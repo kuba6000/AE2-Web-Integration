@@ -17,7 +17,6 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -106,9 +105,8 @@ public class CoreEngine {
         if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory, Config.INSTANCE.craftingHistory);
     }
 
-    /** Applies HTTP/worker policy now; native observation settings are picked up on the next game tick. */
+    /** Applies worker policy now; native observation settings are picked up on the next game tick. */
     public static void applyServerConfig() {
-        AuthService.reloadHttpSettings();
         applyDataConfig();
         NotificationManager.reloadSettings();
     }

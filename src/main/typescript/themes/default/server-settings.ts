@@ -264,11 +264,8 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     fileControl(general, 'publicMode', 'serverPublicMode', 'checkbox');
     fileControl(general, 'allowNoPasswordOnLocalhost', 'serverLocalhost', 'checkbox');
     control(general, 'general', 'checkForUpdates', 'serverUpdates', 'checkbox');
-    control(general, 'general', 'maxRequestsBeforeLoggedInPerMinute', 'serverLoginRate', 'number', {
-        min: 1,
-        max: 1000
-    });
-    control(general, 'general', 'trustedProxies', 'serverProxies', 'text', { help: 'serverProxiesHelp' });
+    fileControl(general, 'maxRequestsBeforeLoggedInPerMinute', 'serverLoginRate', 'text');
+    fileControl(general, 'trustedProxies', 'serverProxies', 'text');
     control(general, 'general', 'defaultTheme', 'serverDefaultTheme', 'text', { help: 'serverDefaultThemeHelp' });
     const notifications = group('serverNotifications', 'serverNotificationsHelp');
     control(notifications, 'notifications', 'minimumCraftingDurationSeconds', 'serverMinimumDuration', 'number');
@@ -322,8 +319,14 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     control(advanced, 'resourceTracking', 'reconciliationIntervalSeconds', 'serverReconciliation', 'number', {
         min: 1
     });
-    control(advanced, 'resourceTracking', 'maxResourcesPerGrid', 'serverResourceCap', 'number', { min: 1 });
-    control(advanced, 'resourceTracking', 'maxQueuedRows', 'serverQueueCap', 'number', { min: 1 });
+    control(advanced, 'resourceTracking', 'maxResourcesPerGrid', 'serverResourceCap', 'number', {
+        min: 1,
+        help: 'serverResourceCapHelp'
+    });
+    control(advanced, 'resourceTracking', 'maxQueuedRows', 'serverQueueCap', 'number', {
+        min: 1,
+        help: 'serverQueueCapHelp'
+    });
     // The actions remain visible when loading failed; only the form is hidden without confirmed data.
     save.addEventListener('click', () => form.requestSubmit());
     form.addEventListener('submit', (event) => {

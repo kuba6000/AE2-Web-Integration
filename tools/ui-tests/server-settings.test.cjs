@@ -71,7 +71,15 @@ test('file-only metadata stays separate from edits and saves, then clears when a
     assert.deepEqual(terminal.state.serverSettings.readOnly, metadata);
     await terminal.serverSettings.save();
     assert.deepEqual(Object.keys(submitted).sort(), ['revision', 'settings']);
-    for (const field of ['port', 'password', 'publicMode', 'allowNoPasswordOnLocalhost', 'adminPasswordConfigured'])
+    for (const field of [
+        'port',
+        'password',
+        'publicMode',
+        'allowNoPasswordOnLocalhost',
+        'adminPasswordConfigured',
+        'trustedProxies',
+        'maxRequestsBeforeLoggedInPerMinute'
+    ])
         assert.equal(field in submitted.settings.general, false);
     assert.equal(terminal.state.serverSettings.readOnly.port, 2424);
     assert.equal(terminal.state.serverSettings.readOnly.adminPasswordConfigured, false);

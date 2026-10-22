@@ -5,8 +5,6 @@ import type { SettingRange } from './api-types.js';
 /** Editable configuration; listener and login access settings remain file-only. */
 export type ServerConfiguration = {
     general: {
-        trustedProxies: string;
-        maxRequestsBeforeLoggedInPerMinute: number;
         checkForUpdates: boolean;
         defaultTheme: string;
     };
@@ -29,6 +27,8 @@ export type ServerConfiguration = {
 };
 export type ServerSettingsReadOnly = {
     port: number;
+    trustedProxies: string;
+    maxRequestsBeforeLoggedInPerMinute: number;
     publicMode: boolean;
     allowNoPasswordOnLocalhost: boolean;
     adminPasswordConfigured: boolean;

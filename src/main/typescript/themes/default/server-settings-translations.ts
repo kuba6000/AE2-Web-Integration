@@ -13,8 +13,6 @@ export const serverSettingsTranslations = {
         serverUpdates: 'Check for mod updates',
         serverLoginRate: 'Unauthenticated requests per minute',
         serverProxies: 'Trusted proxies',
-        serverProxiesHelp:
-            'Comma-separated IP addresses or CIDRs. Only trust proxies you control: forwarded addresses affect administrator access. Loopback proxies are trusted automatically.',
         serverDefaultTheme: 'Default theme',
         serverDefaultThemeHelp:
             'Use builtin:default or server:<theme id>. Applies on the next page load for browsers following the server default. Theme ZIPs are discovered at server startup.',
@@ -59,7 +57,10 @@ export const serverSettingsTranslations = {
         serverActiveInterval: 'Minimum live observation interval (ms)',
         serverReconciliation: 'Full storage reconciliation interval (seconds)',
         serverResourceCap: 'Maximum tracked resources per network',
+        serverResourceCapHelp: 'A lower cap limits additional resources. Resources already being tracked are retained.',
         serverQueueCap: 'Maximum queued history rows',
+        serverQueueCapHelp:
+            'A lower cap limits new queued work. Already accepted history data is kept until it is processed.',
         serverSave: 'Save and apply',
         serverReload: 'Reload from server',
         serverDiscardReload: 'Discard changes and reload',
@@ -85,8 +86,6 @@ export const serverSettingsTranslations = {
         serverUpdates: 'Sprawdzaj aktualizacje moda',
         serverLoginRate: 'Żądania bez logowania na minutę',
         serverProxies: 'Zaufane proxy',
-        serverProxiesHelp:
-            'Adresy IP lub zakresy CIDR oddzielone przecinkami. Ufaj tylko własnym proxy: przekazane adresy wpływają na dostęp administratora. Lokalne proxy są zaufane automatycznie.',
         serverDefaultTheme: 'Domyślny motyw',
         serverDefaultThemeHelp:
             'Wpisz builtin:default lub server:<id motywu>. Zmiana działa po ponownym załadowaniu strony w przeglądarkach używających domyślnego motywu serwera. Paczki ZIP są wykrywane przy uruchamianiu serwera.',
@@ -131,7 +130,10 @@ export const serverSettingsTranslations = {
         serverActiveInterval: 'Minimalny interwał obserwacji na żywo (ms)',
         serverReconciliation: 'Interwał pełnego odczytu magazynu (sekundy)',
         serverResourceCap: 'Maksymalna liczba śledzonych zasobów na sieć',
+        serverResourceCapHelp: 'Niższy limit ogranicza nowe zasoby. Zasoby już objęte śledzeniem zostają zachowane.',
         serverQueueCap: 'Maksymalna liczba rekordów w kolejce',
+        serverQueueCapHelp:
+            'Niższy limit ogranicza nowe wpisy do kolejki. Już przyjęte dane historii czekają na przetworzenie.',
         serverSave: 'Zapisz i zastosuj',
         serverReload: 'Wczytaj ponownie z serwera',
         serverDiscardReload: 'Odrzuć zmiany i wczytaj ponownie',

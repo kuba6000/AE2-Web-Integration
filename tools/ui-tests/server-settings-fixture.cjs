@@ -1,7 +1,5 @@
 const settings = () => ({
     general: {
-        trustedProxies: '',
-        maxRequestsBeforeLoggedInPerMinute: 20,
         checkForUpdates: true,
         defaultTheme: 'builtin:default'
     },
@@ -25,6 +23,8 @@ const settings = () => ({
 
 const readOnly = () => ({
     port: 2324,
+    trustedProxies: '',
+    maxRequestsBeforeLoggedInPerMinute: 20,
     publicMode: true,
     allowNoPasswordOnLocalhost: true,
     adminPasswordConfigured: true,

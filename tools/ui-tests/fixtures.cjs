@@ -366,9 +366,14 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                     const input = JSON.parse(Buffer.concat(body).toString());
                     if (
                         'readOnly' in input ||
-                        ['password', 'port', 'publicMode', 'allowNoPasswordOnLocalhost'].some(
-                            (key) => key in input.settings.general
-                        ) ||
+                        [
+                            'password',
+                            'port',
+                            'publicMode',
+                            'allowNoPasswordOnLocalhost',
+                            'trustedProxies',
+                            'maxRequestsBeforeLoggedInPerMinute'
+                        ].some((key) => key in input.settings.general) ||
                         'webhook' in input.settings.discord ||
                         'password' in input.settings.ntfy ||
                         (input.secrets !== undefined &&

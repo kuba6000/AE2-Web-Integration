@@ -115,6 +115,8 @@ public class Config {
                 loaded.general.port,
                 loaded.general.publicMode,
                 loaded.general.allowNoPasswordOnLocalhost,
+                loaded.general.trustedProxies,
+                loaded.general.maxRequestsBeforeLoggedInPerMinute,
                 !loaded.general.password.isEmpty(),
                 !loaded.discord.webhook.isEmpty(),
                 !loaded.ntfy.password.isEmpty()));
@@ -239,6 +241,8 @@ public class Config {
             loaded.general.password = INSTANCE.general.password;
             loaded.general.publicMode = INSTANCE.general.publicMode;
             loaded.general.allowNoPasswordOnLocalhost = INSTANCE.general.allowNoPasswordOnLocalhost;
+            loaded.general.trustedProxies = INSTANCE.general.trustedProxies;
+            loaded.general.maxRequestsBeforeLoggedInPerMinute = INSTANCE.general.maxRequestsBeforeLoggedInPerMinute;
         }
         INSTANCE = loaded;
     }

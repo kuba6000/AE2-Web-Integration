@@ -57,10 +57,10 @@ Hide its navigation entry for players. `state.serverSettings` contains confirmed
 an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
 without automatic polling. Edits survive navigation within the application; they are not stored in
 the browser. The administrator password, web port, player-account access and password-free localhost
-access cannot be edited here.
+access, trusted proxies and the unauthenticated request limit cannot be edited here.
 
 `state.serverSettings.readOnly` contains confirmed metadata: `port`, `publicMode`,
-`allowNoPasswordOnLocalhost`, `adminPasswordConfigured`, `discordWebhookConfigured` and
+`allowNoPasswordOnLocalhost`, `trustedProxies`, `maxRequestsBeforeLoggedInPerMinute`, `adminPasswordConfigured`, `discordWebhookConfigured` and
 `ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
 Secret values and lengths are never returned; the configured flags only indicate whether a value is
 set. Keep this metadata outside the editable draft. The HTTP write contract is

@@ -44,9 +44,16 @@ test('server configuration phone form preserves focus and drafts, detects confli
     });
     options.isAdmin = true;
     await page.goto(`${base}#/server-settings`);
-    const rate = page.getByRole('spinbutton', { name: 'Unauthenticated requests per minute', exact: true });
-    await rate.waitFor();
-    for (const field of ['port', 'adminPasswordConfigured', 'publicMode', 'allowNoPasswordOnLocalhost']) {
+    const amount = page.getByRole('spinbutton', { name: 'Minimum crafted amount', exact: true });
+    await amount.waitFor();
+    for (const field of [
+        'port',
+        'adminPasswordConfigured',
+        'publicMode',
+        'allowNoPasswordOnLocalhost',
+        'trustedProxies',
+        'maxRequestsBeforeLoggedInPerMinute'
+    ]) {
         assert.equal(await page.locator(`#server-file-${field}`).isDisabled(), true);
     }
     assert.equal(
@@ -62,11 +69,11 @@ test('server configuration phone form preserves focus and drafts, detects confli
         .filter({ hasText: /config\.toml/ })
         .waitFor();
     assert.equal(await page.locator('#server-ntfy-password').getAttribute('type'), 'password');
-    await rate.fill('37');
+    await amount.fill('37');
     const reads = options.requests.filter((request) => request.path === '/api/server/settings').length;
     await page.clock.fastForward(15000);
-    assert.equal(await rate.evaluate((input) => document.activeElement === input), true);
-    assert.equal(await rate.inputValue(), '37');
+    assert.equal(await amount.evaluate((input) => document.activeElement === input), true);
+    assert.equal(await amount.inputValue(), '37');
     assert.equal(options.requests.filter((request) => request.path === '/api/server/settings').length, reads);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     const save = page.getByRole('button', { name: 'Save and apply', exact: true });
@@ -76,19 +83,19 @@ test('server configuration phone form preserves focus and drafts, detects confli
         .locator('#server-settings [role="status"]')
         .filter({ hasText: /changed on the server/ })
         .waitFor();
-    assert.equal(await rate.inputValue(), '37');
+    assert.equal(await amount.inputValue(), '37');
     assert.equal(await save.isDisabled(), true);
     await page.getByRole('button', { name: 'Discard changes and reload', exact: true }).click();
     await page.waitForFunction(
-        () => document.querySelector('#server-general-maxRequestsBeforeLoggedInPerMinute')?.value === '20'
+        () => document.querySelector('#server-notifications-minimumCraftingAmount')?.value === '0'
     );
-    await rate.fill('38');
+    await amount.fill('38');
     await save.click();
     await page
         .locator('#server-settings [role="status"]')
         .filter({ hasText: /saved and applied/ })
         .waitFor();
-    assert.equal(options.serverConfiguration.general.maxRequestsBeforeLoggedInPerMinute, 38);
+    assert.equal(options.serverConfiguration.notifications.minimumCraftingAmount, 38);
     assert.equal(await save.isDisabled(), true);
 });
 

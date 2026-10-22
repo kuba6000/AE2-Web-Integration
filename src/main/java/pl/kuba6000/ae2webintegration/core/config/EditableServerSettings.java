@@ -8,7 +8,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
-/** Editable server configuration. Access mode, localhost trust, listener port and admin password are file-only. */
+/** Editable server configuration. Listener, authentication and proxy trust policy are file-only. */
 public final class EditableServerSettings {
 
     public @NotNull General general = new General();
@@ -42,10 +42,6 @@ public final class EditableServerSettings {
 
     public static final class General {
 
-        @Path("trusted_proxies")
-        public @NotNull String trustedProxies = "";
-        @Path("max_requests_before_logged_in_per_minute")
-        public int maxRequestsBeforeLoggedInPerMinute;
         @Path("check_for_updates")
         public boolean checkForUpdates;
         @Path("default_theme")

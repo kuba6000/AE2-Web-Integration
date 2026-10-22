@@ -202,8 +202,8 @@ an `/ae2webintegration auth <token>` command. The player must run that command i
 
 Administrators and trusted localhost users can edit the configuration in **Server settings**.
 **Save and apply** writes `config.toml` and applies the changes without restarting the web server.
-The listener port, administrator password, public mode and password-free localhost access are read-only
-in the panel; change them directly in the configuration file.
+The listener port, administrator password, public mode, password-free localhost access, trusted proxies
+and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
 Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
 to keep them, or explicitly replace or clear them.
 

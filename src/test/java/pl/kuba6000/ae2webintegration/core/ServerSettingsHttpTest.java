@@ -26,6 +26,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -66,6 +67,45 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void unrelatedSettingsSaveDoesNotResetLoginRateLimit() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 2);
+        AuthService.reloadHttpSettings();
+        request("GET", "/api/server/settings", null, null, 401);
+        request("GET", "/api/server/settings", null, null, 401);
+        request("GET", "/api/server/settings", null, null, 429);
+        JsonObject edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("notifications")
+            .addProperty("minimumCraftingAmount", 123);
+        request("POST", "/api/server/settings", token, edit.toString(), 200);
+        request("GET", "/api/server/settings", null, null, 429);
+    }
+
+    @Test
+    void webCannotChangeProxyTrustOrUnauthenticatedRequestLimit() throws Exception {
+        byte[] originalFile = Files.readAllBytes(
+            Config.getConfigFile("config.toml")
+                .toPath());
+        Object active = Config.INSTANCE;
+        JsonObject edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("general")
+            .addProperty("trustedProxies", "0.0.0.0/0, ::/0");
+        request("POST", "/api/server/settings", token, edit.toString(), 400);
+        edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("general")
+            .addProperty("maxRequestsBeforeLoggedInPerMinute", 999);
+        request("POST", "/api/server/settings", token, edit.toString(), 400);
+        assertSame(active, Config.INSTANCE);
+        assertArrayEquals(
+            originalFile,
+            Files.readAllBytes(
+                Config.getConfigFile("config.toml")
+                    .toPath()));
+    }
+
+    @Test
     void readsEditableSettingsAndFileOnlyMetadataWithoutAdminPassword() throws Exception {
         JsonObject data = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         assertFalse(
@@ -99,6 +139,20 @@ class ServerSettingsHttpTest {
             settings.getAsJsonObject("general")
                 .has("allowNoPasswordOnLocalhost"));
         JsonObject readOnly = data.getAsJsonObject("readOnly");
+        assertFalse(
+            settings.getAsJsonObject("general")
+                .has("trustedProxies"));
+        assertFalse(
+            settings.getAsJsonObject("general")
+                .has("maxRequestsBeforeLoggedInPerMinute"));
+        assertEquals(
+            "",
+            readOnly.get("trustedProxies")
+                .getAsString());
+        assertEquals(
+            20,
+            readOnly.get("maxRequestsBeforeLoggedInPerMinute")
+                .getAsInt());
         assertEquals(
             port,
             readOnly.get("port")
@@ -136,6 +190,8 @@ class ServerSettingsHttpTest {
         config.write("general.port", port + 1);
         config.write("general.public_mode", false);
         config.write("general.allow_no_password_on_localhost", true);
+        config.write("general.trusted_proxies", "192.0.2.0/24");
+        config.write("general.max_requests_before_logged_in_per_minute", 37);
         config.write("extension.custom", "keep-me");
         Path file = Config.getConfigFile("config.toml")
             .toPath();
@@ -143,6 +199,14 @@ class ServerSettingsHttpTest {
         Files.write(file, ("# administrator comment\n" + original).getBytes(StandardCharsets.UTF_8));
         JsonObject body = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         JsonObject readOnly = body.getAsJsonObject("readOnly");
+        assertEquals(
+            "192.0.2.0/24",
+            readOnly.get("trustedProxies")
+                .getAsString());
+        assertEquals(
+            37,
+            readOnly.get("maxRequestsBeforeLoggedInPerMinute")
+                .getAsInt());
         assertEquals(
             port + 1,
             readOnly.get("port")
@@ -171,6 +235,8 @@ class ServerSettingsHttpTest {
         assertEquals(port, Config.INSTANCE.general.port);
         assertTrue(Config.INSTANCE.general.publicMode);
         assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
+        assertEquals("", Config.INSTANCE.general.trustedProxies);
+        assertEquals(20, Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute);
         String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         assertTrue(contents.contains("administrator comment"));
         assertTrue(contents.contains("keep-me"));
@@ -181,6 +247,8 @@ class ServerSettingsHttpTest {
         assertEquals(port + 1, Config.INSTANCE.general.port);
         assertFalse(Config.INSTANCE.general.publicMode);
         assertTrue(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
+        assertEquals("192.0.2.0/24", Config.INSTANCE.general.trustedProxies);
+        assertEquals(37, Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute);
         assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
         assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
         assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);

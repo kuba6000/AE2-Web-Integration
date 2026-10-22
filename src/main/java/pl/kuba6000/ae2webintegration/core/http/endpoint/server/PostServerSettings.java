@@ -26,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
  * Saves and applies the complete editable server configuration without restarting the web listener.
- * Listener port, administrator password, public mode and localhost trust are file-only.
+ * Listener port, administrator password, public mode, localhost trust, proxy trust and request limit are file-only.
  * Requests contain revision, editable settings and optional secrets updates; readOnly metadata is rejected.
  * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty
  * string to clear it. Explicit null values are invalid; saved secrets are never returned.
