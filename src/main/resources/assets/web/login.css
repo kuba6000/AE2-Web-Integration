@@ -16,15 +16,16 @@
     box-sizing: border-box;
 }
 :root {
-    color-scheme: light;
-    --panel: #c6c6c6;
-    --surface: #8b8b8b;
-    --surface-hover: #a3a3a3;
-    --surface-text: #1a1a1a;
-    --edge-light: #fff;
-    --edge-dark: #373737;
-    --text: #34333b;
-    --muted: #63616d;
+    color-scheme: light dark;
+    --panel: light-dark(#c6c6c6, #45434e);
+    --surface: light-dark(#8b8b8b, #514e5b);
+    --surface-hover: light-dark(#a3a3a3, #625d6e);
+    --surface-text: light-dark(#1a1a1a, #eeeaf4);
+    --edge-light: light-dark(#fff, #766e83);
+    --edge-dark: light-dark(#373737, #26232e);
+    --text: light-dark(#34333b, #eeeaf4);
+    --muted: light-dark(#63616d, #c0bacd);
+    --border: light-dark(#9a99a3, #696372);
 }
 [hidden] {
     display: none !important;
@@ -128,6 +129,7 @@ label {
 }
 input,
 textarea,
+select,
 button {
     display: inline-flex;
     align-items: center;
@@ -138,7 +140,8 @@ button {
     border-radius: 0;
 }
 input,
-textarea {
+textarea,
+select {
     background: var(--surface);
     color: var(--surface-text);
     border: 2px solid;
@@ -156,7 +159,7 @@ input:read-only {
     color: var(--surface-text);
 }
 input::placeholder {
-    color: #242424;
+    color: light-dark(#242424, #c0bacd);
     opacity: 1;
 }
 textarea {
@@ -179,7 +182,7 @@ button:active {
     border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
 }
 :focus-visible {
-    outline: 1px solid #626262;
+    outline: 1px solid light-dark(#626262, #b0b0b0);
     outline-offset: 1px;
 }
 .primary {
@@ -266,11 +269,11 @@ button:active {
 }
 .notice {
     padding: 12px;
-    border-left: 3px solid #9a3333;
-    background: #e6c5c2;
+    border-left: 3px solid light-dark(#9a3333, #e89494);
+    background: light-dark(#e6c5c2, #56353b);
 }
 .error {
-    color: #742525;
+    color: light-dark(#742525, #ffd0d0);
 }
 #copyStatus {
     margin-top: 8px;
@@ -278,16 +281,31 @@ button:active {
 footer {
     margin-top: 24px;
     padding-top: 18px;
-    border-top: 1px solid #9a99a3;
+    border-top: 1px solid var(--border);
     font-size: 12px;
 }
 footer p {
     margin-bottom: 10px;
 }
+.appearance-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+.appearance-control label {
+    margin: 0;
+}
+.appearance-control select {
+    min-height: 44px;
+    padding: 8px 12px;
+}
 .credits {
     margin: 16px 0 0;
     padding-top: 12px;
-    border-top: 1px solid #9a99a3;
+    border-top: 1px solid var(--border);
     color: var(--muted);
     text-align: center;
 }

@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light" />
+        <meta name="color-scheme" content="light dark" />
         <style>
             html {
                 background: #262830;
@@ -143,6 +143,14 @@
                 </section>
             </section>
             <footer>
+                <div class="appearance-control">
+                    <label for="appearance">Appearance</label>
+                    <select id="appearance">
+                        <option value="system">System</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
                 <p class="cookie-notice">
                     <svg class="login-icon" aria-hidden="true" focusable="false">
                         <use href="./assets/web/login-icons.svg#cookie" /></svg

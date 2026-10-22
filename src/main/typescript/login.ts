@@ -1,4 +1,5 @@
 import { createApi } from './app/api.js';
+import { createSettings } from './app/storage.js';
 
 function element<T extends HTMLElement>(id: string): T {
     const value = document.getElementById(id);
@@ -17,6 +18,19 @@ const retry = element<HTMLButtonElement>('bootstrapRetry');
 const command = element<HTMLTextAreaElement>('registrationCommand');
 const controller = new AbortController();
 let disposed = false;
+
+const appearance = element<HTMLSelectElement>('appearance');
+const settings = createSettings(new URL('./', location.href), 'login');
+const savedAppearance = settings.get('appearance');
+appearance.value = savedAppearance === 'light' || savedAppearance === 'dark' ? savedAppearance : 'system';
+function applyAppearance(): void {
+    document.documentElement.style.colorScheme = appearance.value === 'system' ? 'light dark' : appearance.value;
+}
+applyAppearance();
+appearance.addEventListener('change', () => {
+    applyAppearance();
+    settings.set('appearance', appearance.value);
+});
 
 function showForm(registration: boolean): void {
     login.hidden = registration;
