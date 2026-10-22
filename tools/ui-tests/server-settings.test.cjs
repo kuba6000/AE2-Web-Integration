@@ -190,7 +190,7 @@ test('configuration conflict retains edits until explicit reload and uses the ne
     terminal.route({ view: 'server-settings', gridKey: null });
     await terminal.refresh();
     terminal.serverSettings.edit('general', 'checkForUpdates', false);
-    revision = 'edited-on-disk';
+    revision = 'after-reload';
     terminal.serverSettings.removeSecret('discordWebhook');
     await terminal.serverSettings.save();
     assert.equal(terminal.state.serverSettings.error, 'CONFIG_CHANGED');
@@ -368,7 +368,7 @@ test('HTTP server settings transport sends revisioned JSON with CSRF header and 
             response.end(
                 JSON.stringify({
                     status: 'OK',
-                    data: { revision: 'file-hash', settings: settings(), readOnly: readOnly() }
+                    data: { revision: 'config-revision', settings: settings(), readOnly: readOnly() }
                 })
             );
         else {

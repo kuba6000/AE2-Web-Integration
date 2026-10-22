@@ -67,6 +67,26 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void readsActiveConfigurationAndStableRevisionWithoutReadingTheFile() throws Exception {
+        JsonObject active = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        config.write("notifications.minimum_crafting_amount", 456);
+        config.write("discord.webhook", "");
+        config.write("general.trusted_proxies", "192.0.2.0/24");
+        assertEquals(active, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
+        config.writeRaw("[invalid");
+        assertThrows(com.electronwill.nightconfig.core.io.ParsingException.class, Config::reload);
+        assertEquals(active, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
+        Files.delete(
+            Config.getConfigFile("config.toml")
+                .toPath());
+        try {
+            assertEquals(active, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
+        } finally {
+            config.writeRaw("");
+        }
+    }
+
+    @Test
     void settingsSavePreservesOrdinaryAndRememberedAdminAndPlayerSessions() throws Exception {
         CoreData.setPassword(
             new PlayerIdentity(UUID.randomUUID(), "SettingsPlayer"),
@@ -206,7 +226,7 @@ class ServerSettingsHttpTest {
                 .getAsBoolean());
         request("POST", "/api/server/settings", token, data.toString(), 400);
         config.write("general.password", "");
-        assertFalse(
+        assertTrue(
             request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data")
                 .getAsJsonObject("readOnly")
                 .get("adminPasswordConfigured")
@@ -222,6 +242,8 @@ class ServerSettingsHttpTest {
         config.write("general.trusted_proxies", "192.0.2.0/24");
         config.write("general.max_requests_before_logged_in_per_minute", 37);
         config.write("extension.custom", "keep-me");
+        config.write("discord.webhook", "https://example.invalid/pending-webhook-secret");
+        config.write("ntfy.password", "pending-ntfy-secret");
         Path file = Config.getConfigFile("config.toml")
             .toPath();
         String original = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
@@ -229,21 +251,21 @@ class ServerSettingsHttpTest {
         JsonObject body = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         JsonObject readOnly = body.getAsJsonObject("readOnly");
         assertEquals(
-            "192.0.2.0/24",
+            "",
             readOnly.get("trustedProxies")
                 .getAsString());
         assertEquals(
-            37,
+            20,
             readOnly.get("maxRequestsBeforeLoggedInPerMinute")
                 .getAsInt());
         assertEquals(
-            port + 1,
+            port,
             readOnly.get("port")
                 .getAsInt());
-        assertFalse(
+        assertTrue(
             readOnly.get("publicMode")
                 .getAsBoolean());
-        assertTrue(
+        assertFalse(
             readOnly.get("allowNoPasswordOnLocalhost")
                 .getAsBoolean());
         body.remove("readOnly");
@@ -284,7 +306,7 @@ class ServerSettingsHttpTest {
     }
 
     @Test
-    void staleFileOrBrowserRevisionCannotOverwriteNewerSettings() throws Exception {
+    void staleRuntimeRevisionCannotOverwriteSettingsAfterSaveReloadOrInit() throws Exception {
         JsonObject old = readSettings();
         JsonObject edit = new Gson().fromJson(old.toString(), JsonObject.class);
         edit.getAsJsonObject("settings")
@@ -302,13 +324,20 @@ class ServerSettingsHttpTest {
                 .getAsString());
         assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
         JsonObject fresh = readSettings();
-        config.write("general.password", "external-change");
+        Config.reload();
         assertEquals(
             "CONFIG_CHANGED",
             request("POST", "/api/server/settings", token, fresh.toString(), 409).get("status")
                 .getAsString());
         assertEquals(55, Config.INSTANCE.notifications.minimumCraftingAmount);
         assertEquals("test-password", Config.INSTANCE.general.password);
+        fresh = readSettings();
+        Config.init(directory);
+        request("POST", "/api/server/settings", token, fresh.toString(), 409);
+        fresh = readSettings();
+        JsonObject saved = request("POST", "/api/server/settings", token, fresh.toString(), 200)
+            .getAsJsonObject("data");
+        assertNotEquals(fresh.get("revision"), saved.get("revision"));
     }
 
     @Test
@@ -354,11 +383,13 @@ class ServerSettingsHttpTest {
                 Config.getConfigFile("config.toml")
                     .toPath()));
         assertSame(active, Config.INSTANCE);
+        assertEquals(original, readSettings());
     }
 
     @Test
     void failedAtomicWriteLeavesDiskAndRuntimeUntouched() throws Exception {
-        JsonObject edit = readSettings();
+        JsonObject original = readSettings();
+        JsonObject edit = new Gson().fromJson(original.toString(), JsonObject.class);
         setSecret(edit, "ntfyPassword", "replacement-ntfy-secret");
         edit.getAsJsonObject("secrets")
             .addProperty("discordWebhook", "https://example.invalid/replacement-webhook-secret");
@@ -382,6 +413,7 @@ class ServerSettingsHttpTest {
             Files.readAllBytes(
                 Config.getConfigFile("config.toml")
                     .toPath()));
+        assertEquals(original, readSettings());
         request("POST", "/api/server/settings", token, edit.toString(), 200);
         assertEquals("replacement-ntfy-secret", Config.INSTANCE.ntfy.password);
         assertEquals("https://example.invalid/replacement-webhook-secret", Config.INSTANCE.discord.webhook);

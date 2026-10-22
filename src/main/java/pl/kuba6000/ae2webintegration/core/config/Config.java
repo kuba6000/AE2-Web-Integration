@@ -7,16 +7,10 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,6 +26,7 @@ import com.electronwill.nightconfig.toml.TomlFormat;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.electronwill.nightconfig.toml.TomlWriter;
 
+import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
 
@@ -41,14 +36,11 @@ public class Config {
 
     private static final ObjectConverter CONVERTER = new ObjectConverter();
 
-    /** Replaced as a whole on init and reload. Fields of a published instance are read-only. */
+    /** Replaced as a whole on init, reload and web save. Fields of a published instance are read-only. */
     public static volatile ConfigSettings INSTANCE = new ConfigSettings();
 
     private static File configDirectory;
-    private static final byte[] REVISION_KEY = new byte[32];
-    static {
-        new SecureRandom().nextBytes(REVISION_KEY);
-    }
+    private static String revision = PasswordHelper.generateToken(32);
 
     // --- Directory / file setup ---
 
@@ -96,20 +88,15 @@ public class Config {
         }
     }
 
-    /** Reads editable values from disk, without exposing the file-only administrator credentials. */
-    public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() throws IOException {
-        byte[] bytes = Files.readAllBytes(getConfigFile("config.toml").toPath());
-        CommentedConfig document = new TomlParser().parse(new String(bytes, StandardCharsets.UTF_8));
-        ConfigSettings loaded = new ConfigSettings();
-        CommentedConfig defaults = newDocument();
-        CONVERTER.toConfig(loaded, defaults);
-        fillDefaults(document, defaults);
-        CONVERTER.toObject(document, loaded);
-        loaded.validate();
+    /** Returns detached active settings without exposing secret values. */
+    public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() {
+        ConfigSettings loaded = INSTANCE;
+        CommentedConfig document = newDocument();
+        CONVERTER.toConfig(loaded, document);
         EditableServerSettings editable = new EditableServerSettings();
         CONVERTER.toObject(document, editable);
         return new ServerSettingsSnapshot(
-            revision(bytes),
+            revision,
             editable,
             new ServerSettingsSnapshot.ReadOnly(
                 loaded.general.port,
@@ -122,17 +109,18 @@ public class Config {
                 !loaded.ntfy.password.isEmpty()));
     }
 
-    /** Returns null when another file edit superseded the submitted revision. */
+    /** Returns null when another configuration publication superseded the submitted revision. */
     public static synchronized @Nullable ServerSettingsSnapshot saveServerSettings(@NotNull String expectedRevision,
         @NotNull EditableServerSettings settings, @Nullable EditableServerSettings.SecretUpdates secrets)
         throws IOException {
+        if (!revision.equals(expectedRevision)) return null;
         File file = getConfigFile("config.toml");
-        byte[] bytes = Files.readAllBytes(file.toPath());
-        if (!revision(bytes).equals(expectedRevision)) return null;
-        CommentedConfig document = new TomlParser().parse(new String(bytes, StandardCharsets.UTF_8));
+        CommentedConfig document = read(file);
         CommentedConfig edits = newDocument();
         CONVERTER.toConfig(settings, edits);
         mergeEdits(document, edits);
+        document.set("discord.webhook", INSTANCE.discord.webhook);
+        document.set("ntfy.password", INSTANCE.ntfy.password);
         if (secrets != null) {
             if (secrets.discordWebhook() != null) document.set("discord.webhook", secrets.discordWebhook());
             if (secrets.ntfyPassword() != null) document.set("ntfy.password", secrets.ntfyPassword());
@@ -157,18 +145,6 @@ public class Config {
             } else {
                 document.set(key, entry.getValue());
             }
-        }
-    }
-
-    private static String revision(byte[] bytes) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(REVISION_KEY, "HmacSHA256"));
-            return Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(mac.doFinal(bytes));
-        } catch (GeneralSecurityException unavailable) {
-            throw new IllegalStateException("Configuration revision algorithm unavailable", unavailable);
         }
     }
 
@@ -235,6 +211,7 @@ public class Config {
         serializer.setIndent("");
         serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
         disableMultilineStrings(serializer);
+        String nextRevision = PasswordHelper.generateToken(32);
         AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
         if (preserveFileOnlySettings) {
             loaded.general.port = INSTANCE.general.port;
@@ -245,6 +222,7 @@ public class Config {
             loaded.general.maxRequestsBeforeLoggedInPerMinute = INSTANCE.general.maxRequestsBeforeLoggedInPerMinute;
         }
         INSTANCE = loaded;
+        revision = nextRevision;
     }
 
     private static boolean useLiteralString(String value) {

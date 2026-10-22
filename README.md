@@ -212,10 +212,11 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
-Administrators and trusted localhost users can edit the configuration in **Server settings**.
+Administrators and trusted localhost users can edit the active configuration in **Server settings**.
 **Save and apply** writes `config.toml` and applies the changes without restarting the web server.
 The listener port, administrator password, public mode, password-free localhost access, trusted proxies
 and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
+Manual file edits take effect after reloading the configuration or restarting the server.
 Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
 to keep them, or explicitly replace or clear them.
 

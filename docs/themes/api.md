@@ -64,7 +64,9 @@ access, trusted proxies and the unauthenticated request limit cannot be edited h
 `ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
 Secret values and lengths are never returned; the configured flags only indicate whether a value is
 set. Keep this metadata outside the editable draft. The HTTP write contract is
-`{revision, settings, secrets?}`; `readOnly` is response-only.
+`{revision, settings, secrets?}`; `readOnly` is response-only. Values and metadata describe the active
+configuration in memory. The opaque revision changes after each successful configuration load, reload
+or web save. Manual file edits alone do not change the active values or revision.
 
 Notification credentials are write-only. Use `serverSettings.editSecret(name, value)` for a replacement,
 `removeSecret(name)` for explicit deletion, and `resetSecret(name)` to undo a pending credential change.

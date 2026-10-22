@@ -31,11 +31,12 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty
  * string to clear it. Explicit null values are invalid; saved secrets are never returned.
  * 
- * @response 200 {@link Response} Saved configuration and its new opaque file revision.
+ * @response 200 {@link Response} Saved configuration and its new opaque configuration revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid, missing, unknown or file-only settings.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required; CSRF_REJECTED: missing request marker.
- * @response 409 {@link ErrorResponse} CONFIG_CHANGED: file changed since the settings were read; reload before saving.
+ * @response 409 {@link ErrorResponse} CONFIG_CHANGED: active configuration changed since the settings were read; fetch
+ *           it again before saving.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
@@ -50,7 +51,7 @@ public final class PostServerSettings extends IAsyncRequest {
     @Body
     private @NotNull Input input;
 
-    /** Complete editable values, current file revision and optional write-only notification secret updates. */
+    /** Complete editable values, current configuration revision and optional write-only notification secret updates. */
     @Desugar
     public record Input(@NotNull String revision, @NotNull EditableServerSettings settings,
         @OptionalInput @Nullable EditableServerSettings.SecretUpdates secrets) {}
