@@ -23,12 +23,12 @@ final class CanonicalNbt {
 
     private CanonicalNbt() {}
 
-    static void write(@NotNull Tag tag, @NotNull PrimitiveSink sink) {
-        new CanonicalNbt().writeTag(tag, sink, 0);
+    static boolean write(@NotNull Tag tag, @NotNull PrimitiveSink sink) {
+        return new CanonicalNbt().writeTag(tag, sink, 0);
     }
 
     /** Streams the native AE codec's sorted compound envelope without constructing it. */
-    static void writeKey(@NotNull String type, @NotNull String id, @Nullable CompoundTag tag,
+    static boolean writeKey(@NotNull String type, @NotNull String id, @Nullable CompoundTag tag,
         @Nullable CompoundTag caps, @NotNull PrimitiveSink sink) {
         CanonicalNbt writer = new CanonicalNbt();
         writer.nodes = 1;
@@ -37,13 +37,14 @@ final class CanonicalNbt {
         writer.writeStringEntry("#c", type, sink);
         if (caps != null) {
             StableKey.writeText(sink, "caps");
-            writer.writeTag(caps, sink, 1);
+            if (!writer.writeTag(caps, sink, 1)) return false;
         }
         writer.writeStringEntry("id", id, sink);
         if (tag != null) {
             StableKey.writeText(sink, "tag");
-            writer.writeTag(tag, sink, 1);
+            if (!writer.writeTag(tag, sink, 1)) return false;
         }
+        return true;
     }
 
     private void writeStringEntry(@NotNull String name, @NotNull String value, @NotNull PrimitiveSink sink) {
@@ -54,16 +55,18 @@ final class CanonicalNbt {
         StableKey.writeText(sink, value);
     }
 
-    private void writeTag(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {
+    private boolean writeTag(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {
         sink.putByte(tag.getId());
-        writePayload(tag, sink, depth);
+        return writePayload(tag, sink, depth);
     }
 
-    private void writePayload(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {
+    private boolean writePayload(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {
         if (depth > MAX_DEPTH || ++nodes > MAX_NODES) {
             throw new IllegalArgumentException("Native identity exceeds traversal bounds");
         }
         switch (tag.getId()) {
+            case Tag.TAG_END:
+                throw new IllegalArgumentException("Unexpected NBT end tag");
             case Tag.TAG_BYTE:
                 sink.putByte(((NumericTag) tag).getAsByte());
                 break;
@@ -105,7 +108,7 @@ final class CanonicalNbt {
                 checkChildren(list.size());
                 sink.putByte(list.isEmpty() ? Tag.TAG_END : list.getElementType());
                 writeInt(sink, list.size());
-                for (Tag element : list) writePayload(element, sink, depth + 1);
+                for (Tag element : list) if (!writePayload(element, sink, depth + 1)) return false;
                 break;
             case Tag.TAG_COMPOUND:
                 CompoundTag compound = (CompoundTag) tag;
@@ -115,12 +118,13 @@ final class CanonicalNbt {
                 writeInt(sink, names.size());
                 for (String name : names) {
                     StableKey.writeText(sink, name);
-                    writeTag(compound.get(name), sink, depth + 1);
+                    if (!writeTag(compound.get(name), sink, depth + 1)) return false;
                 }
                 break;
             default:
-                throw new IllegalArgumentException("Unsupported native tag type: " + tag.getId());
+                return false;
         }
+        return true;
     }
 
     private void checkChildren(int count) {

@@ -10,7 +10,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.VanillaPackResources;
 import net.minecraftforge.fml.ModList;
+import net.minecraftforge.resource.DelegatingPackResources;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -42,11 +44,10 @@ final class ExportEnvironment {
                 if (pack instanceof FilePackResources || pack instanceof PathPackResources
                     || pack instanceof net.minecraftforge.resource.PathPackResources) {
                     paths.add(backingPath(pack));
-                } else if (!(pack.isBuiltin() && pack instanceof net.minecraft.server.packs.VanillaPackResources)
-                    && !(pack instanceof net.minecraftforge.resource.DelegatingPackResources
-                        && "mod_resources".equals(pack.packId()))) {
-                            throw new IllegalStateException("Cannot fingerprint resource pack " + pack.packId());
-                        }
+                } else if (!(pack.isBuiltin() && pack instanceof VanillaPackResources)
+                    && !(pack instanceof DelegatingPackResources && "mod_resources".equals(pack.packId()))) {
+                        throw new IllegalStateException("Cannot fingerprint resource pack " + pack.packId());
+                    }
             });
         return IMetadataSource.fromFilesystem(
             new IconPack.Target(
