@@ -790,11 +790,11 @@ test('the default theme ignores obsolete shared appearance, preserves current ch
     await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
     await appearance.waitFor();
-    assert.equal(await appearance('Use system theme').getAttribute('aria-pressed'), 'true');
-    await appearance('Light mode').click();
+    assert.equal(await appearance.inputValue(), 'system');
+    await appearance.selectOption('light');
     await page.reload();
     await appearance.waitFor();
-    assert.equal(await appearance('Light mode').getAttribute('aria-pressed'), 'true');
+    assert.equal(await appearance.inputValue(), 'light');
     await open();
     await page.getByRole('button', { name: 'Reset default appearance' }).click();
     await page.goto(`${base}#/web-settings`);
@@ -812,9 +812,9 @@ test('the default theme ignores obsolete shared appearance, preserves current ch
     });
     await page.reload();
     await appearance.waitFor();
-    assert.equal(await appearance('Light mode').getAttribute('aria-pressed'), 'true');
-    await appearance('Use system theme').click();
-    assert.equal(await appearance('Use system theme').getAttribute('aria-pressed'), 'true');
+    assert.equal(await appearance.inputValue(), 'light');
+    await appearance.selectOption('system');
+    assert.equal(await appearance.inputValue(), 'system');
     await page.reload();
     await appearance.waitFor();
     assert.equal(await appearance.inputValue(), 'light', 'Failed writes must preserve the current persisted choice');
