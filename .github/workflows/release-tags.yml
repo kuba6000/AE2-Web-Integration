@@ -113,27 +113,52 @@ jobs:
     env:
       VERSION: ${{ github.ref_name }}
     steps:
+      - name: Check portal credentials
+        id: portal
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          if [[ "$PLATFORM" == 'modrinth' ]]; then
+            token="$MODRINTH_TOKEN"
+          else
+            token="$CURSEFORGE_TOKEN"
+          fi
+          if [[ -z "${token//[[:space:]]/}" ]]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            message="Skipping $PLATFORM publication: no token is configured."
+            echo "::notice::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.portal.outputs.enabled == 'true'
         with:
           submodules: recursive
           persist-credentials: false
       - uses: actions/download-artifact@v4
+        if: steps.portal.outputs.enabled == 'true'
         with:
           name: release-1.21.1
           path: release-bundle
       - name: Verify immutable release bundle
+        if: steps.portal.outputs.enabled == 'true'
         id: bundle
         run: |
           python3 .github/scripts/release_bundle.py export \
             --bundle release-bundle --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
+        if: steps.portal.outputs.enabled == 'true'
         with:
           distribution: temurin
           java-version: |
             21
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.portal.outputs.enabled == 'true'
       - name: Publish to Modrinth
-        if: matrix.platform == 'modrinth'
+        if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'modrinth'
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
@@ -149,7 +174,7 @@ jobs:
             -PreleaseBundleManifest="$RELEASE_MANIFEST" \
             -PreleaseNotesFile="$RELEASE_NOTES"
       - name: Publish to CurseForge
-        if: matrix.platform == 'curseforge'
+        if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'curseforge'
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
           RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
