@@ -39,6 +39,35 @@ async function png(page, dialog) {
     return { bytes, pixels, download };
 }
 
+test('PNG export stays left-aligned below the grid on the same row as Start on desktop and mobile', async (t) => {
+    const { page, base } = await fixture(t, '', {}, { mockClock: false });
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const exporter = page.getByRole('button', { name: 'Export PNG', exact: true });
+    for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const button = await exporter.boundingBox();
+        const start = await page.getByRole('button', { name: 'Start', exact: true }).boundingBox();
+        const resources = await page.getByRole('region', { name: 'Plan resources', exact: true }).boundingBox();
+        assert.ok(button.x < start.x, 'export is before the crafting controls');
+        assert.ok(Math.abs(button.y + button.height / 2 - start.y - start.height / 2) <= 2, 'actions share a row');
+        assert.ok(button.y >= resources.y + resources.height - 1, 'export stays below the resource grid');
+        assert.ok(button.x - resources.x < 30, 'export is aligned to the left edge of the grid');
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await exporter.hover();
+    await page.getByRole('tooltip').waitFor({ state: 'visible' });
+    assert.ok((await page.getByRole('tooltip').innerText()).includes('Export PNG'));
+    assert.equal(await exporter.getAttribute('title'), null);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await exporter.click();
+    const dialog = page.getByRole('dialog', { name: 'Export PNG', exact: true });
+    await dialog.waitFor({ state: 'visible' });
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    assert.ok(await exporter.evaluate((node) => node === document.activeElement));
+    await exporter.click();
+    await png(page, dialog);
+});
+
 test('plan PNG exports every row independently of search, without icons, and remembers settings', async (t) => {
     const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
     options.plan = {

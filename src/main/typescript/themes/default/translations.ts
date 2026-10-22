@@ -4,6 +4,7 @@ export const translations = {
     en: {
         exportAppearance: 'Appearance',
         exportPlan: 'Export PNG',
+        exportAction: 'Export',
         exportDownload: 'Download PNG',
         exportGrid: 'Grid',
         exportLayout: 'Layout',
@@ -121,6 +122,7 @@ export const translations = {
     },
     pl: {
         exportAppearance: 'Wygląd',
+        exportAction: 'Eksportuj',
         exportPlan: 'Eksport PNG',
         exportDownload: 'Pobierz PNG',
         exportGrid: 'Siatka',

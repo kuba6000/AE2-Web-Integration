@@ -204,6 +204,21 @@ header {
 .plan-start-controls {
     display: flex;
 }
+.plan-export-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: auto;
+}
+.plan-export-button .theme-icon {
+    width: 18px;
+    height: 18px;
+}
+@media (width <= 600px) {
+    .plan-export-label {
+        display: none;
+    }
+}
 .plan-start-controls > button + button {
     margin-left: -2px;
     padding-inline: 10px;
