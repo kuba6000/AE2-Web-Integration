@@ -84,7 +84,7 @@ public final class ConfigSettings {
 
         @Path("image_in_embed")
         @Comment("Put generated images in a text embed. False sends only the image attachment and configured role mention. Ignored when no image is generated.")
-        public boolean imageInEmbed = true;
+        public boolean imageInEmbed = false;
 
         @Path("role_id")
         @Comment("Role to mention in notification content. Empty disables mentions.")
