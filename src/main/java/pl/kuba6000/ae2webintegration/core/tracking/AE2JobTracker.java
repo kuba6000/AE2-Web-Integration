@@ -235,9 +235,11 @@ public class AE2JobTracker {
             // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
             grid.web$getCraftingGrid()
                 .web$getCPUs();
+            String gridName = data.getSettings()
+                .getName();
             NotificationManager.postMessageNonBlocking(
                 new CraftingMessage(
-                    key,
+                    gridName.isEmpty() ? key.toString() : gridName,
                     cpu.web$getName(),
                     info.finalOutput.description()
                         .displayName(),

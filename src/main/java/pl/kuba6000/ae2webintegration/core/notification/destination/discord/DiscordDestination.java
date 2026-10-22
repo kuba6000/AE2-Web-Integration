@@ -32,7 +32,7 @@ public class DiscordDestination implements INotificationDestination {
         DiscordPayload payload = null;
         if (message instanceof CraftingMessage craftingMessage) {
             payload = new DiscordPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
+                "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
                 "Crafting for `" + craftingMessage.outputItemName()
                     + " x"
                     + craftingMessage.outputItemAmount()

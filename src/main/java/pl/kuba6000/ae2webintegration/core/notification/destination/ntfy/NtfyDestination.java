@@ -40,7 +40,7 @@ public class NtfyDestination implements INotificationDestination {
             else tags.add("heavy_check_mark");
 
             payload = new NtfyPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
+                "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
                 "Crafting for `" + craftingMessage.outputItemName()
                     + " x"
                     + craftingMessage.outputItemAmount()
