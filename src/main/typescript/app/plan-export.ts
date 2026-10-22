@@ -301,15 +301,10 @@ function drawTile(
     let y = settings.name ? height - style.padding - style.borderWidth - blockHeight : (height - blockHeight) / 2;
     for (const amount of amounts) {
         ctx.font = `${style.quantityFontSize}px ${style.fontFamily}`;
-        const combinedWidth = ctx.measureText(amount.value + (amount.usage ?? '')).width;
-        const quantitySize = Math.min(
-            style.quantityFontSize,
-            (style.quantityFontSize * (right - left)) / combinedWidth
-        );
-        ctx.font = `${quantitySize}px ${style.fontFamily}`;
         const valueWidth = ctx.measureText(amount.value).width;
         const usageWidth = amount.usage ? ctx.measureText(amount.usage).width : 0;
-        const quantityX = Math.max(left, right - valueWidth - usageWidth);
+        const quantityScale = Math.min(1, (right - left) / (valueWidth + usageWidth));
+        const quantityX = right - (valueWidth + usageWidth) * quantityScale;
         drawText(
             ctx,
             amount.label,
@@ -319,13 +314,19 @@ function drawTile(
             style,
             style.labelFontSize
         );
-        drawText(ctx, amount.value, quantityX, y, right - quantityX, style, quantitySize);
+        ctx.save();
+        ctx.translate(quantityX, y);
+        // Scale the measured text; font-size changes can round glyph advances differently across platforms.
+        ctx.scale(quantityScale, quantityScale);
+        ctx.font = `${style.quantityFontSize}px ${style.fontFamily}`;
+        ctx.fillStyle = style.foreground;
+        ctx.fillText(amount.value, 0, 0);
         if (amount.usage) {
             const level = row.usedPercent <= 0.25 ? 0 : row.usedPercent <= 0.5 ? 1 : row.usedPercent <= 0.75 ? 2 : 3;
             ctx.fillStyle = style.usageColors[level];
-            ctx.font = `${quantitySize}px ${style.fontFamily}`;
-            ctx.fillText(amount.usage, quantityX + valueWidth, y);
+            ctx.fillText(amount.usage, valueWidth, 0);
         }
+        ctx.restore();
         y += line;
     }
 }

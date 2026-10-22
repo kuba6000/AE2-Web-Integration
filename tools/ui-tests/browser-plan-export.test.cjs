@@ -394,8 +394,14 @@ test('rectangular export keeps all metric rows and full quantities inside each c
         window.exportNumbers = [];
         const fillText = CanvasRenderingContext2D.prototype.fillText;
         CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-            if (text.includes('9,007,199,254,740,991') || text.includes('(95%)'))
-                window.exportNumbers.push({ text, x, right: x + this.measureText(text).width });
+            if (text.includes('9,007,199,254,740,991') || text.includes('(95%)')) {
+                const transform = this.getTransform();
+                window.exportNumbers.push({
+                    text,
+                    x: new DOMPoint(x, y).matrixTransform(transform).x,
+                    right: new DOMPoint(x + this.measureText(text).width, y).matrixTransform(transform).x
+                });
+            }
             return fillText.call(this, text, x, y, ...rest);
         };
     });
@@ -409,7 +415,7 @@ test('rectangular export keeps all metric rows and full quantities inside each c
     assert.ok(values.some((call) => call.text === ' (95%)'));
     assert.ok(
         values.every((call) => call.x >= 0 && call.right <= result.pixels.width / 2),
-        'full quantity and suffix stay inside their cell'
+        `full quantity and suffix stay inside their cell: ${JSON.stringify(values)}`
     );
     if (process.env.EXPORT_EVIDENCE_DIR)
         await fs.writeFile(path.join(process.env.EXPORT_EVIDENCE_DIR, 'plan-icons-full.png'), result.bytes);
