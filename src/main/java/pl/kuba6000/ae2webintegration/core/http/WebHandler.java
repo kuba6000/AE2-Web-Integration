@@ -8,6 +8,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +21,7 @@ import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Serves browser pages and adapts shared authentication operations to forms, cookies and redirects. */
@@ -153,7 +155,13 @@ public final class WebHandler implements HttpHandler {
                         .name());
             } else {
                 exchange.getResponseHeaders()
-                    .add("Set-Cookie", sessionCookie(result.token(), result.validForSeconds()));
+                    .add(
+                        "Set-Cookie",
+                        sessionCookie(
+                            result.token(),
+                            input.containsKey("remember")
+                                ? TimeUnit.MILLISECONDS.toSeconds(AuthSession.REMEMBERED_CAP_MILLIS)
+                                : 0));
                 redirect(exchange, ".");
             }
             return true;
@@ -238,7 +246,9 @@ public final class WebHandler implements HttpHandler {
      * sent at all.
      */
     private static String sessionCookie(String token, long maxAgeSeconds) {
-        return "authenticationToken=" + token + "; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Lax";
+        return "authenticationToken=" + token
+            + (maxAgeSeconds == 0 ? "" : "; Max-Age=" + maxAgeSeconds)
+            + "; HttpOnly; SameSite=Lax";
     }
 
     private static boolean isSameOriginBrowserPost(HttpExchange exchange) {

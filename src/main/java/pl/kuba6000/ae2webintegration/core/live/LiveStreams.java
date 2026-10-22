@@ -195,7 +195,8 @@ public final class LiveStreams implements AutoCloseable {
         LiveSubscription subscription = session.subscription;
         if (subscription.end != null) return;
         if (!session.context.isLifecycleUnchanged()) subscription.end = "invalidate";
-        else if (!subscription.session.isValid(System.currentTimeMillis())) subscription.end = "revoked";
+        else if (!pl.kuba6000.ae2webintegration.core.auth.AuthService
+            .isValid(subscription.session, System.currentTimeMillis())) subscription.end = "revoked";
         else {
             IAEGrid grid = identities.getGrid(
                 subscription.topic.key()

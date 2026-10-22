@@ -109,8 +109,10 @@ In public mode, every player can create their own web account and access the AE2
 use. Registration starts on the website and must be confirmed in game with the command shown by the web panel.
 The player must be online to register.
 
-Player passwords are stored as salted PBKDF2-HMAC-SHA1 hashes. A normal session is valid for one hour, or seven
-days when **Remember me** is selected.
+Player passwords are stored as salted PBKDF2-HMAC-SHA1 hashes. Sessions expire after one hour without activity
+and can be extended by use for up to twelve hours from login. **Remember me** survives server restarts,
+expires after seven days without activity and can be extended for up to sixty days from login. Watching a
+live terminal or CPU counts as activity. Changing the password revokes existing sessions.
 
 ### Public mode disabled
 

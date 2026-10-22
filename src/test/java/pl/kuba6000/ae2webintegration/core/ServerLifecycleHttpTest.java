@@ -225,6 +225,108 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void rememberedLoginSurvivesWorldRestartAndLogoutDoesNot() throws Exception {
+        startApi();
+        String temporary = login();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String remembered = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", temporary).status());
+        assertEquals(200, get("/api/themes", remembered).status());
+        assertEquals(200, read(jsonPost("/api/auth/logout", remembered, "")).status());
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", remembered).status());
+    }
+
+    @Test
+    void adminCredentialChangeWhileStoppedRejectsPersistedToken() throws Exception {
+        startApi();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String token = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        config.set("general.password", "new-password");
+        startApi();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void browserCookieRetentionMatchesRememberMeWithoutChangingMountScope() throws Exception {
+        startApi();
+        HttpURLConnection ordinary = browserForm("/", "username=admin&password=lifecycle-password");
+        assertEquals(302, read(ordinary).status());
+        assertFalse(
+            ordinary.getHeaderField("Set-Cookie")
+                .contains("Max-Age"));
+        HttpURLConnection remembered = browserForm("/", "username=admin&password=lifecycle-password&remember=on");
+        assertEquals(302, read(remembered).status());
+        String cookie = remembered.getHeaderField("Set-Cookie");
+        assertTrue(cookie.contains("Max-Age=5184000"));
+        assertFalse(cookie.contains("Path="));
+    }
+
+    @Test
+    void credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword() throws Exception {
+        startApi();
+        String token = login();
+        config.set("general.password", "changed-password");
+        AuthService.reloadHttpSettings();
+        config.set("general.password", "lifecycle-password");
+        AuthService.reloadHttpSettings();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void playerPasswordAndPublicModeChangesRevokeRememberedSessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            Response response = read(
+                jsonPost(
+                    "/api/auth/login",
+                    null,
+                    "{\"username\":\"SessionPlayer\",\"password\":\"player-password\",\"rememberMe\":true}"));
+            String token = new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("token")
+                .getAsString();
+            assertEquals(200, get("/api/themes", token).status());
+            CoreData.setPassword(player, "");
+            assertEquals(401, get("/api/themes", token).status());
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            String second = login("SessionPlayer", "player-password");
+            config.set("general.public_mode", false);
+            AuthService.reloadHttpSettings();
+            config.set("general.public_mode", true);
+            AuthService.reloadHttpSettings();
+            assertEquals(401, get("/api/themes", second).status());
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", token).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
     void compiledFrontendModulesAreAvailableThroughTheWebServer() throws Exception {
         startApi();
         for (String path : new String[] { "/assets/web/app/main.js", "/assets/web/app/api.js",

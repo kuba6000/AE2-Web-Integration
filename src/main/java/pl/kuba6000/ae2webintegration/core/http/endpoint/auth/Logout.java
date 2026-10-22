@@ -34,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
  *           failure.
+ * @response 503 {@link Response} SERVER_STOPPING: the originating HTTP lifecycle ended before logout.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"CSRF_REJECTED","data":null}
@@ -42,6 +43,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/auth/logout")
 public final class Logout extends IAsyncRequest {
@@ -59,7 +61,10 @@ public final class Logout extends IAsyncRequest {
 
     @Override
     public void handle() {
-        AuthService.logout(context.getExchange());
+        if (!AuthService.logout(context)) {
+            respond(HttpURLConnection.HTTP_UNAVAILABLE, new Response(ApiStatus.SERVER_STOPPING, null));
+            return;
+        }
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }
