@@ -7,12 +7,14 @@ import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
@@ -85,6 +87,48 @@ class DiscordCraftingCardTest {
         assertTrue(count(longName, 0xfff19b9b) > 0, "Cancelled cards must have a cancellation accent");
     }
 
+    @Test
+    void requesterNamesAreVisibleInTheirOwnBoundedCardRow() throws Exception {
+        DiscordCraftingCard renderer = new DiscordCraftingCard();
+        CraftingMessage unknown = message(null, null, false, "Powered Rail");
+        CraftingMessage single = new CraftingMessage(
+            unknown.gridName(),
+            unknown.cpuName(),
+            unknown.output(),
+            unknown.durationString(),
+            false,
+            Collections.singletonList(new PlayerIdentity(new UUID(0, 1), "Alice")));
+        CraftingMessage multiple = new CraftingMessage(
+            unknown.gridName(),
+            unknown.cpuName(),
+            unknown.output(),
+            unknown.durationString(),
+            false,
+            Arrays.asList(new PlayerIdentity(new UUID(0, 1), "Alice"), new PlayerIdentity(new UUID(0, 2), "Bob")));
+        BufferedImage noNames = decode(renderer.render(unknown, null));
+        BufferedImage oneName = decode(renderer.render(single, null));
+        BufferedImage twoNames = decode(renderer.render(multiple, null));
+        assertEquals(noNames.getWidth(), twoNames.getWidth());
+        assertEquals(noNames.getHeight(), twoNames.getHeight());
+        assertTrue(noNames.getHeight() <= 500);
+        int height = noNames.getHeight();
+        int width = noNames.getWidth();
+        assertArrayEquals(
+            noNames.getRGB(0, 0, width, height / 2, null, 0, width),
+            twoNames.getRGB(0, 0, width, height / 2, null, 0, width),
+            "Requester changes must not overwrite product details");
+        assertFalse(
+            Arrays.equals(
+                noNames.getRGB(0, height / 2, width, height / 2, null, 0, width),
+                oneName.getRGB(0, height / 2, width, height / 2, null, 0, width)),
+            "Known requester must visibly replace Unknown");
+        assertFalse(
+            Arrays.equals(
+                oneName.getRGB(0, height / 2, width, height / 2, null, 0, width),
+                twoNames.getRGB(0, height / 2, width, height / 2, null, 0, width)),
+            "Each additional known requester must be shown");
+    }
+
     private static CraftingMessage message(StableKey key, StableKey base, boolean cancelled, String name) {
         return new CraftingMessage(
             "Factory",
@@ -93,7 +137,8 @@ class DiscordCraftingCardTest {
                 new ResourceDescriptor("minecraft", "rail", 0, 0, name, ResourceType.ITEM, key, base),
                 4096),
             "16m 42s",
-            cancelled);
+            cancelled,
+            java.util.Collections.emptyList());
     }
 
     private static BufferedImage decode(byte[] png) throws Exception {

@@ -97,7 +97,7 @@ class CraftingNotificationTest extends GridTestScope {
                 assertNotNull(data);
                 GridSettingsData settings = data.getSettings();
                 settings.setName("Name when the job started");
-                AE2JobTracker.addJob(cpu, grid, false);
+                AE2JobTracker.addJob(cpu, grid, false, null);
                 String name = named ? "Factory \"A\" – Łódź" : "";
                 settings.setName(name);
 

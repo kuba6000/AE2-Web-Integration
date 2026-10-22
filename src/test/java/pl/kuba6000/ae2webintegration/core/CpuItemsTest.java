@@ -32,7 +32,8 @@ class CpuItemsTest {
         false,
         null,
         true,
-        1000);
+        1000,
+        Collections.emptyList());
     private static final CpuObservation.Header UNTRACKED = new CpuObservation.Header(
         64,
         true,
@@ -41,7 +42,8 @@ class CpuItemsTest {
         false,
         null,
         false,
-        0);
+        0,
+        Collections.emptyList());
     private final Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
 
     private CpuObservation.Row row(long id, CpuObservation.Amounts amounts) {

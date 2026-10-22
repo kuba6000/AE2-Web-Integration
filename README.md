@@ -262,12 +262,15 @@ Crafting completion notifications can be filtered with `minimum_crafting_duratio
 which keeps all crafting completion notifications enabled.
 Notifications are initialized ONLY for tracked grids
 
+Crafting updates include the requesting players when identified, using the authenticated account for
+orders placed through the web terminal. Administrator and localhost access have no player identity.
+
 #### Discord Integration
 
 Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
 `discord.role_id` configures an optional role mention.
 
-Crafting notifications include a dark image card with the result, network name, CPU and duration.
+Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
 Install an icon pack to include item icons. Set `discord.image_cards = false` for text-only notifications.
 
 #### NTFY Integration

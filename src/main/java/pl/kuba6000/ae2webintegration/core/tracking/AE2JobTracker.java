@@ -1,9 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
 import org.jetbrains.annotations.NotNull;
@@ -13,6 +17,7 @@ import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -71,6 +76,19 @@ public class AE2JobTracker {
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
         public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
         public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
+        private final Map<UUID, PlayerIdentity> requestersById = new LinkedHashMap<>();
+        private volatile List<PlayerIdentity> requesters = Collections.emptyList();
+
+        public @NotNull List<PlayerIdentity> getRequesters() {
+            return requesters;
+        }
+
+        private void rememberRequester(@Nullable PlayerIdentity requester) {
+            if (requester == null) return;
+            requestersById.put(requester.uuid, requester);
+            requesters = Collections.unmodifiableList(new ArrayList<>(requestersById.values()));
+        }
+
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
@@ -102,7 +120,8 @@ public class AE2JobTracker {
         trackingInfoMap.clear();
     }
 
-    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging) {
+    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging,
+        @Nullable PlayerIdentity requester) {
         if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
         if (isMerging && info == null) return;
@@ -120,8 +139,10 @@ public class AE2JobTracker {
         if (isMerging) {
             info.finalOutput = finalOutput;
         } else {
-            trackingInfoMap.put(cpuCluster, new JobTrackingInfo(finalOutput));
+            info = new JobTrackingInfo(finalOutput);
+            trackingInfoMap.put(cpuCluster, info);
         }
+        info.rememberRequester(requester);
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, @NotNull IAEKey keyDiff) {
@@ -243,7 +264,8 @@ public class AE2JobTracker {
                     cpu.web$getName(),
                     info.finalOutput,
                     NotificationManager.formatDuration(durationMillis),
-                    info.wasCancelled));
+                    info.wasCancelled,
+                    info.getRequesters()));
         }
     }
 

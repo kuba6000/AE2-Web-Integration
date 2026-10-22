@@ -241,7 +241,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             }
         };
         TestGridFixtures.track(grid);
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, null);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         info.timeStarted = System.currentTimeMillis() + (clockMovedBack ? 60_000 : -60_000);
         // One already measured stage of a still-active job; its duration may legitimately be zero.

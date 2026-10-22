@@ -2,22 +2,27 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
@@ -30,11 +35,93 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
     private static final StableKey GRID_KEY = TestGridFixtures.key(900_001L);
+
+    @ParameterizedTest
+    @ValueSource(ints = { 7, -1, -2 })
+    void webSubmissionUsesTheSubmittingPrincipalInsteadOfTheSyntheticNativePlayer(int principal) {
+        TestCraftingGrid crafting = new TestCraftingGrid(null);
+        TestGrid grid = new TestGrid(GRID_KEY, crafting);
+        TestGridFixtures.track(grid);
+        ICraftingCPUCluster cpu = cpu();
+        PlayerIdentity synthetic = new PlayerIdentity(AE2Controller.AEControllerUUID, "AE2CONTROLLER");
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, synthetic);
+        assertStatus("OK", submit(grid, plan(grid), TestGridFixtures.principal(principal)));
+        List<PlayerIdentity> requesters = AE2JobTracker.findActiveJob(cpu)
+            .getRequesters();
+        if (principal < 0) assertTrue(requesters.isEmpty());
+        else {
+            assertEquals(1, requesters.size());
+            assertEquals(TestGridFixtures.playerIdentity(principal).uuid, requesters.get(0).uuid);
+            assertEquals(TestGridFixtures.playerIdentity(principal).name, requesters.get(0).name);
+        }
+    }
+
+    @Test
+    void nestedAndFailedWebSubmissionsRestoreTheCallingRequesterAndThenNativeAttribution() {
+        TestCraftingGrid outerCrafting = new TestCraftingGrid(null);
+        TestGrid outer = new TestGrid(GRID_KEY, outerCrafting);
+        TestGridFixtures.track(outer);
+        TestCraftingGrid innerCrafting = new TestCraftingGrid(null);
+        TestGrid inner = new TestGrid(TestGridFixtures.key(900_002L), innerCrafting);
+        TestGridFixtures.track(inner);
+        PlayerIdentity nativePlayer = new PlayerIdentity(UUID.randomUUID(), "NativePlayer");
+        ICraftingCPUCluster innerCpu = cpu();
+        ICraftingCPUCluster outerCpu = cpu();
+        ICraftingCPUCluster laterCpu = cpu();
+        innerCrafting.submitAction = () -> {
+            AEMixinCallbacks.INSTANCE.jobStarted(innerCpu, inner, false, true, nativePlayer);
+            throw new IllegalStateException("Inner submission failed");
+        };
+        int innerPlan = plan(inner);
+        outerCrafting.submitAction = () -> {
+            assertThrows(IllegalStateException.class, () -> submit(inner, innerPlan, WebPrincipal.admin()));
+            AEMixinCallbacks.INSTANCE.jobStarted(outerCpu, outer, false, true, nativePlayer);
+            throw new IllegalStateException("Outer submission failed");
+        };
+        assertThrows(IllegalStateException.class, () -> submit(outer, plan(outer), TestGridFixtures.principal(7)));
+        assertTrue(
+            AE2JobTracker.findActiveJob(innerCpu)
+                .getRequesters()
+                .isEmpty());
+        assertEquals(
+            TestGridFixtures.playerIdentity(7).uuid,
+            AE2JobTracker.findActiveJob(outerCpu)
+                .getRequesters()
+                .get(0).uuid);
+        AEMixinCallbacks.INSTANCE.jobStarted(laterCpu, outer, false, true, nativePlayer);
+        assertEquals(
+            Collections.singletonList(nativePlayer),
+            AE2JobTracker.findActiveJob(laterCpu)
+                .getRequesters());
+    }
+
+    private static int plan(TestGrid grid) {
+        return GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture.completedFuture(new TestCraftingJob()),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+    }
+
+    private static ICraftingCPUCluster cpu() {
+        return (ICraftingCPUCluster) Proxy.newProxyInstance(
+            CraftingPlanRequestLifecycleTest.class.getClassLoader(),
+            new Class<?>[] { ICraftingCPUCluster.class },
+            (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$getFinalOutput"))
+                    return new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);
+                throw new AssertionError("Unexpected CPU operation: " + method.getName());
+            });
+    }
 
     @Test
     void aSuccessfullySubmittedPlanCannotBeSubmittedAgain() {
@@ -193,9 +280,14 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
     }
 
     private static String submit(TestGrid grid, int id) {
+        return submit(grid, id, WebPrincipal.admin());
+    }
+
+    private static String submit(TestGrid grid, int id, WebPrincipal principal) {
         SubmitCraftingPlan request = new SubmitCraftingPlan();
         request.init(
-            TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
+            TestGridFixtures
+                .context(principal, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         return request.getJSON();
     }
@@ -221,8 +313,14 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         }
     }
 
-    @Desugar
-    private record TestCraftingGrid(String submitResult) implements IAECraftingGrid {
+    private static final class TestCraftingGrid implements IAECraftingGrid {
+
+        private final String submitResult;
+        private Runnable submitAction = () -> {};
+
+        private TestCraftingGrid(String submitResult) {
+            this.submitResult = submitResult;
+        }
 
         @Override
         public boolean web$isCurrentlyCraftable(IAEKey key) {
@@ -248,6 +346,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         @Override
         public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
             IAEGrid grid) {
+            submitAction.run();
             return submitResult;
         }
 

@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
 import java.net.HttpURLConnection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +14,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -130,6 +133,8 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean hasTrackingInfo = false;
+        /** Identified player requesters of the tracked job, in submission order; empty when unavailable. */
+        public @NotNull List<PlayerIdentity> requesters = Collections.emptyList();
         /**
          * Crafting start time in Unix epoch milliseconds; zero when unavailable.
          *
@@ -168,6 +173,7 @@ public final class GetCPUList extends ISyncedRequest {
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;
                     cpuInfo.timeStarted = trackingInfo.timeStarted;
+                    cpuInfo.requesters = trackingInfo.getRequesters();
                 }
             }
             cpuList.put(entry.getKey(), cpuInfo);

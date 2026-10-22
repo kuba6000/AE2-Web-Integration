@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.notification;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.awt.AWTError;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -10,7 +11,10 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -21,12 +25,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -160,8 +166,8 @@ class DiscordNotificationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = { false, true })
-    void unavailableFontOrJava2dStillDeliversText(boolean missingJava2d) throws Exception {
+    @ValueSource(strings = { "font", "java2d", "awt" })
+    void unavailableGraphicsStillDeliversTextAndFurtherNotifications(String failureMode) throws Exception {
         URL classes = DiscordDestination.class.getProtectionDomain()
             .getCodeSource()
             .getLocation();
@@ -170,7 +176,8 @@ class DiscordNotificationTest {
 
             @Override
             protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                if (missingJava2d && name.startsWith("java.awt.")) throw new NoClassDefFoundError("Java2D unavailable");
+                if (failureMode.equals("java2d") && name.startsWith("java.awt."))
+                    throw new NoClassDefFoundError("Java2D unavailable");
                 if (!name.startsWith("pl.kuba6000.ae2webintegration.core.notification.destination.discord."))
                     return super.loadClass(name, resolve);
                 Class<?> loaded = findLoadedClass(name);
@@ -181,15 +188,15 @@ class DiscordNotificationTest {
 
             @Override
             public InputStream getResourceAsStream(String name) {
+                if (failureMode.equals("awt")) throw new AWTError("Cannot connect to graphics environment");
                 return name.endsWith(".ttf") ? null : super.getResourceAsStream(name);
             }
         }) {
             Class<?> destination = loader.loadClass(DiscordDestination.class.getName());
+            Object sender = destination.getConstructor()
+                .newInstance();
             destination.getMethod("sendNotification", IMessage.class)
-                .invoke(
-                    destination.getConstructor()
-                        .newInstance(),
-                    crafting("Powered Rail", false));
+                .invoke(sender, crafting("Powered Rail", false));
             Upload upload = upload();
             assertEquals("application/json", upload.contentType);
             JsonObject embed = parse(upload.body).getAsJsonArray("embeds")
@@ -200,7 +207,54 @@ class DiscordNotificationTest {
                 embed.get("description")
                     .getAsString()
                     .contains("Powered Rail"));
+            destination.getMethod("sendNotification", IMessage.class)
+                .invoke(sender, new StatusMessage("Still running", "Second notification", StatusMessage.Severity.NONE));
+            assertEquals(
+                "Still running",
+                parse(upload().body).getAsJsonArray("embeds")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("title")
+                    .getAsString());
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "true, 0", "true, 1", "true, 2", "false, 0", "false, 1", "false, 2" })
+    void bothDestinationsPresentTheKnownRequestersWithoutGuessingUnknownOnes(boolean discord, int count)
+        throws Exception {
+        Config.INSTANCE.discord.imageCards = false;
+        Config.INSTANCE.ntfy.host = Config.INSTANCE.discord.webhook;
+        Config.INSTANCE.ntfy.topic = "crafting-test";
+        List<PlayerIdentity> requesters = new ArrayList<>();
+        if (count >= 1) requesters.add(new PlayerIdentity(new UUID(0, 1), "Alice"));
+        if (count >= 2) requesters.add(new PlayerIdentity(new UUID(0, 2), "Bob"));
+        CraftingMessage base = crafting("Powered Rail", false);
+        CraftingMessage message = new CraftingMessage(
+            base.gridName(),
+            base.cpuName(),
+            base.output(),
+            base.durationString(),
+            base.wasCancelled(),
+            requesters);
+        if (discord) new DiscordDestination().sendNotification(message);
+        else new NtfyDestination().sendNotification(message);
+        JsonObject payload = parse(upload().body);
+        String text = discord ? payload.getAsJsonArray("embeds")
+            .get(0)
+            .getAsJsonObject()
+            .get("description")
+            .getAsString()
+            : payload.get("message")
+                .getAsString();
+        if (count == 0) assertTrue(text.contains("Unknown"), text);
+        else {
+            assertTrue(text.contains("Alice"), text);
+            assertFalse(text.contains("Unknown"), text);
+            if (count >= 2) assertTrue(text.contains("Bob"), text);
+        }
+        assertFalse(text.contains("Admin"), text);
+        assertFalse(text.contains("Automation"), text);
     }
 
     @Test
@@ -261,7 +315,8 @@ class DiscordNotificationTest {
                 new ResourceDescriptor("minecraft", "rail", 0, 0, name, ResourceType.ITEM, null, null),
                 4096),
             "16m 42s",
-            cancelled);
+            cancelled,
+            java.util.Collections.emptyList());
     }
 
     private static JsonObject parse(byte[] bytes) {

@@ -209,7 +209,8 @@ public final class CpuReader {
             busy && cpu instanceof IPausableCraftingCPU pausable && pausable.web$isPaused(),
             finalOutput,
             tracking != null,
-            tracking == null ? 0 : tracking.timeStarted);
+            tracking == null ? 0 : tracking.timeStarted,
+            tracking == null ? Collections.emptyList() : tracking.getRequesters());
     }
 
     private static @Nullable CpuObservation.Tracking tracking(AE2JobTracker.JobTrackingInfo info, IAEKey key) {

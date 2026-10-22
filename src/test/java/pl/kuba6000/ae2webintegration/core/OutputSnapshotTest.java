@@ -395,12 +395,12 @@ class OutputSnapshotTest extends GridTestScope {
                     .equals("web$getFinalOutput")) return output.get();
                 throw new AssertionError("Unexpected native CPU call");
             });
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, null);
         ResourceSnapshot initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         output.set(new Stack(new Resource(), 9));
-        AE2JobTracker.addJob(cpu, grid, true);
+        AE2JobTracker.addJob(cpu, grid, true, null);
         ResourceSnapshot merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;

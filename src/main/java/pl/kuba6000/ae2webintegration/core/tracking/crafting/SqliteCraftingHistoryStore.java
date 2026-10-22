@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
@@ -21,6 +22,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -41,7 +43,7 @@ public final class SqliteCraftingHistoryStore {
 
     @Desugar
     public record Summary(long id, @NotNull ResourceSnapshot finalOutput, long timeStarted, long timeDone,
-        boolean wasCancelled) {}
+        boolean wasCancelled, @NotNull List<PlayerIdentity> requesters) {}
 
     @Desugar
     public record Page(@NotNull List<Summary> entries, @Nullable Long nextBefore) {}
@@ -67,6 +69,19 @@ public final class SqliteCraftingHistoryStore {
                 insert.setBoolean(4, job.wasCancelled());
                 insert.executeUpdate();
                 id = generatedId(insert);
+            }
+            try (PreparedStatement insert = db.prepareStatement("""
+                INSERT INTO crafting_requesters(job_id, ordinal, player_uuid, player_name) VALUES (?, ?, ?, ?)
+                """)) {
+                int position = 0;
+                for (PlayerIdentity requester : job.requesters()) {
+                    insert.setLong(1, id);
+                    insert.setInt(2, position++);
+                    insert.setString(3, requester.uuid.toString());
+                    insert.setString(4, requester.name);
+                    insert.addBatch();
+                }
+                if (position > 0) insert.executeBatch();
             }
             Map<String, Long> providers = new HashMap<>();
             int ordinal = 0;
@@ -112,6 +127,11 @@ public final class SqliteCraftingHistoryStore {
 
     private static void validate(CompletedCrafting job) throws RejectedCraftingException {
         validate(job.finalOutput());
+        Set<UUID> requesters = new HashSet<>();
+        for (PlayerIdentity requester : job.requesters()) {
+            if (!requesters.add(requester.uuid)) throw new RejectedCraftingException("Duplicate requester UUID");
+            validateLength(requester.name, 1048576, "requester name");
+        }
         Set<String> providers = new HashSet<>();
         for (CompletedCrafting.Provider provider : job.providers()) {
             validateLength(provider.name(), 1048576, "provider name");
@@ -282,12 +302,28 @@ public final class SqliteCraftingHistoryStore {
                             snapshot(rows),
                             rows.getLong("time_started"),
                             rows.getLong("time_done"),
-                            rows.getBoolean("cancelled")));
+                            rows.getBoolean("cancelled"),
+                            Collections.emptyList()));
                 }
             }
             Long next = entries.size() > limit ? entries.get(limit - 1)
                 .id() : null;
             if (next != null) entries.remove(entries.size() - 1);
+            List<Long> ids = new ArrayList<>();
+            for (Summary entry : entries) ids.add(entry.id());
+            Map<Long, List<PlayerIdentity>> requesters = requesters(db, ids);
+            for (int index = 0; index < entries.size(); index++) {
+                Summary entry = entries.get(index);
+                entries.set(
+                    index,
+                    new Summary(
+                        entry.id(),
+                        entry.finalOutput(),
+                        entry.timeStarted(),
+                        entry.timeDone(),
+                        entry.wasCancelled(),
+                        requesters.getOrDefault(entry.id(), Collections.emptyList())));
+            }
             return new Page(entries, next);
         });
     }
@@ -308,10 +344,28 @@ public final class SqliteCraftingHistoryStore {
                         rows.getLong(2),
                         rows.getBoolean(3),
                         resources(db, id),
-                        providers(db, id));
+                        providers(db, id),
+                        requesters(db, Collections.singletonList(id)).getOrDefault(id, Collections.emptyList()));
                 }
             }
         });
+    }
+
+    private static Map<Long, List<PlayerIdentity>> requesters(Connection db, List<Long> jobs) throws SQLException {
+        Map<Long, List<PlayerIdentity>> result = new HashMap<>();
+        if (jobs.isEmpty()) return result;
+        String placeholders = String.join(",", Collections.nCopies(jobs.size(), "?"));
+        try (PreparedStatement query = db.prepareStatement(
+            "SELECT job_id, player_uuid, player_name FROM crafting_requesters WHERE job_id IN (" + placeholders
+                + ") ORDER BY job_id, ordinal")) {
+            for (int index = 0; index < jobs.size(); index++) query.setLong(index + 1, jobs.get(index));
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) result.computeIfAbsent(rows.getLong(1), ignored -> new ArrayList<>())
+                    .add(new PlayerIdentity(UUID.fromString(rows.getString(2)), rows.getString(3)));
+            }
+        }
+        result.replaceAll((id, identities) -> Collections.unmodifiableList(identities));
+        return result;
     }
 
     private static String descriptionsSql() {

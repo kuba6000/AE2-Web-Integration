@@ -130,8 +130,8 @@ class CpuLiveHttpTest {
                     case "complete" -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
                     case "cancel" -> AEMixinCallbacks.INSTANCE.jobCancelled(grid, cpu);
                     case "replace" -> AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
-                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true);
-                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true);
+                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
+                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
                     default -> throw new AssertionError(boundary);
                 }
             });
@@ -253,7 +253,7 @@ class CpuLiveHttpTest {
     void inventoryNotificationUpdatesStoredCountsWithoutAdvancingCraftingMeasurements() throws Exception {
         onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false);
+            AE2JobTracker.addJob(cpu, grid, false, null);
             cpu.waiting.amounts.put(iron, 5L);
             AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
         });
@@ -387,7 +387,7 @@ class CpuLiveHttpTest {
     void restoredStateInvalidatesTheViewWithoutChangingJobMeasurements() throws Exception {
         AE2JobTracker.JobTrackingInfo measured = onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false);
+            AE2JobTracker.addJob(cpu, grid, false, null);
             return AE2JobTracker.findActiveJob(cpu);
         });
         assertNotNull(measured);
@@ -507,10 +507,10 @@ class CpuLiveHttpTest {
                 onGame(() -> {
                     switch (hook) {
                         case "started":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
                             break;
                         case "merged":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
                             break;
                         case "completed":
                             AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);

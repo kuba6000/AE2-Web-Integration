@@ -1700,9 +1700,9 @@ class IconDeliveryHttpTest {
             if (index == 0) exactOutput = output.get();
             if (index == 1) {
                 // A merge replaces both the previous exact identity and its output data.
-                AE2JobTracker.addJob(cpu, grid, true);
+                AE2JobTracker.addJob(cpu, grid, true, null);
             } else {
-                AE2JobTracker.addJob(cpu, grid, false);
+                AE2JobTracker.addJob(cpu, grid, false, null);
             }
             waiting.set(10 + variant);
             AE2JobTracker.updateCraftingStatus(cpu, key);
@@ -1712,7 +1712,7 @@ class IconDeliveryHttpTest {
         }
         // Also retain an exact-match job independently of the merged fallback job.
         output.set(exactOutput);
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, null);
         AE2JobTracker.completeCrafting(grid, cpu);
         assertEquals(
             3,

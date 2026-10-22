@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -15,7 +16,11 @@ public interface IAEMixinCallbacks {
         return AEMixinCallbacks.INSTANCE;
     }
 
-    void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer);
+    /**
+     * An accepted submission or merge. Player-like admission remains independent of the optional identified player.
+     */
+    void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer,
+        @Nullable PlayerIdentity requester);
 
     void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, @NotNull IAEKey diff);
 

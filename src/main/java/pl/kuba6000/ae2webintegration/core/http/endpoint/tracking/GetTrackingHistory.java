@@ -13,6 +13,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -89,6 +90,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @param timeDone     completion time in Unix epoch milliseconds
      * @param wasCancelled whether the crafting work was cancelled
      * @param finalOutput  detached snapshot of the final crafting output
+     * @param requesters   identified player requesters, in submission order; empty when unavailable
      * @param id           durable decimal history entry identifier
      * @example timeStarted 1700000000000
      * @example timeDone 1700000010000
@@ -97,7 +99,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
      */
     @Desugar
     public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
-        @NotNull ResourceStack finalOutput, @NotNull String id) {}
+        @NotNull ResourceStack finalOutput, @NotNull String id, @NotNull List<PlayerIdentity> requesters) {}
 
     @Override
     public void handle() {
@@ -136,7 +138,8 @@ public final class GetTrackingHistory extends IAsyncRequest {
                         entry.timeDone(),
                         entry.wasCancelled(),
                         new ResourceStack(entry.finalOutput(), mappings),
-                        Long.toString(entry.id())));
+                        Long.toString(entry.id()),
+                        entry.requesters()));
             }
             respondDetached(
                 HttpURLConnection.HTTP_OK,

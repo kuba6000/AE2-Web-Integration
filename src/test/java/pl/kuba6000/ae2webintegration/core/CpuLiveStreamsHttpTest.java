@@ -298,7 +298,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
     private void track(CpuFixtures.Resource waitingFor) {
         TestGridFixtures.track(nativeGrid);
-        AE2JobTracker.addJob(cpu, nativeGrid, false);
+        AE2JobTracker.addJob(cpu, nativeGrid, false, null);
         cpu.waiting.amounts.put(waitingFor, 5L);
         AE2JobTracker.updateCraftingStatus(cpu, waitingFor);
     }
@@ -546,7 +546,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     void runningMeasurementIsDeliveredWhenTheJobStartsOrStopsWaitingAndWhenItsCountsChange() throws Exception {
         cpu.set(iron, 4, 0, 0);
         TestGridFixtures.track(nativeGrid);
-        AE2JobTracker.addJob(cpu, nativeGrid, false);
+        AE2JobTracker.addJob(cpu, nativeGrid, false, null);
         try (Connection stream = open(view(cpu), cpu)) {
             cpu.waiting.amounts.put(iron, 5L);
             AE2JobTracker.updateCraftingStatus(cpu, iron);

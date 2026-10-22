@@ -29,7 +29,7 @@ class WorldDatabaseSqliteTest {
         try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
             database.write(db -> {
                 try (Statement sql = db.createStatement()) {
-                    sql.execute("UPDATE world_schema SET version = 4294967303");
+                    sql.execute("UPDATE world_schema SET version = 4294967304");
                 }
                 return null;
             });

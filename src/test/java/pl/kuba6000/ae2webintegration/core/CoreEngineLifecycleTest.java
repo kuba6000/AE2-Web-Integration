@@ -68,7 +68,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         int planId = gridData
             .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, null);
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
         try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
             PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");

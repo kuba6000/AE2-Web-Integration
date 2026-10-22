@@ -49,7 +49,8 @@ export function createCpuView(
     const outputIcon = createResourceIcon();
     const timing = element('p', '', 'cpu-detail-note');
     const tracking = element('p', '', 'cpu-detail-note');
-    work.append(panelState, output, timing, tracking);
+    const requesters = element('p', '', 'cpu-detail-note');
+    work.append(panelState, output, requesters, timing, tracking);
     const actions = element('div');
     const footer = element('div', '', 'cpu-footer');
     footer.append(work, actions, status);
@@ -108,6 +109,11 @@ export function createCpuView(
                 );
             } else output.textContent = t('cpuOutputUnknown');
         } else if (detail) output.textContent = t('cpuIdleMessage');
+        requesters.textContent =
+            detail?.isBusy && detail.requesters.length
+                ? `${t('craftingRequestersLabel')}: ${detail.requesters.map((player) => player.name).join(', ')}`
+                : '';
+        requesters.hidden = !requesters.textContent;
         renderElapsed(state, locale);
         tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
         tracking.hidden = !tracking.textContent;
