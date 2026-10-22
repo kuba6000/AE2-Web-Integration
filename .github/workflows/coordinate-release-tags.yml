@@ -17,14 +17,29 @@ jobs:
     if: github.repository == 'kuba6000/AE2-Web-Integration'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      enabled: ${{ steps.credentials.outputs.enabled }}
     steps:
+      - name: Check release bot configuration
+        id: credentials
+        env:
+          CORE_PIN_BOT_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+        run: |
+          if [[ -z "${CORE_PIN_BOT_TOKEN//[[:space:]]/}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping native release tags: CORE_PIN_BOT_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.credentials.outputs.enabled == 'true'
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           submodules: false
           persist-credentials: false
       - name: Freeze the four release commits
+        if: steps.credentials.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_TAG: ${{ github.ref_name }}
@@ -35,6 +50,7 @@ jobs:
             --core-sha "$core_sha" --plan release-plan.json
           cat release-plan.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: steps.credentials.outputs.enabled == 'true'
         with:
           name: core-release-plan
           path: release-plan.json
@@ -43,6 +59,7 @@ jobs:
 
   publish:
     needs: prepare
+    if: needs.prepare.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

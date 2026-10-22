@@ -119,6 +119,8 @@ class CoordinateReleaseTest(unittest.TestCase):
         arguments.update(overrides)
         environment = dict(os.environ, GITHUB_API_URL=f"http://127.0.0.1:{self.server.server_port}",
                            GH_TOKEN="read-fixture", CORE_PIN_BOT_TOKEN=self.bot_token)
+        if self.bot_token is None:
+            environment.pop("CORE_PIN_BOT_TOKEN")
         return subprocess.run([sys.executable, str(SCRIPT), command,
                                *(value for key, item in arguments.items() for value in (f"--{key}", item))],
                               capture_output=True, text=True, env=environment)
@@ -151,6 +153,44 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.assertEqual(list(zip(TARGETS, TAGS, self.heads.values())),
                          [(item["branch"], item["tag"], item["sha"]) for item in plan["targets"]])
         self.assertEqual("", self.native_refs())
+
+    def test_missing_bot_token_skips_publication_without_requiring_a_plan(self):
+        before = self.git(self.checkout, "ls-remote", "origin")
+        for token in (None, "", " \t\n"):
+            with self.subTest(token=token):
+                self.bot_token = token
+                result = self.coordinate("publish")
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("CORE_PIN_BOT_TOKEN", result.stdout)
+                self.assertFalse(self.plan.exists())
+                self.assertEqual(before, self.git(self.checkout, "ls-remote", "origin"))
+                self.assertEqual([], self.api_writes)
+
+    def test_rewritten_native_history_reports_the_frozen_commit_without_publishing(self):
+        self.assertEqual(0, self.coordinate("prepare").returncode)
+        branch = "1.21.1"
+        self.git(self.source, "push", "--force", "origin", f"{self.core_sha}:refs/heads/{branch}")
+
+        result = self.coordinate("publish")
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(branch, result.stderr)
+        self.assertIn(self.heads[branch], result.stderr)
+        self.assertEqual("", self.native_refs())
+
+    def test_frozen_release_survives_newer_core_and_native_pins(self):
+        self.assertEqual(0, self.coordinate("prepare").returncode)
+        frozen = self.plan.read_bytes()
+        newer_core = self.advance("core")
+        for branch in TARGETS:
+            self.advance(branch, pin=newer_core)
+
+        result = self.coordinate("publish")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(sorted(f"{sha}\trefs/tags/{tag}" for sha, tag in zip(self.heads.values(), TAGS)),
+                         sorted(self.native_refs().splitlines()))
+        self.assertEqual(frozen, self.plan.read_bytes())
 
     def test_publishes_exact_four_planned_refs_and_can_repeat(self):
         prepared = self.coordinate("prepare")
@@ -290,7 +330,7 @@ class CoordinateReleaseTest(unittest.TestCase):
 
     def test_publication_requires_approved_bot_token_and_identity(self):
         self.assertEqual(0, self.coordinate("prepare").returncode)
-        for token, login in (("", "kuba6000-agent"), ("other-fixture", "kuba6000-agent"),
+        for token, login in (("other-fixture", "kuba6000-agent"),
                              ("bot-fixture", "other-account")):
             with self.subTest(token=token, login=login):
                 self.bot_token = token

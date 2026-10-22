@@ -130,6 +130,10 @@ def prepare(args, version):
 
 
 def publish(args, version):
+    token = os.environ.get("CORE_PIN_BOT_TOKEN", "").strip()
+    if not token:
+        print("Skipping native release tags: CORE_PIN_BOT_TOKEN is not configured.")
+        return
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     if (set(plan) != {"schema", "repository", "source_tag", "source_object", "core_sha", "targets"}
             or type(plan["schema"]) is not int or plan["schema"] != 1 or plan["repository"] != args.repository
@@ -146,11 +150,14 @@ def publish(args, version):
     existing = []
     for target in plan["targets"]:
         require_native_commit(args, target["branch"], target["sha"])
-        git(args.checkout, "merge-base", "--is-ancestor", target["sha"],
-            f"refs/remotes/origin/{target['branch']}")
+        try:
+            git(args.checkout, "merge-base", "--is-ancestor", target["sha"],
+                f"refs/remotes/origin/{target['branch']}")
+        except ReleaseError as error:
+            raise ReleaseError(f"Frozen release commit {target['sha']} is no longer in "
+                               f"{target['branch']} history; no release tags were created") from error
         existing.append(tag_exists(args, target))
-    token = os.environ.get("CORE_PIN_BOT_TOKEN")
-    if not token or github_api("user", token)["login"] != "kuba6000-agent":
+    if github_api("user", token)["login"] != "kuba6000-agent":
         raise ReleaseError("CORE_PIN_BOT_TOKEN must authenticate as kuba6000-agent")
     authentication = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
     if os.environ.get("GITHUB_ACTIONS") == "true":
