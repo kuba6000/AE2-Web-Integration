@@ -27,12 +27,14 @@ async function png(page, dialog) {
         bitmap.close();
         const values = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let opaque = 0,
-            red = 0;
+            red = 0,
+            green = 0;
         for (let i = 0; i < values.length; i += 4) {
             if (values[i + 3]) opaque++;
             if (values[i] === 255 && values[i + 1] === 0 && values[i + 2] === 0 && values[i + 3] === 255) red++;
+            if (values[i] === 0 && values[i + 1] === 255 && values[i + 2] === 0 && values[i + 3] === 255) green++;
         }
-        return { width: canvas.width, height: canvas.height, cornerAlpha: values[3], opaque, red };
+        return { width: canvas.width, height: canvas.height, cornerAlpha: values[3], opaque, red, green };
     }, bytes.toString('base64'));
     return { bytes, pixels, download };
 }
@@ -84,6 +86,27 @@ test('plan PNG exports every row independently of search, without icons, and rem
         .evaluate((node) => Math.round(node.getBoundingClientRect().width));
     assert.equal(smaller.pixels.width, Math.round(mobileWidth * 0.5) * 3);
     assert.equal(smaller.pixels.height, 166);
+});
+
+test('PNG header includes the output icon only when both header and icons are enabled', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    await atlasFixture(page, options);
+    options.plan = {
+        ...readyPlan,
+        finalOutput: { ...readyPlan.finalOutput, icon: { page: 0, x: 64, y: 0 } },
+        plan: [{ ...readyPlan.plan[0], icon: { page: 0, x: 0, y: 0 } }]
+    };
+    const dialog = await openExport(page, base);
+    const withHeader = await png(page, dialog);
+    assert.ok(withHeader.pixels.green > 100, 'output icon is drawn even when absent from plan rows');
+    assert.ok(withHeader.pixels.red > 100, 'resource icon is still drawn');
+    await dialog.getByRole('checkbox', { name: 'Icons', exact: true }).uncheck();
+    assert.equal((await png(page, dialog)).pixels.green, 0);
+    await dialog.getByRole('checkbox', { name: 'Icons', exact: true }).check();
+    await dialog.getByRole('checkbox', { name: 'Include title', exact: true }).uncheck();
+    const withoutHeader = await png(page, dialog);
+    assert.equal(withoutHeader.pixels.green, 0);
+    assert.ok(withoutHeader.pixels.red > 100);
 });
 
 test('PNG uses authenticated atlas crops and falls back without changing grid positions', async (t) => {

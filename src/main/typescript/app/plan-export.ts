@@ -77,11 +77,10 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
             if (signal.aborted) abort();
         });
         signal.throwIfAborted();
-        const resolved = await loader.resolve(
-            settings.icon ? rows.flatMap((row) => (row.icon ? [row.icon] : [])) : [],
-            request.icons as IconMetadata | null,
-            signal
-        );
+        const outputIcon = settings.header && settings.icon ? request.plan.finalOutput.icon : undefined;
+        const references = settings.icon ? rows.flatMap((row) => (row.icon ? [row.icon] : [])) : [];
+        if (outputIcon) references.push(outputIcon);
+        const resolved = await loader.resolve(references, request.icons as IconMetadata | null, signal);
         try {
             while (layout) {
                 signal.throwIfAborted();
@@ -103,16 +102,35 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
                     }
                     ctx.imageSmoothingEnabled = false;
                     ctx.textBaseline = 'top';
-                    if (settings.header)
+                    if (settings.header) {
+                        const padding = 6 * layout.scale;
+                        const icon = outputIcon ? resolved.icons.get(outputIcon) : undefined;
+                        const iconSize = icon
+                            ? Math.max(0, Math.min(style.iconSize * layout.scale, layout.headerHeight - 2 * padding))
+                            : 0;
+                        if (icon && iconSize > 0)
+                            ctx.drawImage(
+                                icon.image,
+                                icon.x,
+                                icon.y,
+                                icon.width,
+                                icon.height,
+                                padding,
+                                (layout.headerHeight - iconSize) / 2,
+                                iconSize,
+                                iconSize
+                            );
+                        const textLeft = padding + (iconSize > 0 ? iconSize + padding : 0);
                         drawText(
                             ctx,
                             request.title,
-                            6 * layout.scale,
-                            6 * layout.scale,
-                            layout.width - 12 * layout.scale,
+                            textLeft,
+                            (layout.headerHeight - style.fontSize * layout.scale) / 2,
+                            layout.width - textLeft - padding,
                             style,
                             style.fontSize * layout.scale
                         );
+                    }
                     for (let index = 0; index < layout.columns * layout.rows; index++) {
                         ctx.save();
                         ctx.translate(
