@@ -3702,6 +3702,7 @@ button.toast:hover {
 
 .plan-export-dialog {
     width: min(760px, calc(100vw - 24px));
+    height: fit-content;
     max-height: calc(100dvh - 24px);
     overflow: auto;
     box-sizing: border-box;
