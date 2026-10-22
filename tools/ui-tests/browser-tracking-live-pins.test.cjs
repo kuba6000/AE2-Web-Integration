@@ -2128,6 +2128,8 @@ test('live CPU detail applies absolute updates, new and removed resources and un
 
 test('a live CPU header section replaces the CPU state and keeps its resources', async (t) => {
     const { page, options, resources, send } = await openLiveCpu(t);
+    // Elapsed time advances even while paused; hold it steady while checking the incoming header.
+    await page.clock.setFixedTime(Date.now());
     await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
     const header = { ...options.cpuDetails['cpu-a'], isPaused: true, timeElapsed: 20000, items: null };
     send(2, { cpu: header });
