@@ -4,7 +4,7 @@ import org.jetbrains.annotations.NotNull;
 
 import com.electronwill.nightconfig.core.conversion.Path;
 
-/** Editable server configuration. Listener port and administrator password remain file-only. */
+/** Editable server configuration. Access mode, localhost trust, listener port and admin password are file-only. */
 public final class EditableServerSettings {
 
     public @NotNull General general = new General();
@@ -20,12 +20,8 @@ public final class EditableServerSettings {
 
     public static final class General {
 
-        @Path("allow_no_password_on_localhost")
-        public boolean allowNoPasswordOnLocalhost;
         @Path("trusted_proxies")
         public @NotNull String trustedProxies = "";
-        @Path("public_mode")
-        public boolean publicMode;
         @Path("max_requests_before_logged_in_per_minute")
         public int maxRequestsBeforeLoggedInPerMinute;
         @Path("check_for_updates")

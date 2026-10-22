@@ -13,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.EditableServerSettings;
 import pl.kuba6000.ae2webintegration.core.config.ServerSettingsSnapshot;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -23,7 +24,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
  * Saves and applies the complete editable server configuration without restarting the web listener.
- * Port and administrator password are file-only and rejected in the submitted object.
+ * Listener port, administrator password, public mode and localhost trust are file-only.
+ * Requests contain only revision and editable settings; readOnly metadata is rejected.
  * 
  * @response 200 {@link Response} Saved configuration and its new opaque file revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid, missing, unknown or file-only settings.
@@ -42,7 +44,11 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 public final class PostServerSettings extends IAsyncRequest {
 
     @Body
-    private @NotNull ServerSettingsSnapshot input;
+    private @NotNull Input input;
+
+    /** Complete editable values and the revision returned by the most recent read. */
+    @Desugar
+    public record Input(@NotNull String revision, @NotNull EditableServerSettings settings) {}
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull ServerSettingsSnapshot data) implements IResponseBody {}

@@ -6,7 +6,12 @@ import type { HistoryState } from './history.js';
 import type { ResourceHistoryState } from './resource-history.js';
 import type { SettingsState } from './settings.js';
 import type { ServerSettingsState, createServerSettings } from './server-settings.js';
-export type { ServerConfiguration, ServerSettingsResponse } from './server-settings.js';
+export type {
+    ServerConfiguration,
+    ServerSettingsReadOnly,
+    ServerSettingsUpdate,
+    ServerSettingsResponse
+} from './server-settings.js';
 import type {
     StoredResource,
     Grid,

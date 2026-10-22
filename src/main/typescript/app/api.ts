@@ -1,5 +1,5 @@
 import type { ThemeManifest } from './theme-manifest.js';
-import type { ServerSettingsResponse } from './server-settings.js';
+import type { ServerSettingsResponse, ServerSettingsUpdate } from './server-settings.js';
 import type {
     Grid,
     StoredResource,
@@ -62,7 +62,7 @@ export type EventHandlers<Delta> = {
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
     serverSettings(signal?: AbortSignal): Promise<ServerSettingsResponse>;
-    saveServerSettings(body: ServerSettingsResponse): Promise<ServerSettingsResponse>;
+    saveServerSettings(body: ServerSettingsUpdate): Promise<ServerSettingsResponse>;
     resourcePins(signal?: AbortSignal, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
     addResourcePin(
         gridKey: string,
@@ -214,7 +214,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                   }
                 | { cpuKey?: string }
                 | Partial<GridSettings>
-                | ServerSettingsResponse
+                | ServerSettingsUpdate
                 | { paused: boolean }
                 | { tag: string }
                 | { itemKey: string; placement: PinPlacement }

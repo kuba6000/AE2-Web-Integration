@@ -56,7 +56,14 @@ Server configuration is available at `#/server-settings` only for `context.user.
 Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
 an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
 without automatic polling. Edits survive navigation within the application; they are not stored in
-the browser. The administrator password and web port are excluded from this contract.
+the browser. The administrator password, web port, player-account access and password-free localhost
+access cannot be edited here.
+
+`state.serverSettings.readOnly` contains confirmed file-only metadata: `port`, `publicMode`,
+`allowNoPasswordOnLocalhost` and `adminPasswordConfigured`. It is null until loaded, and clears on
+denial or application disposal. The administrator password's value and length are never exposed;
+`adminPasswordConfigured` only indicates whether it is set. Keep this metadata outside the editable
+draft. The HTTP write contract is `{revision, settings}`; `readOnly` is response-only.
 
 Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
 `serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh

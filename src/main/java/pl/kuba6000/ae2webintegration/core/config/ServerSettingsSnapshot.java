@@ -4,6 +4,13 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
-/** Detached editable file contents and an opaque revision for conditional saves. */
+/** Detached file settings and an opaque revision for conditional saves. */
 @Desugar
-public record ServerSettingsSnapshot(@NotNull String revision, @NotNull EditableServerSettings settings) {}
+public record ServerSettingsSnapshot(@NotNull String revision, @NotNull EditableServerSettings settings,
+    @NotNull ReadOnly readOnly) {
+
+    /** File-only settings. Password state deliberately reveals neither its value nor its length. */
+    @Desugar
+    public record ReadOnly(int port, boolean publicMode, boolean allowNoPasswordOnLocalhost,
+        boolean adminPasswordConfigured) {}
+}

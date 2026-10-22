@@ -2806,18 +2806,29 @@ code {
     gap: 16px 20px;
 }
 .server-setting {
-    position: relative;
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 8px;
     min-width: 0;
 }
-.server-setting:has(.server-setting-help) {
-    padding-right: 30px;
-}
-.server-setting label:not(.checkbox),
-.server-settings-range label {
+.server-setting-label {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: start;
+    gap: 6px;
+    min-width: 0;
+}
+.server-setting label,
+.server-settings-range label {
     font-size: 12px;
+    line-height: 1.6;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.server-setting-value {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
     min-width: 0;
 }
 .server-setting input:not([type='checkbox']),
@@ -2825,23 +2836,45 @@ code {
     width: 100%;
     min-width: 0;
 }
+.server-setting input[type='checkbox'] {
+    margin: 0;
+}
 .server-setting-help {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    flex: 0 0 18px;
+    height: 20px;
     cursor: help;
+    opacity: 0.65;
+    filter: grayscale(1);
+}
+.server-setting-help:hover,
+.server-setting-help:focus-visible {
+    opacity: 1;
 }
 .server-setting-help .info-icon {
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+}
+.server-setting-file-only {
+    cursor: help;
+}
+.server-setting-file-only label {
+    color: var(--muted);
+}
+.server-setting-file-only input {
+    pointer-events: none;
+    opacity: 0.6;
+}
+.server-setting-file-only:focus-visible {
+    outline: 1px dashed var(--muted);
+    outline-offset: 4px;
 }
 .server-settings-range {
+    grid-column: 1 / -1;
+    grid-row: span 2;
     min-width: 0;
     margin: 0;
     padding: 0;
@@ -2857,6 +2890,10 @@ code {
     gap: 8px;
 }
 .server-settings-range label {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    gap: 8px;
     font-size: 10px;
 }
 .server-settings-actions {

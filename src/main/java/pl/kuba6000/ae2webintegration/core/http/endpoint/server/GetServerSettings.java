@@ -20,9 +20,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
  * Reads the editable server configuration. Administrator or trusted localhost access is required.
- * Port and administrator password are excluded; notification credentials are included.
+ * Read-only metadata includes listener port, public mode, localhost trust and whether an administrator
+ * password is configured. The administrator password itself is never returned; notification credentials are included.
  * 
- * @response 200 {@link Response} Detached editable configuration and opaque file revision.
+ * @response 200 {@link Response} Detached editable configuration, file-only metadata and opaque file revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: unexpected request body.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required.

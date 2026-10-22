@@ -108,7 +108,14 @@ public class Config {
         loaded.validate();
         EditableServerSettings editable = new EditableServerSettings();
         CONVERTER.toObject(document, editable);
-        return new ServerSettingsSnapshot(revision(bytes), editable);
+        return new ServerSettingsSnapshot(
+            revision(bytes),
+            editable,
+            new ServerSettingsSnapshot.ReadOnly(
+                loaded.general.port,
+                loaded.general.publicMode,
+                loaded.general.allowNoPasswordOnLocalhost,
+                !loaded.general.password.isEmpty()));
     }
 
     /** Returns null when another file edit superseded the submitted revision. */
@@ -223,6 +230,8 @@ public class Config {
         if (preserveFileOnlySettings) {
             loaded.general.port = INSTANCE.general.port;
             loaded.general.password = INSTANCE.general.password;
+            loaded.general.publicMode = INSTANCE.general.publicMode;
+            loaded.general.allowNoPasswordOnLocalhost = INSTANCE.general.allowNoPasswordOnLocalhost;
         }
         INSTANCE = loaded;
     }

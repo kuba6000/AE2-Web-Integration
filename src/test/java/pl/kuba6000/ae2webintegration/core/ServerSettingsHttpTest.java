@@ -61,7 +61,7 @@ class ServerSettingsHttpTest {
     }
 
     @Test
-    void readsEditableSettingsWithoutPortOrAdminPassword() throws Exception {
+    void readsEditableSettingsAndFileOnlyMetadataWithoutAdminPassword() throws Exception {
         JsonObject data = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         assertFalse(
             data.get("revision")
@@ -78,18 +78,62 @@ class ServerSettingsHttpTest {
             settings.getAsJsonObject("ntfy")
                 .has("password"));
         assertTrue(settings.has("resourceHistory"));
+        assertFalse(
+            settings.getAsJsonObject("general")
+                .has("publicMode"));
+        assertFalse(
+            settings.getAsJsonObject("general")
+                .has("allowNoPasswordOnLocalhost"));
+        JsonObject readOnly = data.getAsJsonObject("readOnly");
+        assertEquals(
+            port,
+            readOnly.get("port")
+                .getAsInt());
+        assertTrue(
+            readOnly.get("publicMode")
+                .getAsBoolean());
+        assertFalse(
+            readOnly.get("allowNoPasswordOnLocalhost")
+                .getAsBoolean());
+        assertTrue(
+            readOnly.get("adminPasswordConfigured")
+                .getAsBoolean());
+        assertFalse(
+            data.toString()
+                .contains("test-password"));
+        request("POST", "/api/server/settings", token, data.toString(), 400);
+        config.write("general.password", "");
+        assertFalse(
+            request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data")
+                .getAsJsonObject("readOnly")
+                .get("adminPasswordConfigured")
+                .getAsBoolean());
     }
 
     @Test
     void savesAndAppliesWithoutRestartPreservingFileOnlyValuesAndUnknownKeys() throws Exception {
         config.write("general.password", "file-edited-password");
         config.write("general.port", port + 1);
+        config.write("general.public_mode", false);
+        config.write("general.allow_no_password_on_localhost", true);
         config.write("extension.custom", "keep-me");
         Path file = Config.getConfigFile("config.toml")
             .toPath();
         String original = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         Files.write(file, ("# administrator comment\n" + original).getBytes(StandardCharsets.UTF_8));
         JsonObject body = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        JsonObject readOnly = body.getAsJsonObject("readOnly");
+        assertEquals(
+            port + 1,
+            readOnly.get("port")
+                .getAsInt());
+        assertFalse(
+            readOnly.get("publicMode")
+                .getAsBoolean());
+        assertTrue(
+            readOnly.get("allowNoPasswordOnLocalhost")
+                .getAsBoolean());
+        body.remove("readOnly");
         String previousRevision = body.get("revision")
             .getAsString();
         body.getAsJsonObject("settings")
@@ -103,6 +147,8 @@ class ServerSettingsHttpTest {
         assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
         assertEquals("test-password", Config.INSTANCE.general.password);
         assertEquals(port, Config.INSTANCE.general.port);
+        assertTrue(Config.INSTANCE.general.publicMode);
+        assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         assertTrue(contents.contains("administrator comment"));
         assertTrue(contents.contains("keep-me"));
@@ -111,6 +157,8 @@ class ServerSettingsHttpTest {
         Config.reload();
         assertEquals("file-edited-password", Config.INSTANCE.general.password);
         assertEquals(port + 1, Config.INSTANCE.general.port);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertTrue(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
     }
 
@@ -234,6 +282,7 @@ class ServerSettingsHttpTest {
         request("POST", "/api/server/settings", "cookie:" + token, edit.toString(), 403);
         config.set("general.allow_no_password_on_localhost", true);
         JsonObject local = request("GET", "/api/server/settings", null, null, 200).getAsJsonObject("data");
+        local.remove("readOnly");
         request("POST", "/api/server/settings", null, local.toString(), 403);
         request("POST", "/api/server/settings", "local", local.toString(), 200);
     }
@@ -258,8 +307,21 @@ class ServerSettingsHttpTest {
         assertNotEquals(777, Config.INSTANCE.notifications.minimumCraftingAmount);
     }
 
+    @Test
+    void fileOnlyAccessFlagsCannotBeChangedByWebClients() throws Exception {
+        for (String field : new String[] { "publicMode", "allowNoPasswordOnLocalhost" }) {
+            JsonObject edit = readSettings();
+            edit.getAsJsonObject("settings")
+                .getAsJsonObject("general")
+                .addProperty(field, true);
+            request("POST", "/api/server/settings", token, edit.toString(), 400);
+        }
+    }
+
     private JsonObject readSettings() throws Exception {
-        return request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        JsonObject input = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        input.remove("readOnly");
+        return input;
     }
 
     private JsonObject request(String method, String path, String credentials, String body, int expected)

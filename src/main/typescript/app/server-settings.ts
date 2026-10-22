@@ -2,12 +2,10 @@ import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { SettingRange } from './api-types.js';
 
-/** Editable server configuration. The web listener port and administrator password stay file-only. */
+/** Editable configuration; listener and login access settings remain file-only. */
 export type ServerConfiguration = {
     general: {
-        allowNoPasswordOnLocalhost: boolean;
         trustedProxies: string;
-        publicMode: boolean;
         maxRequestsBeforeLoggedInPerMinute: number;
         checkForUpdates: boolean;
         defaultTheme: string;
@@ -29,11 +27,19 @@ export type ServerConfiguration = {
         maxQueuedRows: number;
     };
 };
-export type ServerSettingsResponse = { revision: string; settings: ServerConfiguration };
+export type ServerSettingsReadOnly = {
+    port: number;
+    publicMode: boolean;
+    allowNoPasswordOnLocalhost: boolean;
+    adminPasswordConfigured: boolean;
+};
+export type ServerSettingsUpdate = { revision: string; settings: ServerConfiguration };
+export type ServerSettingsResponse = ServerSettingsUpdate & { readOnly: ServerSettingsReadOnly };
 export type ServerSettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: ServerConfiguration | null;
     draft: ServerConfiguration | null;
+    readOnly: ServerSettingsReadOnly | null;
     dirty: boolean;
     saving: boolean;
     error: string | null;
@@ -46,6 +52,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
         status: 'idle',
         current: null,
         draft: null,
+        readOnly: null,
         dirty: false,
         saving: false,
         error: null,
@@ -60,7 +67,14 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
     let reading: Promise<void> | undefined;
 
     function denied() {
-        Object.assign(state, { status: 'error', error: 'NO_PERMISSIONS', current: null, draft: null, dirty: false });
+        Object.assign(state, {
+            status: 'error',
+            error: 'NO_PERMISSIONS',
+            current: null,
+            draft: null,
+            readOnly: null,
+            dirty: false
+        });
         revision = null;
     }
     async function load(discard = false) {
@@ -85,6 +99,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 Object.assign(state, {
                     status: 'ready',
                     current: result.settings,
+                    readOnly: result.readOnly,
                     draft: structuredClone(result.settings),
                     dirty: false,
                     uncertain: false
@@ -160,6 +175,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 Object.assign(state, {
                     status: 'ready',
                     current: result.settings,
+                    readOnly: result.readOnly,
                     draft: structuredClone(result.settings),
                     dirty: false,
                     saved: true,
@@ -188,6 +204,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
             request?.abort();
             state.current = null;
             state.draft = null;
+            state.readOnly = null;
         }
     };
 }

@@ -1,13 +1,11 @@
 export const serverSettingsTranslations = {
     en: {
-        serverSettingsIntro:
-            'Save and apply server configuration. The administrator password and web port can only be changed in config.toml.',
+        serverFileOnly: 'This setting can only be changed in config.toml.',
+        serverPort: 'Web server port',
+        serverAdminPassword: 'Administrator password',
         serverGeneral: 'General and access',
         serverPublicMode: 'Allow player accounts',
-        serverPublicModeHelp: 'When disabled, only the administrator account can log in.',
         serverLocalhost: 'Allow localhost without a password',
-        serverLocalhostHelp:
-            'Loopback clients receive administrator access. Disabling this may require you to log in on your next request.',
         serverUpdates: 'Check for mod updates',
         serverLoginRate: 'Unauthenticated requests per minute',
         serverProxies: 'Trusted proxies',
@@ -68,14 +66,12 @@ export const serverSettingsTranslations = {
             'The save could not be confirmed. Your edits have been kept. Reload the server configuration to check what was applied.'
     },
     pl: {
-        serverSettingsIntro:
-            'Zapisz i zastosuj konfigurację serwera. Hasło administratora i port WWW można zmienić tylko w config.toml.',
+        serverFileOnly: 'To ustawienie można zmienić tylko w config.toml.',
+        serverPort: 'Port serwera WWW',
+        serverAdminPassword: 'Hasło administratora',
         serverGeneral: 'Ogólne i dostęp',
         serverPublicMode: 'Zezwalaj na konta graczy',
-        serverPublicModeHelp: 'Po wyłączeniu logować może się tylko administrator.',
         serverLocalhost: 'Zezwalaj na localhost bez hasła',
-        serverLocalhostHelp:
-            'Klienci lokalni otrzymują dostęp administratora. Wyłączenie może wymagać zalogowania przy następnym żądaniu.',
         serverUpdates: 'Sprawdzaj aktualizacje moda',
         serverLoginRate: 'Żądania bez logowania na minutę',
         serverProxies: 'Zaufane proxy',

@@ -1,8 +1,6 @@
 const settings = () => ({
     general: {
-        allowNoPasswordOnLocalhost: true,
         trustedProxies: '',
-        publicMode: true,
         maxRequestsBeforeLoggedInPerMinute: 20,
         checkForUpdates: true,
         defaultTheme: 'builtin:default'
@@ -25,4 +23,11 @@ const settings = () => ({
     }
 });
 
-module.exports = { settings };
+const readOnly = () => ({
+    port: 2324,
+    publicMode: true,
+    allowNoPasswordOnLocalhost: true,
+    adminPasswordConfigured: true
+});
+
+module.exports = { settings, readOnly };

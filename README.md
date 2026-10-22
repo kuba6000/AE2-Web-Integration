@@ -202,7 +202,8 @@ an `/ae2webintegration auth <token>` command. The player must run that command i
 
 Administrators and trusted localhost users can edit the configuration in **Server settings**.
 **Save and apply** writes `config.toml` and applies the changes without restarting the web server.
-The listener port and administrator password must be changed directly in the configuration file.
+The listener port, administrator password, public mode and password-free localhost access are read-only
+in the panel; change them directly in the configuration file.
 
 Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
 **Include machine-requested crafting** there to also track jobs started by machines on that network.

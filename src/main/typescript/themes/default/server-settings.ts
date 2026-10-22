@@ -5,6 +5,7 @@ import { element } from './dom.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 type Draft = NonNullable<ThemeState['serverSettings']['draft']>;
+type FileSettings = NonNullable<ThemeState['serverSettings']['readOnly']>;
 
 export function createServerSettingsView(root: HTMLElement, application: ThemeApplication, tooltips: TooltipBindings) {
     const view = element('section', '', 'page-view server-settings-view');
@@ -19,7 +20,6 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     scroll.role = 'region';
     scroll.tabIndex = 0;
     scroll.setAttribute('aria-labelledby', title.id);
-    const intro = element('p', '', 'hint');
     const form = element('form', '', 'server-settings-form');
     const status = element('p');
     status.role = 'status';
@@ -29,7 +29,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     reload.type = 'button';
     const actions = element('div', '', 'settings-actions server-settings-actions');
     actions.append(save, reload);
-    scroll.append(intro, status, form, actions);
+    scroll.append(status, form, actions);
     body.append(scroll);
     view.append(heading, body);
     root.append(view);
@@ -37,6 +37,8 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     const labels: { node: HTMLElement; key: string }[] = [];
     const inputs: { input: HTMLInputElement; update(draft: Draft): void }[] = [];
     const validations: (() => void)[] = [];
+    const fileControls: { input: HTMLInputElement; update(settings: FileSettings): void }[] = [];
+    const passwordMask = 'x'.repeat(8 + Math.floor(Math.random() * 5));
     const translated = <T extends HTMLElement>(node: T, key: string) => {
         labels.push({ node, key });
         return node;
@@ -69,8 +71,8 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
         options: { min?: number; max?: number; help?: string } = {}
     ) {
         const wrapper = element('div', '', 'server-setting');
-        const label = element('label', '', type === 'checkbox' ? 'checkbox' : '');
-        const text = translated(element('span'), key);
+        const header = element('div', '', 'server-setting-label');
+        const label = translated(element('label'), key);
         const input = element('input');
         input.type = type;
         input.id = `server-${section}-${String(field)}`;
@@ -82,10 +84,11 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             input.min = String(options.min ?? 0);
             input.max = String(options.max ?? 2147483647);
         }
-        if (type === 'checkbox') label.append(input, text);
-        else label.append(text, input);
-        wrapper.append(label);
-        if (options.help) help(wrapper, options.help);
+        header.append(label);
+        if (options.help) help(header, options.help);
+        const controlField = element('div', '', 'server-setting-value');
+        controlField.append(input);
+        wrapper.append(header, controlField);
         container.append(wrapper);
         input.addEventListener(type === 'checkbox' ? 'change' : 'input', () => {
             const value = type === 'checkbox' ? input.checked : type === 'number' ? input.valueAsNumber : input.value;
@@ -100,6 +103,43 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
                     const text = typeof value === 'number' && !Number.isFinite(value) ? '' : String(value);
                     if (input.value !== text) input.value = text;
                 }
+            }
+        });
+    }
+    function fileControl(
+        container: HTMLElement,
+        field: keyof FileSettings,
+        key: string,
+        type: 'text' | 'password' | 'checkbox'
+    ) {
+        const wrapper = element('div', '', 'server-setting server-setting-file-only');
+        wrapper.tabIndex = 0;
+        wrapper.role = 'group';
+        const label = translated(element('label'), key);
+        label.id = `server-file-${field}-label`;
+        const input = element('input');
+        input.type = type;
+        input.id = `server-file-${field}`;
+        input.disabled = true;
+        input.autocomplete = 'off';
+        label.htmlFor = input.id;
+        wrapper.setAttribute('aria-labelledby', label.id);
+        const control = element('div', '', 'server-setting-value');
+        control.append(input);
+        wrapper.append(label, control);
+        tooltips.bind(wrapper, () => [element('span', locale.t('serverFileOnly'))]);
+        container.append(wrapper);
+        fileControls.push({
+            input,
+            update(settings) {
+                if (type === 'checkbox') input.checked = settings[field] === true;
+                else
+                    input.value =
+                        field === 'adminPasswordConfigured'
+                            ? settings[field]
+                                ? passwordMask
+                                : ''
+                            : String(settings[field]);
             }
         });
     }
@@ -152,10 +192,10 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     }
 
     const general = group('serverGeneral');
-    control(general, 'general', 'publicMode', 'serverPublicMode', 'checkbox', { help: 'serverPublicModeHelp' });
-    control(general, 'general', 'allowNoPasswordOnLocalhost', 'serverLocalhost', 'checkbox', {
-        help: 'serverLocalhostHelp'
-    });
+    fileControl(general, 'port', 'serverPort', 'text');
+    fileControl(general, 'adminPasswordConfigured', 'serverAdminPassword', 'password');
+    fileControl(general, 'publicMode', 'serverPublicMode', 'checkbox');
+    fileControl(general, 'allowNoPasswordOnLocalhost', 'serverLocalhost', 'checkbox');
     control(general, 'general', 'checkForUpdates', 'serverUpdates', 'checkbox');
     control(general, 'general', 'maxRequestsBeforeLoggedInPerMinute', 'serverLoginRate', 'number', {
         min: 1,
@@ -234,7 +274,6 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             locale = nextLocale;
             const config = state.serverSettings;
             title.textContent = locale.common('serverSettings');
-            intro.textContent = locale.t('serverSettingsIntro');
             for (const { node, key } of labels) {
                 if (node.hasAttribute('aria-label')) node.setAttribute('aria-label', locale.t(key));
                 else node.textContent = locale.t(key);
@@ -243,6 +282,13 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             for (const control of inputs) {
                 control.input.disabled = config.saving || config.status !== 'ready';
                 if (config.draft) control.update(config.draft);
+                else {
+                    control.input.value = '';
+                    control.input.checked = false;
+                }
+            }
+            for (const control of fileControls) {
+                if (config.readOnly) control.update(config.readOnly);
                 else {
                     control.input.value = '';
                     control.input.checked = false;

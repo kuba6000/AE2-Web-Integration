@@ -46,7 +46,21 @@ test('server configuration phone form preserves focus and drafts, detects confli
     await page.goto(`${base}#/server-settings`);
     const rate = page.getByRole('spinbutton', { name: 'Unauthenticated requests per minute', exact: true });
     await rate.waitFor();
-    assert.equal(await page.locator('#server-general-port, #server-general-password').count(), 0);
+    for (const field of ['port', 'adminPasswordConfigured', 'publicMode', 'allowNoPasswordOnLocalhost']) {
+        assert.equal(await page.locator(`#server-file-${field}`).isDisabled(), true);
+    }
+    assert.equal(
+        await page.locator('#server-file-port').inputValue(),
+        String(options.serverConfigurationReadOnly.port)
+    );
+    assert.equal(await page.locator('#server-file-adminPasswordConfigured').getAttribute('type'), 'password');
+    assert.ok((await page.locator('#server-file-adminPasswordConfigured').inputValue()).length > 0);
+    const fileOnly = page.locator('.server-setting-file-only').first();
+    await fileOnly.focus();
+    await page
+        .locator('#resource-tooltip')
+        .filter({ hasText: /config\.toml/ })
+        .waitFor();
     assert.equal(await page.locator('#server-ntfy-password').getAttribute('type'), 'password');
     await rate.fill('37');
     const reads = options.requests.filter((request) => request.path === '/api/server/settings').length;
@@ -76,6 +90,24 @@ test('server configuration phone form preserves focus and drafts, detects confli
         .waitFor();
     assert.equal(options.serverConfiguration.general.maxRequestsBeforeLoggedInPerMinute, 38);
     assert.equal(await save.isDisabled(), true);
+});
+
+test('server settings keep neighboring inputs aligned when labels wrap at different widths', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    const duration = page.getByRole('spinbutton', { name: 'Minimum crafting duration (seconds)', exact: true });
+    const amount = page.getByRole('spinbutton', { name: 'Minimum crafted amount', exact: true });
+    await duration.waitFor();
+    for (const width of [1000, 1150, 1300]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settleFrames(page);
+        const first = await duration.boundingBox();
+        const second = await amount.boundingBox();
+        assert.ok(first && second);
+        assert.ok(Math.abs(first.y - second.y) < 1, `Inputs must align at viewport width ${width}`);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    }
 });
 
 test('crafting retention is independent per network and persists while collection is disabled', async (t) => {
