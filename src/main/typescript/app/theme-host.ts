@@ -63,6 +63,7 @@ export function mountTheme(
     }
     const { crafting, cpus, settings } = application;
     const actions: ThemeApplication = {
+        exportPlan: (request, signal) => application.exportPlan(request, AbortSignal.any([signal, controller.signal])),
         notifications: {
             subscribe: (listener) => subscribe(application.notifications.subscribe, listener),
             dismiss: application.notifications.dismiss,
@@ -98,6 +99,19 @@ export function mountTheme(
         cpus: { cancel: cpus.cancel, pause: cpus.pause },
         settings: { edit: settings.edit, save: settings.save },
         icons: {
+            async resolve(references, metadata, signal) {
+                const result = await application.icons.resolve(
+                    references,
+                    metadata as import('./api-types.js').IconMetadata | null,
+                    AbortSignal.any([signal, controller.signal])
+                );
+                const dispose = () => {
+                    cleanups.delete(dispose);
+                    result.dispose();
+                };
+                onCleanup(dispose);
+                return { icons: result.icons, dispose };
+            },
             observe(host, paint) {
                 const observer = application.icons.observe(host, (target, sprite) => {
                     if (controller.signal.aborted || failure) return;

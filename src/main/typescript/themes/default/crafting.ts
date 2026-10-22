@@ -5,7 +5,7 @@ import { element } from './dom.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
 import { selectPlanResources } from '../../app/resource-helpers.js';
 import type { ResourceStack, PlanItem } from '../../app/api-types.js';
-import type { ThemeState, ThemeApplication, ThemeLifetime, ReadonlyData } from '../../app/theme-api.js';
+import type { ThemeState, ThemeApplication, ThemeLifetime, ReadonlyData, ThemeSettings } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 
 import { createSlotGrid } from './slot-grid.js';
@@ -35,7 +35,8 @@ export function createCraftingView(
     workspace: HTMLElement,
     tooltip: CraftingTooltipPresenter,
     beforeDialog: (source: HTMLElement) => HTMLElement,
-    lifetime: ThemeLifetime
+    lifetime: ThemeLifetime,
+    settings: ThemeSettings
 ) {
     const dialog = createCraftingDialog(application, beforeDialog, lifetime);
     lifetime.onCleanup(dialog.dispose);
@@ -106,7 +107,7 @@ export function createCraftingView(
     const panel = createPlanPanel(application, tooltip);
     lifetime.onCleanup(panel.dispose);
     workspace.append(panel.element);
-    const actions = createPlanActions(application, workspace, tooltip);
+    const actions = createPlanActions(application, workspace, tooltip, settings, beforeDialog);
     lifetime.onCleanup(actions.dispose);
     planView.append(header, planBody, actions.element);
     root.append(planView);

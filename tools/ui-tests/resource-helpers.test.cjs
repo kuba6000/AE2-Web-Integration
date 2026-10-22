@@ -62,6 +62,12 @@ test('plan selection keeps missing and requested groups first in either sorting 
     ]);
     assert.deepEqual(selectPlanResources(rows, { ...options, sort: 'steps' }), [rows[2], rows[1], rows[3], rows[0]]);
     assert.deepEqual(selectPlanResources(rows, { ...options, search: 'small @TEST' }), [rows[1]]);
+    assert.deepEqual(selectPlanResources(rows, { ...options, groupByState: false }), [
+        rows[0],
+        rows[3],
+        rows[1],
+        rows[2]
+    ]);
 });
 
 test('themes can independently filter or sort while retaining unknown resource types and stable ties', async () => {
