@@ -9,6 +9,9 @@ def target = [
 
 apply plugin: 'me.modmuss50.mod-publish-plugin'
 
+def modrinthProjectId = providers.gradleProperty('releaseModrinthProjectId')
+def curseforgeProjectId = providers.gradleProperty('releaseCurseforgeProjectId')
+
 def productionTask = target.archiveTask == 'publishableObfJar'
     ? project.property('publishableObfJar')
     : tasks.named(target.archiveTask)
@@ -164,7 +167,7 @@ def prepareRelease = tasks.register('prepareRelease') {
             artifact: archive.absolutePath, sha1: hashFile(archive, 'SHA-1'), sha512: sha512,
             tag: releaseVersion, version: releaseVersion, minecraft: target.minecraft,
             loader: target.loader, java: target.java,
-            project_ids: [modrinth: '8MGTfmHF', curseforge: '1122761'],
+            project_ids: [modrinth: modrinthProjectId.get(), curseforge: curseforgeProjectId.get()],
             release_type: releaseKind, environment: [client: 'unsupported', server: 'required'],
             dependencies: [modrinth: target.modrinth, curseforge: target.curseforge, external: target.external],
             notes_file: notesFile.absolutePath, additional_artifacts: extras
@@ -194,7 +197,7 @@ publishingOptions.type.set(
 publishingOptions.modLoaders.set([target.loader])
 
 publishingOptions.modrinth {
-    projectId.set('8MGTfmHF')
+    projectId.set(modrinthProjectId)
     accessToken.set(dryRun ? providers.provider { '' } : modrinthToken.orElse(''))
     minecraftVersions.set([target.minecraft])
     environment.set(SERVER_ONLY)
@@ -207,7 +210,7 @@ publishingOptions.modrinth {
 }
 
 publishingOptions.curseforge {
-    projectId.set('1122761')
+    projectId.set(curseforgeProjectId)
     accessToken.set(dryRun ? providers.provider { '' } : curseforgeToken.orElse(''))
     minecraftVersions.set([target.minecraft])
     javaVersions.set([JavaVersion.toVersion(target.java)])
