@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.bindings;
 
 import java.io.IOException;
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -28,6 +27,15 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic;
 
+import com.palantir.javapoet.ClassName;
+import com.palantir.javapoet.CodeBlock;
+import com.palantir.javapoet.FieldSpec;
+import com.palantir.javapoet.JavaFile;
+import com.palantir.javapoet.MethodSpec;
+import com.palantir.javapoet.ParameterizedTypeName;
+import com.palantir.javapoet.TypeSpec;
+import com.palantir.javapoet.WildcardTypeName;
+
 /** Generates ordinary Java companions using only the standard compiler model. */
 @SupportedAnnotationTypes("pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding")
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
@@ -35,7 +43,13 @@ import javax.tools.Diagnostic;
 public final class HttpBindingProcessor extends AbstractProcessor {
 
     private static final String CONTRACT = "pl.kuba6000.ae2webintegration.core.http.contract.";
-    private static final String HTTP = "pl.kuba6000.ae2webintegration.core.http.";
+    private static final String HTTP = "pl.kuba6000.ae2webintegration.core.http";
+    private static final ClassName INPUT_VALUES = ClassName.get(HTTP, "InputValues");
+    private static final ClassName HTTP_BINDING = ClassName.get(HTTP, "HttpBinding");
+    private static final ClassName STABLE_KEY = ClassName
+        .get("pl.kuba6000.ae2webintegration.core.identity", "StableKey");
+    private static final ClassName JSON_OBJECT = ClassName.get("com.google.gson", "JsonObject");
+    private static final ClassName JSON_ELEMENT = ClassName.get("com.google.gson", "JsonElement");
     private final Set<String> emitted = new HashSet<>();
 
     @Override
@@ -68,16 +82,21 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     private void emitOwner(TypeElement owner) throws IOException {
         List<VariableElement> fields = inputFields(owner);
         if (fields.isEmpty()) return;
-        String name = companion(owner);
-        if (!emitted.add(name) || processingEnv.getElementUtils()
-            .getTypeElement(name) != null) return;
-        StringBuilder code = header(owner, name);
+        ClassName name = companion(owner);
+        if (!emitted.add(name.canonicalName()) || processingEnv.getElementUtils()
+            .getTypeElement(name.canonicalName()) != null) return;
+        TypeSpec.Builder companion = TypeSpec.classBuilder(name)
+            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addOriginatingElement(owner)
+            .addMethod(
+                MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PRIVATE)
+                    .build());
         Map<TypeElement, String> shapes = new LinkedHashMap<>();
-        code.append("  public static void bind(")
-            .append(owner.getQualifiedName())
-            .append(" target, ")
-            .append(HTTP)
-            .append("InputValues values) {\n");
+        MethodSpec.Builder bind = MethodSpec.methodBuilder("bind")
+            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+            .addParameter(ClassName.get(owner), "target")
+            .addParameter(INPUT_VALUES, "values");
         int index = 0;
         for (VariableElement field : fields) {
             if (field.getModifiers()
@@ -101,132 +120,119 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     error(field, "HTTP body requires an object type");
                     continue;
                 }
-                String validator = shape(input, shapes);
-                code.append("    target.")
-                    .append(field.getSimpleName())
-                    .append(" = values.body(")
-                    .append(input.getQualifiedName())
-                    .append(".class, ")
-                    .append(name)
-                    .append("::")
-                    .append(validator)
-                    .append(");\n");
+                bind.addStatement(
+                    "target.$N = values.body($T.class, $T::$N)",
+                    field.getSimpleName(),
+                    ClassName.get(input),
+                    name,
+                    shape(input, shapes));
                 continue;
             }
             String inputName = value(query != null ? query : path, "value");
             String local = "value" + index++;
-            String conversion = conversion(field, local);
+            CodeBlock conversion = conversion(field, local);
             if (conversion == null) continue;
             if (query != null) {
-                code.append("    String ")
-                    .append(local)
-                    .append(" = values.query(")
-                    .append(quote(inputName))
-                    .append(");\n")
-                    .append("    if (")
-                    .append(local)
-                    .append(" != null) target.")
-                    .append(field.getSimpleName())
-                    .append(" = ")
-                    .append(conversion)
-                    .append(";\n");
+                bind.addStatement("$T $N = values.query($S)", String.class, local, inputName)
+                    .beginControlFlow("if ($N != null)", local)
+                    .addStatement("target.$N = $L", field.getSimpleName(), conversion)
+                    .endControlFlow();
             } else {
-                code.append("    if (values.hasPath(")
-                    .append(quote(inputName))
-                    .append(")) {\n")
-                    .append("      String ")
-                    .append(local)
-                    .append(" = values.path(")
-                    .append(quote(inputName))
-                    .append(");\n")
-                    .append("      target.")
-                    .append(field.getSimpleName())
-                    .append(" = ")
-                    .append(conversion)
-                    .append(";\n    }\n");
+                bind.beginControlFlow("if (values.hasPath($S))", inputName)
+                    .addStatement("$T $N = values.path($S)", String.class, local, inputName)
+                    .addStatement("target.$N = $L", field.getSimpleName(), conversion)
+                    .endControlFlow();
             }
         }
-        code.append("  }\n");
+        companion.addMethod(bind.build());
         List<TypeElement> pending = new ArrayList<>(shapes.keySet());
         for (int shapeIndex = 0; shapeIndex < pending.size(); shapeIndex++) {
-            emitShape(pending.get(shapeIndex), shapes, code);
+            companion.addMethod(shapeValidator(pending.get(shapeIndex), shapes));
             pending = new ArrayList<>(shapes.keySet());
         }
-        code.append("}\n");
-        write(name, code.toString(), owner);
+        JavaFile.builder(name.packageName(), companion.build())
+            .indent("    ")
+            .skipJavaLangImports(true)
+            .build()
+            .writeTo(processingEnv.getFiler());
     }
 
     private void emitCatalog(List<TypeElement> endpoints) throws IOException {
-        String name = processingEnv.getOptions()
-            .getOrDefault("httpBindings.catalog", HTTP + "GeneratedHttpBindings");
-        String packageName = name.substring(0, name.lastIndexOf('.'));
-        String simple = name.substring(name.lastIndexOf('.') + 1);
-        StringBuilder code = new StringBuilder("package ").append(packageName)
-            .append(";\n\npublic final class ")
-            .append(simple)
-            .append(" {\n  private ")
-            .append(simple)
-            .append("() {}\n");
+        String configuredName = processingEnv.getOptions()
+            .getOrDefault("httpBindings.catalog", HTTP + ".GeneratedHttpBindings");
+        int lastDot = configuredName.lastIndexOf('.');
+        ClassName name = ClassName.get(configuredName.substring(0, lastDot), configuredName.substring(lastDot + 1));
+        TypeSpec.Builder catalog = TypeSpec.classBuilder(name)
+            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addMethod(
+                MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PRIVATE)
+                    .build());
+        MethodSpec.Builder lookup = MethodSpec.methodBuilder("get")
+            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+            .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
+            .returns(HTTP_BINDING)
+            .addParameter(
+                ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                "type");
+        TypeElement requestType = processingEnv.getElementUtils()
+            .getTypeElement("pl.kuba6000.ae2webintegration.core.ae2request.IRequest");
         for (int index = 0; index < endpoints.size(); index++) {
             TypeElement endpoint = endpoints.get(index);
+            catalog.addOriginatingElement(endpoint);
             AnnotationMirror route = annotation(endpoint, "Endpoint");
-            code.append("  private static final ")
-                .append(HTTP)
-                .append("HttpBinding BINDING_")
-                .append(index)
-                .append(" = new ")
-                .append(HTTP)
-                .append("HttpBinding(\n    ")
-                .append(CONTRACT)
-                .append("HttpMethod.")
-                .append(value(route, "method"))
-                .append(", ")
-                .append(quote(value(route, "path")))
-                .append(", ")
-                .append(CONTRACT)
-                .append("Authentication.")
-                .append(value(route, "authentication"))
-                .append(",\n    ");
-            TypeElement requestType = processingEnv.getElementUtils()
-                .getTypeElement("pl.kuba6000.ae2webintegration.core.ae2request.IRequest");
+            ClassName endpointName = ClassName.get(endpoint);
             boolean request = processingEnv.getTypeUtils()
                 .isSubtype(endpoint.asType(), requestType.asType());
-            code.append(request ? endpoint.getQualifiedName() + "::new" : "null")
-                .append(", (request, values) -> {\n");
-            for (TypeElement owner : hierarchy(endpoint)) {
-                if (!inputFields(owner).isEmpty()) code.append("      ")
-                    .append(companion(owner))
-                    .append(".bind((")
-                    .append(endpoint.getQualifiedName())
-                    .append(") request, values);\n");
+            CodeBlock factory = request ? CodeBlock.of("$T::new", endpointName) : CodeBlock.of("null");
+            CodeBlock.Builder initializer = CodeBlock.builder()
+                .add(
+                    "new $T($T.$L,$W$S,$W$T.$L,$W$L,$W(request, values) -> {\n",
+                    HTTP_BINDING,
+                    ClassName.get(HTTP + ".contract", "HttpMethod"),
+                    value(route, "method"),
+                    value(route, "path"),
+                    ClassName.get(HTTP + ".contract", "Authentication"),
+                    value(route, "authentication"),
+                    factory)
+                .indent();
+            List<TypeElement> owners = hierarchy(endpoint);
+            for (TypeElement owner : owners) {
+                if (!inputFields(owner).isEmpty())
+                    initializer.addStatement("$T.bind(($T) request, values)", companion(owner), endpointName);
             }
-            long bodies = hierarchy(endpoint).stream()
+            long bodies = owners.stream()
                 .flatMap(type -> inputFields(type).stream())
                 .filter(field -> annotation(field, "Body") != null)
                 .count();
             if (bodies > 1) error(endpoint, "Only one body field is allowed");
-            if (bodies == 0) code.append("      values.noBody();\n");
-            code.append("    });\n");
+            if (bodies == 0) initializer.addStatement("values.noBody()");
+            initializer.unindent()
+                .add("})");
+            FieldSpec binding = FieldSpec
+                .builder(HTTP_BINDING, "BINDING_" + index, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                .initializer(initializer.build())
+                .build();
+            catalog.addField(binding);
+            lookup.beginControlFlow("if (type == $T.class)", endpointName)
+                .addStatement("return $N", binding)
+                .endControlFlow();
         }
-        code.append("  public static @org.jetbrains.annotations.Nullable ")
-            .append(HTTP)
-            .append("HttpBinding get(Class<?> type) {\n");
-        for (int index = 0; index < endpoints.size(); index++) code.append("    if (type == ")
-            .append(
-                endpoints.get(index)
-                    .getQualifiedName())
-            .append(".class) return BINDING_")
-            .append(index)
-            .append(";\n");
-        code.append("    return null;\n  }\n}\n");
-        write(name, code.toString(), endpoints.toArray(new Element[0]));
+        catalog.addMethod(
+            lookup.addStatement("return null")
+                .build());
+        JavaFile.builder(name.packageName(), catalog.build())
+            .indent("    ")
+            .skipJavaLangImports(true)
+            .build()
+            .writeTo(processingEnv.getFiler());
     }
 
     private String shape(TypeElement type, Map<TypeElement, String> shapes) {
         return shapes.computeIfAbsent(type, ignored -> "validate" + shapes.size());
     }
 
-    private void emitShape(TypeElement type, Map<TypeElement, String> shapes, StringBuilder code) {
+    private MethodSpec shapeValidator(TypeElement type, Map<TypeElement, String> shapes) {
         List<VariableElement> fields = ElementFilter.fieldsIn(type.getEnclosedElements())
             .stream()
             .filter(
@@ -235,72 +241,67 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     && !field.getModifiers()
                         .contains(Modifier.TRANSIENT))
             .toList();
-        code.append("  private static void ")
-            .append(shapes.get(type))
-            .append("(com.google.gson.JsonObject body) {\n")
-            .append("    for (java.util.Map.Entry<String, com.google.gson.JsonElement> member : body.entrySet()) {\n")
-            .append("      switch (member.getKey()) {\n");
-        for (VariableElement field : fields) code.append("        case ")
-            .append(
-                quote(
-                    field.getSimpleName()
-                        .toString()))
-            .append(":\n");
-        if (!fields.isEmpty()) code.append("          break;\n");
-        code.append(
-            "        default: throw new IllegalArgumentException(\"Unknown JSON member: \" + member.getKey());\n      }\n    }\n");
+        MethodSpec.Builder validate = MethodSpec.methodBuilder(shapes.get(type))
+            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .addParameter(JSON_OBJECT, "body")
+            .beginControlFlow(
+                "for ($T member : body.entrySet())",
+                ParameterizedTypeName.get(ClassName.get(Map.Entry.class), ClassName.get(String.class), JSON_ELEMENT))
+            .beginControlFlow("switch (member.getKey())");
+        for (VariableElement field : fields) validate.addCode(
+            "case $S:\n",
+            field.getSimpleName()
+                .toString());
+        if (!fields.isEmpty()) validate.addCode("$>")
+            .addStatement("break")
+            .addCode("$<");
+        validate.addCode("default:\n$>")
+            .addStatement("throw new $T($S + member.getKey())", IllegalArgumentException.class, "Unknown JSON member: ")
+            .addCode("$<")
+            .endControlFlow()
+            .endControlFlow();
         for (VariableElement field : fields) {
-            String fieldName = quote(
-                field.getSimpleName()
-                    .toString());
-            String value = "body.get(" + fieldName + ")";
+            String fieldName = field.getSimpleName()
+                .toString();
+            CodeBlock value = CodeBlock.of("body.get($S)", fieldName);
             String fieldType = typeName(field.asType());
             boolean optional = annotation(field, "OptionalInput") != null;
-            if (optional) code.append("    if (body.has(")
-                .append(fieldName)
-                .append(")) {\n");
-            String call = switch (fieldType) {
-                case "java.lang.String" -> HTTP + "InputValues.string(" + value + ", " + fieldName + ")";
-                case "pl.kuba6000.ae2webintegration.core.identity.StableKey" -> HTTP + "InputValues.key("
-                    + value
-                    + ", "
-                    + fieldName
-                    + ")";
-                case "boolean", "java.lang.Boolean" -> HTTP + "InputValues.bool(" + value + ", " + fieldName + ")";
-                case "int", "java.lang.Integer" -> HTTP + "InputValues.integer(" + value + ", " + fieldName + ", true)";
-                case "long", "java.lang.Long" -> HTTP + "InputValues.integer(" + value + ", " + fieldName + ", false)";
+            if (optional) validate.beginControlFlow("if (body.has($S))", fieldName);
+            CodeBlock call = switch (fieldType) {
+                case "java.lang.String" -> CodeBlock.of("$T.string($L, $S)", INPUT_VALUES, value, fieldName);
+                case "pl.kuba6000.ae2webintegration.core.identity.StableKey" -> CodeBlock
+                    .of("$T.key($L, $S)", INPUT_VALUES, value, fieldName);
+                case "boolean", "java.lang.Boolean" -> CodeBlock.of("$T.bool($L, $S)", INPUT_VALUES, value, fieldName);
+                case "int", "java.lang.Integer" -> CodeBlock
+                    .of("$T.integer($L, $S, true)", INPUT_VALUES, value, fieldName);
+                case "long", "java.lang.Long" -> CodeBlock
+                    .of("$T.integer($L, $S, false)", INPUT_VALUES, value, fieldName);
                 default -> {
                     Element nested = processingEnv.getTypeUtils()
                         .asElement(field.asType());
                     if (!(nested instanceof TypeElement nestedType) || fieldType.startsWith("java.")) {
                         error(field, "Unsupported JSON member type: " + fieldType);
-                        yield "";
+                        yield CodeBlock.of("");
                     }
-                    yield shape(nestedType, shapes) + "("
-                        + HTTP
-                        + "InputValues.object("
-                        + value
-                        + ", "
-                        + fieldName
-                        + "))";
+                    yield CodeBlock
+                        .of("$N($T.object($L, $S))", shape(nestedType, shapes), INPUT_VALUES, value, fieldName);
                 }
             };
-            code.append("      ")
-                .append(call)
-                .append(";\n");
-            if (optional) code.append("    }\n");
+            validate.addStatement("$L", call);
+            if (optional) validate.endControlFlow();
         }
-        code.append("  }\n");
+        return validate.build();
     }
 
-    private String conversion(VariableElement field, String value) {
+    private CodeBlock conversion(VariableElement field, String value) {
         String type = typeName(field.asType());
         return switch (type) {
-            case "java.lang.String" -> value;
-            case "boolean" -> HTTP + "InputValues.booleanValue(" + value + ")";
-            case "int", "java.lang.Integer" -> "Integer.parseInt(" + value + ")";
-            case "long", "java.lang.Long" -> "Long.parseLong(" + value + ")";
-            case "pl.kuba6000.ae2webintegration.core.identity.StableKey" -> type + ".parse(" + value + ")";
+            case "java.lang.String" -> CodeBlock.of("$N", value);
+            case "boolean" -> CodeBlock.of("$T.booleanValue($N)", INPUT_VALUES, value);
+            case "int", "java.lang.Integer" -> CodeBlock.of("$T.parseInt($N)", Integer.class, value);
+            case "long", "java.lang.Long" -> CodeBlock.of("$T.parseLong($N)", Long.class, value);
+            case "pl.kuba6000.ae2webintegration.core.identity.StableKey" -> CodeBlock
+                .of("$T.parse($N)", STABLE_KEY, value);
             default -> {
                 error(field, "Unsupported HTTP parameter type: " + type);
                 yield null;
@@ -359,45 +360,16 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         throw new IllegalArgumentException("Missing annotation value: " + name);
     }
 
-    private String companion(TypeElement owner) {
+    private ClassName companion(TypeElement owner) {
         String packageName = processingEnv.getElementUtils()
             .getPackageOf(owner)
             .getQualifiedName()
             .toString();
-        return packageName + "."
-            + owner.getQualifiedName()
-                .toString()
-                .substring(packageName.length() + 1)
-                .replace('.', '_')
-            + "_HttpBinding";
-    }
-
-    private StringBuilder header(TypeElement owner, String name) {
-        String simple = name.substring(name.lastIndexOf('.') + 1);
-        return new StringBuilder("package ").append(
-            processingEnv.getElementUtils()
-                .getPackageOf(owner)
-                .getQualifiedName())
-            .append(";\n\npublic final class ")
-            .append(simple)
-            .append(" {\n  private ")
-            .append(simple)
-            .append("() {}\n");
-    }
-
-    private static String quote(String value) {
-        return "\"" + value.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r") + "\"";
-    }
-
-    private void write(String name, String code, Element... origins) throws IOException {
-        try (Writer writer = processingEnv.getFiler()
-            .createSourceFile(name, origins)
-            .openWriter()) {
-            writer.write(code);
-        }
+        String simpleName = owner.getQualifiedName()
+            .toString()
+            .substring(packageName.length() + 1)
+            .replace('.', '_');
+        return ClassName.get(packageName, simpleName + "_HttpBinding");
     }
 
     private void error(Element element, String message) {

@@ -153,11 +153,13 @@ sourceSets {
     }
 }
 dependencies {
+    bindingProcessorImplementation 'com.palantir.javapoet:javapoet:0.22.0'
     annotationProcessor sourceSets.bindingProcessor.output
     bindingProcessorTestRuntimeOnly 'org.jetbrains:annotations:26.0.2'
 }
+configurations.annotationProcessor.extendsFrom configurations.bindingProcessorImplementation, configurations.bindingProcessorRuntimeOnly
 configurations.bindingProcessorTestImplementation.extendsFrom configurations.testImplementation
-configurations.bindingProcessorTestRuntimeOnly.extendsFrom configurations.testRuntimeOnly
+configurations.bindingProcessorTestRuntimeOnly.extendsFrom configurations.testRuntimeOnly, configurations.bindingProcessorImplementation, configurations.bindingProcessorRuntimeOnly
 tasks.register('testBindingProcessor', Test) {
     testClassesDirs = sourceSets.bindingProcessorTest.output.classesDirs
     classpath = sourceSets.bindingProcessorTest.runtimeClasspath
