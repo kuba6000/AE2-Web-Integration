@@ -3717,7 +3717,7 @@ button.toast:hover {
 
 /* Export geometry stays the same at every viewport size. */
 .plan-export-probe .resource-grid {
-    grid-template-columns: 180px;
+    grid-template-columns: 240px;
 }
 .plan-export-probe.cpu-icons-enabled .cpu-item {
     --resource-icon-size: 32px;

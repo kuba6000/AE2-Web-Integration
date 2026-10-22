@@ -300,17 +300,20 @@ function drawTile(
     const blockHeight = Math.max(0, amounts.length * line - style.metricGap);
     let y = settings.name ? height - style.padding - style.borderWidth - blockHeight : (height - blockHeight) / 2;
     for (const amount of amounts) {
+        ctx.font = `${style.labelFontSize}px ${style.fontFamily}`;
+        const labelWidth = ctx.measureText(amount.label).width;
         ctx.font = `${style.quantityFontSize}px ${style.fontFamily}`;
         const valueWidth = ctx.measureText(amount.value).width;
         const usageWidth = amount.usage ? ctx.measureText(amount.usage).width : 0;
-        const quantityScale = Math.min(1, (right - left) / (valueWidth + usageWidth));
+        const quantityWidth = Math.max(1, right - left - labelWidth - 4);
+        const quantityScale = Math.min(1, quantityWidth / (valueWidth + usageWidth));
         const quantityX = right - (valueWidth + usageWidth) * quantityScale;
         drawText(
             ctx,
             amount.label,
             left,
             y + style.quantityFontSize - style.labelFontSize,
-            Math.max(0, quantityX - left - 4),
+            right - left,
             style,
             style.labelFontSize
         );

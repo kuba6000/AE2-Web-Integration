@@ -103,11 +103,11 @@ test('the same export settings produce identical pixels across desktop, mobile a
         await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
         await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('2');
         const detailed = (await png(page, dialog)).pixels;
-        assert.deepEqual([detailed.width, detailed.height], [360, 392]);
+        assert.deepEqual([detailed.width, detailed.height], [480, 392]);
         assert.equal(detailed.red, 3 * 32 * 32, 'three unscaled 32px resource icons');
         await dialog.getByRole('checkbox', { name: 'Name', exact: true }).uncheck();
         const compact = (await png(page, dialog)).pixels;
-        assert.deepEqual([compact.width, compact.height], [360, 332]);
+        assert.deepEqual([compact.width, compact.height], [480, 332]);
         rendered.push([detailed.pixelHash, compact.pixelHash]);
     }
     assert.deepEqual(rendered[1], rendered[0]);
@@ -136,7 +136,7 @@ test('export without names vertically centers each resource metric block regardl
     await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('4');
     const { bytes, pixels } = await png(page, dialog);
-    assert.deepEqual([pixels.width, pixels.height], [720, 100]);
+    assert.deepEqual([pixels.width, pixels.height], [960, 100]);
     const centers = await page.evaluate(async (data) => {
         const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
         const canvas = document.createElement('canvas');
@@ -147,7 +147,7 @@ test('export without names vertically centers each resource metric block regardl
         bitmap.close();
         return Array.from({ length: 4 }, (_, column) => {
             // Read only the text region, excluding the icon and cell borders.
-            const { data: rgba, width, height } = ctx.getImageData(column * 180 + 54, 3, 118, 94);
+            const { data: rgba, width, height } = ctx.getImageData(column * 240 + 54, 3, 178, 94);
             let top = height,
                 bottom = -1;
             for (let y = 0; y < height; y++)
@@ -177,7 +177,7 @@ test('plan PNG exports every row independently of search, without icons, and rem
     assert.ok(await dialog.getByRole('checkbox', { name: 'Icons', exact: true }).isDisabled());
     await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('3');
-    const tileWidth = 180;
+    const tileWidth = 240;
     await dialog.getByRole('combobox', { name: 'Background', exact: true }).selectOption('transparent');
     const { pixels, bytes, download } = await png(page, dialog);
     assert.equal(pixels.width, tileWidth * 3);
@@ -205,7 +205,7 @@ test('plan PNG exports every row independently of search, without icons, and rem
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('0.5');
     assert.equal(await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).inputValue(), '3');
     const smaller = await png(page, dialog);
-    assert.equal(smaller.pixels.width, 270);
+    assert.equal(smaller.pixels.width, 360);
     assert.equal(smaller.pixels.height, 166);
 });
 
@@ -303,7 +303,7 @@ test('PNG uses authenticated atlas crops and falls back without changing grid po
     const dialog = await openExport(page, base);
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('2');
     // Simulate a browser rejecting large canvas allocation through the platform API.
-    const tileWidth = 180;
+    const tileWidth = 240;
     await page.evaluate((limit) => {
         const getContext = HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext = function (...args) {
@@ -329,7 +329,7 @@ test('restoring a saved ratio chooses columns once rather than changing them beh
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('2');
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('2');
     const original = await png(page, dialog);
-    const tileWidth = 180;
+    const tileWidth = 240;
     assert.deepEqual([original.pixels.width, original.pixels.height], [tileWidth * 4, 464]);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
@@ -392,12 +392,15 @@ test('rectangular export keeps all metric rows and full quantities inside each c
     await dialog.getByRole('combobox', { name: 'Number format', exact: true }).selectOption('full');
     await page.evaluate(() => {
         window.exportNumbers = [];
+        window.exportLabels = [];
         const fillText = CanvasRenderingContext2D.prototype.fillText;
         CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-            if (text.includes('9,007,199,254,740,991') || text.includes('(95%)')) {
+            window.exportLabels.push(text);
+            if (['9,007,199,254,740,991', '(95%)', '4,096', '(40%)'].some((value) => text.includes(value))) {
                 const transform = this.getTransform();
                 window.exportNumbers.push({
                     text,
+                    fontSize: parseFloat(this.font) * Math.hypot(transform.a, transform.b),
                     x: new DOMPoint(x, y).matrixTransform(transform).x,
                     right: new DOMPoint(x + this.measureText(text).width, y).matrixTransform(transform).x
                 });
@@ -407,7 +410,15 @@ test('rectangular export keeps all metric rows and full quantities inside each c
     });
     const result = await png(page, dialog);
     assert.equal(result.pixels.height, 272, 'unfiltered four-metric row determines 120px cells plus header');
+    const labels = await page.evaluate(() => window.exportLabels);
+    assert.equal(labels.filter((text) => text === 'Stored').length, 3, 'every stock value keeps its full label');
+    for (const label of ['Missing', 'Requested', 'Steps']) assert.ok(labels.includes(label), `${label} is complete`);
     const values = await page.evaluate(() => window.exportNumbers);
+    for (const text of ['4,096', ' (40%)'])
+        assert.ok(
+            values.some((call) => call.text === text && call.fontSize === 12),
+            `${text} uses the normal font size`
+        );
     assert.ok(
         values.some((call) => call.text === '9,007,199,254,740,991'),
         'full quantity is not replaced by an ellipsis'
