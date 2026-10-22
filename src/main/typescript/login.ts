@@ -1,4 +1,5 @@
 import { createApi } from './app/api.js';
+import { createSettings } from './app/storage.js';
 
 function element<T extends HTMLElement>(id: string): T {
     const value = document.getElementById(id);
@@ -17,6 +18,31 @@ const retry = element<HTMLButtonElement>('bootstrapRetry');
 const command = element<HTMLTextAreaElement>('registrationCommand');
 const controller = new AbortController();
 let disposed = false;
+
+const appearanceButton = element<HTMLButtonElement>('appearance');
+const settings = createSettings(new URL('./', location.href), 'login');
+const savedAppearance = settings.get('appearance');
+let appearance =
+    savedAppearance === 'light' || savedAppearance === 'dark'
+        ? savedAppearance
+        : matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light';
+function applyAppearance(): void {
+    document.documentElement.style.colorScheme = appearance;
+    appearanceButton.dataset.appearance = appearance;
+    appearanceButton.setAttribute('aria-label', `Switch to ${appearance === 'light' ? 'dark' : 'light'} mode`);
+    appearanceButton
+        .querySelector('use')!
+        .setAttribute('href', `./assets/web/login-icons.svg#${appearance === 'light' ? 'sun' : 'moon'}`);
+}
+applyAppearance();
+if (savedAppearance !== appearance) settings.set('appearance', appearance);
+appearanceButton.addEventListener('click', () => {
+    appearance = appearance === 'light' ? 'dark' : 'light';
+    applyAppearance();
+    settings.set('appearance', appearance);
+});
 
 function showForm(registration: boolean): void {
     login.hidden = registration;

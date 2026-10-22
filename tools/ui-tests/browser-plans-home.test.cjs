@@ -363,6 +363,52 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
+for (const initialScheme of ['light', 'dark']) {
+    test(`login initializes from ${initialScheme} system mode once and remembers its own toggle`, async (t) => {
+        const { page, options, base } = await fixture(t, '/ae2');
+        options.loggedOut = true;
+        await page.emulateMedia({ colorScheme: initialScheme });
+        await page.goto(base);
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        const other = initialScheme === 'light' ? 'dark' : 'light';
+        const toggle = (target) => page.getByRole('button', { name: `Switch to ${target} mode`, exact: true });
+        assert.equal(await toggle(other).count(), 1);
+        const panelColor = () => page.getByRole('main').evaluate((node) => getComputedStyle(node).backgroundColor);
+        const initialColor = await panelColor();
+        await page.emulateMedia({ colorScheme: other });
+        assert.equal(await panelColor(), initialColor, 'system changes do not override the initial choice');
+        await page.reload();
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        assert.equal(await panelColor(), initialColor, 'the initial choice survives reloading');
+        await toggle(other).click();
+        const changedColor = await panelColor();
+        assert.notEqual(changedColor, initialColor);
+        await page.reload();
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        assert.equal(await panelColor(), changedColor);
+        assert.equal(await toggle(initialScheme).count(), 1);
+        await toggle(initialScheme).click();
+        assert.equal(await panelColor(), initialColor, 'the same button toggles back');
+        await page.getByRole('button', { name: 'Register', exact: true }).click();
+        await page.getByLabel('Username (in-game)', { exact: true }).waitFor();
+        assert.equal(await panelColor(), initialColor);
+        await page.setViewportSize({ width: 320, height: 640 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (initialScheme === 'dark' && process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-dark-mobile.png'),
+                fullPage: true
+            });
+            await page.getByRole('button', { name: 'Log in', exact: true }).first().click();
+            await page.setViewportSize({ width: 1280, height: 900 });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-dark-desktop.png'),
+                fullPage: true
+            });
+        }
+    });
+}
 test('mobile login shows one usable form at a time and submits the existing registration fields', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.loggedOut = true;
