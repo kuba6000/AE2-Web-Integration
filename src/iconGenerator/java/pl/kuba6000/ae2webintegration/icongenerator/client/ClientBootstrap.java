@@ -17,6 +17,7 @@ import net.minecraft.util.text.TextComponentString;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -100,7 +101,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
     @Override
     public void onResourceManagerReload(@NotNull IResourceManager resources) {
         if (session != null) session.cancel("resources reloaded");
-        if (net.minecraftforge.fml.common.Loader.isModLoaded("jei")) JeiCatalogue.invalidate();
+        if (Loader.isModLoaded("jei")) JeiCatalogue.invalidate();
     }
 
     private final class ExportCommand extends CommandBase {

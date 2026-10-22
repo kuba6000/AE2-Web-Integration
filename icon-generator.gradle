@@ -29,9 +29,9 @@ dependencies {
     iconGeneratorCompileOnly('org.jetbrains:annotations:24.1.0')
 }
 
-// RFG 1.4.9 patches source fields after decompilation; binary ATs alone do not reach compiled dev classes.
+// Apply the generator's field access rules to decompiled sources as well as the binary runtime.
 // Keep the same narrow rules in source preparation, the SRG runtime and the standalone manifest.
-tasks.named('applySourceAccessTransformers') {
+tasks.named('applyJST') {
     accessTransformerFiles.from('src/iconGenerator/resources/META-INF/ae2webicons_at.cfg')
 }
 tasks.named('srgifyBinpatchedJar') {

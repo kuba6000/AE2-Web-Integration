@@ -1,10 +1,4 @@
-//version: 1762213476
-/*
- * DO NOT CHANGE THIS FILE!
- * Also, you may replace this file at any time if there is an update available.
- * Please check https://github.com/GregTechCEu/Buildscripts/blob/master/build.gradle for updates.
- * You can also run ./gradlew updateBuildScript to update your buildscript.
- */
+// Based on GregTechCEu/Buildscripts, maintained in this repository; it no longer updates itself.
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.gtnewhorizons.retrofuturagradle.MinecraftExtension
@@ -17,7 +11,7 @@ import com.modrinth.minotaur.dependencies.ModDependency
 import com.modrinth.minotaur.dependencies.VersionDependency
 import de.undercouch.gradle.tasks.download.DownloadExtension
 import org.apache.commons.io.FileUtils
-import org.gradle.api.internal.artifacts.configurations.DefaultUnlockedConfiguration
+import org.gradle.api.artifacts.Configuration
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.internal.logging.text.StyledTextOutputFactory
@@ -34,12 +28,12 @@ plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
-    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.9'
+    id 'com.gtnewhorizons.retrofuturagradle' version '2.0.6'
     id 'net.darkhax.curseforgegradle' version '1.1.24' apply false
     id 'com.modrinth.minotaur' version '2.8.7' apply false
-    id 'com.diffplug.spotless' version '6.24.0' apply false
+    id 'com.diffplug.spotless' version '8.10.2' apply false
     id 'com.palantir.git-version' version '3.0.0' apply false
-    id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+    id 'com.gradleup.shadow' version '9.6.1' apply false
     id 'org.jetbrains.kotlin.jvm' version '1.8.0' apply false
     id 'org.jetbrains.kotlin.kapt' version '1.8.0' apply false
     id 'com.google.devtools.ksp' version '1.8.0-1.0.9' apply false
@@ -47,10 +41,6 @@ plugins {
 }
 
 def out = services.get(StyledTextOutputFactory).create('an-output')
-
-
-// Project properties
-loadProjectProperties()
 
 
 // Required properties: we don't know how to handle these being missing gracefully
@@ -68,7 +58,6 @@ checkPropertyExists("containsMixinsAndOrCoreModOnly")
 // Optional properties: we can assume some default behavior if these are missing
 propertyDefaultIfUnset("modVersion", "")
 propertyDefaultIfUnset("includeMCVersionJar", false)
-propertyDefaultIfUnset("autoUpdateBuildScript", false)
 propertyDefaultIfUnset("modArchivesBaseName", project.modId)
 propertyDefaultIfUnsetWithEnvVar("developmentEnvironmentUserName", "Developer", "DEV_USERNAME")
 propertyDefaultIfUnset("additionalJavaArguments", "")
@@ -274,7 +263,7 @@ if (project.file('.git/HEAD').isFile() || project.file('.git').isFile()) {
 
 // Shadowing
 if (usesShadowedDependencies.toBoolean()) {
-    apply plugin: 'com.github.johnrengelman.shadow'
+    apply plugin: 'com.gradleup.shadow'
 }
 
 
@@ -857,11 +846,11 @@ if (enableJava17RunTasks.toBoolean()) {
         spec.vendor.set(JvmVendorSpec.matching("jetbrains"))
     }
 
-    ext.java17DependenciesCfg = (DefaultUnlockedConfiguration) configurations.create("java17Dependencies") {
+    ext.java17DependenciesCfg = (Configuration) configurations.create("java17Dependencies") {
         extendsFrom(configurations.getByName("runtimeClasspath")) // Ensure consistent transitive dependency resolution
         canBeConsumed = false
     }
-    ext.java17PatchDependenciesCfg = (DefaultUnlockedConfiguration) configurations.create("java17PatchDependencies") {
+    ext.java17PatchDependenciesCfg = (Configuration) configurations.create("java17PatchDependencies") {
         canBeConsumed = false
     }
 
@@ -1115,9 +1104,6 @@ idea {
                     '6. Build Jars'(Gradle) {
                         taskNames = ['build']
                     }
-                }
-                'Update Buildscript'(Gradle) {
-                    taskNames = ['updateBuildScript']
                 }
                 'FAQ'(Gradle) {
                     taskNames = ['faq']
@@ -1386,78 +1372,12 @@ def getChangelog() {
 }
 
 
-// Buildscript updating
+// Gradle wrapper
 
-def buildscriptGradleVersion = '8.9'
+def buildscriptGradleVersion = '9.4.0'
 
 tasks.named('wrapper', Wrapper).configure {
     gradleVersion = buildscriptGradleVersion
-}
-
-tasks.register('updateBuildScript') {
-    group = 'GT Buildscript'
-    description = 'Updates the build script to the latest version'
-
-    if (gradle.gradleVersion != buildscriptGradleVersion && !Boolean.getBoolean('DISABLE_BUILDSCRIPT_GRADLE_UPDATE')) {
-        dependsOn('wrapper')
-    }
-
-    doLast {
-        if (performBuildScriptUpdate()) return
-        print('Build script already up to date!')
-    }
-}
-
-if (!project.getGradle().startParameter.isOffline() && !Boolean.getBoolean('DISABLE_BUILDSCRIPT_UPDATE_CHECK') && isNewBuildScriptVersionAvailable()) {
-    if (autoUpdateBuildScript.toBoolean()) {
-        performBuildScriptUpdate()
-    } else {
-        out.style(Style.SuccessHeader).println("Build script update available! Run 'gradle updateBuildScript'")
-        if (gradle.gradleVersion != buildscriptGradleVersion) {
-            out.style(Style.SuccessHeader).println("updateBuildScript can update gradle from ${gradle.gradleVersion} to ${buildscriptGradleVersion}\n")
-        }
-    }
-}
-
-static URL availableBuildScriptUrl() {
-    new URL("https://raw.githubusercontent.com/GregTechCEu/Buildscripts/master/build.gradle")
-}
-
-static URL availableSettingsGradleUrl() {
-    new URL("https://raw.githubusercontent.com/GregTechCEu/Buildscripts/master/settings.gradle")
-}
-
-boolean performBuildScriptUpdate() {
-    if (isNewBuildScriptVersionAvailable()) {
-        def buildscriptFile = getFile("build.gradle")
-        def settingsFile = getFile("settings.gradle")
-        availableBuildScriptUrl().withInputStream { i -> buildscriptFile.withOutputStream { it << i } }
-        availableSettingsGradleUrl().withInputStream { i -> settingsFile.withOutputStream { it << i } }
-        def out = services.get(StyledTextOutputFactory).create('buildscript-update-output')
-        out.style(Style.Success).print("Build script updated. Please REIMPORT the project or RESTART your IDE!")
-        return true
-    }
-    return false
-}
-
-boolean isNewBuildScriptVersionAvailable() {
-    Map parameters = ["connectTimeout": 10000, "readTimeout": 10000]
-
-    String currentBuildScript = getFile("build.gradle").getText()
-    String currentBuildScriptHash = getVersionHash(currentBuildScript)
-    String availableBuildScript = availableBuildScriptUrl().newInputStream(parameters).getText()
-    String availableBuildScriptHash = getVersionHash(availableBuildScript)
-
-    boolean isUpToDate = currentBuildScriptHash.empty || availableBuildScriptHash.empty || currentBuildScriptHash == availableBuildScriptHash
-    return !isUpToDate
-}
-
-static String getVersionHash(String buildScriptContent) {
-    String versionLine = buildScriptContent.find("^//version: [a-z0-9]*")
-    if (versionLine != null) {
-        return versionLine.split(": ").last()
-    }
-    return ""
 }
 
 
@@ -1467,34 +1387,18 @@ tasks.register('faq') {
     group = 'GT Buildscript'
     description = 'Prints frequently asked questions about building a project'
     doLast {
-        print("\nTo update this buildscript to the latest version, run 'gradlew updateBuildScript' or run the generated run configuration if you are using IDEA.\n" +
+        print("\n" +
                 "To set up the project, run the 'setupDecompWorkspace' task, which you can run as './gradlew setupDecompWorkspace' in a terminal, or find in the 'modded minecraft' gradle category.\n\n" +
-                "To add new dependencies to your project, place them in 'dependencies.gradle', NOT in 'build.gradle' as they would be replaced when the script updates.\n" +
+                "To add new dependencies to your project, place them in 'dependencies.gradle', NOT in 'build.gradle'.\n" +
                 "To add new repositories to your project, place them in 'repositories.gradle'.\n" +
                 "If you need additional gradle code to run, you can place it in a file named 'addon.gradle' (or either of the above, up to you for organization).\n\n" +
-                "If your build fails to recognize the syntax of newer Java versions, enable Jabel in your 'buildscript.properties' under the option name 'enableModernJavaSyntax'.\n" +
-                "To see information on how to configure your IDE properly for Java 17, see https://github.com/GregTechCEu/Buildscripts/blob/master/docs/jabel.md\n\n" +
-                "Report any issues or feature requests you have for this build script to https://github.com/GregTechCEu/Buildscripts/issues\n")
+                "If your build fails to recognize the syntax of newer Java versions, enable Jabel in your 'gradle.properties' under the option name 'enableModernJavaSyntax'.\n" +
+                "To see information on how to configure your IDE properly for Java 17, see https://github.com/GregTechCEu/Buildscripts/blob/master/docs/jabel.md\n")
     }
 }
 
 
 // Helpers
-def loadProjectProperties() {
-    def configFile = file("buildscript.properties")
-    if (configFile.exists()) {
-        configFile.withReader {
-            def prop = new Properties()
-            prop.load(it)
-            new ConfigSlurper().parse(prop).forEach { String k, def v ->
-                project.ext.setProperty(k, v)
-            }
-        }
-    } else {
-        print("Failed to read from buildscript.properties, as it did not exist!")
-    }
-}
-
 def getDefaultArtifactGroup() {
     def lastIndex = project.modGroup.lastIndexOf('.')
     return lastIndex < 0 ? project.modGroup : project.modGroup.substring(0, lastIndex)
@@ -1506,7 +1410,7 @@ def getFile(String relativePath) {
 
 def checkPropertyExists(String propertyName) {
     if (!project.hasProperty(propertyName)) {
-        throw new GradleException("This project requires a property \"" + propertyName + "\"! Please add it your \"buildscript.properties\" or \"gradle.properties\". You can find all properties and their description here: https://github.com/GregTechCEu/Buildscripts/blob/main/buildscript.properties and https://github.com/GregTechCEu/Buildscripts/blob/main/gradle.properties")
+        throw new GradleException("This project requires a property \"" + propertyName + "\"! Please add it to \"gradle.properties\".")
     }
 }
 
