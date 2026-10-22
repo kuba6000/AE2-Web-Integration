@@ -10,6 +10,7 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
+import pl.kuba6000.ae2webintegration.core.config.EditableServerSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public class GSONUtils {
@@ -19,6 +20,7 @@ public class GSONUtils {
     /** Creates an independent builder with the shared API adapters. */
     public static GsonBuilder createBuilder() {
         return new GsonBuilder()
+            .registerTypeAdapter(EditableServerSettings.class, new EditableServerSettings.Adapter().nullSafe())
             // Old Gson otherwise reflects into java.lang.Void, which modern JVM modules forbid.
             .registerTypeAdapter(Void.class, new TypeAdapter<Void>() {
 

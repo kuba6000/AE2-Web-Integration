@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -31,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.server.PostServerSettings;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class ServerSettingsHttpTest {
 
@@ -466,14 +468,54 @@ class ServerSettingsHttpTest {
     }
 
     @Test
-    void fileOnlyAccessFlagsCannotBeChangedByWebClients() throws Exception {
-        for (String field : new String[] { "publicMode", "allowNoPasswordOnLocalhost" }) {
-            JsonObject edit = readSettings();
-            edit.getAsJsonObject("settings")
-                .getAsJsonObject("general")
-                .addProperty(field, true);
-            request("POST", "/api/server/settings", token, edit.toString(), 400);
+    void restrictedConfigurationFieldsRejectValidTypes() throws Exception {
+        JsonObject restricted = new Gson().fromJson("""
+            {"general":{"password":"other-password","port":65500,"publicMode":false,
+            "allowNoPasswordOnLocalhost":true,"trustedProxies":"192.0.2.0/24",
+            "maxRequestsBeforeLoggedInPerMinute":37},"discord":{"webhook":"https://example.invalid/other"},
+            "ntfy":{"password":"other-secret"}}
+            """, JsonObject.class);
+        JsonObject before = readSettings();
+        for (Map.Entry<String, JsonElement> section : restricted.entrySet()) {
+            for (Map.Entry<String, JsonElement> field : section.getValue()
+                .getAsJsonObject()
+                .entrySet()) {
+                JsonObject edit = readSettings();
+                edit.getAsJsonObject("settings")
+                    .getAsJsonObject(section.getKey())
+                    .add(field.getKey(), field.getValue());
+                request("POST", "/api/server/settings", token, edit.toString(), 400);
+            }
         }
+        assertEquals(before, readSettings());
+    }
+
+    @Test
+    void webPolicyDoesNotFilterOrdinaryConfigurationSerialization() {
+        JsonObject ordinary = GSONUtils.createBuilder()
+            .create()
+            .toJsonTree(Config.INSTANCE)
+            .getAsJsonObject();
+        assertEquals(
+            "test-password",
+            ordinary.getAsJsonObject("general")
+                .get("password")
+                .getAsString());
+        assertEquals(
+            port,
+            ordinary.getAsJsonObject("general")
+                .get("port")
+                .getAsInt());
+        assertEquals(
+            "https://example.invalid/stored-webhook-secret",
+            ordinary.getAsJsonObject("discord")
+                .get("webhook")
+                .getAsString());
+        assertEquals(
+            "stored-ntfy-secret",
+            ordinary.getAsJsonObject("ntfy")
+                .get("password")
+                .getAsString());
     }
 
     @Test

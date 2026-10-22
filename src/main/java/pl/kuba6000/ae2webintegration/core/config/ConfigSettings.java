@@ -24,26 +24,32 @@ public final class ConfigSettings {
     public static final class General {
 
         @Comment("Web server port (1-65535).")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public int port = 2324;
 
         @Comment("Password for the Admin web account. Keep this secret.")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public String password = PasswordHelper.generateDefaultPassword();
 
         @Path("allow_no_password_on_localhost")
         @Comment("Allow loopback clients to access the panel as admin without a password.")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean allowNoPasswordOnLocalhost = true;
 
         @Path("trusted_proxies")
         @Comment({ "Comma-separated trusted proxy IPs or CIDRs. Loopback proxies are trusted automatically.",
             "Only trust proxies you control; their forwarded client address affects admin access." })
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public String trustedProxies = "";
 
         @Path("public_mode")
         @Comment("Allow individual player accounts. When false, only the Admin account can log in.")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean publicMode = true;
 
         @Path("max_requests_before_logged_in_per_minute")
         @Comment("Unauthenticated requests per client per minute (1-1000).")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
         public int maxRequestsBeforeLoggedInPerMinute = 20;
 
         @Path("check_for_updates")
@@ -76,6 +82,7 @@ public final class ConfigSettings {
     public static final class Discord {
 
         @Comment("Discord webhook URL. Empty disables notifications; public mode must also be disabled.")
+        @WebSetting(WebSetting.Access.SECRET)
         public String webhook = "";
 
         @Path("role_id")
@@ -96,6 +103,7 @@ public final class ConfigSettings {
         public String user = "";
 
         @Comment("ntfy password. Leave empty when the topic does not require authentication.")
+        @WebSetting(WebSetting.Access.SECRET)
         public String password = "";
 
     }

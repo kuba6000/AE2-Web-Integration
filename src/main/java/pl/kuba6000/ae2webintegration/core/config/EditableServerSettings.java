@@ -1,66 +1,57 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import java.io.IOException;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.electronwill.nightconfig.core.conversion.Path;
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.GsonBuilder;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
 
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
-/** Editable server configuration. Listener, authentication and proxy trust policy are file-only. */
-public final class EditableServerSettings {
+/** Server-settings projection. A response wraps its published, read-only configuration; input owns a fresh instance. */
+@Desugar
+public record EditableServerSettings(@NotNull ConfigSettings config) {
 
-    public @NotNull General general = new General();
-    public @NotNull ConfigSettings.Notifications notifications = new ConfigSettings.Notifications();
-    public @NotNull Discord discord = new Discord();
-    public @NotNull Ntfy ntfy = new Ntfy();
-    @Path("resource_history")
-    public @NotNull ConfigSettings.ResourceHistory resourceHistory = new ConfigSettings.ResourceHistory();
-    @Path("crafting_history")
-    public @NotNull ConfigSettings.CraftingHistory craftingHistory = new ConfigSettings.CraftingHistory();
-    @Path("resource_tracking")
-    public @NotNull ConfigSettings.ResourceTracking resourceTracking = new ConfigSettings.ResourceTracking();
-
-    /** Read-only view: shared sections belong to a published configuration and must not be mutated. */
-    static @NotNull EditableServerSettings fromConfig(@NotNull ConfigSettings config) {
-        EditableServerSettings settings = new EditableServerSettings();
-        settings.general.checkForUpdates = config.general.checkForUpdates;
-        settings.general.defaultTheme = config.general.defaultTheme;
-        settings.notifications = config.notifications;
-        settings.discord.roleId = config.discord.roleId;
-        settings.ntfy.host = config.ntfy.host;
-        settings.ntfy.topic = config.ntfy.topic;
-        settings.ntfy.user = config.ntfy.user;
-        settings.resourceHistory = config.resourceHistory;
-        settings.craftingHistory = config.craftingHistory;
-        settings.resourceTracking = config.resourceTracking;
-        return settings;
-    }
-
-    /** Omitted values preserve existing secrets; empty strings explicitly clear them. Never returned in responses. */
+    /** Omitted values preserve active secrets; empty strings explicitly clear them. Never returned in responses. */
     @Desugar
     public record SecretUpdates(@OptionalInput @Nullable String discordWebhook,
         @OptionalInput @Nullable String ntfyPassword) {}
 
-    public static final class Discord {
+    /** Registered only for this wrapper, so ordinary configuration serialization remains unaffected. */
+    public static final class Adapter extends TypeAdapter<EditableServerSettings> {
 
-        @Path("role_id")
-        public @NotNull String roleId = "";
-    }
+        private static final TypeAdapter<ConfigSettings> CONFIG = new GsonBuilder()
+            .setExclusionStrategies(new ExclusionStrategy() {
 
-    public static final class Ntfy {
+                @Override
+                public boolean shouldSkipField(FieldAttributes field) {
+                    return field.getAnnotation(WebSetting.class) != null;
+                }
 
-        public @NotNull String host = "";
-        public @NotNull String topic = "";
-        public @NotNull String user = "";
-    }
+                @Override
+                public boolean shouldSkipClass(Class<?> type) {
+                    return false;
+                }
+            })
+            .serializeNulls()
+            .create()
+            .getAdapter(ConfigSettings.class);
 
-    public static final class General {
+        @Override
+        public void write(JsonWriter output, EditableServerSettings settings) throws IOException {
+            CONFIG.write(output, settings.config());
+        }
 
-        @Path("check_for_updates")
-        public boolean checkForUpdates;
-        @Path("default_theme")
-        public @NotNull String defaultTheme = "";
+        @Override
+        public EditableServerSettings read(JsonReader input) throws IOException {
+            return new EditableServerSettings(CONFIG.read(input));
+        }
     }
 }

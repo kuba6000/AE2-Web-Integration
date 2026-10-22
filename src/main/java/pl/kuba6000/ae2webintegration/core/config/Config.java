@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
@@ -93,7 +94,7 @@ public class Config {
         ConfigSettings loaded = INSTANCE;
         return new ServerSettingsSnapshot(
             revision,
-            EditableServerSettings.fromConfig(loaded),
+            new EditableServerSettings(loaded),
             new ServerSettingsSnapshot.ReadOnly(
                 loaded.general.port,
                 loaded.general.publicMode,
@@ -112,11 +113,7 @@ public class Config {
         if (!revision.equals(expectedRevision)) return null;
         File file = getConfigFile("config.toml");
         CommentedConfig document = read(file);
-        CommentedConfig edits = newDocument();
-        CONVERTER.toConfig(settings, edits);
-        mergeEdits(document, edits);
-        document.set("discord.webhook", INSTANCE.discord.webhook);
-        document.set("ntfy.password", INSTANCE.ntfy.password);
+        applyWebEdits(document, settings.config(), INSTANCE);
         if (secrets != null) {
             if (secrets.discordWebhook() != null) document.set("discord.webhook", secrets.discordWebhook());
             if (secrets.ntfyPassword() != null) document.set("ntfy.password", secrets.ntfyPassword());
@@ -125,10 +122,26 @@ public class Config {
         return readServerSettings();
     }
 
-    private static void mergeEdits(CommentedConfig document, UnmodifiableConfig edits) {
-        for (UnmodifiableConfig.Entry entry : edits.entrySet()) {
-            String key = entry.getKey();
-            if (entry.getValue() instanceof UnmodifiableConfig section) {
+    private static void applyWebEdits(CommentedConfig document, ConfigSettings settings, ConfigSettings active) {
+        try {
+            applyWebFields(document, settings, active);
+        } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("Cannot read editable configuration fields", failure);
+        }
+    }
+
+    private static void applyWebFields(CommentedConfig document, Object settings, Object active)
+        throws IllegalAccessException {
+        for (Field field : settings.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting access = field.getAnnotation(WebSetting.class);
+            if (access != null && access.value() == WebSetting.Access.FILE_ONLY) continue;
+            Path path = field.getAnnotation(Path.class);
+            String key = path == null ? field.getName() : path.value();
+            Object value = field.get(access != null && access.value() == WebSetting.Access.SECRET ? active : settings);
+            if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
                 Object existing = document.get(key);
                 if (existing == null) {
                     existing = newDocument();
@@ -137,11 +150,29 @@ public class Config {
                 if (!(existing instanceof CommentedConfig target)) {
                     throw new IllegalArgumentException("Expected a configuration table");
                 }
-                mergeEdits(target, section);
+                applyWebFields(target, value, field.get(active));
             } else {
-                document.set(key, entry.getValue());
+                document.set(key, value);
             }
         }
+    }
+
+    private static void preserveFileOnlySettings(Object loaded, Object active) throws IllegalAccessException {
+        for (Field field : loaded.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting setting = field.getAnnotation(WebSetting.class);
+            if (setting != null && setting.value() == WebSetting.Access.FILE_ONLY) {
+                field.set(loaded, field.get(active));
+            } else if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
+                    preserveFileOnlySettings(field.get(loaded), field.get(active));
+                }
+        }
+    }
+
+    private static boolean isConfigField(Field field) {
+        return !Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers());
     }
 
     private static CommentedConfig newDocument() {
@@ -208,15 +239,14 @@ public class Config {
         serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
         disableMultilineStrings(serializer);
         String nextRevision = PasswordHelper.generateToken(32);
-        AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
         if (preserveFileOnlySettings) {
-            loaded.general.port = INSTANCE.general.port;
-            loaded.general.password = INSTANCE.general.password;
-            loaded.general.publicMode = INSTANCE.general.publicMode;
-            loaded.general.allowNoPasswordOnLocalhost = INSTANCE.general.allowNoPasswordOnLocalhost;
-            loaded.general.trustedProxies = INSTANCE.general.trustedProxies;
-            loaded.general.maxRequestsBeforeLoggedInPerMinute = INSTANCE.general.maxRequestsBeforeLoggedInPerMinute;
+            try {
+                preserveFileOnlySettings(loaded, INSTANCE);
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException("Cannot preserve active file-only configuration fields", failure);
+            }
         }
+        AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
         INSTANCE = loaded;
         revision = nextRevision;
     }

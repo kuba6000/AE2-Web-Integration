@@ -65,6 +65,9 @@ public final class OpenApiDoclet implements Doclet {
     private static final String QUERY_PARAM = "pl.kuba6000.ae2webintegration.core.http.contract.QueryParam";
     private static final String BODY = "pl.kuba6000.ae2webintegration.core.http.contract.Body";
     private static final String OPTIONAL_INPUT = "pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput";
+    private static final String EDITABLE_SETTINGS = "pl.kuba6000.ae2webintegration.core.config.EditableServerSettings";
+    private static final String CONFIG_SETTINGS = "pl.kuba6000.ae2webintegration.core.config.ConfigSettings";
+    private static final String WEB_SETTING = "pl.kuba6000.ae2webintegration.core.config.WebSetting";
     private static final String STABLE_KEY = "pl.kuba6000.ae2webintegration.core.identity.StableKey";
     private static final Gson JSON = new GsonBuilder().setPrettyPrinting()
         .disableHtmlEscaping()
@@ -565,7 +568,11 @@ public final class OpenApiDoclet implements Doclet {
     }
 
     private Map<String, Object> schema(TypeMirror type, boolean input) {
-        Map<String, Object> result = nonNullableSchema(type, input);
+        return schema(type, input, false);
+    }
+
+    private Map<String, Object> schema(TypeMirror type, boolean input, boolean webSettings) {
+        Map<String, Object> result = nonNullableSchema(type, input, webSettings);
         if ("null".equals(result.get("type"))) return result;
         if (!input && type.getAnnotationMirrors()
             .stream()
@@ -578,7 +585,7 @@ public final class OpenApiDoclet implements Doclet {
         return result;
     }
 
-    private Map<String, Object> nonNullableSchema(TypeMirror type, boolean input) {
+    private Map<String, Object> nonNullableSchema(TypeMirror type, boolean input, boolean webSettings) {
         if (type.getKind() == TypeKind.BOOLEAN) return object("type", "boolean");
         if (Set.of(TypeKind.BYTE, TypeKind.SHORT, TypeKind.INT, TypeKind.LONG)
             .contains(type.getKind())) {
@@ -587,7 +594,7 @@ public final class OpenApiDoclet implements Doclet {
         if (type.getKind() == TypeKind.FLOAT || type.getKind() == TypeKind.DOUBLE) return object("type", "number");
         if (type.getKind() == TypeKind.CHAR) return object("type", "string", "minLength", 1, "maxLength", 1);
         if (type instanceof ArrayType array)
-            return object("type", "array", "items", schema(array.getComponentType(), input));
+            return object("type", "array", "items", schema(array.getComponentType(), input, webSettings));
         if (!(type instanceof DeclaredType declared))
             throw new IllegalArgumentException("Unsupported schema type: " + type);
         TypeElement element = (TypeElement) declared.asElement();
@@ -596,6 +603,13 @@ public final class OpenApiDoclet implements Doclet {
         switch (name) {
             case "java.lang.String", STABLE_KEY:
                 return object("type", "string");
+            case EDITABLE_SETTINGS:
+                return schema(
+                    environment.getElementUtils()
+                        .getTypeElement(CONFIG_SETTINGS)
+                        .asType(),
+                    input,
+                    true);
             case "java.util.UUID":
                 return object("type", "string", "format", "uuid");
             case "java.lang.Void":
@@ -619,7 +633,8 @@ public final class OpenApiDoclet implements Doclet {
                     schema(
                         declared.getTypeArguments()
                             .get(0),
-                        input));
+                        input,
+                        webSettings));
             case "java.util.Map":
                 if (declared.getTypeArguments()
                     .size() != 2) throw problem(element, "Raw map schema is unsupported");
@@ -635,12 +650,13 @@ public final class OpenApiDoclet implements Doclet {
                     "type",
                     "object",
                     "propertyNames",
-                    nonNullableSchema(key, input),
+                    nonNullableSchema(key, input, webSettings),
                     "additionalProperties",
                     schema(
                         declared.getTypeArguments()
                             .get(1),
-                        input));
+                        input,
+                        webSettings));
             default:
                 break;
         }
@@ -669,7 +685,7 @@ public final class OpenApiDoclet implements Doclet {
                     .contains(Modifier.STATIC))) {
             throw problem(element, "Unsupported schema type: " + type);
         }
-        name = shortName(element) + (input ? "Input" : "");
+        name = shortName(element) + (webSettings ? "Web" : "") + (input ? "Input" : "");
         String qualifiedName = element.getQualifiedName()
             .toString();
         String previousType = schemaTypes.putIfAbsent(name, qualifiedName);
@@ -683,7 +699,7 @@ public final class OpenApiDoclet implements Doclet {
         Map<String, Object> properties = new TreeMap<>();
         schemas.put(name, object("type", "object", "properties", properties));
         List<String> required = new ArrayList<>();
-        collectFields(declared, properties, required, input);
+        collectFields(declared, properties, required, input, webSettings);
         if (properties.isEmpty()) throw problem(element, "Unsupported empty object schema");
         Map<String, Object> definition = object(
             "type",
@@ -702,7 +718,7 @@ public final class OpenApiDoclet implements Doclet {
     }
 
     private void collectFields(DeclaredType declared, Map<String, Object> properties, List<String> required,
-        boolean input) {
+        boolean input, boolean webSettings) {
         TypeElement type = (TypeElement) declared.asElement();
         Map<String, String> componentDescriptions = new TreeMap<>();
         Map<String, JsonObject> fieldSchemas = new TreeMap<>();
@@ -722,15 +738,16 @@ public final class OpenApiDoclet implements Doclet {
             if (field.getKind() != ElementKind.FIELD || field.getModifiers()
                 .contains(Modifier.STATIC)
                 || field.getModifiers()
-                    .contains(Modifier.TRANSIENT))
-                continue;
+                    .contains(Modifier.TRANSIENT)
+                || webSettings && annotation(field, WEB_SETTING) != null) continue;
             if (annotation(field, "com.google.gson.annotations.JsonAdapter") != null) {
                 throw problem(field, "Unsupported custom Gson adapter");
             }
             Map<String, Object> value = schema(
                 environment.getTypeUtils()
                     .asMemberOf(declared, field),
-                input);
+                input,
+                webSettings);
             if (!input && annotation(field, "org.jetbrains.annotations.Nullable") != null
                 && !value.containsKey("anyOf")
                 && !"null".equals(value.get("type"))) {
@@ -774,7 +791,7 @@ public final class OpenApiDoclet implements Doclet {
                 .contentEquals("java.lang.Record")) {
             if (!superclass.getTypeArguments()
                 .isEmpty()) throw problem(type, "Generic superclass schemas are unsupported");
-            collectFields(superclass, properties, required, input);
+            collectFields(superclass, properties, required, input, webSettings);
         }
     }
 
