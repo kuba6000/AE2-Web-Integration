@@ -10,10 +10,17 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.AbstractCollection;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +35,11 @@ import com.sun.net.httpserver.HttpServer;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -37,12 +48,14 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 class ApiRoutingHttpTest extends GridTestScope {
 
     private HttpServer server;
+    private ExecutorService gameThread;
     // The production registry is weak; the fixture owns the live grid until HTTP requests finish.
     private TestGridFixtures.TestGrid grid;
     private volatile boolean localAccess;
@@ -50,6 +63,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     @BeforeEach
     void start() throws Exception {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        gameThread = Executors.newSingleThreadExecutor();
         ApiRouter router = new ApiRouter(exchange -> {
             if (localAccess) return new RequestContext(exchange, WebPrincipal.localhost());
             String bearer = exchange.getRequestHeaders()
@@ -64,14 +78,27 @@ class ApiRoutingHttpTest extends GridTestScope {
                     exchange.getRequestHeaders()
                         .getFirst("Cookie"));
             return identified ? new RequestContext(exchange, WebPrincipal.admin()) : null;
-        }, exchange -> false, ISyncedRequest::handle);
+        }, exchange -> false, request -> {
+            try {
+                gameThread.submit(request::handle)
+                    .get(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread()
+                    .interrupt();
+                throw new IllegalStateException(exception);
+            } catch (ExecutionException | TimeoutException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
         router.register(Echo.class);
         router.register(Read.class);
         router.register(FailingRead.class);
+        router.register(DetachedRead.class);
         router.register(PublicIdentity.class);
         router.register(OptionalIdentity.class);
         router.register(GetGridSettings.class);
         router.register(PatchGridSettings.class);
+        router.register(GetResourceHistory.class);
         server.createContext("/api", router);
         server.start();
     }
@@ -79,7 +106,96 @@ class ApiRoutingHttpTest extends GridTestScope {
     @AfterEach
     void stop() {
         server.stop(0);
+        gameThread.shutdownNow();
         grid = null;
+    }
+
+    @Test
+    void settingsExposeActiveServerBoundsAndRejectWholeInvalidUpdates() throws Exception {
+        ConfigSettings previous = Config.INSTANCE;
+        try {
+            ConfigSettings configured = new ConfigSettings();
+            configured.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            configured.resourceHistory.flowFlushIntervalSeconds = new ConfigSettings.Range(20, 900, 180);
+            configured.resourceHistory.historyRetentionDays = new ConfigSettings.Range(2, 30, 14);
+            Config.INSTANCE = configured;
+            worlds.close(TestGridFixtures.Worlds.source(gridSave));
+            worlds.initialize(gridSave);
+            grid = TestGridFixtures.grid(1);
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            String path = "/api/grids/" + key + "/settings";
+            String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+            Config.INSTANCE = new ConfigSettings();
+            JsonObject data = request("GET", path, headers, "").json()
+                .getAsJsonObject("data");
+            assertEquals(
+                180,
+                data.get("flowFlushIntervalSeconds")
+                    .getAsInt());
+            assertEquals(
+                14,
+                data.get("historyRetentionDays")
+                    .getAsInt());
+            JsonObject limits = data.getAsJsonObject("limits");
+            assertNotNull(limits);
+            assertEquals(
+                10,
+                limits.getAsJsonObject("stockSampleIntervalSeconds")
+                    .get("min")
+                    .getAsInt());
+            assertEquals(
+                900,
+                limits.getAsJsonObject("flowFlushIntervalSeconds")
+                    .get("max")
+                    .getAsInt());
+            assertEquals(
+                14,
+                limits.getAsJsonObject("historyRetentionDays")
+                    .get("defaultValue")
+                    .getAsInt());
+            for (String invalid : new String[] { "{\"name\":\"Wrong\",\"flowFlushIntervalSeconds\":19}",
+                "{\"name\":\"Wrong\",\"historyRetentionDays\":31}",
+                "{\"name\":\"Wrong\",\"stockSampleIntervalSeconds\":9}" }) {
+                assertEquals(400, request("PATCH", path, headers, invalid).status());
+                assertEquals(
+                    "",
+                    request("GET", path, headers, "").json()
+                        .getAsJsonObject("data")
+                        .get("name")
+                        .getAsString());
+            }
+            Reply saved = request(
+                "PATCH",
+                path,
+                headers,
+                "{\"flowFlushIntervalSeconds\":240,\"stockSampleIntervalSeconds\":90}");
+            assertEquals(200, saved.status());
+            assertEquals(
+                240,
+                saved.json()
+                    .getAsJsonObject("data")
+                    .get("flowFlushIntervalSeconds")
+                    .getAsInt());
+            assertEquals(
+                limits,
+                saved.json()
+                    .getAsJsonObject("data")
+                    .getAsJsonObject("limits"));
+        } finally {
+            Config.INSTANCE = previous;
+        }
+    }
+
+    @Test
+    void resourceHistoryRequiresAccessAndRejectsUnboundedQueries() throws Exception {
+        grid = TestGridFixtures.grid(781012);
+        String path = "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/resource-history";
+        assertEquals(401, request("GET", path, "", "").status());
+        assertEquals(403, request("GET", path, "Authorization: Bearer stranger\r\n", "").status());
+        for (String query : new String[] { "limit=0", "limit=10001", "from=-1", "from=1.5", "itemKey=bad" }) {
+            assertEquals(400, request("GET", path + "?" + query, "Authorization: Bearer owner\r\n", "").status());
+        }
+        assertEquals(503, request("GET", path + "?limit=20&from=0", "Authorization: Bearer owner\r\n", "").status());
     }
 
     @Endpoint(method = HttpMethod.PATCH, path = "/api/echo/{name}")
@@ -132,6 +248,60 @@ class ApiRoutingHttpTest extends GridTestScope {
         public void handle() {
             throw new IllegalArgumentException("Internal data cannot be processed");
         }
+    }
+
+    @Endpoint(method = HttpMethod.GET, path = "/api/detached/{mode}")
+    public static class DetachedRead extends ISyncedRequest {
+
+        @PathParam("mode")
+        private String mode;
+
+        @Override
+        public void handle() {
+            respondDetached(HttpURLConnection.HTTP_OK, new DetachedBody("fail".equals(mode)));
+        }
+    }
+
+    private static final class DetachedBody extends AbstractCollection<String> implements IResponseBody {
+
+        private final Thread producer = Thread.currentThread();
+        private final boolean fail;
+
+        private DetachedBody(boolean fail) {
+            this.fail = fail;
+        }
+
+        @Override
+        public @NotNull Iterator<String> iterator() {
+            if (fail || Thread.currentThread() == producer) {
+                throw new IllegalStateException("Body cannot be serialized on this thread");
+            }
+            return Collections.singletonList("Żelazo")
+                .iterator();
+        }
+
+        @Override
+        public int size() {
+            return 1;
+        }
+    }
+
+    @Test
+    void detachedBodyIsEncodedAsUtf8OutsideTheGameThread() throws Exception {
+        Reply response = request("GET", "/api/detached/ok", "Authorization: Bearer valid\r\n", "");
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals("[\"Żelazo\"]", response.body());
+    }
+
+    @Test
+    void detachedSerializationFailureProducesAnInternalErrorResponse() throws Exception {
+        Reply response = request("GET", "/api/detached/fail", "Authorization: Bearer valid\r\n", "");
+        assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, response.status());
+        assertEquals(
+            "INTERNAL_ERROR",
+            response.json()
+                .get("status")
+                .getAsString());
     }
 
     @Endpoint(method = HttpMethod.POST, path = "/api/public-identity", authentication = Authentication.NONE)
@@ -380,12 +550,256 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
-    void namingUsesExistingGridAuthorizationAndCsrfProtection() throws Exception {
+    void craftingRetentionIsIndependentDurableAndValidatesBeforeMutation() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        JsonObject initial = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        int max = initial.getAsJsonObject("craftingLimits")
+            .getAsJsonObject("historyRetentionDays")
+            .get("max")
+            .getAsInt();
+        Reply saved = request("PATCH", path, headers, "{\"craftingHistoryRetentionDays\":" + max + "}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject current = saved.json()
+            .getAsJsonObject("data");
+        assertEquals(
+            max,
+            current.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        assertEquals(initial.get("historyRetentionDays"), current.get("historyRetentionDays"));
+        assertFalse(
+            current.get("isTracked")
+                .getAsBoolean());
+        GridPersistentData restored = new WorldGridStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)))
+            .load(
+                TestGridFixtures.Worlds.source(gridSave)
+                    .toPath())
+            .get(key);
+        assertNotNull(restored);
+        assertEquals(
+            max,
+            restored.getSettings()
+                .getCraftingHistoryRetentionDays());
+        for (String invalid : new String[] { "null", "0", Integer.toString(max + 1), "1.5", "\"7\"", "{}" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request("PATCH", path, headers, "{\"isTracked\":true,\"craftingHistoryRetentionDays\":" + invalid + "}")
+                    .status());
+        }
+        JsonObject unchanged = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertFalse(
+            unchanged.get("isTracked")
+                .getAsBoolean());
+        assertEquals(
+            max,
+            unchanged.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        ConfigSettings.CraftingHistory tighter = new ConfigSettings.CraftingHistory();
+        tighter.historyRetentionDays = new ConfigSettings.Range(1, 3, 2);
+        assertTrue(
+            worlds.database(TestGridFixtures.Worlds.source(gridSave))
+                .applyPolicy(Config.INSTANCE.resourceHistory, tighter));
+        JsonObject clamped = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertEquals(
+            3,
+            clamped.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        assertEquals(
+            3,
+            clamped.getAsJsonObject("craftingLimits")
+                .getAsJsonObject("historyRetentionDays")
+                .get("max")
+                .getAsInt());
+    }
+
+    @Test
+    void machineCraftingSettingIsOptionalValidatedAndDurableWithoutMasterTracking() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        JsonObject initial = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(initial.has("trackMachineCrafting"));
+        assertFalse(
+            initial.get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply saved = request("PATCH", path, headers, "{\"trackMachineCrafting\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        assertTrue(
+            saved.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+        assertFalse(
+            saved.json()
+                .getAsJsonObject("data")
+                .get("isTracked")
+                .getAsBoolean());
+        GridPersistentData restored = worlds.registry(
+            gridSave.toPath()
+                .resolve("ae2webintegration/grid-identities.json")
+                .toFile())
+            .getPersistentData(key);
+        assertNotNull(restored);
+        assertTrue(
+            restored.getSettings()
+                .isTrackMachineCrafting());
+        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request("PATCH", path, headers, "{\"isTracked\":true,\"trackMachineCrafting\":" + invalid + "}")
+                    .status());
+        }
+        JsonObject unchanged = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertFalse(
+            unchanged.get("isTracked")
+                .getAsBoolean());
+        assertTrue(
+            unchanged.get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply omitted = request("PATCH", path, headers, "{\"isTracked\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, omitted.status());
+        assertTrue(
+            omitted.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply cleared = request("PATCH", path, headers, "{\"trackMachineCrafting\":false}");
+        assertEquals(HttpURLConnection.HTTP_OK, cleared.status());
+        assertFalse(
+            cleared.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+    }
+
+    @Test
+    void storageHistorySettingIsIndependentAndPersists() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        Reply saved = request("PATCH", path, headers, "{\"isStorageTracked\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject settings = saved.json()
+            .getAsJsonObject("data");
+        assertTrue(
+            settings.get("isStorageTracked")
+                .getAsBoolean());
+        assertFalse(
+            settings.get("isTracked")
+                .getAsBoolean());
+        Path file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        GridPersistentData restored = worlds.registry(file.toFile())
+            .getPersistentData(key);
+        assertNotNull(restored);
+        JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
+            .getAsJsonObject();
+        assertTrue(
+            loaded.get("isStorageTracked")
+                .getAsBoolean());
+        assertEquals(
+            HttpURLConnection.HTTP_BAD_REQUEST,
+            request("PATCH", path, headers, "{\"isStorageTracked\":null}").status());
+        assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, "{\"isTracked\":true}").status());
+        JsonObject current = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            current.get("isStorageTracked")
+                .getAsBoolean());
+        assertTrue(
+            current.get("isTracked")
+                .getAsBoolean());
+    }
+
+    @Test
+    void flowAndStockSettingsPersistIndependentlyAndInvalidIntervalsDoNotPartiallyApply() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        Reply saved = request("PATCH", path, headers, "{\"isFlowTracked\":true,\"stockSampleIntervalSeconds\":60}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject data = saved.json()
+            .getAsJsonObject("data");
+        assertTrue(
+            data.get("isFlowTracked")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isStorageTracked")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isTracked")
+                .getAsBoolean());
+        assertEquals(
+            60,
+            data.get("stockSampleIntervalSeconds")
+                .getAsInt());
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            request("PATCH", path, headers, "{\"isStorageTracked\":true}").status());
+        for (String invalid : new String[] { "0", "-1", "86401", "1.5", "null" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request(
+                    "PATCH",
+                    path,
+                    headers,
+                    "{\"isFlowTracked\":false,\"name\":\"Invalid update\",\"stockSampleIntervalSeconds\":" + invalid
+                        + "}")
+                    .status());
+        }
+        JsonObject current = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            current.get("isFlowTracked")
+                .getAsBoolean());
+        assertTrue(
+            current.get("isStorageTracked")
+                .getAsBoolean());
+        assertEquals(
+            "",
+            current.get("name")
+                .getAsString());
+        assertEquals(
+            60,
+            current.get("stockSampleIntervalSeconds")
+                .getAsInt());
+        Path file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        GridPersistentData restored = worlds.registry(file.toFile())
+            .getPersistentData(key);
+        assertNotNull(restored);
+        JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
+            .getAsJsonObject();
+        assertTrue(
+            loaded.get("isFlowTracked")
+                .getAsBoolean());
+        assertEquals(
+            60,
+            loaded.get("stockSampleIntervalSeconds")
+                .getAsInt());
+    }
+
+    @Test
+    void namingAndMachineCraftingUseExistingGridAuthorizationAndCsrfProtection() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String json = "Content-Type: application/json\r\n";
-        String body = "{\"name\":\"Factory\",\"isTracked\":true}";
+        String body = "{\"name\":\"Factory\",\"isTracked\":true,\"trackMachineCrafting\":true}";
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, request("PATCH", path, json, body).status());
         assertEquals(
             HttpURLConnection.HTTP_FORBIDDEN,
@@ -396,6 +810,9 @@ class ApiRoutingHttpTest extends GridTestScope {
         String ownerHeaders = "Authorization: Bearer owner\r\n" + json;
         JsonObject initial = request("GET", path, ownerHeaders, "").json()
             .getAsJsonObject("data");
+        assertFalse(
+            initial.get("trackMachineCrafting")
+                .getAsBoolean());
         assertEquals(
             "",
             initial.get("name")
@@ -407,9 +824,12 @@ class ApiRoutingHttpTest extends GridTestScope {
         grid.withoutSources();
         assertEquals(
             HttpURLConnection.HTTP_FORBIDDEN,
-            request("PATCH", path, ownerHeaders, "{\"name\":\"Changed\"}").status());
+            request("PATCH", path, ownerHeaders, "{\"name\":\"Changed\",\"trackMachineCrafting\":false}").status());
         JsonObject current = request("GET", path, "Authorization: Bearer valid\r\n", "").json()
             .getAsJsonObject("data");
+        assertTrue(
+            current.get("trackMachineCrafting")
+                .getAsBoolean());
         assertEquals(
             "Factory",
             current.get("name")
@@ -438,26 +858,28 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
-    void failedNameSaveReturnsErrorAndSameValueRetryPersistsAcrossRestart() throws Exception {
+    void failedNameSaveReturnsErrorAndRetryAfterRestartPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        Path blocker = file.resolveSibling("grid-identities.json.tmp");
-        Files.createDirectory(blocker);
+        worlds.close(file.toFile());
         String body = "{\"name\":\"Factory\"}";
         assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, request("PATCH", path, headers, body).status());
-        var unsaved = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        GridPersistentData unsaved = worlds.registry(file.toFile())
+            .getPersistentData(key);
         assertNotNull(unsaved);
         assertEquals(
             "",
             unsaved.getSettings()
                 .getName());
-        Files.deleteIfExists(blocker);
+        worlds.initialize(gridSave);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, body).status());
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         grid = TestGridFixtures.grid(1);
         JsonObject loaded = request("GET", path, headers, "").json()
             .getAsJsonObject("data");

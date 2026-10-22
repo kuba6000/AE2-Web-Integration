@@ -14,10 +14,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
@@ -406,6 +408,37 @@ class IconPackTest {
             }
         }
         assertEquals(ids[0], ids[1]);
+    }
+
+    @Test
+    void repeatedStatisticsReplacePreviousValuesAndCopyCallerData() throws Exception {
+        Map<String, Long> counts = new TreeMap<>();
+        counts.put("current", 7L);
+        List<String> sources = new ArrayList<>(Arrays.asList("second", "first"));
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            writer.statistics(Collections.singletonMap("previous", 1L), Collections.singletonList("old"));
+            writer.statistics(counts, sources);
+            counts.put("current", 99L);
+            sources.clear();
+            output = writer.finish();
+        }
+        try (ZipFile zip = new ZipFile(output.toFile())) {
+            JsonObject statistics = new JsonParser()
+                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+                .getAsJsonObject()
+                .getAsJsonObject("statistics");
+            JsonObject publishedCounts = statistics.getAsJsonObject("counts");
+            assertFalse(publishedCounts.has("previous"));
+            assertEquals(
+                7,
+                publishedCounts.get("current")
+                    .getAsLong());
+            assertEquals(
+                "[\"second\",\"first\"]",
+                statistics.getAsJsonArray("sources")
+                    .toString());
+        }
     }
 
     @Test

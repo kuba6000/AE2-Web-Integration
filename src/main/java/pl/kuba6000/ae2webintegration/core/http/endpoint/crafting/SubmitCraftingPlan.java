@@ -13,15 +13,16 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
-import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -79,7 +80,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
      * @example data null
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
+    public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     /**
      * Submission failure; a native crafting service may provide the reason.
@@ -92,7 +93,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
      * @example data CPU is busy with another job.
      */
     @Desugar
-    public record FailureResponse(@NotNull ApiStatus status, @Nullable String data) {}
+    public record FailureResponse(@NotNull ApiStatus status, @Nullable String data) implements IResponseBody {}
 
     /**
      * Optional CPU selection for submission.
@@ -127,7 +128,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
                 IAECraftingJob craftingJob = job.get();
                 ICraftingCPUCluster target = null;
                 if (input.cpuKey() != null) {
-                    Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+                    Map<StableKey, ICraftingCPUCluster> cpus = CpuReader.list(craftingGrid);
                     target = cpus.get(input.cpuKey());
                     if (target == null) {
                         deny(ApiStatus.CPU_NOT_FOUND);

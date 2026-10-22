@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
@@ -16,13 +18,31 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
+import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
@@ -51,11 +71,22 @@ public class CoreEngine {
     private static volatile String modVersion;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
+    private static volatile @Nullable WorldDatabase worldDatabase;
+    private static @Nullable ScheduledExecutorService gridFlushScheduler;
+    private static volatile @Nullable ResourcePinStore resourcePins;
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
+    private static volatile @Nullable StorageTrackingService storageTracking;
+    private static volatile @Nullable CraftingHistoryService craftingHistory;
+    private static volatile @Nullable StorageTrackingCoordinator storageCoordinator;
+    private static volatile @Nullable LiveStreams liveStreams;
+    private static volatile @Nullable TerminalRegistry terminalRegistry;
+    private static volatile @Nullable CpuRegistry cpuRegistry;
+    private static volatile @Nullable CpuLiveCoordinator cpuLive;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
+        stopStorageTracking();
         stopVersionChecker();
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory(), serverPlatform::getLegacyConfig);
@@ -67,22 +98,86 @@ public class CoreEngine {
         CoreData.loadData();
     }
 
+    /** Publishes reloaded data settings immediately; the world scheduler applies durable changes. */
+    public static void applyDataConfig() {
+        WorldDatabase database = worldDatabase;
+        if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory, Config.INSTANCE.craftingHistory);
+    }
+
     public static void onServerStarted() {
+        // Finish the previous world before binding any new identity or storage owner.
+        onServerStopping();
+        File databaseFile = new File(
+            AE2Controller.serverPlatform.getWorldDirectory(),
+            "ae2webintegration/grids.sqlite");
+        WorldDatabase database = new WorldDatabase(
+            databaseFile.toPath(),
+            Config.INSTANCE.resourceHistory,
+            Config.INSTANCE.craftingHistory);
+        SqliteCraftingHistoryStore craftings = new SqliteCraftingHistoryStore(database);
+        SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database);
         try {
-            CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
-        } catch (IOException e) {
-            LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
+            database.open();
+            GRID_IDENTITIES.initialize(
+                database,
+                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grid-identities.json")
+                    .toPath());
+            history.initialize();
+            craftings.maintain();
+        } catch (IOException | RuntimeException | LinkageError failure) {
+            GRID_IDENTITIES.clear();
+            try {
+                database.close();
+            } catch (IOException | RuntimeException | LinkageError closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            if (failure instanceof LinkageError linkageFailure) throw linkageFailure;
+            throw new IllegalStateException("Failed to initialize world database: " + databaseFile, failure);
         }
-        serverRunning = true;
-        loadIconPack();
-        themes.close();
-        themes = ThemeCatalog.load(
-            Config.getConfigFile("themes")
-                .toPath());
-        AE2Controller.init();
-        StartupHandler.logOpenAdminAccessWarning();
-        maintainVersionChecker();
-        StartupHandler.handleNotificationIntegration();
+        try {
+            worldDatabase = database;
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
+                Thread thread = new Thread(task, "AE2Web-GridPersistence");
+                thread.setDaemon(true);
+                return thread;
+            });
+            gridFlushScheduler = scheduler;
+            CraftingHistoryService craftingService = new CraftingHistoryService(craftings, scheduler);
+            craftingHistory = craftingService;
+            database.startGridFlush(scheduler, () -> {
+                history.maintain();
+                try {
+                    craftingService.maintain();
+                } catch (IOException failure) {
+                    LOG.error("Crafting history maintenance failed; a later pass will retry", failure);
+                }
+            });
+            resourcePins = new ResourcePinStore(database);
+            serverRunning = true;
+            loadIconPack();
+            ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
+            LiveHub hub = new LiveHub();
+            TerminalRegistry terminals = new TerminalRegistry(hub);
+            terminalRegistry = terminals;
+            CpuRegistry cpus = new CpuRegistry(hub);
+            cpuRegistry = cpus;
+            cpuLive = new CpuLiveCoordinator(cpus, GRID_IDENTITIES, trackingSettings);
+            liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
+            StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
+            storageTracking = service;
+            storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
+            themes.close();
+            themes = ThemeCatalog.load(
+                Config.getConfigFile("themes")
+                    .toPath());
+            AE2Controller.init();
+            StartupHandler.logOpenAdminAccessWarning();
+            maintainVersionChecker();
+            StartupHandler.handleNotificationIntegration();
+        } catch (RuntimeException failure) {
+            onServerStopping();
+            LOG.error("World services failed during startup", failure);
+        }
     }
 
     /**
@@ -93,6 +188,15 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
+        AE2Controller.itemIdentities.cleanUp();
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        IAE ae = AE2Controller.AE2Interface;
+        if (coordinator != null && ae != null) {
+            long now = System.currentTimeMillis();
+            coordinator.tick(ae, now);
+        }
+        CpuLiveCoordinator cpus = cpuLive;
+        if (cpus != null) cpus.tick(System.currentTimeMillis());
         maintainVersionChecker();
     }
 
@@ -195,7 +299,9 @@ public class CoreEngine {
     public static void onServerStopping() {
         serverRunning = false;
         stopVersionChecker();
+        stopLiveStreams();
         AE2Controller.stopHTTPServer();
+        stopStorageTracking();
         closeIconPack();
         // Authorization must not survive into the next world loaded in this JVM.
         themes.close();
@@ -206,7 +312,9 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
+        stopLiveStreams();
         AE2Controller.stopHTTPServer();
+        stopStorageTracking();
         closeIconPack();
         AE2Controller.clearWorldState();
         themes.close();
@@ -218,6 +326,107 @@ public class CoreEngine {
 
     public static @Nullable String getModVersion() {
         return modVersion;
+    }
+
+    /** Detached data and history access for HTTP workers. Null outside an active server lifecycle. */
+    public static @Nullable ResourcePinStore getResourcePins() {
+        return resourcePins;
+    }
+
+    public static @Nullable StorageTrackingService getStorageTracking() {
+        return storageTracking;
+    }
+
+    /** Detached recent tracking only; HTTP readers neither capture native state nor query durable history. */
+    public static @Nullable RecentResourceActivity.Summary recentActivity(@NotNull StableKey key) {
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        return coordinator == null ? null : coordinator.recent(key);
+    }
+
+    /** Authorized terminal reads renew the shared native observation lease on the game thread. */
+    public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid) {
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        return coordinator == null ? null : coordinator.observeForViewer(grid, System.currentTimeMillis());
+    }
+
+    public static void prepareTerminal(@NotNull IAEGrid grid) {
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        if (coordinator != null) coordinator.prepareForViewer(grid, System.currentTimeMillis());
+    }
+
+    public static @Nullable TerminalRegistry getTerminalRegistry() {
+        return terminalRegistry;
+    }
+
+    public static @Nullable CpuRegistry getCpuRegistry() {
+        return cpuRegistry;
+    }
+
+    /** Server-thread observation of viewed crafting CPUs, also fed by the native change notifications. */
+    public static @Nullable CpuLiveCoordinator getCpuLive() {
+        return cpuLive;
+    }
+
+    public static @Nullable LiveStreams getLiveStreams() {
+        return liveStreams;
+    }
+
+    private static void stopLiveStreams() {
+        LiveStreams previousStreams = liveStreams;
+        liveStreams = null;
+        terminalRegistry = null;
+        cpuRegistry = null;
+        cpuLive = null;
+        if (previousStreams != null) previousStreams.close();
+    }
+
+    public static @Nullable CraftingHistoryService getCraftingHistory() {
+        return craftingHistory;
+    }
+
+    private static void stopStorageTracking() {
+        WorldDatabase database = worldDatabase;
+        if (database != null) database.stopGridFlush();
+        ScheduledExecutorService scheduler = gridFlushScheduler;
+        gridFlushScheduler = null;
+        if (scheduler != null) scheduler.shutdown();
+        resourcePins = null;
+        stopLiveStreams();
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        if (coordinator != null) {
+            coordinator.close();
+            storageCoordinator = null;
+        }
+        if (database != null) {
+            try {
+                database.finishGridIdentities();
+            } catch (IOException failure) {
+                LOG.error("Final grid identity flush failed; queued dependent writes will be rejected", failure);
+            }
+        }
+        // Flush even newly retired identities before clearing admission and draining captured tails.
+        GRID_IDENTITIES.clear();
+        StorageTrackingService previous = storageTracking;
+        storageTracking = null;
+        worldDatabase = null;
+        CraftingHistoryService completed = craftingHistory;
+        craftingHistory = null;
+        if (completed != null) {
+            try {
+                completed.close();
+            } catch (IOException | RuntimeException failure) {
+                LOG.error("Cannot finish writing crafting history", failure);
+            }
+        }
+        if (previous != null) previous.close();
+        else if (database != null) {
+            try {
+                database.close();
+            } catch (IOException failure) {
+                LOG.error("Cannot close world database", failure);
+            }
+        }
+
     }
 
     /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */

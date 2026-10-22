@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
@@ -56,6 +58,7 @@ import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -189,6 +192,8 @@ class ServerLifecycleHttpTest {
         }
     }
 
+    private final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
+
     @TempDir
     File tempDirectory;
 
@@ -212,10 +217,11 @@ class ServerLifecycleHttpTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws IOException {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousServerPlatform;
         config.close();
+        worlds.close();
     }
 
     @Test
@@ -648,6 +654,36 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void logoutInvalidatesRetainedLoginSessionButNotOtherLoginOfSameAccount() throws Exception {
+        startApi();
+        String first = login();
+        String second = login();
+        TestGridFixtures.TestExchange firstRequest = new TestGridFixtures.TestExchange(null);
+        firstRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + first);
+        TestGridFixtures.TestExchange secondRequest = new TestGridFixtures.TestExchange(null);
+        secondRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + second);
+        AE2Controller.RequestContext firstContext = AuthService.authenticate(firstRequest);
+        AE2Controller.RequestContext secondContext = AuthService.authenticate(secondRequest);
+        assertNotNull(firstContext);
+        assertNotNull(secondContext);
+        assertNotNull(firstContext.getSession());
+        assertNotNull(secondContext.getSession());
+        assertNotSame(firstContext.getSession(), secondContext.getSession());
+        HttpURLConnection logout = connection("/api/auth/logout", first);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertFalse(
+            firstContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertTrue(
+            secondContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertEquals(HttpURLConnection.HTTP_OK, get("/api/context", second).status());
+    }
+
+    @Test
     void contextUsesCurrentCredentialsAndPreservesExplicitAuthorizationPrecedence() throws Exception {
         startApi();
         String token = login();
@@ -725,7 +761,7 @@ class ServerLifecycleHttpTest {
         IAE processInterface = TestGridFixtures.ae();
         AE2Controller.AE2Interface = processInterface;
 
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
@@ -738,7 +774,7 @@ class ServerLifecycleHttpTest {
         CoreEngine.onServerStopped();
 
         assertSame(processInterface, AE2Controller.AE2Interface);
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
 
         Response secondWorld = get("/api/grids", token);
@@ -762,7 +798,7 @@ class ServerLifecycleHttpTest {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
@@ -844,7 +880,7 @@ class ServerLifecycleHttpTest {
                 return new File(tempDirectory, "test-save");
             }
         };
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
@@ -862,7 +898,7 @@ class ServerLifecycleHttpTest {
     // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
     @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         fillServerThreadQueue();
         PostExchange exchange = new PostExchange(
@@ -878,7 +914,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         fillServerThreadQueue();
@@ -941,7 +977,7 @@ class ServerLifecycleHttpTest {
             }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
@@ -1023,7 +1059,7 @@ class ServerLifecycleHttpTest {
             }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
@@ -1071,7 +1107,7 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "Player"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/login",
@@ -1123,7 +1159,7 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "CanonicalPlayer"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("canonicalplayer", "player-password");
         Response response = get("/api/context", token);
@@ -1555,7 +1591,7 @@ class ServerLifecycleHttpTest {
 
     private void startApi() throws IOException {
         AE2Controller.AE2Interface = TestGridFixtures.ae();
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
+        worlds.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
     }
 

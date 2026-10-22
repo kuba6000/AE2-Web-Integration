@@ -12,6 +12,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
@@ -41,7 +42,8 @@ import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 public final class GetThemes extends IAsyncRequest {
 
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ThemeCatalog.Description data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull ThemeCatalog.Description data)
+        implements IResponseBody {}
 
     @Override
     public void handle() {

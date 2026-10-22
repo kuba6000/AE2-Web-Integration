@@ -12,6 +12,12 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
     @NotNull
     StableKey web$getKey();
 
+    /**
+     * Whether this native CPU is still valid and belongs to this exact grid. Server thread only; must not enumerate
+     * resources, tasks or other CPUs.
+     */
+    boolean web$isValidForGrid(@NotNull IAEGrid grid);
+
     String web$getName();
 
     long web$getAvailableStorage();
@@ -36,13 +42,8 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
 
     IAEGenericStack web$getFinalOutput();
 
-    long web$getActiveItems(IAEKey key);
-
-    long web$getPendingItems(IAEKey key);
-
-    long web$getStorageItems(IAEKey key);
-
-    void web$getAllItems(IStackList list);
+    /** Fills empty lists with absolute counts, in one native pass per list. Server thread; zero entries omitted. */
+    void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored);
 
     IStackList web$getWaitingFor();
 

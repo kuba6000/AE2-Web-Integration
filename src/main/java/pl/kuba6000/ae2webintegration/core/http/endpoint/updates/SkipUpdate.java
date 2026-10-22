@@ -13,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -50,7 +51,7 @@ public final class SkipUpdate extends IAsyncRequest {
      * @param data   always null
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
+    public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     @Override
     public void handle() {

@@ -15,14 +15,223 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
+import com.electronwill.nightconfig.toml.TomlWriter;
 
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 
 class ConfigFileTest {
 
+    @Test
+    void craftingRetentionUsesIndependentBoundsAndSurvivesDetachedCopy() {
+        ConfigSettings.ResourceHistory resource = new ConfigSettings.ResourceHistory();
+        ConfigSettings.CraftingHistory crafting = new ConfigSettings.CraftingHistory();
+        crafting.historyRetentionDays = new ConfigSettings.Range(2, 12, 4);
+        GridSettingsData settings = new GridSettingsData(resource, crafting);
+        assertEquals(4, settings.getCraftingHistoryRetentionDays());
+        settings.setCraftingHistoryRetentionDays(10);
+        assertEquals(7, settings.getHistoryRetentionDays());
+        assertEquals(
+            10,
+            settings.copy()
+                .getCraftingHistoryRetentionDays());
+        assertThrows(IllegalArgumentException.class, () -> settings.setCraftingHistoryRetentionDays(13));
+        ConfigSettings.CraftingHistory tighter = new ConfigSettings.CraftingHistory();
+        tighter.historyRetentionDays = new ConfigSettings.Range(2, 5, 3);
+        assertTrue(settings.applyPolicy(resource, tighter));
+        assertEquals(5, settings.getCraftingHistoryRetentionDays());
+        assertFalse(settings.applyPolicy(resource, tighter));
+        assertEquals(7, settings.getHistoryRetentionDays());
+    }
+
+    @Test
+    void craftingHistoryBoundsRoundTripAndRejectInvalidCaps() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(7, (Integer) document.get("crafting_history.history_retention_days.default"));
+        assertEquals(1000, (Integer) document.get("crafting_history.history_max_jobs_per_grid"));
+        document.set("crafting_history.history_retention_days.min", 2);
+        document.set("crafting_history.history_retention_days.max", 12);
+        document.set("crafting_history.history_retention_days.default", 4);
+        document.set("crafting_history.history_max_jobs_per_grid", 20);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(4, (Integer) restored.get("crafting_history.history_retention_days.default"));
+        assertEquals(20, (Integer) restored.get("crafting_history.history_max_jobs_per_grid"));
+        ConfigSettings active = Config.INSTANCE;
+        document.set("crafting_history.history_max_jobs_per_grid", 0);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
+    void publishedDataConfigDirectlyDefinesGridDefaultsAndBounds() {
+        ConfigSettings.ResourceHistory data = new ConfigSettings.ResourceHistory();
+        data.stockSampleIntervalSeconds = new ConfigSettings.Range(5, 30, 10);
+        GridSettingsData settings = new GridSettingsData(data);
+        assertEquals(10, settings.getStockSampleIntervalSeconds());
+        settings.setStockSampleIntervalSeconds(30);
+        assertEquals(30, settings.getStockSampleIntervalSeconds());
+        assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(31));
+        assertEquals(30, settings.getStockSampleIntervalSeconds());
+    }
+
     @TempDir
     Path root;
+
+    @Test
+    void dataPolicyRangesRoundTripAndRejectInvalidDefaultWithoutReplacingActiveConfig() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(300, (Integer) document.get("resource_history.stock_sample_interval_seconds.default"));
+        assertEquals(60, (Integer) document.get("resource_history.flow_flush_interval_seconds.default"));
+        assertEquals(7, (Integer) document.get("resource_history.history_retention_days.default"));
+        assertEquals(60, (Integer) document.get("resource_history.stock_sample_interval_seconds.min"));
+        assertEquals(60, (Integer) document.get("resource_history.flow_flush_interval_seconds.min"));
+        document.set("resource_history.stock_sample_interval_seconds.min", 10);
+        document.set("resource_history.stock_sample_interval_seconds.max", 600);
+        document.set("resource_history.stock_sample_interval_seconds.default", 120);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(120, (Integer) restored.get("resource_history.stock_sample_interval_seconds.default"));
+        ConfigSettings active = Config.INSTANCE;
+        document.set("resource_history.stock_sample_interval_seconds.default", 5);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
+    void minuteFlowDefaultDoesNotReplaceExplicitFiveSecondConfiguration() throws Exception {
+        Config.init(root.toFile());
+        assertEquals(60, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("resource_history.flow_flush_interval_seconds.default", 5);
+        document.set("resource_history.flow_flush_interval_seconds.min", 1);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        assertEquals(5, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
+        document.remove("resource_history.flow_flush_interval_seconds.default");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        assertEquals(60, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
+    }
+
+    @Test
+    void flowHistoryIntervalIsConfigurableAndRejectsZero() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertTrue(document.contains("resource_history.flow_flush_interval_seconds.default"));
+        document.set("resource_history.flow_flush_interval_seconds.default", 11);
+        document.set("resource_history.flow_flush_interval_seconds.min", 1);
+        TomlWriter writer = new TomlWriter();
+        Files.write(
+            file,
+            writer.writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        assertEquals(11, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
+        document.set("resource_history.flow_flush_interval_seconds.default", 0);
+        Files.write(
+            file,
+            writer.writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+    }
+
+    @Test
+    void historyRetentionAndRowLimitsArePersistedAndValidated() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(7, (Integer) document.get("resource_history.history_retention_days.default"));
+        assertTrue(document.contains("resource_history.history_max_rows_per_grid"));
+        for (String key : new String[] { "history_retention_days.default", "history_max_rows_per_grid" }) {
+            Object original = document.get("resource_history." + key);
+            document.set("resource_history." + key, 0);
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            assertThrows(IllegalArgumentException.class, Config::reload);
+            document.set("resource_history." + key, original);
+        }
+        document.set("resource_history.history_retention_days.default", 3);
+        document.set("resource_history.history_max_rows_per_grid", 5000);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(3, (Integer) reloaded.get("resource_history.history_retention_days.default"));
+        assertEquals(5000, (Integer) reloaded.get("resource_history.history_max_rows_per_grid"));
+    }
+
+    @Test
+    void resourceTrackingLimitsArePersistedAndInvalidIntervalsAreRejected() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        CommentedConfig document = new TomlParser().parse(contents);
+        assertTrue(document.contains("resource_tracking.active_interval_millis"));
+        assertTrue(document.contains("resource_history.history_max_rows_per_grid"));
+        Files.write(
+            file,
+            contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+    }
+
+    @Test
+    void obsoleteTrackingTableIsRemovedWithoutChangingUnrelatedUnknownConfig() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("tracking.track_machine_crafting", true);
+        document.set("custom_extension.enabled", true);
+        document.setComment("custom_extension.enabled", "Keep this extension option");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertFalse(reloaded.contains("tracking"));
+        assertEquals(Boolean.TRUE, reloaded.get("custom_extension.enabled"));
+        assertEquals("Keep this extension option", reloaded.getComment("custom_extension.enabled"));
+    }
 
     @Test
     void firstStartCreatesReadableConfigAndRetainsPasswordAcrossRestarts() throws Exception {
@@ -35,7 +244,7 @@ class ConfigFileTest {
         CommentedConfig document = new TomlParser().parse(contents);
         assertNotNull(document.getComment("general.port"));
         assertNotNull(document.getComment("discord.webhook"));
-        assertNotNull(document.getComment("tracking.track_machine_crafting"));
+        assertFalse(document.contains("tracking"));
         assertTrue(document.contains("general.password"));
 
         Config.init(root.toFile());
@@ -43,7 +252,7 @@ class ConfigFileTest {
     }
 
     @Test
-    void migrationPreservesSettingsAndExistingTomlTakesPrecedence() {
+    void migrationPreservesSettingsAndExistingTomlTakesPrecedence() throws Exception {
         Map<String, Object> legacy = new LinkedHashMap<>();
         legacy.put("port", 25432);
         legacy.put("password", "existing-admin-password");
@@ -75,7 +284,10 @@ class ConfigFileTest {
         assertEquals("123456789", Config.INSTANCE.discord.roleId);
         assertEquals(64, Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
         assertEquals(128, Config.INSTANCE.notifications.minimumCraftingAmount);
-        assertTrue(Config.INSTANCE.tracking.trackMachineCrafting);
+        CommentedConfig document = new TomlParser().parse(
+            new String(Files.readAllBytes(root.resolve("ae2webintegration/config.toml")), StandardCharsets.UTF_8));
+        assertFalse(document.contains("tracking"));
+        assertFalse(new GridSettingsData().isTrackMachineCrafting());
     }
 
     @Test
@@ -105,7 +317,6 @@ class ConfigFileTest {
         String password = Config.INSTANCE.general.password;
         assertFalse(password.isEmpty());
         assertTrue(Config.INSTANCE.general.publicMode);
-        assertFalse(Config.INSTANCE.tracking.trackMachineCrafting);
         Config.init(root.toFile());
         assertEquals(password, Config.INSTANCE.general.password);
         assertEquals(25434, Config.INSTANCE.general.port);

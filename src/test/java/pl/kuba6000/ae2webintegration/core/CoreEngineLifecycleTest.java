@@ -23,7 +23,6 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -43,7 +42,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         IAE previous = AE2Controller.AE2Interface;
         try {
@@ -70,7 +69,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
-        gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
         try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
             PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");
             String registrationToken = registrations.begin(registeringPlayer, "test-password");
@@ -78,6 +77,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
                 grid,
                 cpu.web$getFinalOutput()
                     .web$what());
+            assertNotNull(itemKey);
 
             IAE processInterface = TestGridFixtures.ae(grid);
             AE2Controller.AE2Interface = processInterface;
@@ -130,9 +130,8 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertSame(processInterface, AE2Controller.AE2Interface);
             assertSame(processPlatform, AE2Controller.serverPlatform);
             assertTrue(
-                TestGridFixtures.isTracked(
-                    new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")),
-                    gridKey),
+                TestGridFixtures
+                    .isTracked(worlds.registry(new File(gridSave, "ae2webintegration/grid-identities.json")), gridKey),
                 "settings remain in the stopped save");
             assertFalse(
                 TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),
@@ -143,7 +142,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertNull(AE2Controller.itemIdentities.resolve(itemKey));
             assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
             assertNull(AE2JobTracker.findActiveJob(cpu));
-            assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
+            assertNull(CoreEngine.getCraftingHistory());
             assertNull(gridData.getJob(planId));
             assertTrue(pendingPlan.isCancelled());
             assertEquals(
@@ -215,6 +214,10 @@ class CoreEngineLifecycleTest extends GridTestScope {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
+
         public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
@@ -263,23 +266,8 @@ class CoreEngineLifecycleTest extends GridTestScope {
             return output;
         }
 
-        @Override
-        public long web$getActiveItems(IAEKey key) {
-            return 0;
-        }
-
-        @Override
-        public long web$getPendingItems(IAEKey key) {
-            return 0;
-        }
-
-        @Override
-        public long web$getStorageItems(IAEKey key) {
-            return 0;
-        }
-
-        @Override
-        public void web$getAllItems(IStackList list) {}
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {}
 
         @Override
         public IStackList web$getWaitingFor() {

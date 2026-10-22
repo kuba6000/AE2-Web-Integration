@@ -18,9 +18,21 @@ function link(text: string, url: string) {
 
 export function createAboutView(root: HTMLElement, modVersion: string | null) {
     const view = element('section');
-    view.className = 'about-view';
+    view.className = 'about-view page-view';
     view.hidden = true;
     const title = element('h2');
+    title.id = 'about-title';
+    const heading = element('div');
+    heading.className = 'terminal-heading';
+    heading.append(title);
+    const content = element('div');
+    content.className = 'terminal-body';
+    const scroll = element('div');
+    scroll.className = 'terminal-scroll page-scroll';
+    scroll.role = 'region';
+    scroll.setAttribute('aria-labelledby', title.id);
+    scroll.tabIndex = 0;
+    content.append(scroll);
     const mod = element('section');
     const modTitle = element('h3');
     const version = element('p');
@@ -54,6 +66,8 @@ export function createAboutView(root: HTMLElement, modVersion: string | null) {
     head.append(headings);
     const body = element('tbody');
     for (const resource of [
+        { name: 'SQLite JDBC', url: 'https://github.com/xerial/sqlite-jdbc', license: 'Apache 2.0; BSD 2-Clause' },
+        { name: 'uPlot', url: 'https://github.com/leeoniya/uPlot', license: 'MIT' },
         {
             name: 'Lato',
             url: 'https://github.com/google/fonts/tree/main/ofl/lato',
@@ -74,7 +88,8 @@ export function createAboutView(root: HTMLElement, modVersion: string | null) {
     }
     table.append(head, body);
     resources.append(resourcesTitle, table);
-    view.append(title, mod, theme, resources);
+    scroll.append(mod, theme, resources);
+    view.append(heading, content);
     root.append(view);
 
     return {

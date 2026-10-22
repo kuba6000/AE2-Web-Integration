@@ -10,14 +10,17 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
+import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /**
@@ -68,21 +71,37 @@ public final class PatchGridSettings extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsView data) implements IResponseBody {}
 
     /**
      * Settings to update; omitted members remain unchanged.
      *
-     * @param isTracked whether the grid should collect crafting history
-     * @param name      custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
-     *                  matching JavaScript String.trim after control characters are rejected.
-     *                  At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-     *                  U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
+     * @param isTracked                    whether the grid should collect crafting history
+     * @param trackMachineCrafting         whether new machine-origin jobs are recorded while crafting tracking is
+     *                                     enabled
+     * @param isStorageTracked             whether the grid should collect periodic resource quantities
+     * @param isFlowTracked                whether the grid should collect accepted input/output history
+     * @param stockSampleIntervalSeconds   seconds between stock samples, within the active server bounds
+     * @param flowFlushIntervalSeconds     seconds covered by durable flow totals, within the active server bounds
+     * @param historyRetentionDays         resource history days, within the active server bounds
+     * @param craftingHistoryRetentionDays completed crafting history days, within the active server bounds
+     * @param name                         custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
+     *                                     trimmed,
+     *                                     matching JavaScript String.trim after control characters are rejected.
+     *                                     At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+     *                                     U+007F–009F) are rejected even at the edges. Null is invalid; omission
+     *                                     preserves the
+     *                                     name.
      * @example isTracked true
      * @example name Factory
      */
     @Desugar
-    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name) {}
+    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name,
+        @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
+        @OptionalInput @Nullable Integer stockSampleIntervalSeconds,
+        @OptionalInput @Nullable Integer flowFlushIntervalSeconds,
+        @OptionalInput @Nullable Integer historyRetentionDays, @OptionalInput @Nullable Boolean trackMachineCrafting,
+        @OptionalInput @Nullable Integer craftingHistoryRetentionDays) {}
 
     @Body
     private @NotNull Input input;
@@ -101,10 +120,26 @@ public final class PatchGridSettings extends IAsyncRequest {
             return;
         }
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        GridSettingsView result;
         synchronized (registry) {
             GridPersistentData data = registry.getPersistentData(gridKey);
             if (data == null) {
                 deny(ApiStatus.GRID_NOT_FOUND);
+                return;
+            }
+            try {
+                ResourceHistory policy = registry.getDataPolicy();
+                if (input.stockSampleIntervalSeconds() != null)
+                    policy.stockSampleIntervalSeconds.validate(input.stockSampleIntervalSeconds());
+                if (input.flowFlushIntervalSeconds() != null)
+                    policy.flowFlushIntervalSeconds.validate(input.flowFlushIntervalSeconds());
+                if (input.historyRetentionDays() != null)
+                    policy.historyRetentionDays.validate(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    registry.getCraftingHistoryPolicy().historyRetentionDays
+                        .validate(input.craftingHistoryRetentionDays());
+            } catch (IllegalArgumentException e) {
+                deny(ApiStatus.BAD_PARAM);
                 return;
             }
             GridSettingsData settings = data.getSettings();
@@ -113,13 +148,33 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.isTracked() != null) {
                     settings.setTracked(input.isTracked());
                 }
-                if (input.name() != null || input.isTracked() != null) registry.saveIfDirty();
-                // Completion serializes under the same monitor used by settings mutations and file writes.
-                respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
+                if (input.trackMachineCrafting() != null)
+                    settings.setTrackMachineCrafting(input.trackMachineCrafting());
+                if (input.isStorageTracked() != null) settings.setStorageTracked(input.isStorageTracked());
+                if (input.isFlowTracked() != null) settings.setFlowTracked(input.isFlowTracked());
+                if (input.stockSampleIntervalSeconds() != null)
+                    settings.setStockSampleIntervalSeconds(input.stockSampleIntervalSeconds());
+                if (input.flowFlushIntervalSeconds() != null)
+                    settings.setFlowFlushIntervalSeconds(input.flowFlushIntervalSeconds());
+                if (input.historyRetentionDays() != null)
+                    settings.setHistoryRetentionDays(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    settings.setCraftingHistoryRetentionDays(input.craftingHistoryRetentionDays());
+                if (input.name() != null || input.isTracked() != null
+                    || input.trackMachineCrafting() != null
+                    || input.isStorageTracked() != null
+                    || input.isFlowTracked() != null
+                    || input.stockSampleIntervalSeconds() != null
+                    || input.flowFlushIntervalSeconds() != null
+                    || input.historyRetentionDays() != null
+                    || input.craftingHistoryRetentionDays() != null) registry.saveIfDirty();
+                result = GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy());
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
+                return;
             }
         }
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
     }
 
     private static @NotNull String normalizeName(@NotNull String name) {

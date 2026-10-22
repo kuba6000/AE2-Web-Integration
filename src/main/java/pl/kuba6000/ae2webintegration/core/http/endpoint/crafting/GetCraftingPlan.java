@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -183,7 +184,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull PlanData data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull PlanData data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     @PathParam("planId")
     private int jobId;
@@ -227,7 +229,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
                     IconMappings.Reference icon = null;
                     try {
                         itemKey = identities.remember(key);
-                        if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+                        if (itemKey != null && mappings != null)
+                            icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
                     } catch (RuntimeException unavailable) {
                         // Optional identity or icon failures must not hide the calculated resource counts.
                     }

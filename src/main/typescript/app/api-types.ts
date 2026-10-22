@@ -41,7 +41,46 @@ export type IconMetadata = {
     height: number;
     pages: { digest: string; width: number; height: number }[];
 };
-export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
+export type TerminalView = { generation: string; revision: string };
+export type RecentResource = {
+    input: string | null;
+    output: string | null;
+    inputOperations: string | null;
+    outputOperations: string | null;
+    stockChange: string | null;
+};
+export type RecentTracking = {
+    flowWindowMillis: number;
+    stockWindowMillis: number;
+    bucketMillis: number;
+    observedAt: number;
+    flowObservedAt: number | null;
+    stockObservedAt: number | null;
+    flowSince: number | null;
+    stockSince: number | null;
+    flowComplete: boolean;
+    stockComplete: boolean;
+    resources: Record<string, RecentResource>;
+};
+/** Changes to one live keyed list; updates carry absolute values for rows that already exist. */
+export type LiveDelta<Row, Update> = {
+    view: TerminalView;
+    updates: Update[];
+    definitions: Row[];
+    removed: string[];
+    unkeyed?: Row[] | null;
+    icons: IconMetadata | null;
+};
+export type StoredResourceUpdate = { itemKey: string; quantity: number; craftable: boolean };
+export type TerminalDelta = LiveDelta<StoredResource, StoredResourceUpdate> & { recent?: RecentTracking };
+export type ResourceResponse<T> = {
+    data: T;
+    icons: IconMetadata | null;
+    view?: TerminalView;
+    subscription?: string;
+    recent?: RecentTracking;
+    nextBefore?: string | null;
+};
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };
@@ -63,7 +102,23 @@ export type Grid = {
     isTrackingEnabled: boolean;
     accessSources: AccessSources;
 };
-export type GridSettings = { isTracked: boolean; name: string };
+export type GridSettings = {
+    isTracked: boolean;
+    trackMachineCrafting: boolean;
+    isStorageTracked: boolean;
+    isFlowTracked: boolean;
+    stockSampleIntervalSeconds: number;
+    flowFlushIntervalSeconds: number;
+    historyRetentionDays: number;
+    craftingHistoryRetentionDays: number;
+    name: string;
+};
+export type ResourceHistorySetting = 'stockSampleIntervalSeconds' | 'flowFlushIntervalSeconds' | 'historyRetentionDays';
+export type HistorySetting = ResourceHistorySetting | 'craftingHistoryRetentionDays';
+export type SettingRange = { min: number; max: number; defaultValue: number };
+export type GridSettingsLimits = Record<ResourceHistorySetting, SettingRange> & { historyMaxRowsPerGrid: number };
+export type CraftingHistoryLimits = { historyRetentionDays: SettingRange; historyMaxJobsPerGrid: number };
+export type GridSettingsResponse = GridSettings & { limits: GridSettingsLimits; craftingLimits: CraftingHistoryLimits };
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
@@ -84,6 +139,7 @@ export type CpuResource = ResourceDescription & {
     pending: number;
     stored: number;
     timeSpentCrafting: number;
+    crafting: boolean;
     craftedTotal: number;
     shareInCraftingTime: number;
     shareInCraftingTimeCombined: number;
@@ -101,6 +157,19 @@ export type CpuDetail = {
     timeStarted: number;
     timeElapsed: number;
 };
+/** The CPU state without its resources; a live delta replaces it whole when it changes. */
+export type CpuHeader = Omit<CpuDetail, 'items'>;
+/** Absolute measurements of one resource; `timeSpentCrafting` is as of the delta and still grows while `crafting`. */
+export type CpuResourceUpdate = {
+    itemKey: string;
+    active: number;
+    pending: number;
+    stored: number;
+    craftedTotal: number;
+    timeSpentCrafting: number;
+    crafting: boolean;
+};
+export type CpuDelta = LiveDelta<CpuResource, CpuResourceUpdate> & { cpu?: CpuHeader | null };
 export type PlanItem = ResourceDescription & {
     stored: number;
     requested: number;
@@ -122,7 +191,7 @@ export type HistoryEntry = {
     timeDone: number;
     wasCancelled: boolean;
     finalOutput: ResourceStack;
-    id: number;
+    id: string;
 };
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = ResourceDescription & {
@@ -142,4 +211,56 @@ export type CraftingHistory = {
     wasCancelled: boolean;
     items: ResourceTiming[];
     interfaceShare: ProviderTiming[];
+};
+
+/** Tracking counters use decimal strings so long values are never rounded by JSON parsing. */
+export type ResourceHistoryPoint = {
+    flowFrom: number | null;
+    observedAt: number;
+    generation: string;
+    kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';
+    resource: (ResourceDescription & { quantity: string }) | null;
+    input: string;
+    output: string;
+    inputOperations: string;
+    outputOperations: string;
+};
+export type ResourceHistory = {
+    baseline: ResourceHistoryPoint | null;
+    points: ResourceHistoryPoint[];
+    complete: boolean;
+    truncated: boolean;
+    enabled: boolean;
+};
+
+export type PinPlacement = 'terminal' | 'home';
+export type PinHomeConfig = {
+    showRecentFlow: boolean;
+    flowRangeMillis: number;
+    showStock: boolean;
+    showFlow: boolean;
+    showChart: boolean;
+    stock: boolean;
+    input: boolean;
+    output: boolean;
+    net: boolean;
+    rangeMillis: number;
+};
+export type ResourcePin = {
+    recent: RecentTracking | null;
+    pinKey: string;
+    available: boolean;
+    gridKey: string | null;
+    itemKey: string | null;
+    gridName: string | null;
+    resource: ResourceDescription | null;
+    terminalOrder: number | null;
+    homeOrder: number | null;
+    homeConfig: PinHomeConfig;
+};
+export type ResourcePinUpdate = {
+    terminal?: boolean;
+    home?: boolean;
+    move?: { placement: PinPlacement; direction: 'earlier' | 'later' };
+    homeConfig?: PinHomeConfig;
 };

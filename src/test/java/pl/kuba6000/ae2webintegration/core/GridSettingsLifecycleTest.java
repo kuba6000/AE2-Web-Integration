@@ -2,9 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.File;
 import java.net.HttpURLConnection;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,10 +16,10 @@ import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -29,6 +28,54 @@ class GridSettingsLifecycleTest extends GridTestScope {
     private final WebPrincipal owner = TestGridFixtures.principal(TestGridFixtures.OWNER_ID);
     private TestGridFixtures.TestGrid grid;
     private StableKey key;
+
+    @Test
+    void changedBoundsRejectTheWholeAuthorizedPatch() throws Exception {
+        ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
+        initial.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 900, 300);
+        worlds.database(TestGridFixtures.Worlds.source(gridSave))
+            .applyPolicy(initial);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStockSampleIntervalSeconds(600);
+        PatchGridSettings request = new PatchGridSettings();
+        JsonObject body = new JsonObject();
+        body.addProperty("name", "Do not apply");
+        body.addProperty("isTracked", true);
+        body.addProperty("stockSampleIntervalSeconds", 600);
+        assertTrue(
+            request.init(
+                new AE2Controller.RequestContext(
+                    new TestGridFixtures.TestExchange(""),
+                    owner,
+                    Collections.singletonMap("gridKey", key.toString()),
+                    body)));
+        ConfigSettings.ResourceHistory tighter = new ConfigSettings.ResourceHistory();
+        tighter.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 90, 60);
+        Thread pending = new Thread(request::handle);
+        synchronized (CoreEngine.GRID_IDENTITIES) {
+            pending.start();
+            assertTrue(
+                worlds.database(TestGridFixtures.Worlds.source(gridSave))
+                    .applyPolicy(tighter));
+        }
+        pending.join(5000);
+        assertFalse(pending.isAlive());
+        assertEquals(
+            "BAD_PARAM",
+            response(request).get("status")
+                .getAsString());
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
+        assertEquals(
+            "",
+            data.getSettings()
+                .getName());
+        assertEquals(
+            90,
+            data.getSettings()
+                .getStockSampleIntervalSeconds());
+    }
 
     @BeforeEach
     void grantGridAccess() {
@@ -73,12 +120,10 @@ class GridSettingsLifecycleTest extends GridTestScope {
     }
 
     @Test
-    void failedPersistenceReturnsInternalErrorAndRetainsSettingsForRetry() throws Exception {
-        Path file = gridSave.toPath()
-            .resolve("ae2webintegration/grid-identities.json");
-        Path blocker = gridSave.toPath()
-            .resolve("ae2webintegration/grid-identities.json.tmp");
-        Files.createDirectory(blocker);
+    void failedPersistenceReturnsInternalErrorAndRetryAfterRestartPersists() throws Exception {
+        File file = TestGridFixtures.Worlds.source(gridSave);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
+        worlds.close(file);
         PatchGridSettings request = new PatchGridSettings();
         request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
         assertEquals(
@@ -90,16 +135,17 @@ class GridSettingsLifecycleTest extends GridTestScope {
         assertTrue(
             data.getSettings()
                 .isTracked());
-        assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+        assertFalse(TestGridFixtures.isTracked(worlds.registry(file), key));
 
-        Files.deleteIfExists(blocker);
+        worlds.initialize(gridSave);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         PatchGridSettings retry = new PatchGridSettings();
         retry.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
         assertEquals(
             "OK",
             response(retry).get("status")
                 .getAsString());
-        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+        assertTrue(TestGridFixtures.isTracked(worlds.registry(file), key));
     }
 
     @Test

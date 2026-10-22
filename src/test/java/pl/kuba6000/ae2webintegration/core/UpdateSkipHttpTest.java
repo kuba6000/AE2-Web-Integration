@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -31,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Release;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 class UpdateSkipHttpTest {
@@ -251,7 +253,7 @@ class UpdateSkipHttpTest {
             new Gson().fromJson(request.getJSON(), JsonObject.class)
                 .get("status")
                 .getAsString());
-        var release = checker.getAvailableUpdate();
+        Release release = checker.getAvailableUpdate();
         assertNotNull(release);
         assertFalse(CoreData.isUpdateSkipped("1.7.10", "forge", release));
     }
@@ -332,7 +334,7 @@ class UpdateSkipHttpTest {
         }
         assertEquals(expected, connection.getResponseCode());
         try (InputStream input = expected >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-            return new Gson().fromJson(new java.io.InputStreamReader(input, StandardCharsets.UTF_8), JsonObject.class);
+            return new Gson().fromJson(new InputStreamReader(input, StandardCharsets.UTF_8), JsonObject.class);
         } finally {
             connection.disconnect();
         }

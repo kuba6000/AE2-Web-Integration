@@ -33,16 +33,19 @@ public final class RequestInputs {
             for (Field field : type.getDeclaredFields()) {
                 QueryParam query = field.getAnnotation(QueryParam.class);
                 if (query != null) {
-                    if (field.getType() != boolean.class) throw new IllegalStateException("Unsupported query type");
                     String value = HTTPUtils.parseQueryString(
                         context.getExchange()
                             .getRequestURI()
                             .getRawQuery())
                         .get(query.value());
                     if (value != null) {
-                        if (!value.equals("true") && !value.equals("false"))
-                            throw new IllegalArgumentException("Expected boolean query parameter");
-                        set(field, request, value.equals("true"));
+                        if (field.getType() == boolean.class) {
+                            if (!value.equals("true") && !value.equals("false"))
+                                throw new IllegalArgumentException("Expected boolean query parameter");
+                            set(field, request, value.equals("true"));
+                        } else {
+                            set(field, request, parsePath(value, field.getType()));
+                        }
                     }
                 }
                 PathParam path = field.getAnnotation(PathParam.class);
@@ -107,6 +110,17 @@ public final class RequestInputs {
         for (Field field : fields.values()) {
             JsonElement value = body.get(field.getName());
             if (value == null && field.isAnnotationPresent(OptionalInput.class)) continue;
+            Class<?> inputType = field.getType();
+            if (!inputType.isPrimitive() && inputType != String.class
+                && inputType != StableKey.class
+                && inputType != Boolean.class
+                && inputType != Integer.class
+                && inputType != Long.class) {
+                if (value == null || !value.isJsonObject())
+                    throw new IllegalArgumentException("Missing or invalid JSON object: " + field.getName());
+                validate(value.getAsJsonObject(), inputType);
+                continue;
+            }
             if (value == null || !value.isJsonPrimitive())
                 throw new IllegalArgumentException("Missing or invalid JSON member: " + field.getName());
             JsonPrimitive scalar = value.getAsJsonPrimitive();

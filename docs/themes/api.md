@@ -38,6 +38,20 @@ network settings. State is borrowed readonly data, not a separately cloned snaps
 arrays when presenting it. `subscribe` returns an early-unsubscribe function; host cleanup also removes
 the subscription.
 
+`itemSnapshotRevision` changes when a full terminal snapshot is accepted; SSE deltas leave it unchanged.
+Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
+the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
+
+While the selected CPU follows live updates, `cpus.stream` reports the connection and is null otherwise.
+Its `detail` changes on every update, and a busy CPU's elapsed time, time spent crafting, time shares and
+rates advance about once a second without network requests, so render them from `cpus.detail` on each
+state notification.
+
+Network `settings.current` contains confirmed values and `settings.draft` contains editable values.
+`settings.limits` supplies the server's `min`, `max` and `defaultValue` for stock and flow intervals
+and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
+Use those limits for controls and validation; pass only editable fields to `settings.edit`.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |
@@ -50,6 +64,8 @@ the subscription.
 | `crafting.search(value)`, `sort(value)`, `reverse()`                       | Set standard plan presentation preferences                |
 | `cpus.pause(key, paused)`, `cpus.cancel(key)`                              | Operate on CPU work                                       |
 | `settings.edit(field, value)`, `settings.save()`                           | Edit and save network settings                            |
+| `pins.add(gridKey, itemKey, placement)`                                    | Pin a resource in the terminal or on Home                  |
+| `pins.update(pinKey, update)`, `pins.remove(pinKey)`                       | Change placement, order or Home display; remove a pin      |
 
 Actions retain the shared validation, capability checks, pending state and API error handling.
 Render the appropriate state error fields and pending indicators. Automatic polling must not disable
@@ -59,6 +75,29 @@ Navigation uses the application's existing hash routes, for example `#/`,
 `#/grids/<encoded-key>/items` and `#/web-settings`. `Route` and `ThemeView` expose the supported route
 union. URL-encode keys. A theme's declared views affect its navigation; they do not disable server
 authorization or eliminate all background data requests.
+
+### Account pins
+
+`state.pins.items` contains the current account's saved resource pins. `terminalOrder` is scoped to
+the pin's network; `homeOrder` spans all networks independently of the selected network. A null order
+means that placement is disabled. Adding one placement preserves the other. Use
+`pins.update(pinKey, { move: { placement: 'terminal', direction: 'earlier' } })` to change one order.
+Home display options are replaced together through `homeConfig`; copy the current configuration
+before changing selected fields.
+
+`state.pins.icons` supplies the atlas metadata for pin descriptions. Unavailable pins retain their
+identifier and settings but have null resource/network metadata. Render an unavailable entry and
+allow removal; do not keep displaying previously cached metadata after access is lost.
+
+On Home, `state.pins.histories[pinKey][rangeMillis]` supplies recorded history for the required
+ranges. `homeConfig.flowRangeMillis` selects historical flow totals independently of the chart's
+`rangeMillis`; equal ranges share one result. `showRecentFlow` controls the separate recent flow
+summary from `pin.recent`, which contains only that resource's detached tracking measurements.
+A null recent summary or null counters mean unknown, not zero. Recent flow never starts inventory
+reads or a terminal subscription. Stock values are samples with timestamps, not live inventory
+counts. Pinning does not enable tracking.
+The application owns request cancellation, bounded history reads and automatic refresh; themes
+choose the presentation and must preserve the distinction between missing measurements and zero.
 
 ## Optional helpers
 

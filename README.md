@@ -200,6 +200,47 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
+**Include machine-requested crafting** there to also track jobs started by machines on that network.
+The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
+
+Completed and cancelled jobs are saved with the world and remain available after a server restart.
+Choose crafting history retention in the network settings. The default is 7 days, with a limit of
+1,000 jobs per network. Administrators can change the retention bounds and job limit in `crafting_history`.
+
+### Resource history
+
+Network settings have independent switches for input/output history and periodic storage quantities.
+Choose each network's storage sampling interval, input/output interval and history retention there,
+within the server's allowed ranges. Input/output recording alone does not scan the inventory;
+accepted input includes resources consumed by void storage. Select a resource in the terminal and open
+**Resource history** in its details to view measurements.
+
+Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
+to five minutes. Recent terminal summaries use five-second samples over
+two minutes independently of saved history. Charts show each measured interval's actual span and
+retain available partial counts when collection has gaps.
+
+Flow also records the number of accepted input and output operations. Recent summaries show an
+approximate rate per second when the measured interval is complete. One transfer of 64 items counts
+as one operation; these counts describe network transfers, not individual machine recipes.
+
+History is stored in an embedded SQLite database at `ae2webintegration/grids.sqlite` in the world directory.
+No database installation is needed. Server startup fails if the database cannot be initialized.
+The defaults retain up to 7 days and 250,000 records per network;
+the oldest records are removed when either limit is reached. One older stock measurement per resource
+may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
+values, plus the record cap, under `resource_history` in `config.toml` and apply them with `/ae2webintegration reload`
+or a server restart.
+Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
+shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;
+physical cleanup runs during database initialization, writes and periodic background maintenance.
+Missing measurements are shown as gaps, not zero activity.
+
+With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
+require history tracking or increase the frequency of saved storage measurements. After a connection
+interruption or storage topology change, the terminal loads a fresh snapshot automatically.
+
 ## Notification services integration
 
 **Integrations only works when public mode is disabled.**
@@ -300,6 +341,7 @@ Bundled third-party assets retain their own licenses:
 | Component | Author / source | License |
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
 | Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |

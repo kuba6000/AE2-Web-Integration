@@ -51,6 +51,8 @@ const resources = [
 export function startServer({ port = 8770, themeDirectory = path.join(project, 'examples/theme-starter/dist') } = {}) {
     themeDirectory = path.resolve(themeDirectory);
     let loggedOut = false;
+    let pins = [];
+    let nextPin = 0;
     const server = http.createServer(async (request, response) => {
         try {
             const url = new URL(request.url, 'http://localhost');
@@ -61,6 +63,86 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
             if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
                 loggedOut = true;
                 json(null);
+                return;
+            }
+            if (url.pathname.startsWith('/api/') && url.pathname.includes('/resource-pins')) {
+                if (loggedOut) {
+                    json(null, 'UNAUTHORIZED', 401);
+                    return;
+                }
+                const chunks = [];
+                for await (const chunk of request) chunks.push(chunk);
+                const input = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+                if (request.method === 'POST') {
+                    const item = resources.find((resource) => resource.itemKey === input.itemKey);
+                    if (!item || !['home', 'terminal'].includes(input.placement)) {
+                        json(null, 'BAD_PARAM', 400);
+                        return;
+                    }
+                    let pin = pins.find((value) => value.itemKey === item.itemKey);
+                    if (!pin) {
+                        pin = {
+                            pinKey: String(++nextPin),
+                            recent: null,
+                            available: true,
+                            gridKey,
+                            itemKey: item.itemKey,
+                            gridName: grid.name,
+                            resource: {
+                                displayName: item.displayName,
+                                registryNamespace: item.registryNamespace,
+                                registryPath: item.registryPath,
+                                resourceType: item.resourceType,
+                                itemKey: item.itemKey,
+                                icon: null,
+                                componentCount: item.componentCount,
+                                damage: item.damage
+                            },
+                            terminalOrder: null,
+                            homeOrder: null,
+                            homeConfig: {
+                                showStock: true,
+                                showFlow: true,
+                                showRecentFlow: true,
+                                flowRangeMillis: 86400000,
+                                showChart: true,
+                                stock: true,
+                                input: true,
+                                output: true,
+                                net: false,
+                                rangeMillis: 86400000
+                            }
+                        };
+                        pins.push(pin);
+                    }
+                    pin[`${input.placement}Order`] ??= pins.filter(
+                        (value) => value[`${input.placement}Order`] !== null
+                    ).length;
+                } else if (request.method === 'PATCH') {
+                    const pin = pins.find((value) => value.pinKey === url.pathname.split('/').at(-1));
+                    if (!pin) {
+                        json(null, 'NOT_FOUND', 404);
+                        return;
+                    }
+                    for (const placement of ['terminal', 'home'])
+                        if (input[placement] !== undefined)
+                            pin[`${placement}Order`] = input[placement]
+                                ? (pin[`${placement}Order`] ??
+                                  pins.filter((value) => value[`${placement}Order`] !== null).length)
+                                : null;
+                    if (input.homeConfig) pin.homeConfig = input.homeConfig;
+                    if (input.move) {
+                        const property = `${input.move.placement}Order`,
+                            ordered = pins
+                                .filter((value) => value[property] !== null)
+                                .sort((a, b) => a[property] - b[property]);
+                        const neighbor = ordered[ordered.indexOf(pin) + (input.move.direction === 'earlier' ? -1 : 1)];
+                        if (neighbor) [neighbor[property], pin[property]] = [pin[property], neighbor[property]];
+                    }
+                    pins = pins.filter((value) => value.homeOrder !== null || value.terminalOrder !== null);
+                } else if (request.method === 'DELETE')
+                    pins = pins.filter((value) => value.pinKey !== url.pathname.split('/').at(-1));
+                json(pins);
                 return;
             }
             if (url.pathname.startsWith('/api/')) {
@@ -84,6 +166,8 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                 else if (url.pathname === '/api/grids') json([grid]);
                 else if (url.pathname === `/api/grids/${gridKey}/items`) json(resources);
                 else if (url.pathname === `/api/grids/${gridKey}/cpus`) json({});
+                else if (url.pathname === `/api/grids/${gridKey}/resource-history`)
+                    json({ points: [], baseline: null, enabled: false, complete: true, truncated: false });
                 else json(null, 'NOT_FOUND', 404);
                 return;
             }

@@ -19,6 +19,7 @@ import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
+import { createResourceHistoryView } from './resource-history.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 /* Theme renderer. Server operations and preference ownership are supplied by the application. */
@@ -31,8 +32,13 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         <div class="workspace" id="workspace">
             <div class="window-frame" id="window">
                 <div id="network-message" role="status"></div>
-                <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
-                <section id="web-settings" hidden></section>
+                <section id="server-settings" class="page-view" hidden>
+                    <div class="terminal-heading"><h2 id="server-settings-title" data-text="serverSettings"></h2></div>
+                    <div class="terminal-body">
+                        <div class="terminal-scroll page-scroll" role="region" aria-labelledby="server-settings-title" tabindex="0"></div>
+                    </div>
+                </section>
+                <section id="web-settings" class="page-view" hidden></section>
                 <p id="missing" data-text="invalidRoute" hidden></p>
             </div>
         </div>`;
@@ -67,7 +73,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     });
     const mobile = createMobilePanels(root, workspace, header.navigation, tooltips.hide);
     lifetime.onCleanup(() => mobile.dispose());
-    const homeView = createHomeView(workspace, application, mobile.beforeDialog);
+    const homeView = createHomeView(workspace, application, mobile.beforeDialog, context.settings, tooltips.bind);
     lifetime.onCleanup(() => homeView.dispose());
     const craftingView = createCraftingView(
         windowFrame,
@@ -82,7 +88,13 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         lifetime
     );
     lifetime.onCleanup(() => craftingView.dispose());
-    const resourceTerminal = createResourceTerminal(root, application, { craftingView, tooltips, mobile, lifetime });
+    const resourceTerminal = createResourceTerminal(root, application, {
+        craftingView,
+        tooltips,
+        mobile,
+        lifetime,
+        settings
+    });
     lifetime.onCleanup(resourceTerminal.dispose);
     workspace.prepend(resourceTerminal.tools);
     windowFrame.insertBefore(resourceTerminal.element, missingView);
@@ -93,6 +105,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     lifetime.onCleanup(() => historyView.dispose());
     const settingsView = createSettingsView(windowFrame, application);
     const aboutView = createAboutView(windowFrame, modVersion);
+    const trackingView = createResourceHistoryView(windowFrame, application, settings, true);
+    lifetime.onCleanup(trackingView.dispose);
     function updateLabels() {
         locale = i18n.forLanguage(language);
         document.documentElement.lang = language;
@@ -131,8 +145,12 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         resourceTerminal.render(state, locale, effectiveDisplay);
     }
 
-    function render(next: ThemeState) {
+    function render(next: ThemeState, hint?: 'cpu-timing') {
         state = next;
+        if (hint === 'cpu-timing') {
+            cpuView.timing(state.cpus, locale);
+            return;
+        }
         if (language !== state.preferences.language) {
             language = state.preferences.language;
             updateLabels();
@@ -155,6 +173,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         tooltips.refresh();
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
+        trackingView.render(state, locale, effectiveDisplay !== 'names');
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
         const panes: MobilePane[] = [];

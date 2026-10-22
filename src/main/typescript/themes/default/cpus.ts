@@ -30,7 +30,7 @@ export function createCpuView(
     themeLifetime.onCleanup(tips.dispose);
     const overview = createCpuOverview(application, tips);
     themeLifetime.onCleanup(overview.dispose);
-    const resources = createCpuResources(application, tips, themeLifetime);
+    const resources = createCpuResources(application, tips, themeLifetime, settings);
     themeLifetime.onCleanup(resources.dispose);
     const selector = createCpuSelector(application, settings, tips);
     themeLifetime.onCleanup(selector.dispose);
@@ -58,6 +58,16 @@ export function createCpuView(
     const outputIcons = application.icons.observe(footer, paintResourceIcon);
     let selectedCpu = '';
     tips.bindCpu(work, () => selectedCpu);
+
+    function renderElapsed(state: ThemeState['cpus'], locale: Translator) {
+        const detail = state.error ? null : state.detail;
+        const value =
+            detail?.isBusy && detail.hasTrackingInfo
+                ? `${locale.common('cpuElapsedLabel')}: ${locale.duration(detail.timeElapsed)}`
+                : '';
+        if (timing.textContent !== value) timing.textContent = value;
+        if (timing.hidden !== !value) timing.hidden = !value;
+    }
 
     function renderWork(route: ThemeState['route'], state: ThemeState['cpus'], locale: Translator) {
         if (route.view !== 'cpus' || !route.cpuKey) {
@@ -98,11 +108,7 @@ export function createCpuView(
                 );
             } else output.textContent = t('cpuOutputUnknown');
         } else if (detail) output.textContent = t('cpuIdleMessage');
-        timing.textContent =
-            detail?.isBusy && detail.hasTrackingInfo
-                ? `${t('cpuElapsedLabel')}: ${locale.duration(detail.timeElapsed)}`
-                : '';
-        timing.hidden = !timing.textContent;
+        renderElapsed(state, locale);
         tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
         tracking.hidden = !tracking.textContent;
         outputIcons.update(
@@ -112,6 +118,12 @@ export function createCpuView(
         renderCpuActions(actions, route.cpuKey, detail, state, locale, application.cpus);
     }
     return {
+        timing(state: ThemeState['cpus'], locale: Translator) {
+            tips.update(state, locale, selectedCpu);
+            renderElapsed(state, locale);
+            resources.timing();
+            tips.refreshCpu();
+        },
         render(route: ThemeState['route'], state: ThemeState['cpus'], locale: Translator) {
             selectedCpu = route.view === 'cpus' ? route.cpuKey || '' : '';
             view.hidden = route.view !== 'cpus';

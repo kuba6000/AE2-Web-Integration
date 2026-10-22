@@ -57,7 +57,7 @@ public final class OpenApiDoclet implements Doclet {
         new Category("cpu", "CPUs", "Inspect crafting CPUs and cancel their current work."),
         new Category("icons", "Icons", "Discover the server's icon pack and retrieve its atlas pages."),
         new Category("crafting", "Crafting plans", "Create, inspect, submit and discard crafting plans."),
-        new Category("tracking", "Crafting history", "Browse recorded crafting jobs and their measurements."),
+        new Category("tracking", "History", "Browse recorded crafting jobs, resource stock and transfer measurements."),
         new Category("auth", "Authentication", "Obtain or revoke session tokens and start account registration."));
 
     private static final String ENDPOINT = "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint";
@@ -508,13 +508,7 @@ public final class OpenApiDoclet implements Doclet {
         }
         for (Map.Entry<String, Element> query : queryFields.entrySet()) {
             Element field = query.getValue();
-            if (field.getModifiers()
-                .contains(Modifier.STATIC)
-                || environment.getTypeUtils()
-                    .asMemberOf(endpointType, field)
-                    .getKind() != TypeKind.BOOLEAN) {
-                throw problem(field, "@QueryParam requires a nonstatic boolean field");
-            }
+            Map<String, Object> value = querySchema(endpointType, field);
             parameters.add(
                 object(
                     "name",
@@ -526,7 +520,7 @@ public final class OpenApiDoclet implements Doclet {
                     "description",
                     description(field),
                     "schema",
-                    object("type", "boolean", "default", false)));
+                    value));
         }
         if (!parameters.isEmpty()) operation.put("parameters", parameters);
         if (body != null) {
@@ -545,6 +539,25 @@ public final class OpenApiDoclet implements Doclet {
             if (!description.isEmpty()) request.put("description", description);
             operation.put("requestBody", request);
         }
+    }
+
+    private Map<String, Object> querySchema(DeclaredType endpointType, Element field) {
+        TypeMirror type = environment.getTypeUtils()
+            .asMemberOf(endpointType, field);
+        if (field.getModifiers()
+            .contains(Modifier.STATIC)
+            || !(Set.of(TypeKind.BOOLEAN, TypeKind.INT, TypeKind.LONG)
+                .contains(type.getKind())
+                || type instanceof DeclaredType declared
+                    && Set.of("java.lang.String", STABLE_KEY, "java.lang.Integer", "java.lang.Long")
+                        .contains(
+                            ((TypeElement) declared.asElement()).getQualifiedName()
+                                .toString()))) {
+            throw problem(field, "@QueryParam requires a nonstatic supported scalar field");
+        }
+        Map<String, Object> result = schema(type, true);
+        if (type.getKind() == TypeKind.BOOLEAN) result.put("default", false);
+        return result;
     }
 
     private Map<String, Object> schema(TypeMirror type) {

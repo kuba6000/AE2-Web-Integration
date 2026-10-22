@@ -1,13 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,9 +14,8 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 
 /**
  * A completed or cancelled crafting job with resource and pattern-provider timing measurements.
@@ -122,34 +118,35 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
     public record ProviderTiming(@NotNull String name, @NotNull ArrayList<Timing> timings, long timingsCombined,
         @NotNull HashSet<DimensionalCoords> location) {}
 
-    public static @NotNull CraftingHistory capture(@NotNull AE2JobTracker.JobTrackingInfo info,
-        @Nullable IconMappings mappings) {
-        long elapsed = info.timeDone - info.timeStarted;
+    public static @NotNull CraftingHistory capture(@NotNull CompletedCrafting info, @Nullable IconMappings mappings) {
+        long elapsed = info.timeDone() - info.timeStarted();
+        long total = 0;
+        for (CompletedCrafting.Resource resource : info.resources()) total += resource.timeSpentOn();
         ArrayList<ResourceTiming> items = new ArrayList<>();
-        for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
-            IAEKey key = entry.getKey();
-            long spent = entry.getValue();
-            ResourceSnapshot resource = info.resourceSnapshots.get(key);
-            long craftedTotal = info.craftedTotal.get(key);
-            double share = info.getShareInCraftingTime(key);
-            double combinedShare = elapsed > 0 ? Math.min((double) spent / (double) elapsed, 1d) : 0d;
-            double rate = spent > 0 ? (double) craftedTotal / (spent / (double) TimeUnit.SECONDS.toMillis(1)) : 0d;
+        for (CompletedCrafting.Resource measured : info.resources()) {
+            long spent = measured.timeSpentOn();
+            ResourceSnapshot resource = measured.snapshot();
+            long craftedTotal = resource.quantity();
+            double share = total == 0 ? 1d : (double) spent / total;
+            double combinedShare = elapsed > 0 ? Math.min((double) spent / elapsed, 1d) : 0d;
+            double rate = spent > 0 ? craftedTotal / (spent / (double) TimeUnit.SECONDS.toMillis(1)) : 0d;
             ArrayList<Timing> timings = new ArrayList<>();
-            for (Pair<Long, Long> interval : info.itemShare.get(key)) {
-                timings.add(new Timing(interval.getKey(), interval.getValue()));
-            }
-            ArrayList<String> providers = new ArrayList<>();
-            HashSet<String> recordedProviders = info.resourceProviders.get(key);
-            if (recordedProviders != null) providers.addAll(recordedProviders);
-            Collections.sort(providers);
+            for (CompletedCrafting.Interval interval : measured.intervals())
+                timings.add(new Timing(interval.started(), interval.ended()));
             items.add(
                 new ResourceTiming(
-                    resource.registryNamespace(),
-                    resource.registryPath(),
-                    resource.displayName(),
-                    resource.componentCount(),
-                    resource.damage(),
-                    resource.resourceType(),
+                    resource.description()
+                        .registryNamespace(),
+                    resource.description()
+                        .registryPath(),
+                    resource.description()
+                        .displayName(),
+                    resource.description()
+                        .componentCount(),
+                    resource.description()
+                        .damage(),
+                    resource.description()
+                        .resourceType(),
                     spent,
                     craftedTotal,
                     share,
@@ -157,33 +154,40 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
                     rate,
                     timings,
                     resolveIcon(resource, mappings),
-                    resource.itemKey(),
-                    providers));
+                    resource.description()
+                        .itemKey(),
+                    measured.providers()));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime, first.shareInCraftingTime));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();
-        for (Map.Entry<AE2JobTracker.AEInterface, ArrayList<Pair<Long, Long>>> entry : info.interfaceShare.entrySet()) {
+        for (CompletedCrafting.Provider provider : info.providers()) {
             ArrayList<Timing> timings = new ArrayList<>();
-            long combined = 0L;
-            for (Pair<Long, Long> interval : entry.getValue()) {
-                timings.add(new Timing(interval.getKey(), interval.getValue()));
-                combined += interval.getValue() - interval.getKey();
+            long combined = 0;
+            for (CompletedCrafting.Interval interval : provider.intervals()) {
+                timings.add(new Timing(interval.started(), interval.ended()));
+                combined += interval.ended() - interval.started();
             }
-            interfaceShare.add(new ProviderTiming(entry.getKey().name, timings, combined, entry.getKey().location));
+            interfaceShare
+                .add(new ProviderTiming(provider.name(), timings, combined, new HashSet<>(provider.locations())));
         }
         interfaceShare.sort((first, second) -> Long.compare(second.timingsCombined(), first.timingsCombined()));
         return new CraftingHistory(
-            new ResourceStack(info.finalOutput, mappings),
-            info.timeStarted,
-            info.timeDone,
-            info.wasCancelled,
+            new ResourceStack(info.finalOutput(), mappings),
+            info.timeStarted(),
+            info.timeDone(),
+            info.wasCancelled(),
             items,
             interfaceShare);
     }
 
     private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceSnapshot resource,
         @Nullable IconMappings mappings) {
-        return mappings == null || resource.itemKey() == null ? null
-            : mappings.resolve(resource.itemKey(), resource.iconBaseKey());
+        return mappings == null || resource.description()
+            .itemKey() == null ? null
+                : mappings.resolve(
+                    resource.description()
+                        .itemKey(),
+                    resource.description()
+                        .baseKey());
     }
 }

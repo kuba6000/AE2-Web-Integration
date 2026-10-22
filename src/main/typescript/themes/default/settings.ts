@@ -1,7 +1,7 @@
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
-import type { AccessSource } from '../../app/api-types.js';
+import type { AccessSource, HistorySetting } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-import { networkNameError } from '../../app/settings.js';
+import { historySettingFields, historySettingRange, networkNameError, settingRangeError } from '../../app/settings.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel } from './network.js';
 
@@ -81,12 +81,93 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     tracking.id = 'network-tracking';
     const labelText = element('span');
     label.append(tracking, labelText);
+    const machineLabel = element('label');
+    machineLabel.className = 'checkbox';
+    const machineTracking = element('input');
+    machineTracking.type = 'checkbox';
+    machineTracking.id = 'network-machine-tracking';
+    const machineText = element('span');
+    machineLabel.append(machineTracking, machineText);
+    machineTracking.addEventListener('change', () =>
+        application.settings.edit('trackMachineCrafting', machineTracking.checked)
+    );
+    const storageLabel = element('label');
+    storageLabel.className = 'checkbox';
+    const storageTracking = element('input');
+    storageTracking.type = 'checkbox';
+    storageTracking.id = 'network-storage-tracking';
+    const storageText = element('span');
+    storageLabel.append(storageTracking, storageText);
+    storageTracking.addEventListener('change', () =>
+        application.settings.edit('isStorageTracked', storageTracking.checked)
+    );
+    const flowLabel = element('label');
+    flowLabel.className = 'checkbox';
+    const flowTracking = element('input');
+    flowTracking.type = 'checkbox';
+    flowTracking.id = 'network-flow-tracking';
+    const flowText = element('span');
+    flowLabel.append(flowTracking, flowText);
+    flowTracking.addEventListener('change', () => application.settings.edit('isFlowTracked', flowTracking.checked));
+    const intervals = element('div');
+    intervals.className = 'network-tracking-controls';
+    function intervalControl(field: HistorySetting, id: string, labelKey: string, unitMillis: number) {
+        const container = element('div');
+        container.className = 'network-policy-control';
+        const label = element('label');
+        label.htmlFor = `${id}-range`;
+        label.id = `${id}-label`;
+        const value = element('output');
+        value.htmlFor = `${id}-range ${id}`;
+        const heading = element('div');
+        heading.className = 'network-policy-heading';
+        heading.append(label, value);
+        const range = element('input');
+        range.type = 'range';
+        range.id = `${id}-range`;
+        range.step = '1';
+        range.setAttribute('aria-labelledby', label.id);
+        const number = element('input');
+        number.type = 'number';
+        number.id = id;
+        number.step = '1';
+        const unit = element('span');
+        unit.id = `${id}-unit`;
+        number.setAttribute('aria-labelledby', `${label.id} ${unit.id}`);
+        const exact = element('div');
+        exact.className = 'network-policy-exact';
+        exact.append(number, unit);
+        const controls = element('div');
+        controls.className = 'network-policy-inputs';
+        controls.append(range, exact);
+        const help = element('p');
+        help.className = 'hint';
+        help.id = `${id}-help`;
+        range.setAttribute('aria-describedby', help.id);
+        number.setAttribute('aria-describedby', help.id);
+        range.addEventListener('input', () => application.settings.edit(field, range.valueAsNumber));
+        number.addEventListener('input', () => application.settings.edit(field, number.valueAsNumber));
+        container.append(heading, controls, help);
+        intervals.append(container);
+        return { field, labelKey, unitMillis, label, value, range, number, unit, help };
+    }
+    const intervalControls = [
+        intervalControl('stockSampleIntervalSeconds', 'network-stock-interval', 'stockSampleInterval', 1000),
+        intervalControl('flowFlushIntervalSeconds', 'network-flow-interval', 'flowFlushInterval', 1000),
+        intervalControl('historyRetentionDays', 'network-history-retention', 'historyRetention', 86400000),
+        intervalControl(
+            'craftingHistoryRetentionDays',
+            'network-crafting-retention',
+            'craftingHistoryRetention',
+            86400000
+        )
+    ];
     const save = element('button');
     save.type = 'submit';
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, actions);
+    form.append(settingsTitle, nameLabel, nameHelp, label, machineLabel, flowLabel, storageLabel, intervals, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -163,13 +244,21 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             title.querySelector('span')!.textContent = t('networkDetails');
             scroll.setAttribute('aria-label', t('networkDetails'));
             labelText.textContent = t('recordHistory');
+            machineText.textContent = t('trackMachineCrafting');
+            storageText.textContent = t('recordResourceHistory');
+            flowText.textContent = t('recordFlowHistory');
             nameText.textContent = t('networkName');
             nameHelp.textContent = t('networkNameHelp');
             settingsTitle.textContent = t('gridSettings');
             save.textContent = t('saveSettings');
             const dirty =
                 state.current &&
-                (state.draft.isTracked !== state.current.isTracked || state.draft.name.trim() !== state.current.name);
+                (state.draft.isTracked !== state.current.isTracked ||
+                    state.draft.trackMachineCrafting !== state.current.trackMachineCrafting ||
+                    state.draft.isStorageTracked !== state.current.isStorageTracked ||
+                    state.draft.isFlowTracked !== state.current.isFlowTracked ||
+                    historySettingFields.some((field) => state.draft[field] !== state.current![field]) ||
+                    state.draft.name.trim() !== state.current.name);
             status.textContent = '';
             if (state.saving) status.textContent = t('settingsSaving');
             else if (state.uncertain) status.textContent = t('settingsUnconfirmed');
@@ -196,9 +285,53 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             name.setCustomValidity(error ? t(error) : '');
             name.setAttribute('aria-invalid', String(!!error));
             nameHelp.textContent = t(error || 'networkNameHelp');
+            storageTracking.checked = state.draft.isStorageTracked;
+            storageTracking.disabled = state.saving || state.status !== 'ready';
+            flowTracking.checked = state.draft.isFlowTracked;
+            flowTracking.disabled = state.saving || state.status !== 'ready';
+            let invalidInterval = false;
+            for (const control of intervalControls) {
+                const { field, range, number, unitMillis } = control;
+                const limits = historySettingRange(field, state.limits, state.craftingLimits);
+                const value = state.draft[field];
+                control.label.textContent = t(control.labelKey);
+                control.unit.textContent = t(unitMillis === 86400000 ? 'historyDays' : 'historySeconds');
+                const duration = Number.isFinite(value) ? locale.duration(value * unitMillis) : '—';
+                control.value.textContent = duration;
+                range.setAttribute('aria-valuetext', duration);
+                if (limits) {
+                    for (const input of [range, number]) {
+                        input.min = String(limits.min);
+                        input.max = String(limits.max);
+                    }
+                    control.help.textContent = t('historySettingBounds', {
+                        min: locale.duration(limits.min * unitMillis),
+                        max: locale.duration(limits.max * unitMillis),
+                        default: locale.duration(limits.defaultValue * unitMillis)
+                    });
+                    if (field === 'craftingHistoryRetentionDays' && state.craftingLimits)
+                        control.help.textContent += ` ${t('craftingHistoryRetentionCap', { count: state.craftingLimits.historyMaxJobsPerGrid })}`;
+                    if (field === 'historyRetentionDays' && state.limits)
+                        control.help.textContent += ` ${t('historyRetentionCap', { count: state.limits.historyMaxRowsPerGrid })}`;
+                }
+                if (Number.isFinite(value)) range.value = String(value);
+                if (document.activeElement !== number) number.value = Number.isFinite(value) ? String(value) : '';
+                let disabled = state.saving || state.status !== 'ready' || !limits;
+                if (field === 'stockSampleIntervalSeconds') disabled ||= !state.draft.isStorageTracked;
+                if (field === 'flowFlushIntervalSeconds') disabled ||= !state.draft.isFlowTracked;
+                range.disabled = disabled;
+                number.disabled = disabled;
+                const intervalError = limits ? settingRangeError(value, limits) : null;
+                number.setCustomValidity(intervalError ? t(intervalError) : '');
+                number.setAttribute('aria-invalid', String(!!intervalError));
+                invalidInterval ||= !!intervalError;
+            }
             tracking.checked = state.draft.isTracked;
             tracking.disabled = state.saving || state.status !== 'ready';
-            save.disabled = state.saving || state.status !== 'ready' || !!error || (!state.uncertain && !dirty);
+            machineTracking.checked = state.draft.trackMachineCrafting;
+            machineTracking.disabled = state.saving || state.status !== 'ready' || !state.draft.isTracked;
+            save.disabled =
+                state.saving || state.status !== 'ready' || !!error || invalidInterval || (!state.uncertain && !dirty);
             accessTitle.textContent = t('explicitAccess');
             accessHelp.textContent = t('explicitAccessHelp');
             access.hidden = state.status !== 'ready';

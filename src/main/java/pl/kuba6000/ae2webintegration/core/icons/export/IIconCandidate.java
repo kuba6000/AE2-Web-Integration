@@ -8,7 +8,8 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Client-owned native identity, compared before any rendering can mutate its representation. */
 public interface IIconCandidate<C extends IIconCandidate<C>> {
 
-    @NotNull
+    /** Null denotes a recognized unsupported identity; calculation errors still throw. */
+    @Nullable
     StableKey key();
 
     @Nullable

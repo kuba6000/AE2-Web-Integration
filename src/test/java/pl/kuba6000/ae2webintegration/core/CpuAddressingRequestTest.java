@@ -31,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -40,7 +41,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -75,11 +76,11 @@ class CpuAddressingRequestTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID, first, second);
         assertSame(
             first,
-            GetCPUList.getCPUList(grid.web$getCraftingGrid())
+            CpuReader.list(grid.web$getCraftingGrid())
                 .get(firstKey));
         assertSame(
             second,
-            GetCPUList.getCPUList(grid.web$getCraftingGrid())
+            CpuReader.list(grid.web$getCraftingGrid())
                 .get(secondKey));
         assertStatus("OK", submit(grid, "&cpu=" + second.id));
         assertSame(second, grid.submitted);
@@ -388,6 +389,10 @@ class CpuAddressingRequestTest extends GridTestScope {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
+
         final String id;
         final StableKey key;
         String name;
@@ -443,19 +448,8 @@ class CpuAddressingRequestTest extends GridTestScope {
             return null;
         }
 
-        public long web$getActiveItems(IAEKey key) {
-            return 0;
-        }
-
-        public long web$getPendingItems(IAEKey key) {
-            return 0;
-        }
-
-        public long web$getStorageItems(IAEKey key) {
-            return 0;
-        }
-
-        public void web$getAllItems(IStackList list) {}
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {}
 
         public IStackList web$getWaitingFor() {
             throw new AssertionError("Unexpected waiting inventory");

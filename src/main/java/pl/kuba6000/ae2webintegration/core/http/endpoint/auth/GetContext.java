@@ -18,6 +18,7 @@ import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -93,7 +94,7 @@ public final class GetContext extends IAsyncRequest {
      * @param data   public settings and the optional authenticated display identity
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull Metadata data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull Metadata data) implements IResponseBody {}
 
     @Override
     public void handle() {

@@ -14,4 +14,4 @@ import com.github.bsideup.jabel.Desugar;
  * @example data null
  */
 @Desugar
-public record ErrorResponse(@NotNull ApiStatus status, @Nullable Void data) {}
+public record ErrorResponse(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
