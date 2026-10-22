@@ -4,7 +4,7 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
-/** Detached active settings and an opaque runtime revision for conditional saves. */
+/** Read-only active settings view and an opaque runtime revision for conditional saves. */
 @Desugar
 public record ServerSettingsSnapshot(@NotNull String revision, @NotNull EditableServerSettings settings,
     @NotNull ReadOnly readOnly) {

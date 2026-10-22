@@ -20,7 +20,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * Read-only metadata includes listener port, access policy, proxy trust, request limit and configured-secret flags.
  * Administrator password, Discord webhook and ntfy password values are never returned.
  * 
- * @response 200 {@link Response} Detached editable configuration, file-only metadata and opaque configuration revision.
+ * @response 200 {@link Response} Active editable configuration, file-only metadata and opaque configuration revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: unexpected request body.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required.

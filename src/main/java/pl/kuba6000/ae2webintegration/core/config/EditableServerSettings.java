@@ -22,6 +22,22 @@ public final class EditableServerSettings {
     @Path("resource_tracking")
     public @NotNull ConfigSettings.ResourceTracking resourceTracking = new ConfigSettings.ResourceTracking();
 
+    /** Read-only view: shared sections belong to a published configuration and must not be mutated. */
+    static @NotNull EditableServerSettings fromConfig(@NotNull ConfigSettings config) {
+        EditableServerSettings settings = new EditableServerSettings();
+        settings.general.checkForUpdates = config.general.checkForUpdates;
+        settings.general.defaultTheme = config.general.defaultTheme;
+        settings.notifications = config.notifications;
+        settings.discord.roleId = config.discord.roleId;
+        settings.ntfy.host = config.ntfy.host;
+        settings.ntfy.topic = config.ntfy.topic;
+        settings.ntfy.user = config.ntfy.user;
+        settings.resourceHistory = config.resourceHistory;
+        settings.craftingHistory = config.craftingHistory;
+        settings.resourceTracking = config.resourceTracking;
+        return settings;
+    }
+
     /** Omitted values preserve existing secrets; empty strings explicitly clear them. Never returned in responses. */
     @Desugar
     public record SecretUpdates(@OptionalInput @Nullable String discordWebhook,

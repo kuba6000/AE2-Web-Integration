@@ -88,16 +88,12 @@ public class Config {
         }
     }
 
-    /** Returns detached active settings without exposing secret values. */
+    /** Returns a read-only view of active settings without exposing secret values. */
     public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() {
         ConfigSettings loaded = INSTANCE;
-        CommentedConfig document = newDocument();
-        CONVERTER.toConfig(loaded, document);
-        EditableServerSettings editable = new EditableServerSettings();
-        CONVERTER.toObject(document, editable);
         return new ServerSettingsSnapshot(
             revision,
-            editable,
+            EditableServerSettings.fromConfig(loaded),
             new ServerSettingsSnapshot.ReadOnly(
                 loaded.general.port,
                 loaded.general.publicMode,
