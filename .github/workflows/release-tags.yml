@@ -50,6 +50,10 @@ jobs:
             21
             25
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build and prepare release artifacts
