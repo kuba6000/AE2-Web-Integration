@@ -264,11 +264,11 @@ Notifications are initialized ONLY for tracked grids
 
 #### Discord Integration
 
-Create a Discord webhook and set its URL as `discord_webhook` in the AE2 Web Integration config. You can also
-set `discord_role_id` if a role should be pinged on errors.
+Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
+`discord.role_id` configures an optional role mention.
 
-
-<img width="467" height="224" alt="AE2 Web Integration Discord message" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
+Crafting notifications include a dark image card with the result, network name, CPU and duration.
+Install an icon pack to include item icons. Set `discord.image_cards = false` for text-only notifications.
 
 #### NTFY Integration
 

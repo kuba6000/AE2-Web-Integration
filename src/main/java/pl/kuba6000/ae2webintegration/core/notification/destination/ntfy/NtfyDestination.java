@@ -41,9 +41,12 @@ public class NtfyDestination implements INotificationDestination {
 
             payload = new NtfyPayload(
                 "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
-                "Crafting for `" + craftingMessage.outputItemName()
+                "Crafting for `" + craftingMessage.output()
+                    .description()
+                    .displayName()
                     + " x"
-                    + craftingMessage.outputItemAmount()
+                    + craftingMessage.output()
+                        .quantity()
                     + "` "
                     + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
