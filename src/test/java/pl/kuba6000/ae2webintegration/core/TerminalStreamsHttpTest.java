@@ -1167,8 +1167,13 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
     private static void assertClosedWithoutDelta(BufferedReader input) throws IOException {
         // A writer can finish an invalidate control frame while reset closes the connection.
-        for (String line; (line = input.readLine()) != null;) {
-            assertFalse(line.equals("event: delta"), "A failed or reset session must not send another delta");
+        try {
+            for (String line; (line = input.readLine()) != null;) {
+                assertFalse(line.equals("event: delta"), "A failed or reset session must not send another delta");
+            }
+        } catch (IOException closed) {
+            // Closing between chunks ends the chunked body without its terminator, which is still a closed stream.
+            if (!"Premature EOF".equals(closed.getMessage())) throw closed;
         }
     }
 
