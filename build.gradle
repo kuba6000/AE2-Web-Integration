@@ -12,7 +12,7 @@ buildscript {
 plugins {
     id 'java-library'
     // Deliberately no version: when this module is included as a submodule of an integration branch that
-    // branch already has spotless on the classpath (7.0.2 on modern, 6.24.0 on legacy) and Gradle rejects
+    // branch already has spotless on the classpath (8.10.2 on every branch) and Gradle rejects
     // a version request in that case. Standalone builds get the version from settings.gradle.
     id 'com.diffplug.spotless' apply false
 }
