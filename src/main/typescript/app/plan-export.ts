@@ -297,7 +297,8 @@ function drawTile(
     if (!settings.stored && settings.usage && row.stored > 0 && row.usedPercent > 0)
         amounts.push({ value: `${Math.round(row.usedPercent * 100)}%`, label: request.labels.usage });
     const line = style.metricLineHeight + style.metricGap;
-    let y = height - style.padding - style.borderWidth - amounts.length * line + style.metricGap;
+    const blockHeight = Math.max(0, amounts.length * line - style.metricGap);
+    let y = settings.name ? height - style.padding - style.borderWidth - blockHeight : (height - blockHeight) / 2;
     for (const amount of amounts) {
         ctx.font = `${style.quantityFontSize}px ${style.fontFamily}`;
         const combinedWidth = ctx.measureText(amount.value + (amount.usage ?? '')).width;

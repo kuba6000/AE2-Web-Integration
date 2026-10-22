@@ -114,6 +114,59 @@ test('the same export settings produce identical pixels across desktop, mobile a
     assert.deepEqual(rendered[2], rendered[0]);
 });
 
+test('export without names vertically centers each resource metric block regardless of its row count', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    await atlasFixture(page, options);
+    options.capabilities.craftingPlanSteps = true;
+    options.plan = {
+        ...readyPlan,
+        plan: Array.from({ length: 4 }, (_, i) => ({
+            ...readyPlan.plan[0],
+            displayName: `Resource ${i}`,
+            stored: 1234,
+            requested: i >= 1 ? 456 : 0,
+            steps: i >= 2 ? 78 : 0,
+            missing: i === 3 ? 9 : 0,
+            icon: { page: 0, x: 0, y: 0 }
+        }))
+    };
+    const dialog = await openExport(page, base);
+    await dialog.getByRole('checkbox', { name: 'Name', exact: true }).uncheck();
+    await dialog.getByRole('checkbox', { name: 'Include title', exact: true }).uncheck();
+    await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
+    await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('4');
+    const { bytes, pixels } = await png(page, dialog);
+    assert.deepEqual([pixels.width, pixels.height], [720, 100]);
+    const centers = await page.evaluate(async (data) => {
+        const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        return Array.from({ length: 4 }, (_, column) => {
+            // Read only the text region, excluding the icon and cell borders.
+            const { data: rgba, width, height } = ctx.getImageData(column * 180 + 54, 3, 118, 94);
+            let top = height,
+                bottom = -1;
+            for (let y = 0; y < height; y++)
+                for (let x = 0; x < width; x++) {
+                    const index = (y * width + x) * 4;
+                    if ([0, 1, 2].some((channel) => Math.abs(rgba[index + channel] - rgba[channel]) > 30)) {
+                        top = Math.min(top, y);
+                        bottom = Math.max(bottom, y);
+                    }
+                }
+            return bottom < 0 ? null : 3 + (top + bottom) / 2;
+        });
+    }, bytes.toString('base64'));
+    assert.ok(
+        centers.every((center) => center !== null && Math.abs(center - 50) <= 3),
+        JSON.stringify(centers)
+    );
+});
+
 test('plan PNG exports every row independently of search, without icons, and remembers settings', async (t) => {
     const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
     options.plan = {
