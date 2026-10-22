@@ -1,44 +1,41 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
 import java.net.HttpURLConnection;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuTopic;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.http.dto.GetCPUClusterData;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
+import pl.kuba6000.ae2webintegration.core.live.LiveView;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
  * Reads a crafting CPU and its current work.
+ * With live=true the response also carries a view and a single-use subscription token for the live stream at
+ * cpus/{cpuKey}/events.
  *
  * @pathParam gridKey Persistent grid identifier.
  * @pathParam cpuKey Stable crafting CPU identifier.
@@ -68,160 +65,119 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus/{cpuKey}")
-public final class GetCPU extends ISyncedRequest {
+public final class GetCPU extends LiveSnapshotRequest {
 
     /**
      * Successful operation result.
      * 
-     * @param status {@code OK} for a successful request
-     * @param data   current CPU capacity, work and available tracking measurements
+     * @param status       {@code OK} for a successful request
+     * @param data         current CPU capacity, work and available tracking measurements
+     * @param view         identifies the state a live snapshot holds; null unless live was requested
+     * @param subscription single-use token for the live stream; null unless live was requested
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull GetCPUClusterData data, @Nullable IconMappings icons,
+        @Nullable LiveView view, @Nullable String subscription) implements IResponseBody {
 
-    /** Include atlas references. Absent or false skips all native icon normalization. */
+        public Response(ApiStatus status, GetCPUClusterData data, IconMappings icons) {
+            this(status, data, icons, null, null);
+        }
+    }
+
+    /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
     private boolean icons;
-
-    @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    public static class ClusterData {
-
-        /**
-         * Total storage capacity of this CPU in bytes.
-         *
-         * @example 16384
-         */
-        public long size;
-        /**
-         * Whether the CPU is currently crafting.
-         *
-         * @example true
-         */
-        public boolean isBusy;
-        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
-        public @Nullable CpuSelectionMode selectionMode;
-        /** Whether this CPU supports pausing the scheduling of its current job. */
-        public boolean supportsPause;
-        /** Whether the active job is paused; false for idle or unsupported CPUs. */
-        public boolean isPaused;
-        /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable ResourceStack finalOutput;
-        /** Resource details for current work; null when the CPU is idle. */
-        public @Nullable ArrayList<CpuResource> items;
-        /**
-         * Whether measurements are available for the active job.
-         *
-         * @example true
-         */
-        public boolean hasTrackingInfo = false;
-        /**
-         * Crafting start time in Unix epoch milliseconds; zero when unavailable.
-         *
-         * @example 1700000000000
-         */
-        public long timeStarted = 0L;
-        /**
-         * Elapsed crafting time in milliseconds; zero when tracking is unavailable.
-         *
-         * @example 10000
-         */
-        public long timeElapsed = 0L;
-    }
 
     @PathParam("cpuKey")
     private @NotNull StableKey cpuId;
 
     @Override
+    protected void cancel(String token) {
+        CpuRegistry registry = CoreEngine.getCpuRegistry();
+        if (registry != null) registry.cancel(token);
+    }
+
+    @Override
     protected void handle(IAEGrid grid) {
+        if (replace != null && replace.length() != 36) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-
-        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
-        ICraftingCPUCluster cpu = cpus.get(cpuId);
+        ICraftingCPUCluster cpu = CpuReader.list(grid.web$getCraftingGrid())
+            .get(cpuId);
         if (cpu == null) {
             deny(ApiStatus.CPU_NOT_FOUND);
             return;
         }
-
-        ClusterData clusterData = new ClusterData();
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
-        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
-        clusterData.size = cpu.web$getAvailableStorage();
-        clusterData.isBusy = cpu.web$isBusy();
-        clusterData.selectionMode = cpu.web$getSelectionMode();
-        clusterData.supportsPause = cpu instanceof IPausableCraftingCPU;
-        clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
-            && pausable.web$isPaused();
-        if (clusterData.isBusy) {
-            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput(), pack);
-            clusterData.finalOutput = output == null ? null : new ResourceStack(output, mappings);
-            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
-            clusterData.hasTrackingInfo = trackingInfo != null;
-
-            Map<IAEKey, CpuResource> prep = new HashMap<>();
-            IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
-            cpu.web$getAllItems(allItems);
-            for (IAEGenericStack stack : allItems.web$stacks()) {
-                IAEKey key = stack.web$what();
-                CpuResource compactedItem = prep
-                    .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
-                compactedItem.active += cpu.web$getActiveItems(key);
-                compactedItem.pending += cpu.web$getPendingItems(key);
-                compactedItem.stored += cpu.web$getStorageItems(key);
+        if (live && !context.getExchange()
+            .getRequestMethod()
+            .equals("HEAD")) {
+            CpuLiveCoordinator coordinator = CoreEngine.getCpuLive();
+            CpuRegistry registry = CoreEngine.getCpuRegistry();
+            if (coordinator == null || registry == null) {
+                deny(ApiStatus.SERVER_STOPPING);
+                return;
             }
-
-            if (clusterData.hasTrackingInfo) {
-                clusterData.timeStarted = trackingInfo.timeStarted;
-                clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
-                for (IAEKey key : trackingInfo.timeSpentOn.keySet()) {
-                    CpuResource compactedItem = prep
-                        .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
-                    compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
-                    compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
-                    compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
-                    compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
-                        ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
-                        : 0d;
-                    compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
-                        ? (double) compactedItem.craftedTotal
-                            / (compactedItem.timeSpentCrafting / (double) TimeUnit.SECONDS.toMillis(1))
-                        : 0d;
-                }
+            coordinator.prepareForViewer(gridKey, grid, cpuId, cpu, System.currentTimeMillis());
+            CpuRegistry.Bootstrap bootstrap = registry.reserve(
+                gridKey,
+                cpuId,
+                context.getSession(),
+                icons,
+                pack == null ? null : pack.packId(),
+                replace,
+                System.currentTimeMillis());
+            if (bootstrap == null) {
+                deny(ApiStatus.SERVER_BUSY);
+                return;
             }
-
-            clusterData.items = new ArrayList<>(prep.values());
-            clusterData.items.sort((i1, i2) -> {
-                if (i1.active > 0 && i2.active > 0) return Long.compare(i2.active, i1.active);
-                else if (i1.active > 0 && i2.active == 0) return -1;
-                else if (i1.active == 0 && i2.active > 0) return 1;
-                if (i1.pending > 0 && i2.pending > 0) return Long.compare(i2.pending, i1.pending);
-                else if (i1.pending > 0 && i2.pending == 0) return -1;
-                else if (i1.pending == 0 && i2.pending > 0) return 1;
-                return Long.compare(i2.stored, i1.stored);
-            });
-
+            subscription = bootstrap.subscription();
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(
+                    ApiStatus.OK,
+                    clusterData(
+                        bootstrap.header(),
+                        bootstrap.rows(),
+                        bootstrap.descriptions(),
+                        bootstrap.unkeyed(),
+                        bootstrap.at(),
+                        mappings),
+                    mappings,
+                    bootstrap.view(),
+                    subscription));
+            return;
         }
-
-        listing.commit();
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData, mappings));
+        long now = System.currentTimeMillis();
+        CpuObservation observation = CpuReader.read(cpu, mappings != null);
+        CpuObservation.Header header = observation.header();
+        respond(
+            HttpURLConnection.HTTP_OK,
+            new Response(
+                ApiStatus.OK,
+                clusterData(
+                    header,
+                    observation.rows(),
+                    observation.descriptions(),
+                    observation.unkeyed(),
+                    now,
+                    mappings),
+                mappings));
     }
 
-    private static @NotNull CpuResource captureResource(@NotNull IAEKey resource,
-        @NotNull ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
-        StableKey itemKey = null;
-        IconMappings.Reference icon = null;
-        try {
-            itemKey = listing.remember(resource);
-            if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
-        } catch (RuntimeException unavailable) {
-            // Optional identity or icon failures must not hide accumulated work or a successfully captured key.
-        }
-        return new CpuResource(resource, itemKey, icon);
+    private static @NotNull GetCPUClusterData clusterData(@NotNull CpuObservation.Header header,
+        @NotNull List<CpuObservation.Row> rows, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @NotNull List<CpuObservation.UnkeyedRow> unkeyed, long at, @Nullable IconMappings mappings) {
+        GetCPUClusterData data = new GetCPUClusterData(header, at, mappings);
+        if (header.busy()) data.items = CpuTopic.items(rows, descriptions, unkeyed, header, at, mappings);
+        return data;
     }
 
 }

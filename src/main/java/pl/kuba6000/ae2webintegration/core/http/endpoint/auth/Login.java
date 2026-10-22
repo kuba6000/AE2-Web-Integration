@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -93,7 +94,7 @@ public final class Login extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(ApiStatus status, Session data) {}
+    public record Response(ApiStatus status, Session data) implements IResponseBody {}
 
     @Override
     public void handle() {

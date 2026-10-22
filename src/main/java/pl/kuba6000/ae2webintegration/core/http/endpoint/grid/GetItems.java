@@ -13,9 +13,9 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -30,6 +30,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
+import pl.kuba6000.ae2webintegration.core.live.LiveView;
+import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /**
  * Lists stored and craftable resources on a grid.
@@ -61,7 +67,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/items")
-public final class GetItems extends ISyncedRequest {
+public final class GetItems extends LiveSnapshotRequest {
 
     /**
      * Successful operation result.
@@ -71,17 +77,92 @@ public final class GetItems extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data,
-        @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
+        @Nullable LiveView view, @Nullable String subscription, @Nullable RecentResourceActivity.Summary recent)
+        implements IResponseBody {
 
-    /** Include atlas references. Absent or false skips all native icon normalization. */
+        public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
+            this(status, data, icons, null, null, null);
+        }
+    }
+
+    /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
     private boolean icons;
 
     @Override
+    protected void cancel(String token) {
+        TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+        if (terminals != null) terminals.cancel(token);
+    }
+
+    @Override
     protected void handle(IAEGrid grid) {
+        if (replace != null && replace.length() != 36) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
+            return;
+        }
+        StorageSnapshot shared;
+        try {
+            if (live) {
+                CoreEngine.prepareTerminal(grid);
+                shared = null;
+            } else shared = CoreEngine.observeStorage(grid);
+        } catch (RuntimeException failedObservation) {
+            // The coordinator logs the failed attempt and owns retry timing; do not enumerate again here.
+            deny(ApiStatus.INTERNAL_ERROR);
+            return;
+        }
+        if (live && !context.getExchange()
+            .getRequestMethod()
+            .equals("HEAD")) {
+            TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            TerminalRegistry.Bootstrap bootstrap = terminals == null ? null
+                : terminals.reserve(
+                    gridKey,
+                    context.getSession(),
+                    icons,
+                    pack == null ? null : pack.packId(),
+                    replace,
+                    System.currentTimeMillis());
+            if (bootstrap == null) {
+                deny(ApiStatus.SERVER_BUSY);
+            } else {
+                subscription = bootstrap.subscription();
+                IconMappings mappings = pack == null ? null : new IconMappings(pack);
+                respondDetached(
+                    HttpURLConnection.HTTP_OK,
+                    new Response(
+                        ApiStatus.OK,
+                        StorageTopic
+                            .resources(bootstrap.rows(), bootstrap.descriptions(), bootstrap.unkeyed(), mappings),
+                        mappings,
+                        bootstrap.view(),
+                        subscription,
+                        bootstrap.recent()));
+            }
+            return;
+        }
+        if (shared != null) {
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            List<StoredResource> items = StorageTopic
+                .resources(shared.rows(), shared.descriptions(), shared.unkeyed(), mappings);
+            TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(
+                    ApiStatus.OK,
+                    items,
+                    mappings,
+                    null,
+                    null,
+                    terminals == null ? null : terminals.recent(gridKey)));
             return;
         }
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
@@ -106,7 +187,7 @@ public final class GetItems extends ISyncedRequest {
         }
 
         listing.commit();
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
     private static void addItem(ArrayList<StoredResource> items, IAEGenericStack stack, IAEGrid grid,
@@ -123,7 +204,7 @@ public final class GetItems extends ISyncedRequest {
         try {
             StableKey identity = listing.remember(key);
             itemKey = identity;
-            if (mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
+            if (identity != null && mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
         } catch (RuntimeException unavailable) {
             // Optional identity or icon failures must not hide available resources or a successfully captured key.

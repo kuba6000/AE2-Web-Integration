@@ -49,6 +49,16 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
     let selectorRows = new Map<string, ReturnType<typeof createSelectorRow>>();
     let selectorGrid = '';
     let selectedCpu = '';
+    let displayed:
+        | {
+              cpus: ThemeState['cpus']['cpus'];
+              icons: ThemeState['cpus']['overviewIcons'];
+              route: ThemeState['route'];
+              status: string;
+              error: string | null;
+              locale: Translator;
+          }
+        | undefined;
     let selectorSearchOpen = false;
     const selectorCriteria = [
         { value: 'name', label: 'name', icon: terminalIcons.name },
@@ -251,6 +261,23 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
         render(route: ThemeState['route'], next: ThemeState['cpus'], translator: Translator) {
             state = next;
             locale = translator;
+            if (
+                displayed?.cpus === next.cpus &&
+                displayed.icons === next.overviewIcons &&
+                displayed.route === route &&
+                displayed.status === next.status &&
+                displayed.error === next.error &&
+                displayed.locale === translator
+            )
+                return;
+            displayed = {
+                cpus: next.cpus,
+                icons: next.overviewIcons,
+                route,
+                status: next.status,
+                error: next.error,
+                locale: translator
+            };
             const selected = route.view === 'cpus' && !!route.cpuKey;
             const nextGrid = route.view === 'cpus' ? route.gridKey : '';
             if (selectorGrid !== nextGrid) {

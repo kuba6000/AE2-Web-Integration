@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** A resource quantity with a response-local icon, independent of grid craftability. */
@@ -26,17 +27,12 @@ public class ResourceStack extends ResourceDescription {
         this.quantity = quantity;
     }
 
+    protected ResourceStack(@NotNull ResourceDescriptor descriptor, long quantity, @Nullable IconMappings mappings) {
+        super(descriptor, mappings);
+        this.quantity = quantity;
+    }
+
     public ResourceStack(@NotNull ResourceSnapshot snapshot, @Nullable IconMappings mappings) {
-        this(
-            snapshot.registryNamespace(),
-            snapshot.registryPath(),
-            snapshot.displayName(),
-            snapshot.componentCount(),
-            snapshot.damage(),
-            snapshot.resourceType(),
-            snapshot.quantity(),
-            snapshot.itemKey(),
-            mappings == null || snapshot.itemKey() == null ? null
-                : mappings.resolve(snapshot.itemKey(), snapshot.iconBaseKey()));
+        this(snapshot.description(), snapshot.quantity(), mappings);
     }
 }

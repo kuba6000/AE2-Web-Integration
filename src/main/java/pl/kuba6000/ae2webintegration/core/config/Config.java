@@ -111,7 +111,6 @@ public class Config {
         LEGACY_KEYS.put("discord_role_id", "discord.role_id");
         LEGACY_KEYS.put("discord_minimum_crafting_duration_seconds", "notifications.minimum_crafting_duration_seconds");
         LEGACY_KEYS.put("discord_minimum_crafting_amount", "notifications.minimum_crafting_amount");
-        LEGACY_KEYS.put("track_machine_crafting", "tracking.track_machine_crafting");
     }
 
     @Deprecated
@@ -131,6 +130,7 @@ public class Config {
     }
 
     private static void publish(File file, CommentedConfig document) throws IOException {
+        document.remove("tracking");
         ConfigSettings loaded = new ConfigSettings();
         CommentedConfig defaults = newDocument();
         CONVERTER.toConfig(loaded, defaults);

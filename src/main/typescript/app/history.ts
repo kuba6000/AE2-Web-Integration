@@ -5,6 +5,8 @@ import type { Route } from './router.js';
 export type HistoryState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     reading: boolean;
+    nextBefore: string | null;
+    hasPrevious: boolean;
     entries: HistoryEntry[];
     detail: CraftingHistory | null;
     icons: IconMetadata | null;
@@ -12,12 +14,23 @@ export type HistoryState = {
 };
 /** Completed history snapshots are read on entry or explicit refresh, not on each polling tick. */
 export function createHistory(api: Api, changed: () => void, iconsEnabled: () => boolean) {
-    const state: HistoryState = { status: 'idle', reading: false, entries: [], detail: null, icons: null, error: null };
+    const state: HistoryState = {
+        status: 'idle',
+        reading: false,
+        nextBefore: null,
+        hasPrevious: false,
+        entries: [],
+        detail: null,
+        icons: null,
+        error: null
+    };
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
     let request: AbortController | undefined;
     let detailIconsStale = false;
-    return {
+    let before: string | null = null;
+    const previous: (string | null)[] = [];
+    const history = {
         state,
         invalidateIcons() {
             state.icons = null;
@@ -32,16 +45,29 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             request?.abort();
             state.reading = false;
             route = next;
+            before = null;
+            previous.length = 0;
             detailIconsStale = false;
             Object.assign(state, {
                 status: next.view === 'history' ? 'loading' : 'idle',
                 entries: [],
+                nextBefore: null,
+                hasPrevious: false,
                 detail: null,
                 icons: null,
                 error: null
             });
         },
-        async refresh(reloadDetail = false) {
+        async next() {
+            if (state.reading || state.nextBefore === null) return;
+            const target = state.nextBefore;
+            await history.refresh(false, target, 1);
+        },
+        async previous() {
+            if (state.reading || !previous.length) return;
+            await history.refresh(false, previous[previous.length - 1], -1);
+        },
+        async refresh(reloadDetail = false, target = before, direction = 0) {
             if (
                 route.view !== 'history' ||
                 state.reading ||
@@ -66,8 +92,13 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
                     state.icons = data.icons;
                     detailIconsStale = false;
                 } else {
-                    const data = await api.history(current.gridKey, request.signal, iconsEnabled());
+                    const data = await api.history(current.gridKey, request.signal, iconsEnabled(), target);
                     if (version !== generation) return;
+                    if (direction > 0) previous.push(before);
+                    if (direction < 0) previous.pop();
+                    before = target;
+                    state.hasPrevious = previous.length > 0;
+                    state.nextBefore = data.nextBefore ?? null;
                     state.entries = data.data;
                     state.icons = data.icons;
                 }
@@ -76,8 +107,17 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             } catch (caught) {
                 const error = caught as ApiFailure;
                 if (version !== generation || error.name === 'AbortError') return;
+                if (
+                    direction !== 0 &&
+                    !['NO_PERMISSIONS', 'GRID_NOT_FOUND', 'UNAUTHORIZED'].includes(error.status || '')
+                ) {
+                    state.error = error.status || 'NETWORK_ERROR';
+                    return;
+                }
                 Object.assign(state, {
                     status: 'error',
+                    nextBefore: null,
+                    hasPrevious: false,
                     entries: [],
                     detail: null,
                     icons: null,
@@ -94,7 +134,15 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             generation++;
             request?.abort();
             state.reading = false;
-            Object.assign(state, { status: 'error', entries: [], detail: null, icons: null, error });
+            Object.assign(state, {
+                status: 'error',
+                nextBefore: null,
+                hasPrevious: false,
+                entries: [],
+                detail: null,
+                icons: null,
+                error
+            });
             changed();
         },
         dispose() {
@@ -103,4 +151,5 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             state.reading = false;
         }
     };
+    return history;
 }

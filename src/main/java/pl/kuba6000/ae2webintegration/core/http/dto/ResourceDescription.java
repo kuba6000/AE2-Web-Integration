@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Shared resource identity, metadata and response-local icon contract. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
@@ -62,5 +63,18 @@ public class ResourceDescription {
         this.resourceType = resourceType;
         this.itemKey = itemKey;
         this.icon = icon;
+    }
+
+    protected ResourceDescription(@NotNull ResourceDescriptor descriptor, @Nullable IconMappings mappings) {
+        this(
+            descriptor.registryNamespace(),
+            descriptor.registryPath(),
+            descriptor.displayName(),
+            descriptor.componentCount(),
+            descriptor.damage(),
+            descriptor.resourceType(),
+            descriptor.itemKey(),
+            mappings == null || descriptor.itemKey() == null ? null
+                : mappings.resolve(descriptor.itemKey(), descriptor.baseKey()));
     }
 }

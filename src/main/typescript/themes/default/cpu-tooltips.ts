@@ -45,7 +45,11 @@ export function createCpuTooltips(workspace: HTMLElement, hasSelectionMode: bool
     function refreshTooltip() {
         if (!selectedTooltip) return;
         const { row, x, y, pointer } = selectedTooltip;
-        if (!row.button.isConnected || (pointer && !row.button.contains(document.elementFromPoint(x, y)))) {
+        if (
+            row.button.disabled ||
+            !row.button.isConnected ||
+            (pointer && !row.button.contains(document.elementFromPoint(x, y)))
+        ) {
             hideTooltip();
             return;
         }

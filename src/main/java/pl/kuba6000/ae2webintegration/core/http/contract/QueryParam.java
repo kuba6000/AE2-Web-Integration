@@ -5,7 +5,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Binds an optional boolean query parameter; absent values remain false. */
+/** Binds an optional scalar query parameter; absent values retain their field defaults. */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface QueryParam {

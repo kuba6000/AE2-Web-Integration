@@ -5,6 +5,7 @@ import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
 import { renderCpuSelectionMode, selectionModes } from './cpu-presentation.js';
+import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 export function createPlanPanel(application: ThemeApplication, tooltip: TooltipBindings) {
     const panel = element('aside');
@@ -24,6 +25,7 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
     const cpuList = element('div');
     cpuList.className = 'cpu-selector-list cpu-selector-scroll inset-frame';
     cpuList.role = 'radiogroup';
+    const cpuIcons = application.icons.observe(cpuList, paintResourceIcon);
     cpuList.addEventListener('scroll', () => tooltip.hide());
     panel.append(output, status, reason, cpuHeading, cpuHint, cpuList);
     type Cpu = ThemeState['crafting']['cpus'][number];
@@ -41,9 +43,11 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
         const name = element('strong');
         name.className = 'cpu-selector-name';
         const details = element('span');
+        details.className = 'plan-cpu-details';
+        const icon = createResourceIcon();
         const mode = element('span');
-        label.append(input, name, details, mode);
-        const entry = { label, input, name, details, mode, tooltipContent: (): Node[] => [] };
+        label.append(input, icon, name, details, mode);
+        const entry = { label, input, name, details, icon, mode, tooltipContent: (): Node[] => [] };
         tooltip.bind(label, () => entry.tooltipContent(), input);
         return entry;
     }
@@ -89,6 +93,7 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
             return lines;
         };
         row.name.replaceChildren(renderMinecraftText(cpu.name || t('cpuUnnamed')));
+        row.icon.hidden = !cpu.isBusy || !cpu.finalOutput;
         const description = `${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')} · ${locale.bytes(cpu.availableStorage)} · ${t('coprocessors', { count: cpu.coProcessors })}`;
         row.details.textContent = description;
         row.input.setAttribute(
@@ -144,8 +149,20 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
                 cpuRows.get(key)!.label.remove();
                 cpuRows.delete(key);
             }
+            cpuIcons.update(
+                state.status === 'ready'
+                    ? state.cpus
+                          .filter((cpu) => cpu.isBusy && cpu.finalOutput)
+                          .map((cpu) => ({ element: cpuRows.get(cpu.key)!.label, icon: cpu.finalOutput?.icon }))
+                    : [],
+                state.cpuIcons
+            );
+        },
+        clearIcons() {
+            cpuIcons.update([], null);
         },
         dispose() {
+            cpuIcons.dispose();
             panel.remove();
         }
     };

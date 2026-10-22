@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
@@ -11,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -18,13 +21,14 @@ import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 /**
  * Reads a crafting history entry.
  *
  * @pathParam gridKey Persistent grid identifier.
- * @pathParam entryId Runtime history entry identifier.
+ * @pathParam entryId Durable decimal history entry identifier.
  * @response 200 {@link Response} Successful response.
  * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
  *           fields.
@@ -38,6 +42,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
  *           failure.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: the world history service is unavailable.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -46,6 +51,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history/{entryId}")
 public final class GetTracking extends IAsyncRequest {
@@ -63,30 +69,44 @@ public final class GetTracking extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     @PathParam("entryId")
-    private int id;
+    private String id;
 
     @Override
     public void handle() {
-        if (grid == null) {
-            // The grid is real - access was checked - it simply has no tracking data at all.
-            deny(ApiStatus.TRACKING_NOT_FOUND);
+        long entryId;
+        try {
+            entryId = Long.parseLong(id);
+        } catch (NumberFormatException invalid) {
+            deny(ApiStatus.BAD_PARAM);
             return;
         }
-
-        AE2JobTracker.JobTrackingInfo info = grid.trackingInfo.trackingInfos.get(id);
-        if (info == null) {
-            deny(ApiStatus.TRACKING_NOT_FOUND);
+        if (entryId < 1 || !Long.toString(entryId)
+            .equals(id)) {
+            deny(ApiStatus.BAD_PARAM);
             return;
         }
-
-        IconPack pack = icons ? CoreEngine.getIconPack() : null;
-        IconMappings mappings = pack == null ? null : new IconMappings(pack);
-        respond(
-            HttpURLConnection.HTTP_OK,
-            new Response(ApiStatus.OK, CraftingHistory.capture(info, mappings), mappings));
+        CraftingHistoryService service = CoreEngine.getCraftingHistory();
+        if (service == null) {
+            deny(ApiStatus.SERVER_STOPPING);
+            return;
+        }
+        try {
+            CompletedCrafting info = service.read(gridKey, entryId);
+            if (info == null) {
+                deny(ApiStatus.TRACKING_NOT_FOUND);
+                return;
+            }
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(ApiStatus.OK, CraftingHistory.capture(info, mappings), mappings));
+        } catch (IOException failure) {
+            throw new UncheckedIOException(failure);
+        }
     }
-
 }

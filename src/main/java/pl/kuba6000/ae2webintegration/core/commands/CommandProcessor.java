@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.commands;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
@@ -19,6 +20,7 @@ public class CommandProcessor {
     public static CommandResult reload() {
         try {
             Config.reload();
+            CoreEngine.applyDataConfig();
             AE2Controller.stopHTTPServer();
             AE2Controller.startHTTPServer();
             NotificationManager.init();

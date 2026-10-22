@@ -1,7 +1,9 @@
+import type { PinsState } from './pins.js';
+import type { TerminalStreamState, TerminalUpdateHint } from './terminal.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
-import type { HomeState } from './home.js';
+import type { ResourceHistoryState } from './resource-history.js';
 import type { SettingsState } from './settings.js';
 import type {
     StoredResource,
@@ -9,8 +11,11 @@ import type {
     IconMetadata,
     ApplicationContext,
     GridSettings,
-    AvailableUpdate
+    AvailableUpdate,
+    PinPlacement,
+    ResourcePinUpdate
 } from './api-types.js';
+import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
 import type { Route } from './router.js';
 import type { IconSprite, IconTarget } from './icons.js';
@@ -29,6 +34,8 @@ export type ThemeState = ReadonlyData<{
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    /** Advances only when a full item snapshot is accepted, independently of live deltas. */
+    itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -36,15 +43,18 @@ export type ThemeState = ReadonlyData<{
     refreshing: boolean;
     refreshingView: boolean;
     updatedAt: number | null;
+    stream: TerminalStreamState | null;
     search: string;
     selected: StoredResource | null;
     selectedGridKey: string | null;
     preferences: Preferences;
     crafting: CraftingState;
     cpus: CpuState;
-    home: HomeState;
     history: HistoryState;
+    resourceHistory: ResourceHistoryState;
+    recent: RecentTracking | null;
     settings: SettingsState;
+    pins: PinsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
 export type ThemeLifetime = {
@@ -63,11 +73,19 @@ export type ThemeApplication = {
         pause(id: number, paused: boolean): void;
     };
     readonly state: ThemeState;
-    /** Invoked immediately, then on data changes. Renderer failures terminate this theme mount. */
-    subscribe(listener: (state: ThemeState) => void): () => void;
+    /** Invoked immediately, then with complete state on changes. The optional hint identifies timing-only CPU updates. */
+    subscribe(listener: (state: ThemeState, hint?: TerminalUpdateHint) => void): () => void;
     refresh(options?: { reloadDetail?: boolean }): Promise<void>;
     search(value: string): void;
-    select(resource: ReadonlyData<StoredResource> | null): void;
+    /** Optionally choose the selected resource's history period without changing the full tracking view's range. */
+    select(resource: ReadonlyData<StoredResource> | null, historyRangeMillis?: number): void;
+    resourceHistory: { range(millis: number): Promise<void> };
+    pins: {
+        add(gridKey: string, itemKey: string, placement: PinPlacement): Promise<void>;
+        update(pinKey: string, update: ResourcePinUpdate): Promise<void>;
+        remove(pinKey: string): Promise<void>;
+        refresh(): Promise<void>;
+    };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
     readonly crafting: {
@@ -86,6 +104,7 @@ export type ThemeApplication = {
         submit(): Promise<void>;
         remove(): Promise<void>;
     };
+    readonly history: { next(): Promise<void>; previous(): Promise<void> };
     readonly cpus: { cancel(key: string): Promise<void>; pause(key: string, paused: boolean): Promise<void> };
     readonly settings: {
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]): void;

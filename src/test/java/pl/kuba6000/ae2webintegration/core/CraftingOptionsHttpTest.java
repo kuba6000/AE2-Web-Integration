@@ -34,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -58,8 +59,10 @@ class CraftingOptionsHttpTest extends GridTestScope {
     void start() throws Exception {
         grid = new TestGrid();
         base = "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/crafting-plans";
-        itemKey = AE2Controller.itemIdentities.remember(grid, new ItemIdentityRequestTest.Resource("output", 0, true))
-            .toString();
+        StableKey identity = AE2Controller.itemIdentities
+            .remember(grid, new ItemIdentityRequestTest.Resource("output", 0, true));
+        assertNotNull(identity);
+        itemKey = identity.toString();
         previousAe = AE2Controller.AE2Interface;
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
 

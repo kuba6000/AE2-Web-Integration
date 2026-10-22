@@ -191,6 +191,7 @@ export function createCraftingView(
             panel.element.hidden = route.view !== 'plan';
             if (route.view !== 'plan') {
                 icons.update([], null);
+                panel.clearIcons();
                 return;
             }
             title.textContent = t('craftingPlan');

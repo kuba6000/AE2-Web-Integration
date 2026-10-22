@@ -4,8 +4,6 @@ import java.net.HttpURLConnection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,8 +12,10 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -26,7 +26,6 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
@@ -77,9 +76,7 @@ public final class GetCPUList extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data,
-        @Nullable IconMappings icons) {}
-
-    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+        @Nullable IconMappings icons) implements IResponseBody {}
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class CpuInfo {
@@ -141,31 +138,13 @@ public final class GetCPUList extends ISyncedRequest {
         public long timeStarted = 0L;
     }
 
-    /** Duplicate addresses are logged; the last CPU for an address is retained. */
-    @NotNull
-    public static Map<StableKey, ICraftingCPUCluster> getCPUList(@NotNull IAECraftingGrid craftingGrid) {
-        LinkedHashMap<StableKey, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
-        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
-            StableKey id = cpu.web$getKey();
-            ICraftingCPUCluster previous = orderedMap.put(id, cpu);
-            if (previous != null) {
-                LOG.error(
-                    "Duplicate crafting CPU ID '{}' for '{}' and '{}'; retaining the last CPU",
-                    id,
-                    previous.web$getName(),
-                    cpu.web$getName());
-            }
-        }
-        return orderedMap;
-    }
-
     @Override
     protected void handle(IAEGrid grid) {
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Map<StableKey, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
+        Map<StableKey, ICraftingCPUCluster> clusters = CpuReader.list(grid.web$getCraftingGrid());
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
         LinkedHashMap<StableKey, CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
@@ -183,7 +162,7 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                ResourceSnapshot output = ResourceSnapshot.capture(grid, cluster.web$getFinalOutput(), pack);
+                ResourceSnapshot output = CpuReader.readOutput(cluster, cluster.web$getFinalOutput());
                 cpuInfo.finalOutput = output == null ? null : new ResourceStack(output, mappings);
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {

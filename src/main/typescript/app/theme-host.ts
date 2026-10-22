@@ -43,11 +43,14 @@ export function mountTheme(
         if (controller.signal.aborted) cleanup(release);
         else cleanups.add(release);
     }
-    function subscribe<T>(source: (listener: (value: T) => void) => () => void, listener: (value: T) => void) {
-        const unsubscribe = source((value) => {
+    function subscribe<T, Hint = never>(
+        source: (listener: (value: T, hint?: Hint) => void) => () => void,
+        listener: (value: T, hint?: Hint) => void
+    ) {
+        const unsubscribe = source((value, hint) => {
             if (controller.signal.aborted || failure) return;
             try {
-                listener(value);
+                listener(value, hint);
             } catch (error) {
                 fail(error);
             }
@@ -72,6 +75,13 @@ export function mountTheme(
         refresh: application.refresh,
         search: application.search,
         select: application.select,
+        resourceHistory: { range: application.resourceHistory.range },
+        pins: {
+            add: application.pins.add,
+            update: application.pins.update,
+            remove: application.pins.remove,
+            refresh: application.pins.refresh
+        },
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {
@@ -84,6 +94,7 @@ export function mountTheme(
             submit: () => crafting.submit(),
             remove: crafting.remove
         },
+        history: { next: application.history.next, previous: application.history.previous },
         cpus: { cancel: cpus.cancel, pause: cpus.pause },
         settings: { edit: settings.edit, save: settings.save },
         icons: {

@@ -10,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 public class GridData {
@@ -18,8 +17,6 @@ public class GridData {
     private static final ConcurrentHashMap<StableKey, GridData> gridDataMap = new ConcurrentHashMap<>();
 
     private static Iterator<GridData> craftingPlanMaintenanceCursor;
-
-    public AE2JobTracker trackingInfo = new AE2JobTracker();
 
     private final CraftingPlanRegistry craftingPlans = new CraftingPlanRegistry(System::nanoTime);
 
@@ -43,7 +40,6 @@ public class GridData {
     public static synchronized void clearRuntimeState() {
         for (GridData gridData : gridDataMap.values()) {
             gridData.craftingPlans.clearForServerStop();
-            gridData.trackingInfo.clearHistory();
         }
         gridDataMap.clear();
         craftingPlanMaintenanceCursor = null;
@@ -77,7 +73,6 @@ public class GridData {
         GridData data = gridDataMap.remove(gridKey);
         if (data == null) return;
         data.craftingPlans.clearForServerStop();
-        data.trackingInfo.clearHistory();
     }
 
     public static GridData getOrCreate(StableKey gridKey) {

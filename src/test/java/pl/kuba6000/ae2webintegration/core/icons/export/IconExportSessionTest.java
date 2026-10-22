@@ -29,6 +29,26 @@ class IconExportSessionTest {
     Path directory;
 
     @Test
+    void unsupportedCandidateIsOmittedWithoutRenderingOrAbortingHealthyIcons() throws Exception {
+        Candidate unsupported = new Candidate(1);
+        unsupported.unsupportedIdentity = true;
+        Candidate healthy = new Candidate(2);
+        Source source = new Source(unsupported, healthy);
+        Renderer renderer = new Renderer(source);
+        IconExportSession<Candidate> session = new IconExportSession<>(
+            directory,
+            canceled -> metadata(),
+            source,
+            renderer);
+        awaitFinished(session);
+        assertEquals(1, renderer.rendered, "Absent identity must never enter the native renderer");
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(key(2)));
+            assertEquals(1, pack.failureCount());
+        }
+    }
+
+    @Test
     void publishesExactAndBaselineIdentitiesAfterCompleteDiscoveryAndDrainsDeferredPixels() throws Exception {
         Candidate baseline = new Candidate(2);
         Candidate exact = new Candidate(1);
@@ -42,8 +62,8 @@ class IconExportSessionTest {
             renderer);
         awaitFinished(session);
         try (IconPack pack = openPack()) {
-            assertNotNull(pack.find(exact.key()));
-            assertNotNull(pack.find(baseline.key()));
+            assertNotNull(pack.find(key(exact.encodedIdentity)));
+            assertNotNull(pack.find(key(baseline.encodedIdentity)));
             assertEquals(0, pack.failureCount());
         }
         assertTrue(renderer.closed);
@@ -239,7 +259,7 @@ class IconExportSessionTest {
         session.cancel("Late cancellation");
         assertTrue(session.tick());
         try (IconPack pack = openPack()) {
-            for (Candidate candidate : candidates) assertNotNull(pack.find(candidate.key()));
+            for (Candidate candidate : candidates) assertNotNull(pack.find(key(candidate.encodedIdentity)));
         }
     }
 
@@ -280,7 +300,7 @@ class IconExportSessionTest {
                 release.countDown();
                 awaitFinished(session);
                 try (IconPack pack = openPack()) {
-                    for (Candidate candidate : candidates) assertNotNull(pack.find(candidate.key()));
+                    for (Candidate candidate : candidates) assertNotNull(pack.find(key(candidate.encodedIdentity)));
                 }
             } finally {
                 release.countDown();
@@ -337,6 +357,7 @@ class IconExportSessionTest {
 
         final int identity;
         int encodedIdentity;
+        boolean unsupportedIdentity;
         @Nullable
         Candidate base;
         @Nullable
@@ -351,7 +372,8 @@ class IconExportSessionTest {
             this.encodedIdentity = identity;
         }
 
-        public @NotNull StableKey key() {
+        public @Nullable StableKey key() {
+            if (unsupportedIdentity) return null;
             if (identityFailure != null) throw identityFailure;
             return IconExportSessionTest.key(encodedIdentity);
         }

@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -94,6 +95,20 @@ class ThemeDeliveryHttpTest {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousPlatform;
         config.close();
+    }
+
+    @Test
+    void installedThemeCanDeclareResourceTrackingView() throws Exception {
+        install("tracking.zip", manifest("tracking").replace("\"items\"", "\"tracking\""), Collections.emptyMap());
+        CoreEngine.onServerStarted();
+        JsonObject theme = catalog().getAsJsonArray("themes")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "tracking",
+            theme.getAsJsonArray("views")
+                .get(1)
+                .getAsString());
     }
 
     @Test
@@ -237,7 +252,7 @@ class ThemeDeliveryHttpTest {
             catalog().getAsJsonArray("themes")
                 .size());
         CoreEngine.onServerStopped();
-        try (java.util.stream.Stream<Path> files = Files.list(directory.resolve("ae2webintegration/themes"))) {
+        try (Stream<Path> files = Files.list(directory.resolve("ae2webintegration/themes"))) {
             for (Path file : (Iterable<Path>) files::iterator) Files.delete(file);
         }
         install("good.zip", manifest("good"), Collections.emptyMap());

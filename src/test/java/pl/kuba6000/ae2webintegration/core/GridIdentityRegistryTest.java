@@ -7,12 +7,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,37 +26,211 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridIdentityRegistryTest {
 
+    private final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
+
+    @AfterEach
+    void closeWorlds() throws IOException {
+        worlds.close();
+    }
+
     @TempDir
     Path directory;
+
+    @Test
+    void applyingLiveBoundsClampsRamAndPendingRetiredSettingsWithoutWritingSql() throws Exception {
+        ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
+        initial.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+        initial.flowFlushIntervalSeconds = new ConfigSettings.Range(10, 600, 90);
+        initial.historyRetentionDays = new ConfigSettings.Range(1, 30, 7);
+        try (WorldDatabase database = new WorldDatabase(directory.resolve("live-policy"), initial)) {
+            GridIdentityRegistry registry = new GridIdentityRegistry();
+            registry.initialize(database, directory.resolve("absent.json"));
+            StableKey active = resolve(registry, controller(1));
+            GridPersistentData activeData = registry.getPersistentData(active);
+            assertNotNull(activeData);
+            GridSettingsData settings = activeData.getSettings();
+            settings.setStockSampleIntervalSeconds(500);
+            settings.setFlowFlushIntervalSeconds(100);
+            settings.setHistoryRetentionDays(30);
+            settings.setName("Keep");
+            settings.setTracked(true);
+            registry.saveIfDirty();
+            StableKey retired = resolve(registry, controller(2));
+            GridPersistentData retiredData = registry.getPersistentData(retired);
+            assertNotNull(retiredData);
+            retiredData.getSettings()
+                .setHistoryRetentionDays(30);
+            registry.controllerRemoved(controller(2));
+            ConfigSettings.ResourceHistory tightened = new ConfigSettings.ResourceHistory();
+            tightened.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
+            tightened.flowFlushIntervalSeconds = new ConfigSettings.Range(50, 150, 100);
+            tightened.historyRetentionDays = new ConfigSettings.Range(2, 14, 3);
+            assertTrue(database.applyPolicy(tightened));
+            assertEquals(active, registry.findIdentity(controller(1)));
+            assertEquals(90, settings.getStockSampleIntervalSeconds());
+            assertEquals(100, settings.getFlowFlushIntervalSeconds());
+            assertEquals(14, settings.getHistoryRetentionDays());
+            assertEquals("Keep", settings.getName());
+            assertTrue(settings.isTracked());
+            assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(100));
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT stock_seconds FROM grids")) {
+                    assertTrue(rows.next());
+                    assertEquals(500, rows.getInt(1));
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+            StableKey created = resolve(registry, controller(3));
+            GridPersistentData createdData = registry.getPersistentData(created);
+            assertNotNull(createdData);
+            GridSettingsData defaults = createdData.getSettings();
+            assertEquals(60, defaults.getStockSampleIntervalSeconds());
+            assertEquals(100, defaults.getFlowFlushIntervalSeconds());
+            assertEquals(3, defaults.getHistoryRetentionDays());
+            registry.saveIfDirty();
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql
+                        .executeQuery("SELECT retention_days FROM grids WHERE grid_key = '" + retired + "'")) {
+                    assertTrue(rows.next());
+                    assertEquals(14, rows.getInt(1));
+                }
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void nativeMembershipPublishesImmediatelyAndPersistsOnlyWhenFlushed() throws Exception {
+        File source = directory.resolve("deferred.json")
+            .toFile();
+        GridIdentityRegistry registry = worlds.registry(source);
+        WorldDatabase database = worlds.database(source);
+        WorldGridStore durable = new WorldGridStore(database);
+        StableKey key = resolve(registry, controller(1));
+        assertNotNull(key);
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+        assertEquals(key, resolve(registry, controller(1), controller(2)));
+        registry.controllerRemoved(controller(1));
+        assertNull(registry.findIdentity(controller(1)));
+        assertEquals(key, registry.findIdentity(controller(2)));
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+        registry.saveIfDirty();
+        assertEquals(
+            Collections.singleton(controller(2)),
+            durable.load(source.toPath())
+                .get(key)
+                .getControllers());
+        registry.controllerRemoved(controller(2));
+        assertFalse(registry.containsIdentity(key));
+        assertTrue(
+            durable.load(source.toPath())
+                .containsKey(key));
+        registry.saveIfDirty();
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+    }
+
+    @Test
+    void configuredDefaultsAndTighterBoundsPreserveSavedIdentities() throws Exception {
+        ConfigSettings previous = Config.INSTANCE;
+        try {
+            ConfigSettings configured = new ConfigSettings();
+            configured.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            Config.INSTANCE = configured;
+            File file = directory.resolve("policy.json")
+                .toFile();
+            GridIdentityRegistry registry = worlds.registry(file);
+            StableKey key = resolve(registry, controller(1));
+            assertEquals(
+                120,
+                registry.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+            assertTrue(
+                registry.getPersistentData(key)
+                    .getSettings()
+                    .isDefault());
+            registry.getPersistentData(key)
+                .getSettings()
+                .setStockSampleIntervalSeconds(500);
+            registry.saveIfDirty();
+            ConfigSettings tightened = new ConfigSettings();
+            tightened.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
+            Config.INSTANCE = tightened;
+            // A config reload does not replace the policy of an already initialized world.
+            registry.getPersistentData(key)
+                .getSettings()
+                .setStockSampleIntervalSeconds(400);
+            registry.saveIfDirty();
+            worlds.close(file);
+            GridIdentityRegistry reopened = worlds.registry(file);
+            assertEquals(key, reopened.findIdentity(controller(1)));
+            assertEquals(
+                90,
+                reopened.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+            Config.INSTANCE = configured;
+            worlds.close(file);
+            GridIdentityRegistry restored = worlds.registry(file);
+            assertEquals(key, restored.findIdentity(controller(1)));
+            assertEquals(
+                90,
+                restored.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+        } finally {
+            Config.INSTANCE = previous;
+        }
+    }
 
     @Test
     void defaultIdentitySurvivesRestartAndControllerChanges() throws Exception {
         File file = directory.resolve("defaults.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         StableKey key = resolve(registry, controller(2), controller(1));
-        assertTrue(file.isFile());
+
         assertFalse(TestGridFixtures.isTracked(registry, key));
         registry.removeController(controller(1));
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file);
+        registry.saveIfDirty();
+        worlds.close(file);
+        GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(key, resolve(restarted, controller(3), controller(2)));
-        assertEquals(key, new GridIdentityRegistry(file).findIdentity(controller(3)));
+        restarted.saveIfDirty();
+        assertEquals(
+            key,
+            worlds.registry(file)
+                .findIdentity(controller(3)));
     }
 
     @Test
     void identicalCoordinatesInDifferentSavesReceiveIndependentIdentities() throws Exception {
-        GridIdentityRegistry first = new GridIdentityRegistry(
+        GridIdentityRegistry first = worlds.registry(
             directory.resolve("first.json")
                 .toFile());
-        GridIdentityRegistry second = new GridIdentityRegistry(
+        GridIdentityRegistry second = worlds.registry(
             directory.resolve("second.json")
                 .toFile());
         StableKey firstKey = resolve(first, controller(1));
@@ -67,7 +244,7 @@ class GridIdentityRegistryTest {
     void firstValidatedPartKeepsTheKeyEvenWithFewerControllers() throws Exception {
         File file = directory.resolve("split.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         StableKey original = resolve(registry, controller(1), controller(2), controller(3));
         TestGridFixtures.setTracked(registry, original, true);
         ControllerGrid first = new ControllerGrid(controller(1));
@@ -80,7 +257,8 @@ class GridIdentityRegistryTest {
         assertNotEquals(original, fresh);
         assertTrue(TestGridFixtures.isTracked(registry, original));
         assertFalse(TestGridFixtures.isTracked(registry, fresh));
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file);
+        registry.saveIfDirty();
+        GridIdentityRegistry restarted = worlds.registry(file);
         restarted.controllerValidated(later);
         restarted.controllerValidated(first);
         assertEquals(original, restarted.getKey(first));
@@ -91,13 +269,14 @@ class GridIdentityRegistryTest {
     void successfulMergePrefersSettingsAndRetiresConsumedIdentities() throws Exception {
         File file = directory.resolve("merge.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         StableKey untracked = resolve(registry, controller(1));
         StableKey tracked = resolve(registry, controller(2));
         TestGridFixtures.setTracked(registry, tracked, true);
         assertEquals(tracked, resolve(registry, controller(1), controller(2)));
         assertFalse(registry.containsIdentity(untracked));
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file);
+        registry.saveIfDirty();
+        GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(tracked, restarted.findIdentity(controller(1)));
         assertTrue(TestGridFixtures.isTracked(restarted, tracked));
     }
@@ -106,7 +285,7 @@ class GridIdentityRegistryTest {
     void mergePrefersNamedUntrackedIdentityAndPreservesNameAfterRestart() throws Exception {
         File file = directory.resolve("named-merge.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         StableKey first = resolve(registry, controller(1));
         StableKey second = resolve(registry, controller(2));
         StableKey named = first.toString()
@@ -117,7 +296,8 @@ class GridIdentityRegistryTest {
             .setName("Factory");
         registry.saveIfDirty();
         assertEquals(named, resolve(registry, controller(1), controller(2)));
-        GridPersistentData loaded = new GridIdentityRegistry(file).getPersistentData(named);
+        GridPersistentData loaded = worlds.registry(file)
+            .getPersistentData(named);
         assertNotNull(loaded);
         assertEquals(
             "Factory",
@@ -135,28 +315,25 @@ class GridIdentityRegistryTest {
 
     @Test
     void equalSettingsMergeKeepsTheSameKeyRegardlessOfControllerOrder() throws Exception {
-        File file = directory.resolve("tie.json")
-            .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
-        StableKey first = resolve(registry, controller(1));
-        StableKey second = resolve(registry, controller(2));
-        StableKey expected = first.toString()
-            .compareTo(second.toString()) < 0 ? first : second;
         for (boolean reverse : Arrays.asList(false, true)) {
-            Path copy = directory.resolve("tie-" + reverse + ".json");
-            Files.copy(file.toPath(), copy);
-            GridIdentityRegistry merged = new GridIdentityRegistry(copy.toFile());
+            GridIdentityRegistry registry = worlds.registry(
+                directory.resolve("tie-" + reverse + ".json")
+                    .toFile());
+            StableKey first = resolve(registry, controller(1));
+            StableKey second = resolve(registry, controller(2));
+            StableKey expected = first.toString()
+                .compareTo(second.toString()) < 0 ? first : second;
             assertEquals(
                 expected,
-                reverse ? resolve(merged, controller(2), controller(1))
-                    : resolve(merged, controller(1), controller(2)));
+                reverse ? resolve(registry, controller(2), controller(1))
+                    : resolve(registry, controller(1), controller(2)));
         }
     }
 
     @Test
     void conflictingBridgeDoesNotChangeSavedIdentitiesAndRepairRestoresBoth() throws Exception {
         Path file = directory.resolve("conflict.json");
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry registry = worlds.registry(file.toFile());
         ControllerGrid first = new ControllerGrid(controller(1));
         ControllerGrid second = new ControllerGrid(controller(2));
         registry.controllerValidated(first);
@@ -167,13 +344,14 @@ class GridIdentityRegistryTest {
         assertNotNull(secondKey);
         TestGridFixtures.setTracked(registry, firstKey, true);
         TestGridFixtures.setTracked(registry, secondKey, true);
-        byte[] before = Files.readAllBytes(file);
 
         first.controllers.add(controller(2));
         first.state = AEControllerState.CONTROLLER_CONFLICT;
         first.mayReadControllers = false;
         registry.controllerValidated(first);
-        assertArrayEquals(before, Files.readAllBytes(file));
+        GridIdentityRegistry saved = worlds.registry(file.toFile());
+        assertEquals(firstKey, saved.findIdentity(controller(1)));
+        assertEquals(secondKey, saved.findIdentity(controller(2)));
         assertEquals(firstKey, registry.findIdentity(controller(1)));
         assertEquals(secondKey, registry.findIdentity(controller(2)));
         assertTrue(TestGridFixtures.isTracked(registry, firstKey));
@@ -195,7 +373,7 @@ class GridIdentityRegistryTest {
     void physicalRemovalRetiresOnlyTheLastKnownController() throws Exception {
         File file = directory.resolve("removal.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         ControllerGrid grid = new ControllerGrid(controller(1), controller(2));
         registry.controllerValidated(grid);
         StableKey key = registry.getKey(grid);
@@ -207,14 +385,15 @@ class GridIdentityRegistryTest {
         registry.controllerRemoved(controller(2));
         assertFalse(registry.containsIdentity(key));
         assertNull(registry.getKey(grid));
-        assertNotEquals(key, resolve(new GridIdentityRegistry(file), controller(1)));
+        registry.saveIfDirty();
+        assertNotEquals(key, resolve(worlds.registry(file), controller(1)));
     }
 
     @Test
     void UnobservedRecordsRemainSavedAndReadsDoNotDiscoverGrids() throws Exception {
         File file = directory.resolve("unobserved.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         StableKey absent = resolve(registry, controller(1));
         TestGridFixtures.setTracked(registry, absent, true);
         ControllerGrid present = new ControllerGrid(controller(2));
@@ -222,110 +401,66 @@ class GridIdentityRegistryTest {
         registry.controllerValidated(present);
         present.mayReadControllers = false;
         assertNotNull(registry.getKey(present));
-        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file), absent));
-        assertEquals(absent, new GridIdentityRegistry(file).findIdentity(controller(1)));
+        assertTrue(TestGridFixtures.isTracked(worlds.registry(file), absent));
+        assertEquals(
+            absent,
+            worlds.registry(file)
+                .findIdentity(controller(1)));
     }
 
     @Test
-    void settingsDefaultsRemainPersistedAndUnchangedObservationsDoNotRewrite() throws Exception {
+    void settingsDefaultsRemainPersistedAfterUnchangedObservations() throws Exception {
         Path file = directory.resolve("unchanged.json");
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry registry = worlds.registry(file.toFile());
         StableKey key = resolve(registry, controller(1));
         TestGridFixtures.setTracked(registry, key, true);
         TestGridFixtures.setTracked(registry, key, false);
-        assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
-        assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
-        Files.setLastModifiedTime(file, FileTime.fromMillis(1000000000000L));
-        FileTime before = Files.getLastModifiedTime(file);
+        assertEquals(
+            key,
+            worlds.registry(file.toFile())
+                .findIdentity(controller(1)));
+        assertFalse(TestGridFixtures.isTracked(worlds.registry(file.toFile()), key));
+
         TestGridFixtures.setTracked(registry, key, false);
         resolve(registry, controller(1));
         registry.removeController(controller(99));
-        assertEquals(before, Files.getLastModifiedTime(file));
+        assertFalse(TestGridFixtures.isTracked(worlds.registry(file.toFile()), key));
         assertNull(registry.getPersistentData(StableKey.random()));
     }
 
     @Test
-    void failedWritesRetainSettingsForRetryWithoutPublishingMembershipOrRemoval() throws Exception {
-        Path file = directory.resolve("failure.json");
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+    void failedCommitDoesNotPreventNativeMembershipPublication() throws Exception {
+        File source = directory.resolve("failure.json")
+            .toFile();
+        GridIdentityRegistry registry = worlds.registry(source);
         StableKey key = resolve(registry, controller(1));
-        GridPersistentData data = registry.getPersistentData(key);
-        assertNotNull(data);
-        byte[] original = Files.readAllBytes(file);
-        Path backup = directory.resolve("saved.json");
-        Files.move(file, backup);
-        Files.createDirectory(file);
-        Path blocker = file.resolve("unrelated-file");
-        Files.write(blocker, new byte[] { 1 });
-        for (int operation = 0; operation < 3; operation++) {
-            if (operation == 0) assertThrows(IOException.class, () -> TestGridFixtures.setTracked(registry, key, true));
-            else if (operation == 1) {
-                ControllerGrid changed = new ControllerGrid(controller(1), controller(2));
-                registry.controllerValidated(changed);
-                assertNull(registry.getKey(changed));
-            } else assertThrows(IOException.class, () -> registry.removeController(controller(1)));
-            assertEquals(key, registry.findIdentity(controller(1)));
-            assertNull(registry.findIdentity(controller(2)));
-            assertTrue(
-                data.getSettings()
-                    .isTracked());
-            assertArrayEquals(original, Files.readAllBytes(backup));
-            assertArrayEquals(new byte[] { 1 }, Files.readAllBytes(blocker));
-        }
-        Files.delete(blocker);
-        Files.delete(file);
-        Files.move(backup, file);
-        GridIdentityRegistry saved = new GridIdentityRegistry(file.toFile());
+        registry.saveIfDirty();
+        worlds.close(source);
+        assertThrows(IOException.class, () -> TestGridFixtures.setTracked(registry, key, true));
+        ControllerGrid changed = new ControllerGrid(controller(1), controller(2));
+        registry.controllerValidated(changed);
+        assertEquals(key, registry.getKey(changed));
+        registry.removeController(controller(1));
+        assertNull(registry.findIdentity(controller(1)));
+        assertEquals(key, registry.findIdentity(controller(2)));
+        assertThrows(IOException.class, registry::saveIfDirty);
+        GridIdentityRegistry saved = worlds.registry(source);
         assertEquals(key, saved.findIdentity(controller(1)));
         assertFalse(TestGridFixtures.isTracked(saved, key));
-        registry.saveIfDirty();
-        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
-    }
-
-    @Test
-    void malformedFilesIncludingDuplicateKeysAreBackedUpAndReplacedWithAnEmptyRegistry() throws Exception {
-        String record = "\"" + StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")
-            + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
-        String incompleteRecord = "\"AQEBAQEBAQEBAQEBAQEBAQ\":{\"controllers\":[{}],\"settings\":{}}";
-        for (String invalid : Arrays
-            .asList("", "null", "{", "{" + record + "," + record + "}", "{" + record + "," + incompleteRecord + "}")) {
-            Path file = Files.createTempDirectory(directory, "invalid-")
-                .resolve("grid-identities.json");
-            byte[] original = invalid.getBytes(StandardCharsets.UTF_8);
-            Files.write(file, original);
-            GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
-            assertTrue(registry.isInitialized());
-            assertNull(registry.findIdentity(controller(1)));
-            assertEquals("{}", new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-            assertBackupContains(file, original);
-            StableKey key = resolve(registry, controller(1));
-            assertNotNull(key);
-            assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
-            assertBackupContains(file, original);
-        }
-    }
-
-    @Test
-    void failedReplacementLeavesTheInvalidSourceAndItsBackupIntact() throws Exception {
-        Path file = directory.resolve("grid-identities.json");
-        byte[] original = "{".getBytes(StandardCharsets.UTF_8);
-        Files.write(file, original);
-        Files.createDirectory(directory.resolve("grid-identities.json.tmp"));
-
-        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
-        assertArrayEquals(original, Files.readAllBytes(file));
-        assertBackupContains(file, original);
+        TestGridFixtures.setTracked(saved, key, true);
+        assertTrue(TestGridFixtures.isTracked(worlds.registry(source), key));
     }
 
     @Test
     void storedCoordinatesRoundTripAcrossDimensionsAndIntegerLimits() throws Exception {
         File file = directory.resolve("coordinates.json")
             .toFile();
-        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        GridIdentityRegistry registry = worlds.registry(file);
         DimensionalCoords first = new DimensionalCoords("world", Integer.MIN_VALUE, Integer.MAX_VALUE, -1);
         DimensionalCoords second = new DimensionalCoords("other-world", -1, 0, 1);
         StableKey key = resolve(registry, first, second);
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file);
+        registry.saveIfDirty();
+        GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(key, restarted.findIdentity(first));
         assertEquals(key, restarted.findIdentity(second));
     }
@@ -338,7 +473,7 @@ class GridIdentityRegistryTest {
         String json = "{\"" + key
             + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
         Files.write(file, json.getBytes(StandardCharsets.UTF_8));
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry registry = worlds.registry(file.toFile());
         assertEquals(key, registry.findIdentity(controller(1)));
         GridPersistentData data = registry.getPersistentData(key);
         assertNotNull(data);
@@ -346,7 +481,7 @@ class GridIdentityRegistryTest {
             data.getSettings()
                 .isDefault());
         TestGridFixtures.setTracked(registry, key, true);
-        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+        assertTrue(TestGridFixtures.isTracked(worlds.registry(file.toFile()), key));
     }
 
     @Test
@@ -361,22 +496,11 @@ class GridIdentityRegistryTest {
         Files.write(file, saved.getBytes(StandardCharsets.UTF_8));
         DimensionalCoords legacy = new DimensionalCoords(-1, -32, 64, 120);
         DimensionalCoords modern = new DimensionalCoords("minecraft:overworld", -32, 64, 120);
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry registry = worlds.registry(file.toFile());
         assertEquals(key, registry.findIdentity(legacy));
         assertEquals(key, registry.findIdentity(modern));
         TestGridFixtures.setTracked(registry, key, true);
-        JsonObject stored = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
-            .getAsJsonObject()
-            .getAsJsonObject(key.toString());
-        for (com.google.gson.JsonElement value : stored.getAsJsonArray("controllers")) {
-            assertTrue(
-                value.getAsJsonObject()
-                    .has("dimensionId"));
-            assertFalse(
-                value.getAsJsonObject()
-                    .has("dimid"));
-        }
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry restarted = worlds.registry(file.toFile());
         assertEquals(key, restarted.findIdentity(legacy));
         assertEquals(key, restarted.findIdentity(modern));
         assertTrue(TestGridFixtures.isTracked(restarted, key));
@@ -391,23 +515,10 @@ class GridIdentityRegistryTest {
         assertFalse(http.has("dimid"));
     }
 
-    @Test
-    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
-    void coordinatesWithoutADimensionAreBackedUpBeforeStartingANewRegistry() throws Exception {
-        Path file = directory.resolve("incomplete-coordinates.json");
-        String document = "{\"AAAAAAAAAAAAAAAAAAAAAA\":{\"controllers\":[{\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
-        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
-
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
-        assertTrue(registry.isInitialized());
-        assertNull(registry.findIdentity(controller(1)));
-        assertBackupContains(file, document.getBytes(StandardCharsets.UTF_8));
-    }
-
     @ParameterizedTest
     @ValueSource(strings = { "0", "minecraft:overworld" })
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
-    void releasedDimensionFieldPreservesIdentityAndSettingsAndIsRewrittenOnSave(String dimension) throws Exception {
+    void releasedDimensionFieldPreservesIdentityAndSettingsInArchivedSource(String dimension) throws Exception {
         Path file = directory.resolve("released-identities.json");
         StableKey key = StableKey.parse("DtK3pQIgqQ-xyPjLOqQW9A");
         String document = "{\"" + key
@@ -416,41 +527,23 @@ class GridIdentityRegistryTest {
             + "\",\"x\":-643,\"y\":4,\"z\":-907}],\"settings\":{\"isTracked\":true}}}";
         Files.write(file, document.getBytes(StandardCharsets.UTF_8));
 
-        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        GridIdentityRegistry registry = worlds.registry(file.toFile());
         DimensionalCoords controller = new DimensionalCoords(dimension, -643, 4, -907);
         assertEquals(key, registry.findIdentity(controller));
         assertTrue(TestGridFixtures.isTracked(registry, key));
-        assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        Path archived = file.resolveSibling("released-identities.json.old");
+        assertFalse(Files.exists(file));
+        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
 
         registry.saveIfDirty();
-        JsonObject saved = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
-            .getAsJsonObject()
-            .getAsJsonObject(key.toString())
-            .getAsJsonArray("controllers")
-            .get(0)
-            .getAsJsonObject();
-        assertEquals(
-            dimension,
-            saved.get("dimensionId")
-                .getAsString());
-        assertFalse(saved.has("dimid"));
-        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
+        GridIdentityRegistry restarted = worlds.registry(file.toFile());
         assertEquals(key, restarted.findIdentity(controller));
         assertTrue(TestGridFixtures.isTracked(restarted, key));
 
         DimensionalCoords apiCoordinates = GSONUtils.GSON_BUILDER.create()
             .fromJson("{\"dimid\":\"" + dimension + "\",\"x\":-643,\"y\":4,\"z\":-907}", DimensionalCoords.class);
         assertNull(apiCoordinates.dimensionId(), "The storage alias must not affect API deserialization");
-    }
-
-    private static void assertBackupContains(Path file, byte[] original) throws IOException {
-        try (java.nio.file.DirectoryStream<Path> backups = Files
-            .newDirectoryStream(file.getParent(), file.getFileName() + ".corrupt-*.bak")) {
-            java.util.Iterator<Path> iterator = backups.iterator();
-            assertTrue(iterator.hasNext());
-            assertArrayEquals(original, Files.readAllBytes(iterator.next()));
-            assertFalse(iterator.hasNext(), "A successful restart must not create another backup");
-        }
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

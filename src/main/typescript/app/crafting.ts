@@ -20,6 +20,7 @@ export type CraftingState = {
     sort: PlanSort;
     descending: boolean;
     icons: IconMetadata | null;
+    cpuIcons: IconMetadata | null;
     status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
     plan: Plan | null;
     cpus: (CpuInfo & { key: string; eligible: boolean | undefined })[];
@@ -45,6 +46,7 @@ export function createCrafting(
         sort: preferences.values.planSort,
         descending: preferences.values.planSortOrder === 'descending',
         icons: null,
+        cpuIcons: null,
         status: 'idle',
         plan: null,
         cpus: [],
@@ -134,8 +136,10 @@ export function createCrafting(
                 if (state.plan.isSimulating || state.plan.plan?.some((row) => row.missing > 0)) showPlan();
                 else await actions.submit(true);
             } else if (state.plan.isDone) {
-                const cpus = await api.cpus(current.gridKey, request.signal);
+                const requestedRevision = iconRevision;
+                const cpus = await api.cpus(current.gridKey, request.signal, iconsEnabled());
                 if (version !== generation) return;
+                state.cpuIcons = requestedRevision === iconRevision ? cpus.icons : null;
                 state.cpus = Object.entries(cpus.data).map(([key, cpu]) => ({ ...cpu, key, eligible: eligible(cpu) }));
                 if (state.selectedCpu && !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible))
                     state.selectedCpu = '';
@@ -150,6 +154,7 @@ export function createCrafting(
             state.error = error.status;
             readFailed = true;
             state.cpus = [];
+            state.cpuIcons = null;
             state.selectedCpu = '';
             if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                 state.plan = null;
@@ -181,6 +186,7 @@ export function createCrafting(
         state.icons = null;
         state.metadata = input;
         state.cpus = [];
+        state.cpuIcons = null;
         state.selectedCpu = '';
         state.error = null;
         state.errorDetail = null;
@@ -227,6 +233,7 @@ export function createCrafting(
         invalidateIcons() {
             iconRevision++;
             state.icons = null;
+            state.cpuIcons = null;
             planIcons = null;
         },
         search(value: string) {
@@ -264,6 +271,7 @@ export function createCrafting(
                 icons: null,
                 plan: null,
                 cpus: [],
+                cpuIcons: null,
                 selectedCpu: '',
                 mutation: null,
                 uncertain: null,
@@ -292,6 +300,7 @@ export function createCrafting(
                 icons: null,
                 metadata: null,
                 cpus: [],
+                cpuIcons: null,
                 selectedCpu: '',
                 error,
                 errorDetail: null
@@ -427,6 +436,7 @@ export function createCrafting(
                         state.icons = null;
                         state.status = 'calculating';
                         state.cpus = [];
+                        state.cpuIcons = null;
                         state.selectedCpu = '';
                         readFailed = true;
                     }
@@ -436,6 +446,7 @@ export function createCrafting(
                         state.icons = null;
                         state.metadata = null;
                         state.cpus = [];
+                        state.cpuIcons = null;
                         state.selectedCpu = '';
                         readFailed = true;
                     }
@@ -489,6 +500,7 @@ export function createCrafting(
                         state.icons = null;
                         state.metadata = null;
                         state.cpus = [];
+                        state.cpuIcons = null;
                         state.selectedCpu = '';
                         readFailed = true;
                     }

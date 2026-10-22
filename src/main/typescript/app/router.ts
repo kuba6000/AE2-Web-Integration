@@ -1,6 +1,7 @@
 export type Route =
     | { view: 'home' | 'missing' | 'web-settings' | 'server-settings' | 'about'; gridKey: null }
     | { view: 'items' | 'settings'; gridKey: string }
+    | { view: 'tracking'; gridKey: string; itemKey: string }
     | { view: 'cpus'; gridKey: string; cpuKey: string | null }
     | { view: 'history'; gridKey: string; entryId: string | null }
     | { view: 'plan'; gridKey: string; planId: string };
@@ -11,6 +12,18 @@ export function readRoute(): Route {
     if (hash === '/web-settings') return { view: 'web-settings', gridKey: null };
     if (hash === '/server-settings') return { view: 'server-settings', gridKey: null };
     if (hash === '/about') return { view: 'about', gridKey: null };
+    const tracking = /^\/grids\/([^/]+)\/tracking\/([^/]+)$/.exec(hash);
+    if (tracking) {
+        try {
+            return {
+                view: 'tracking',
+                gridKey: decodeURIComponent(tracking[1]),
+                itemKey: decodeURIComponent(tracking[2])
+            };
+        } catch {
+            return { view: 'missing', gridKey: null };
+        }
+    }
     const settings = /^\/grids\/([^/]+)\/settings$/.exec(hash);
     if (settings) {
         try {
@@ -72,4 +85,8 @@ export function historyHref(gridKey: string | null, entryId: string | number | n
 
 export function navigateToGrid(key: string | null) {
     location.hash = key ? `/grids/${encodeURIComponent(key)}/items` : '/';
+}
+
+export function trackingHref(gridKey: string, itemKey: string) {
+    return `#/grids/${encodeURIComponent(gridKey)}/tracking/${encodeURIComponent(itemKey)}`;
 }

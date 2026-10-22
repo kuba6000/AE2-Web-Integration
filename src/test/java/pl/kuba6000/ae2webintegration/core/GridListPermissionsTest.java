@@ -19,7 +19,9 @@ import com.google.gson.JsonParser;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -53,9 +55,9 @@ class GridListPermissionsTest extends GridTestScope {
             }
         };
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        var persistent = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        GridPersistentData persistent = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(persistent);
         persistent.getSettings()
             .setName("Factory");
