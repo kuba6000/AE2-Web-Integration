@@ -14,7 +14,6 @@ public class DiscordPayload implements INotificationPayload {
     final String description;
     final int color;
     private boolean includeImage;
-    private boolean includeEmbed = true;
 
     public DiscordPayload(String title, String description, int color) {
         this.title = title;
@@ -26,9 +25,8 @@ public class DiscordPayload implements INotificationPayload {
         this(title, description, COLOR_TURQUOISE);
     }
 
-    void attachImage(boolean inEmbed) {
+    void includeImage() {
         includeImage = true;
-        includeEmbed = inEmbed;
     }
 
     @Override
@@ -38,20 +36,18 @@ public class DiscordPayload implements INotificationPayload {
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");
         json.addProperty("content", !roleID.isEmpty() ? "<@&" + roleID + ">" : "");
-        if (includeEmbed) {
-            JsonArray embeds = new JsonArray();
-            JsonObject embed = new JsonObject();
-            embed.addProperty("title", limit(this.title, 256));
-            embed.addProperty("description", limit(this.description, 4096));
-            embed.addProperty("color", this.color);
-            if (includeImage) {
-                JsonObject image = new JsonObject();
-                image.addProperty("url", "attachment://crafting.png");
-                embed.add("image", image);
-            }
-            embeds.add(embed);
-            json.add("embeds", embeds);
+        JsonArray embeds = new JsonArray();
+        JsonObject embed = new JsonObject();
+        embed.addProperty("title", limit(this.title, 256));
+        embed.addProperty("description", limit(this.description, 4096));
+        embed.addProperty("color", this.color);
+        if (includeImage) {
+            JsonObject image = new JsonObject();
+            image.addProperty("url", "attachment://crafting.png");
+            embed.add("image", image);
         }
+        embeds.add(embed);
+        json.add("embeds", embeds);
         JsonArray attachments = new JsonArray();
         if (includeImage) {
             JsonObject attachment = new JsonObject();

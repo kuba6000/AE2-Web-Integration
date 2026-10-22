@@ -129,66 +129,12 @@ class DiscordNotificationTest {
         assertTrue(image.getHeight() >= 200 && image.getHeight() <= 500);
     }
 
-    @ParameterizedTest
-    @CsvSource({ "true, true, true", "true, true, false", "true, false, true", "true, false, false",
-        "false, true, true", "false, true, false", "false, false, true", "false, false, false" })
-    void craftingImageOptionsPreserveMentionsAndOnlyImageModeOmitsTheEmbed(boolean generateImage, boolean imageInEmbed,
-        boolean mentionRole) throws Exception {
-        String webhook = Config.INSTANCE.discord.webhook;
-        config.set("discord.generate_image", generateImage);
-        config.set("discord.image_in_embed", imageInEmbed);
-        config.set("discord.role_id", mentionRole ? "123456789" : "");
-        Config.INSTANCE.discord.webhook = webhook;
-        new DiscordDestination().sendNotification(crafting("Powered Rail", false));
-        Upload upload = upload();
-        JsonObject payload;
-        if (generateImage) {
-            assertTrue(upload.contentType.startsWith("multipart/form-data; boundary="));
-            String boundary = upload.contentType.substring(upload.contentType.indexOf("boundary=") + 9);
-            String body = new String(upload.body, StandardCharsets.ISO_8859_1);
-            int jsonStart = body.indexOf("\r\n\r\n") + 4;
-            payload = parse(
-                body.substring(jsonStart, body.indexOf("\r\n--" + boundary, jsonStart))
-                    .getBytes(StandardCharsets.ISO_8859_1));
-            assertEquals(
-                1,
-                payload.getAsJsonArray("attachments")
-                    .size());
-            int imageStart = body.indexOf("\r\n\r\n", body.indexOf("name=\"files[0]\"")) + 4;
-            int imageEnd = body.indexOf("\r\n--" + boundary, imageStart);
-            assertNotNull(ImageIO.read(new ByteArrayInputStream(upload.body, imageStart, imageEnd - imageStart)));
-        } else {
-            assertEquals("application/json", upload.contentType);
-            payload = parse(upload.body);
-            assertEquals(
-                0,
-                payload.getAsJsonArray("attachments")
-                    .size());
-        }
-        assertEquals(
-            mentionRole ? "<@&123456789>" : "",
-            payload.get("content")
-                .getAsString());
-        if (generateImage && !imageInEmbed) {
-            assertFalse(payload.has("embeds"), "Image-only notifications must not repeat their details in an embed");
-        } else {
-            JsonObject embed = payload.getAsJsonArray("embeds")
-                .get(0)
-                .getAsJsonObject();
-            assertEquals(generateImage, embed.has("image"));
-            assertTrue(
-                embed.get("description")
-                    .getAsString()
-                    .contains("Powered Rail"));
-        }
-    }
-
     @Test
     void disablingImagesPersistsAndKeepsCancelledCraftingAsOrdinaryTextJson() throws Exception {
         String webhook = Config.INSTANCE.discord.webhook;
-        config.set("discord.generate_image", false);
+        config.set("discord.image_cards", false);
         Config.INSTANCE.discord.webhook = webhook;
-        assertFalse(Config.INSTANCE.discord.generateImage);
+        assertFalse(Config.INSTANCE.discord.imageCards);
         new DiscordDestination().sendNotification(crafting("Powered Rail", true));
         Upload upload = upload();
         assertEquals("application/json", upload.contentType);
@@ -206,10 +152,8 @@ class DiscordNotificationTest {
                 .contains("Assembly CPU"));
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = { true, false })
-    void statusNotificationsRemainJsonWithoutImageAttachments(boolean imageInEmbed) throws Exception {
-        Config.INSTANCE.discord.imageInEmbed = imageInEmbed;
+    @Test
+    void statusNotificationsRemainJsonWithoutImageAttachments() throws Exception {
         new DiscordDestination()
             .sendNotification(new StatusMessage("Server status", "Connection warning", StatusMessage.Severity.WARNING));
         Upload upload = upload();
@@ -222,10 +166,8 @@ class DiscordNotificationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "font, true", "font, false", "java2d, true", "java2d, false", "awt, true", "awt, false" })
-    void unavailableGraphicsStillDeliversTextAndFurtherNotifications(String failureMode, boolean imageInEmbed)
-        throws Exception {
-        Config.INSTANCE.discord.imageInEmbed = imageInEmbed;
+    @ValueSource(strings = { "font", "java2d", "awt" })
+    void unavailableGraphicsStillDeliversTextAndFurtherNotifications(String failureMode) throws Exception {
         URL classes = DiscordDestination.class.getProtectionDomain()
             .getCodeSource()
             .getLocation();
@@ -281,7 +223,7 @@ class DiscordNotificationTest {
     @CsvSource({ "true, 0", "true, 1", "true, 2", "false, 0", "false, 1", "false, 2" })
     void bothDestinationsPresentTheKnownRequestersWithoutGuessingUnknownOnes(boolean discord, int count)
         throws Exception {
-        Config.INSTANCE.discord.generateImage = false;
+        Config.INSTANCE.discord.imageCards = false;
         Config.INSTANCE.ntfy.host = Config.INSTANCE.discord.webhook;
         Config.INSTANCE.ntfy.topic = "crafting-test";
         List<PlayerIdentity> requesters = new ArrayList<>();
@@ -317,7 +259,7 @@ class DiscordNotificationTest {
 
     @Test
     void longNamesStayWithinDiscordEmbedLimitsAndRetainTheNetworkName() throws Exception {
-        Config.INSTANCE.discord.generateImage = false;
+        Config.INSTANCE.discord.imageCards = false;
         new DiscordDestination()
             .sendNotification(crafting(String.join("", Collections.nCopies(5000, "Long name")), false));
         JsonObject embed = parse(upload().body).getAsJsonArray("embeds")
