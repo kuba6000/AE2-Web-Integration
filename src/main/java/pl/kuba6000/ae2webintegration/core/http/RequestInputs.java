@@ -12,6 +12,7 @@ import com.google.gson.JsonPrimitive;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -25,6 +26,18 @@ public final class RequestInputs {
     private RequestInputs() {}
 
     public static void bind(Object request, RequestContext context) {
+        HttpBinding binding = GeneratedHttpBindings.get(request.getClass());
+        if (binding != null) {
+            binding.inputs()
+                .accept(request, new InputValues(context, binding.path()));
+            return;
+        }
+        // Only unmigrated endpoints use the reflective prototype fallback.
+        if (request.getClass()
+            .isAnnotationPresent(GenerateHttpBinding.class))
+            throw new IllegalStateException(
+                "Missing generated HTTP binding: " + request.getClass()
+                    .getName());
         Endpoint endpoint = request.getClass()
             .getAnnotation(Endpoint.class);
         if (endpoint == null) return; // Internal tasks are not HTTP endpoints.

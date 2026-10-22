@@ -17,10 +17,11 @@ public abstract class LiveEventsRequest extends IAsyncRequest {
 
     /** Single-use token returned with the initial snapshot. Bound to the login session, view and icon mode. */
     @QueryParam("subscription")
-    private @Nullable String subscription;
+    @Nullable
+    String subscription;
     /** Include icon references when new or changed resource definitions are sent. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
     private @Nullable LiveStreams streams;
 
     protected abstract @NotNull LiveTopic.Key topicKey();

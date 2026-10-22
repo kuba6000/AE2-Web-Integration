@@ -21,6 +21,7 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.TrackedResource;
@@ -57,6 +58,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
  * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/resource-history")
+@GenerateHttpBinding
 public final class GetResourceHistory extends IAsyncRequest {
 
     private static final int DEFAULT_QUERY_LIMIT = 200;
@@ -64,17 +66,18 @@ public final class GetResourceHistory extends IAsyncRequest {
 
     /** Optional exact resource key. Omit to read all resources. */
     @QueryParam("itemKey")
-    private @Nullable StableKey itemKey;
+    @Nullable
+    StableKey itemKey;
     /** Earliest observation time in Unix epoch milliseconds, inclusive; defaults to zero. */
     @QueryParam("from")
-    private long from;
+    long from;
     /** Maximum points selected, from 1 through 10000; defaults to 200. One boundary GAP may be added. */
     @QueryParam("limit")
-    private int limit = DEFAULT_QUERY_LIMIT;
+    int limit = DEFAULT_QUERY_LIMIT;
 
     /** Include response-local icon references and the atlas page table. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull History data, @Nullable IconMappings icons)

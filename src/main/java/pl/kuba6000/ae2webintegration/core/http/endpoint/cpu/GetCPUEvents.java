@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuTopic;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -41,10 +42,12 @@ import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
  * @response 503 {@link ErrorResponse} Stream capacity reached or server unavailable.
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus/{cpuKey}/events")
+@GenerateHttpBinding
 public final class GetCPUEvents extends LiveEventsRequest {
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuKey;
+    @NotNull
+    StableKey cpuKey;
 
     @Override
     protected @NotNull LiveTopic.Key topicKey() {

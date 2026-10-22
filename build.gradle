@@ -32,7 +32,7 @@ if (project == rootProject) {
         encoding 'UTF-8'
 
         java {
-            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java'
+            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java', 'tools/http-bindings/src/**/*.java'
 
             def orderFile = project.file('spotless/spotless.importorder')
             def formatFile = project.file('spotless/spotless.eclipseformat.xml')
@@ -138,6 +138,46 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+sourceSets {
+    bindingProcessor {
+        java.srcDir 'tools/http-bindings/src/main/java'
+        resources.srcDir 'tools/http-bindings/src/main/resources'
+    }
+    bindingProcessorTest {
+        java.srcDir 'tools/http-bindings/src/test/java'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.bindingProcessor.output
+    }
+}
+dependencies {
+    annotationProcessor sourceSets.bindingProcessor.output
+    bindingProcessorTestRuntimeOnly 'org.jetbrains:annotations:26.0.2'
+}
+configurations.bindingProcessorTestImplementation.extendsFrom configurations.testImplementation
+configurations.bindingProcessorTestRuntimeOnly.extendsFrom configurations.testRuntimeOnly
+tasks.register('testBindingProcessor', Test) {
+    testClassesDirs = sourceSets.bindingProcessorTest.output.classesDirs
+    classpath = sourceSets.bindingProcessorTest.runtimeClasspath
+    useJUnitPlatform()
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.named('check') { dependsOn tasks.named('testBindingProcessor') }
+pluginManager.withPlugin('idea') {
+    idea.module {
+        // The legacy `idea` export does not automatically include custom source sets or AP outputs.
+        // These are IDE roots only: generated sources must not become javac's initial input files.
+        def generatedBindings = layout.buildDirectory.dir('generated/sources/annotationProcessor/java/main').get().asFile
+        sourceDirs += generatedBindings
+        generatedSourceDirs += generatedBindings
+        sourceDirs += sourceSets.bindingProcessor.java.srcDirs
+        resourceDirs += sourceSets.bindingProcessor.resources.srcDirs
+        testSources.from(sourceSets.bindingProcessorTest.java.srcDirs)
+        scopes.COMPILE.plus += [configurations.bindingProcessorCompileClasspath]
+        scopes.TEST.plus += [configurations.bindingProcessorTestCompileClasspath, configurations.bindingProcessorTestRuntimeClasspath]
+    }
 }
 
 // Exercise the real HTTP boundary with the Gson versions supplied by legacy Minecraft.
@@ -264,6 +304,8 @@ tasks.withType(JavaCompile).configureEach {
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
 }
+tasks.named('compileBindingProcessorTestJava', JavaCompile) { options.release = 17 }
+tasks.named('compileBindingProcessorJava', JavaCompile) { options.release = 17 }
 
 // Client tools share the canonical key implementation without bundling the server or web assets.
 def iconPackJar = tasks.register('iconPackJar', Jar) {
@@ -308,7 +350,7 @@ if (project == rootProject) {
     tasks.register('generateApiDocs', Exec) {
         group = 'documentation'
         description = 'Generate OpenAPI from the HTTP endpoint declarations and Javadoc.'
-        dependsOn buildApiDoclet
+        dependsOn buildApiDoclet, tasks.named('compileJava')
         notCompatibleWithConfigurationCache('The doclet is built independently before its classpath is resolved.')
         inputs.files(sourceSets.main.allJava, sourceSets.main.compileClasspath, docletFiles)
         inputs.property('apiDocumentationVersion', apiDocumentationVersion)
@@ -321,7 +363,7 @@ if (project == rootProject) {
             options.encoding = 'UTF-8'
             options.doclet = 'pl.kuba6000.ae2webintegration.doclet.OpenApiDoclet'
             options.docletpath = docletFiles.files.toList()
-            options.classpath = sourceSets.main.compileClasspath.files.toList()
+            options.classpath = (sourceSets.main.compileClasspath + sourceSets.main.output.classesDirs).files.toList()
             options.sourceNames = sourceSets.main.allJava.files.collect { it.absolutePath }.sort()
             options.addStringOption('-output', apiDocumentation.get().asFile.absolutePath)
             options.addStringOption('-api-version', apiDocumentationVersion)

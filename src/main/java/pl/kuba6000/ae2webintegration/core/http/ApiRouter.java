@@ -17,9 +17,11 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonNull;
@@ -36,6 +38,8 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
 import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
@@ -47,7 +51,14 @@ public final class ApiRouter implements HttpHandler {
     private static final int MAX_BODY_BYTES = 8 * 1024;
 
     @Desugar
-    private record Route(Endpoint endpoint, Constructor<? extends IRequest> factory, String[] segments) {}
+    private record Route(HttpMethod method, String path, Authentication authentication,
+        @Nullable RequestFactory factory, String[] segments) {}
+
+    @FunctionalInterface
+    private interface RequestFactory {
+
+        IRequest create() throws ReflectiveOperationException;
+    }
 
     private final List<Route> routes = new ArrayList<>();
     private final Function<HttpExchange, RequestContext> authenticate;
@@ -62,43 +73,47 @@ public final class ApiRouter implements HttpHandler {
     }
 
     public void register(Class<? extends IRequest> type) {
-        Endpoint endpoint = type.getAnnotation(Endpoint.class);
-        if (endpoint == null) throw new IllegalArgumentException("Missing endpoint declaration: " + type.getName());
         if (!ISyncedRequest.class.isAssignableFrom(type) && !IAsyncRequest.class.isAssignableFrom(type)) {
             throw new IllegalArgumentException("Endpoint must declare an execution thread: " + type.getName());
         }
-        String signature = endpoint.path()
-            .replaceAll("\\{[^/{}]+}", "{}");
-        for (Route route : routes) {
-            if (route.endpoint()
-                .method() == endpoint.method() && route.endpoint()
-                    .path()
-                    .replaceAll("\\{[^/{}]+}", "{}")
-                    .equals(signature)) {
-                throw new IllegalArgumentException("Duplicate route: " + endpoint.method() + " " + endpoint.path());
-            }
+        HttpBinding binding = GeneratedHttpBindings.get(type);
+        if (binding != null) {
+            Supplier<? extends IRequest> factory = binding.factory();
+            if (factory == null) throw new IllegalStateException("Missing request factory: " + type.getName());
+            addRoute(binding.method(), binding.path(), binding.authentication(), factory::get);
+            return;
         }
+        // Transitional registration for endpoints not selected for generated binding.
+        if (type.isAnnotationPresent(GenerateHttpBinding.class))
+            throw new IllegalStateException("Missing generated HTTP binding: " + type.getName());
+        Endpoint endpoint = type.getAnnotation(Endpoint.class);
+        if (endpoint == null) throw new IllegalArgumentException("Missing endpoint declaration: " + type.getName());
         try {
-            routes.add(
-                new Route(
-                    endpoint,
-                    type.getConstructor(),
-                    endpoint.path()
-                        .split("/", -1)));
+            Constructor<? extends IRequest> constructor = type.getConstructor();
+            addRoute(endpoint.method(), endpoint.path(), endpoint.authentication(), constructor::newInstance);
         } catch (NoSuchMethodException exception) {
             throw new IllegalArgumentException("Endpoint requires public constructor", exception);
         }
     }
 
+    private void addRoute(HttpMethod method, String path, Authentication authentication,
+        @Nullable RequestFactory factory) {
+        String signature = path.replaceAll("\\{[^/{}]+}", "{}");
+        for (Route route : routes) {
+            if (route.method() == method && route.path()
+                .replaceAll("\\{[^/{}]+}", "{}")
+                .equals(signature)) {
+                throw new IllegalArgumentException("Duplicate route: " + method + " " + path);
+            }
+        }
+        routes.add(new Route(method, path, authentication, factory, path.split("/", -1)));
+    }
+
     /** Icon bytes use the same routing and authentication boundary, without JSON request completion. */
     public void registerIconPages() {
-        Endpoint endpoint = GetIconPage.class.getAnnotation(Endpoint.class);
-        routes.add(
-            new Route(
-                endpoint,
-                null,
-                endpoint.path()
-                    .split("/", -1)));
+        HttpBinding binding = GeneratedHttpBindings.get(GetIconPage.class);
+        if (binding == null) throw new IllegalStateException("Missing icon-page binding");
+        addRoute(binding.method(), binding.path(), binding.authentication(), null);
     }
 
     @Override
@@ -119,8 +134,7 @@ public final class ApiRouter implements HttpHandler {
         List<String> allowed = new ArrayList<>();
         for (Route route : routes) {
             if (!matches(route.segments(), path)) continue;
-            String declaredMethod = route.endpoint()
-                .method()
+            String declaredMethod = route.method()
                 .name();
             allowed.add(declaredMethod);
             if (declaredMethod.equals("GET")) allowed.add("HEAD");
@@ -152,8 +166,7 @@ public final class ApiRouter implements HttpHandler {
                 .send(exchange);
             return;
         }
-        Authentication authentication = selected.endpoint()
-            .authentication();
+        Authentication authentication = selected.authentication();
         RequestContext credentials = authentication == Authentication.NONE ? null : authenticate.apply(exchange);
         if (credentials == null && authentication == Authentication.REQUIRED) {
             ApiResponse.error(ApiStatus.UNAUTHORIZED)
@@ -193,7 +206,7 @@ public final class ApiRouter implements HttpHandler {
                 return;
             }
             IRequest request = selected.factory()
-                .newInstance();
+                .create();
             if (request.init(context)) {
                 if (request instanceof ISyncedRequest synced) dispatch.accept(synced);
                 else((IAsyncRequest) request).handle();
