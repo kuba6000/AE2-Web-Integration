@@ -225,14 +225,16 @@ publishingOptions.curseforge {
 [Modrinth: modrinthToken, Curseforge: curseforgeToken].each { platform, token ->
     tasks.named('publish' + platform).configure {
         dependsOn(prepareRelease)
+        onlyIf {
+            if (dryRun || token.getOrElse('').trim()) {
+                return true
+            }
+            logger.lifecycle('Skipping ' + platform + ' publication: no token is configured.')
+            false
+        }
         doFirst {
             if (!dryRun && snapshot) {
                 throw new GradleException('Snapshot builds cannot be published to portals')
-            }
-            if (!dryRun && !token.getOrElse('').trim()) {
-                throw new GradleException(platform == 'Modrinth'
-                    ? 'MODRINTH_TOKEN is required for a real release'
-                    : 'CURSEFORGE_TOKEN is required for a real release')
             }
         }
     }
