@@ -26,6 +26,9 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * Creates a web session from account credentials.
  * <p>
  * The returned token can be used as a Bearer credential. This API does not set browser cookies.
+ * Authenticated requests extend idle expiry. Ordinary sessions expire after one idle hour or twelve hours
+ * from login. Remembered sessions survive server restarts and expire after seven idle days or sixty days
+ * from login. Live subscription renewals also count as activity.
  * 
  * @response 200 {@link Response} Session created.
  * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
@@ -62,7 +65,7 @@ public final class Login extends IAsyncRequest {
      * 
      * @param username   account name, or Admin
      * @param password   account password
-     * @param rememberMe keep the session for seven days instead of one hour; omitted means false
+     * @param rememberMe persist the session across restarts and use the seven-day idle window; omitted means false
      * @example username ExamplePlayer
      * @example password example-password
      * @example rememberMe false
@@ -73,8 +76,7 @@ public final class Login extends IAsyncRequest {
     /**
      * Session credentials and display information.
      *
-     * @param token      opaque session credential for the {@code Authorization: Bearer} header; valid for one hour,
-     *                   or seven days when {@code rememberMe} was requested
+     * @param token      opaque session credential for the {@code Authorization: Bearer} header
      * @param username   authenticated account's display name; {@code Admin} for administrator sessions
      * @param isAdmin    whether this session has administrator access to all grids
      * @param isOutdated whether update checking is enabled and a newer mod release is currently known
