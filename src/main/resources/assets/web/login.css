@@ -307,14 +307,14 @@ footer p {
 }
 .appearance-control button {
     position: relative;
-    width: 26px;
-    min-height: 26px;
+    width: 30px;
+    min-height: 30px;
     padding: 3px;
 }
 .appearance-control .login-icon {
-    flex-basis: 16px;
-    width: 16px;
-    height: 16px;
+    flex-basis: 20px;
+    width: 20px;
+    height: 20px;
 }
 .appearance-control [data-appearance='light'] .login-icon {
     color: light-dark(#92651d, #f4cf65);
