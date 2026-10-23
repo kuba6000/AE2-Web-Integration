@@ -46,8 +46,6 @@ class ServerSettingsHttpTest {
     void start() throws Exception {
         CoreEngine.onServerStopped();
         config = new ConfigTestFixture(directory);
-        port = ConfigTestFixture.unusedLoopbackPort();
-        config.write("general.port", port);
         config.write("general.password", "test-password");
         config.write("general.allow_no_password_on_localhost", false);
         config.write("general.check_for_updates", false);
@@ -55,7 +53,7 @@ class ServerSettingsHttpTest {
         config.write("ntfy.password", "stored-ntfy-secret");
         Config.reload();
         AE2Controller.AE2Interface = TestGridFixtures.ae();
-        AE2Controller.startHTTPServer();
+        port = HttpServerTestFixture.start(config);
         token = request("POST", "/api/auth/login", null, "{\"username\":\"admin\",\"password\":\"test-password\"}", 200)
             .getAsJsonObject("data")
             .get("token")
