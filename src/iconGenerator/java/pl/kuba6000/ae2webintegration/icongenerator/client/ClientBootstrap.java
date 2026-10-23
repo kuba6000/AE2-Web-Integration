@@ -43,10 +43,19 @@ public final class ClientBootstrap {
                 Commands.literal("ae2webicons")
                     .then(
                         Commands.literal("export")
-                            .executes(context -> respond(context, start(true)))
+                            .executes(context -> respond(context, start(true, true)))
                             .then(
                                 Commands.literal("nopbo")
-                                    .executes(context -> respond(context, start(false)))))
+                                    .executes(context -> respond(context, start(false, true)))
+                                    .then(
+                                        Commands.literal("noanimation")
+                                            .executes(context -> respond(context, start(false, false)))))
+                            .then(
+                                Commands.literal("noanimation")
+                                    .executes(context -> respond(context, start(true, false)))
+                                    .then(
+                                        Commands.literal("nopbo")
+                                            .executes(context -> respond(context, start(false, false))))))
                     .then(
                         Commands.literal("status")
                             .executes(context -> respond(context, status())))
@@ -68,14 +77,14 @@ public final class ClientBootstrap {
         return session == null ? lastStatus : session.status();
     }
 
-    private static String start(boolean allowPbo) {
+    private static String start(boolean allowPbo, boolean animated) {
         if (session != null) return "An export is already active: " + session.status();
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) return "Open a client world before exporting";
         if (minecraft.getOverlay() != null) return "Wait for resource loading to finish before exporting";
         try {
             sessionResourceGeneration = RESOURCE_GENERATION.get();
-            session = new ExportSession(minecraft, allowPbo);
+            session = new ExportSession(minecraft, allowPbo, animated);
             progressScreen = new ExportProgressScreen(
                 session.status(),
                 ClientBootstrap::cancel,

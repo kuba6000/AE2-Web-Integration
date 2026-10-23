@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 import net.minecraft.ReportedException;
 import net.minecraft.client.Minecraft;
@@ -33,8 +34,10 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexSorting;
 
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-thread GUI capture; native model overrides and Forge custom item renderers remain authoritative. */
@@ -47,10 +50,15 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     private final Minecraft minecraft;
     private final PixelReadback readback;
     private final RenderState state = new RenderState();
+    private final RenderState animationState = new RenderState();
     private final BufferBuilder vertices = new BufferBuilder(INITIAL_VERTEX_BYTES);
     private final Map<RenderType, BufferBuilder> glintBuffers = new LinkedHashMap<>();
     private final Matrix4f projection = new Matrix4f().setOrtho(0, GUI_SIZE, GUI_SIZE, 0, -GUI_DEPTH, GUI_DEPTH);
     private @Nullable TextureTarget target;
+    private CaptureKind captureKind = CaptureKind.STATIC;
+    private long captureTiming;
+    private LongSupplier drawClock = System::nanoTime;
+    private long spriteAnimationPlans, truncatedAnimationPlans;
     private long snapshotNanos, snapshotCount, setupNanos, setupCount;
     private long drawNanos, drawCount, restoreNanos, restoreCount;
 
@@ -122,6 +130,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
                 GuiGraphics graphics = new GuiGraphics(minecraft, buffers);
                 started = System.nanoTime();
                 try {
+                    if (captureKind == CaptureKind.SAMPLE) captureTiming = drawClock.getAsLong();
                     draw.accept(graphics);
                     graphics.flush();
                 } catch (Throwable failure) {
@@ -139,7 +148,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
                     for (BufferBuilder builder : glintBuffers.values()) discard(builder);
                 }
                 if (renderFailure == null) {
-                    readback.submit(key, captures);
+                    readback.submit(key, captures, captureKind, captureTiming);
                     return;
                 }
             } finally {
@@ -212,12 +221,56 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
+    public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
+        throws RenderFailure {
+        RenderFailure preparationFailure = null;
+        IIconAnimation result = null;
+        try (RenderState ignored = state.snapshot()) {
+            try {
+                result = SpriteAnimation.create(minecraft, this, candidate, key);
+            } catch (RenderFailure failure) {
+                preparationFailure = failure;
+            }
+        } catch (RuntimeException | Error failure) {
+            if (preparationFailure != null) failure.addSuppressed(preparationFailure);
+            throw failure;
+        }
+        if (preparationFailure != null) throw preparationFailure;
+        return result;
+    }
+
+    void animated(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures,
+        @NotNull CaptureKind kind, long timing, @NotNull LongSupplier clock) throws RenderFailure {
+        captureKind = kind;
+        captureTiming = timing;
+        drawClock = clock;
+        try {
+            candidate.render(this, key, captures);
+        } finally {
+            captureKind = CaptureKind.STATIC;
+            drawClock = System::nanoTime;
+        }
+    }
+
+    @Override
     public void drain(@NotNull List<Capture> captures) {
         readback.drain(captures);
     }
 
+    @NotNull
+    RenderState controlledState() {
+        return animationState.snapshot();
+    }
+
+    void animationPlan(boolean truncated) {
+        spriteAnimationPlans++;
+        if (truncated) truncatedAnimationPlans++;
+    }
+
     @Override
     public void statistics(@NotNull Map<String, Long> counts) {
+        counts.put("spriteAnimationPlans", spriteAnimationPlans);
+        counts.put("truncatedAnimationPlans", truncatedAnimationPlans);
         counts.put("renderSnapshotNanos", snapshotNanos);
         counts.put("renderSnapshotCount", snapshotCount);
         counts.put("renderSetupNanos", setupNanos);

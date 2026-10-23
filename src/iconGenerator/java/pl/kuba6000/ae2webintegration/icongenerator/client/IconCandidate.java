@@ -83,6 +83,16 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
             && Objects.equals(base ? null : fluid.getTag(), other.base ? null : other.fluid.getTag());
     }
 
+    @NotNull
+    ItemStack animationItem() {
+        return item.copy();
+    }
+
+    @NotNull
+    FluidStack animationFluid() {
+        return fluid.copy();
+    }
+
     void render(@NotNull ModernIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws ModernIconRenderer.RenderFailure {
         // Custom renderers receive a disposable stack, keeping retained collision identity stable.
