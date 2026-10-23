@@ -52,7 +52,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestGridFixtures.track(grid);
         ICraftingCPUCluster cpu = cpu();
         PlayerIdentity synthetic = new PlayerIdentity(AE2Controller.AEControllerUUID, "AE2CONTROLLER");
-        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, synthetic);
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, synthetic);
         assertStatus("OK", submit(grid, plan(grid), TestGridFixtures.principal(principal)));
         List<CraftingRequester> requesters = AE2JobTracker.findActiveJob(cpu)
             .getRequesters();
@@ -76,13 +76,13 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
         TestGridFixtures.track(grid);
         ICraftingCPUCluster cpu = cpu();
-        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, null);
         assertStatus("OK", submit(grid, plan(grid), TestGridFixtures.principal(7)));
-        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
         assertStatus("OK", submit(grid, plan(grid), WebPrincipal.admin()));
         assertStatus("OK", submit(grid, plan(grid), WebPrincipal.admin()));
-        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
-        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
         List<CraftingRequester> requesters = AE2JobTracker.findActiveJob(cpu)
             .getRequesters();
         assertEquals(3, requesters.size());
@@ -107,13 +107,13 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         ICraftingCPUCluster outerCpu = cpu();
         ICraftingCPUCluster laterCpu = cpu();
         innerCrafting.submitAction = () -> {
-            AEMixinCallbacks.INSTANCE.jobStarted(innerCpu, inner, false, true, nativePlayer);
+            AEMixinCallbacks.INSTANCE.jobStarted(innerCpu, inner, false, false, nativePlayer);
             throw new IllegalStateException("Inner submission failed");
         };
         int innerPlan = plan(inner);
         outerCrafting.submitAction = () -> {
             assertThrows(IllegalStateException.class, () -> submit(inner, innerPlan, WebPrincipal.admin()));
-            AEMixinCallbacks.INSTANCE.jobStarted(outerCpu, outer, false, true, nativePlayer);
+            AEMixinCallbacks.INSTANCE.jobStarted(outerCpu, outer, false, false, nativePlayer);
             throw new IllegalStateException("Outer submission failed");
         };
         assertThrows(IllegalStateException.class, () -> submit(outer, plan(outer), TestGridFixtures.principal(7)));
@@ -127,7 +127,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
                 .getRequesters()
                 .get(0)
                 .player().uuid);
-        AEMixinCallbacks.INSTANCE.jobStarted(laterCpu, outer, false, true, nativePlayer);
+        AEMixinCallbacks.INSTANCE.jobStarted(laterCpu, outer, false, false, nativePlayer);
         assertEquals(
             Collections.singletonList(CraftingRequester.player(nativePlayer)),
             AE2JobTracker.findActiveJob(laterCpu)

@@ -91,10 +91,10 @@ class CpuReaderTest extends GridTestScope {
         TestGridFixtures.track(grid);
         PlayerIdentity first = TestGridFixtures.playerIdentity(7);
         PlayerIdentity second = TestGridFixtures.playerIdentity(8);
-        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, first);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, first);
         CpuObservation initial = CpuReader.read(cpu, true);
-        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, second);
-        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, second);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
         CpuObservation merged = CpuReader.read(cpu, cpu, Collections.emptyList());
         assertEquals(
             Collections.singletonList(CraftingRequester.player(first)),

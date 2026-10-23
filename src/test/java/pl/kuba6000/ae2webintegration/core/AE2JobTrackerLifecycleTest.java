@@ -92,14 +92,14 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         PlayerIdentity sameName = new PlayerIdentity(UUID.randomUUID(), "Alex");
         PlayerIdentity renamed = new PlayerIdentity(alice.uuid, "AlexRenamed");
         AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
-        callbacks.jobStarted(cpu, grid, false, true, alice);
+        callbacks.jobStarted(cpu, grid, false, false, alice);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         assertNotNull(info);
         List<CraftingRequester> initial = info.getRequesters();
-        callbacks.jobStarted(cpu, grid, true, true, sameName);
-        callbacks.jobStarted(cpu, grid, true, true, renamed);
-        callbacks.jobStarted(cpu, grid, true, false, null);
-        callbacks.jobStarted(cpu, grid, true, false, null);
+        callbacks.jobStarted(cpu, grid, true, false, sameName);
+        callbacks.jobStarted(cpu, grid, true, false, renamed);
+        callbacks.jobStarted(cpu, grid, true, true, null);
+        callbacks.jobStarted(cpu, grid, true, true, null);
         assertEquals(Collections.singletonList(CraftingRequester.player(alice)), initial);
         assertEquals(
             Arrays.asList(
@@ -170,28 +170,28 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         EqualCpu machine = new EqualCpu();
         EqualCpu player = new EqualCpu();
         AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
-        callbacks.jobStarted(ignored, grid, false, false, TestGridFixtures.playerIdentity(7));
+        callbacks.jobStarted(ignored, grid, false, true, TestGridFixtures.playerIdentity(7));
         assertNull(AE2JobTracker.findActiveJob(ignored));
         settings.setTrackMachineCrafting(true);
-        callbacks.jobStarted(ignored, grid, true, false, null);
+        callbacks.jobStarted(ignored, grid, true, true, null);
         assertNull(AE2JobTracker.findActiveJob(ignored));
-        callbacks.jobStarted(machine, grid, false, false, null);
+        callbacks.jobStarted(machine, grid, false, true, null);
         AE2JobTracker.JobTrackingInfo active = AE2JobTracker.findActiveJob(machine);
         assertNotNull(active);
-        callbacks.jobStarted(ignored, other, false, false, null);
+        callbacks.jobStarted(ignored, other, false, true, null);
         assertNull(AE2JobTracker.findActiveJob(ignored));
-        callbacks.jobStarted(player, other, false, true, null);
+        callbacks.jobStarted(player, other, false, false, null);
         assertNotNull(AE2JobTracker.findActiveJob(player));
         settings.setTrackMachineCrafting(false);
         machine.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
-        callbacks.jobStarted(machine, grid, true, false, null);
+        callbacks.jobStarted(machine, grid, true, true, null);
         assertSame(active, AE2JobTracker.findActiveJob(machine));
         assertEquals(9, active.finalOutput.quantity());
         callbacks.jobCompleted(grid, machine);
         assertEquals(active.finalOutput, completed(gridKey).finalOutput());
         settings.setTrackMachineCrafting(true);
         settings.setTracked(false);
-        callbacks.jobStarted(ignored, grid, false, false, null);
+        callbacks.jobStarted(ignored, grid, false, true, null);
         assertNull(AE2JobTracker.findActiveJob(ignored));
     }
 

@@ -21,16 +21,16 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     public static AEMixinCallbacks INSTANCE = new AEMixinCallbacks();
 
     @Override
-    public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer,
-        @Nullable PlayerIdentity requester) {
+    public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isMachineRequest,
+        @Nullable PlayerIdentity nativeRequester) {
         jobChanged(cpuCluster);
-        if (!isMerging && !isAuthorPlayer) {
+        if (!isMerging && isMachineRequest) {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
             if (data == null || !data.getSettings()
                 .isTrackMachineCrafting()) return;
         }
-        AE2JobTracker.addJob(cpuCluster, grid, isMerging, CraftingRequesterContext.resolve(requester));
+        AE2JobTracker.addJob(cpuCluster, grid, isMerging, CraftingRequesterContext.resolve(nativeRequester));
     }
 
     @Override

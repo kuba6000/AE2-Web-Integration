@@ -240,8 +240,8 @@ class CpuLiveHttpTest {
                     case "complete" -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
                     case "cancel" -> AEMixinCallbacks.INSTANCE.jobCancelled(grid, cpu);
                     case "replace" -> AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
-                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
-                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
+                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, null);
+                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
                     default -> throw new AssertionError(boundary);
                 }
             });
@@ -617,10 +617,10 @@ class CpuLiveHttpTest {
                 onGame(() -> {
                     switch (hook) {
                         case "started":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, null);
                             break;
                         case "merged":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
                             break;
                         case "completed":
                             AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
