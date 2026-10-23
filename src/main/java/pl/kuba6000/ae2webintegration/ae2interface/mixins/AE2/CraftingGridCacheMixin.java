@@ -88,12 +88,17 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         }
         ICraftingLink link = instance.submitJob(craftID, whatLink, list, e);
         if (link != null) { // job started successfully
-            boolean isMachine = e != null || list.isMachine();
-            PlayerIdentity requester = list instanceof PlayerSource source
+            boolean isMachineRequest = e != null || list.isMachine();
+            PlayerIdentity nativeRequester = list instanceof PlayerSource source
                 ? new PlayerIdentity(source.player.getUniqueID(), source.player.getCommandSenderName())
                 : null;
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) (Object) instance, (IAEGrid) grid, isMerging, !isMachine, requester);
+                .jobStarted(
+                    (ICraftingCPUCluster) (Object) instance,
+                    (IAEGrid) grid,
+                    isMerging,
+                    isMachineRequest,
+                    nativeRequester);
         }
         return link;
     }
