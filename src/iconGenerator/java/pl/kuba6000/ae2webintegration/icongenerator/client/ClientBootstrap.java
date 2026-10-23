@@ -116,7 +116,7 @@ public final class ClientBootstrap {
         confirmationScreen = new ConfirmScreen(
             accepted -> confirmAnimation(request, accepted),
             Component.literal("Export animated icons?"),
-            Component.literal("Capturing animations can take a long time, especially in large modpacks. Continue?"),
+            Component.literal("Animations can take much longer to export and may produce a much larger icon pack."),
             Component.literal("Start export"),
             Component.literal("Cancel"));
         minecraft.setScreen(confirmationScreen);
