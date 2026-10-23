@@ -25,6 +25,7 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
+import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.util.IInterfaceViewable;
@@ -32,6 +33,7 @@ import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -86,9 +88,17 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         }
         ICraftingLink link = instance.submitJob(craftID, whatLink, list, e);
         if (link != null) { // job started successfully
-            boolean isMachine = e != null || list.isMachine();
+            boolean isMachineRequest = e != null || list.isMachine();
+            PlayerIdentity nativeRequester = list instanceof PlayerSource source
+                ? new PlayerIdentity(source.player.getUniqueID(), source.player.getCommandSenderName())
+                : null;
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) (Object) instance, (IAEGrid) grid, isMerging, !isMachine);
+                .jobStarted(
+                    (ICraftingCPUCluster) (Object) instance,
+                    (IAEGrid) grid,
+                    isMerging,
+                    isMachineRequest,
+                    nativeRequester);
         }
         return link;
     }
