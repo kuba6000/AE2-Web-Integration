@@ -87,6 +87,16 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     }
 
     @Override
+    public @Nullable String web$getRequesterName() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) cpu.craftingLogic).web$getJob();
+        return job == null ? null
+            : job.web$getRequesterName(
+                cpu.getLevel()
+                    .getServer());
+    }
+
+    @Override
     public long web$getAvailableStorage() {
         return ((ICraftingCPU) this).getAvailableStorage();
     }
