@@ -2,8 +2,10 @@ package pl.kuba6000.ae2webintegration.core.icons.export;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -53,6 +55,8 @@ public final class PackExportWriter {
     private int maxBufferedBatches;
     private long assemblyWorkNanos;
     private long assemblyBatches;
+    private final Set<StableKey> disabledAnimations = new HashSet<>();
+    private volatile boolean animationsStopped;
 
     /** Takes ownership of the detached metadata source and invokes it once on the assembly worker. */
     public PackExportWriter(@NotNull Path root, @NotNull IMetadataSource environment) {
@@ -112,6 +116,20 @@ public final class PackExportWriter {
         });
     }
 
+    /** Queue only after draining and transferring the last static batch. */
+    public void beginAnimations() {
+        requireAccepting();
+        submit(() -> {
+            if (failure == null && publication.get() != Publication.CANCELED) output().sealStatic();
+            return null;
+        });
+    }
+
+    /** Global optional budget exhaustion; the producer should stop submitting further native animation captures. */
+    public boolean animationsStopped() {
+        return animationsStopped;
+    }
+
     private void writeBatch(@NotNull List<Capture> captures, @NotNull List<Failure> failures) throws IOException {
         if (failure != null || publication.get() == Publication.CANCELED) return;
         assemblyBatches++;
@@ -120,11 +138,27 @@ public final class PackExportWriter {
         IconPackWriter output = output();
         for (Failure omitted : failures) {
             if (publication.get() == Publication.CANCELED) return;
+            if (omitted.animationKey() != null) {
+                disabledAnimations.add(omitted.animationKey());
+                output.discardAnimation(omitted.animationKey());
+            }
             output.failure(omitted.context(), omitted.reason());
         }
         for (Capture capture : captures) {
             if (publication.get() == Publication.CANCELED) return;
-            output.add(capture.key(), capture.pixels());
+            if (capture.kind() == CaptureKind.STATIC) output.add(capture.key(), capture.pixels());
+            else if (!animationsStopped && !disabledAnimations.contains(capture.key())) {
+                try {
+                    if (capture.kind() == CaptureKind.FRAME)
+                        output.addAnimationFrame(capture.key(), capture.pixels(), Math.toIntExact(capture.timing()));
+                    else output.addAnimationSample(capture.key(), capture.pixels(), capture.timing());
+                } catch (IconPackWriter.CapacityException limit) {
+                    if (limit.scope() == IconPackWriter.CapacityException.Scope.EXPORT) animationsStopped = true;
+                    disabledAnimations.add(capture.key());
+                    output.discardAnimation(capture.key());
+                    output.failure(capture.key() + "/animation", limit.getMessage());
+                }
+            }
         }
     }
 
@@ -224,9 +258,39 @@ public final class PackExportWriter {
         return writer;
     }
 
+    public enum CaptureKind {
+        STATIC,
+        FRAME,
+        SAMPLE
+    }
+
+    /** Timing is milliseconds for FRAME and draw-submission nanoTime for SAMPLE. STATIC ignores timing. */
     @Desugar
-    public record Capture(@NotNull StableKey key, int @NotNull [] pixels) {}
+    public record Capture(@NotNull StableKey key, int @NotNull [] pixels, @NotNull CaptureKind kind, long timing) {
+
+        public Capture(@NotNull StableKey key, int @NotNull [] pixels) {
+            this(key, pixels, CaptureKind.STATIC, 0);
+        }
+
+        public static @NotNull Capture frame(@NotNull StableKey key, int @NotNull [] pixels, int durationMillis) {
+            return new Capture(key, pixels, CaptureKind.FRAME, durationMillis);
+        }
+
+        public static @NotNull Capture sample(@NotNull StableKey key, int @NotNull [] pixels, long submittedNanos) {
+            return new Capture(key, pixels, CaptureKind.SAMPLE, submittedNanos);
+        }
+    }
 
     @Desugar
-    public record Failure(@NotNull String context, @NotNull String reason) {}
+    public record Failure(@NotNull String context, @NotNull String reason, @Nullable StableKey animationKey) {
+
+        public Failure(@NotNull String context, @NotNull String reason) {
+            this(context, reason, null);
+        }
+
+        public static @NotNull Failure animation(@NotNull StableKey key, @NotNull String context,
+            @NotNull String reason) {
+            return new Failure(context, reason, key);
+        }
+    }
 }

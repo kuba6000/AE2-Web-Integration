@@ -24,12 +24,149 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.icons.ControlledPng;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class PackExportWriterTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void optionalEncoderFailureStillAbortsInsteadOfPublishingStaticFallback() throws Exception {
+        IOException failure = new IconPackWriter.CapacityException(
+            IconPackWriter.CapacityException.Scope.EXPORT,
+            "Failure from encoder is not a publication capacity decision");
+        try (ControlledPng ignored = new ControlledPng((image, delegate) -> {
+            if (image.getRGB(1, 1) == 0xff112233) throw failure;
+            delegate.run();
+        })) {
+            StableKey key = StableKey.create(sink -> sink.putInt(1));
+            PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+            awaitReady(writer);
+            writer.write(
+                new ArrayList<>(Collections.singletonList(new PackExportWriter.Capture(key, new int[4096]))),
+                Collections.emptyList());
+            writer.beginAnimations();
+            awaitReady(writer);
+            int[] frame = new int[4096];
+            Arrays.fill(frame, 0xff112233);
+            writer.write(
+                new ArrayList<>(
+                    Arrays.asList(
+                        PackExportWriter.Capture.frame(key, frame, 100),
+                        PackExportWriter.Capture.frame(key, new int[4096], 100))),
+                Collections.emptyList());
+            writer.finish(new HashMap<>(), Collections.emptyList());
+            ExecutionException problem = assertThrows(ExecutionException.class, () -> awaitFinished(writer));
+            assertSame(
+                failure,
+                problem.getCause()
+                    .getCause());
+            writer.close();
+            assertNull(writer.completedPath());
+            assertEmptyDirectory();
+        }
+    }
+
+    @Test
+    void animationDrawFailureSuppressesDeferredSamplesAlreadySubmittedAndArrivingLater() throws Exception {
+        StableKey key = StableKey.create(sink -> sink.putInt(3));
+        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(Collections.singletonList(new PackExportWriter.Capture(key, new int[4096]))),
+            Collections.emptyList());
+        writer.beginAnimations();
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(Collections.singletonList(PackExportWriter.Capture.sample(key, new int[4096], 0))),
+            Collections.emptyList());
+        awaitReady(writer);
+        int[] changed = new int[4096];
+        Arrays.fill(changed, 0xff112233);
+        writer.write(
+            new ArrayList<>(Collections.singletonList(PackExportWriter.Capture.sample(key, changed, 100_000_000L))),
+            new ArrayList<>(
+                Collections
+                    .singletonList(PackExportWriter.Failure.animation(key, "renderer", "isolated draw failed"))));
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(
+                Arrays.asList(
+                    PackExportWriter.Capture.sample(key, new int[4096], 200_000_000L),
+                    PackExportWriter.Capture.sample(key, changed.clone(), 300_000_000L))),
+            Collections.emptyList());
+        writer.finish(new HashMap<>(), Collections.emptyList());
+        awaitFinished(writer);
+        writer.close();
+        try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
+            assertNotNull(pack.find(key));
+            assertTrue(
+                pack.animation(key)
+                    .isEmpty());
+            assertEquals(1, pack.failureCount());
+        }
+    }
+
+    @Test
+    void animationCapacityKeepsStaticFallbackAndDoesNotDisableOtherResources() throws Exception {
+        StableKey limited = StableKey.create(sink -> sink.putInt(1));
+        StableKey healthy = StableKey.create(sink -> sink.putInt(2));
+        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(
+                Arrays.asList(
+                    new PackExportWriter.Capture(limited, new int[4096]),
+                    new PackExportWriter.Capture(healthy, new int[4096]))),
+            Collections.emptyList());
+        writer.beginAnimations();
+        awaitReady(writer);
+        List<PackExportWriter.Capture> samples = new ArrayList<>();
+        for (int index = 0; index < 257; index++) {
+            int[] image = new int[4096];
+            Arrays.fill(image, index % 2 == 0 ? 0xff112233 : 0xff445566);
+            samples.add(PackExportWriter.Capture.frame(limited, image, 100));
+        }
+        int[] second = new int[4096];
+        Arrays.fill(second, 0xff778899);
+        samples.add(PackExportWriter.Capture.sample(healthy, new int[4096], -1_000_000_000L));
+        samples.add(PackExportWriter.Capture.sample(healthy, second, -900_000_000L));
+        writer.write(samples, Collections.emptyList());
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(
+                Arrays.asList(
+                    PackExportWriter.Capture.frame(limited, new int[4096], 100),
+                    PackExportWriter.Capture.frame(limited, second.clone(), 100))),
+            Collections.emptyList());
+        writer.finish(new HashMap<>(), Collections.emptyList());
+        awaitFinished(writer);
+        assertFalse(writer.animationsStopped());
+        writer.close();
+        try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
+            assertNotNull(pack.find(limited));
+            assertTrue(
+                pack.animation(limited)
+                    .isEmpty());
+            assertEquals(
+                2,
+                pack.animation(healthy)
+                    .size());
+            assertEquals(
+                100,
+                pack.animation(healthy)
+                    .get(0)
+                    .durationMillis());
+            assertEquals(
+                100,
+                pack.animation(healthy)
+                    .get(1)
+                    .durationMillis());
+            assertEquals(1, pack.failureCount());
+        }
+    }
 
     @Test
     void boundedAdmissionAndCancellationWaitForEncodingToSettle() throws Exception {

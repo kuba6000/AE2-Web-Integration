@@ -5,6 +5,7 @@ import java.awt.image.DataBufferInt;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -60,6 +61,7 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Map<String, List<PixelRecord>> pixelIndex = new HashMap<>();
     private final @NotNull Map<String, PixelRecord> keyPixels = new HashMap<>();
     private final @NotNull Map<String, List<AnimationFrame>> animations = new TreeMap<>();
+    private final @NotNull Map<String, TimedSample> samples = new HashMap<>();
     private int animationFrames;
     private final @NotNull RandomAccessFile pixelSpool;
     private final byte @NotNull [] serializedPixels = new byte[PackFormat.ICON_BYTES];
@@ -84,6 +86,7 @@ public final class IconPackWriter implements Closeable {
     private int occupied;
     private int failureCount;
     private boolean closed;
+    private boolean staticSealed;
 
     public IconPackWriter(@NotNull Path outputDirectory, @NotNull Metadata metadata, int pageSize) throws IOException {
         if (pageSize != PackFormat.ICON_SIZE && pageSize != PackFormat.SMALL_PAGE_DIMENSION
@@ -118,6 +121,7 @@ public final class IconPackWriter implements Closeable {
 
     public void add(@NotNull StableKey key, int @NotNull [] pixels) throws IOException {
         checkOpen();
+        if (staticSealed) throw new IllegalStateException("Static icon phase is sealed");
         serializePixels(pixels);
         PixelRecord existingKey = keyPixels.get(key.toString());
         if (existingKey != null) {
@@ -130,32 +134,99 @@ public final class IconPackWriter implements Closeable {
         keyPixels.put(key.toString(), record);
     }
 
+    /** Ends static admission and separates optional pages, allowing final capacity fallback without repacking. */
+    public void sealStatic() throws IOException {
+        checkOpen();
+        if (staticSealed) return;
+        if (!animations.isEmpty() || !samples.isEmpty())
+            throw new IllegalStateException("Static phase must be sealed before animation capture");
+        flushPage();
+        staticSealed = true;
+    }
+
     /** Appends a timed sample after add established its static fallback. Caller pixels may be reused immediately. */
     public void addAnimationFrame(@NotNull StableKey key, int @NotNull [] pixels, int durationMillis)
         throws IOException {
         checkOpen();
-        if (!entries.containsKey(key.toString()))
-            throw new IllegalArgumentException("Animation requires a static icon");
-        if (durationMillis <= 0 || durationMillis > PackFormat.MAX_ANIMATION_MILLIS)
-            throw new IllegalArgumentException("Invalid animation duration");
+        String identity = key.toString();
+        requireBaseline(identity);
+        if (samples.containsKey(identity))
+            throw new IllegalStateException("Cannot mix timed and explicit animation frames");
         serializePixels(pixels);
-        List<AnimationFrame> frames = animations.get(key.toString());
-        int duration = 0;
-        if (frames != null) for (AnimationFrame frame : frames) duration += frame.durationMillis();
-        if (duration > PackFormat.MAX_ANIMATION_MILLIS - durationMillis)
-            throw new IOException("Animation duration limit exceeded");
+        List<AnimationFrame> frames = animations.get(identity);
         AnimationFrame previous = frames == null ? null : frames.get(frames.size() - 1);
         boolean repeated = previous != null && samePixels(previous.pixels());
-        if (!repeated && ((frames != null && frames.size() >= PackFormat.MAX_ANIMATION_FRAMES)
-            || animationFrames >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES))
-            throw new IOException("Animation frame limit exceeded");
+        checkFrame(identity, repeated, durationMillis, 0);
         PixelRecord record = repeated ? previous.pixels() : internPixels(pixels);
+        appendFrame(identity, record, durationMillis);
+    }
+
+    /** Uses draw-submission nanoTime values, including negative origins. Keeps no caller pixel arrays. */
+    public void addAnimationSample(@NotNull StableKey key, int @NotNull [] pixels, long submittedNanos)
+        throws IOException {
+        checkOpen();
+        String identity = key.toString();
+        requireBaseline(identity);
+        TimedSample previous = samples.get(identity);
+        if (previous == null && animations.containsKey(identity))
+            throw new IllegalStateException("Cannot mix explicit and timed animation frames");
+        serializePixels(pixels);
+        int interval = 0;
+        if (previous == null) {
+            if (animationFrames + samples.size() >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
+                throw new CapacityException(CapacityException.Scope.EXPORT, "Animation frame limit exceeded");
+        } else {
+            long elapsed = submittedNanos - previous.submittedNanos();
+            if (elapsed < 0) throw new IllegalArgumentException("Animation timestamps must be monotonic");
+            if (elapsed > TimeUnit.MILLISECONDS.toNanos(PackFormat.MAX_ANIMATION_MILLIS))
+                throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation interval limit exceeded");
+            interval = (int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(elapsed));
+            checkFrame(identity, repeats(identity, previous.pixels()), interval, 1);
+        }
+        PixelRecord record = internPixels(pixels);
+        if (previous != null) appendFrame(identity, previous.pixels(), interval);
+        samples.put(identity, new TimedSample(record, submittedNanos, interval));
+    }
+
+    private void requireBaseline(@NotNull String identity) {
+        if (!entries.containsKey(identity)) throw new IllegalArgumentException("Animation requires a static icon");
+    }
+
+    private boolean repeats(@NotNull String identity, @NotNull PixelRecord pixels) {
+        List<AnimationFrame> frames = animations.get(identity);
+        return frames != null && frames.get(frames.size() - 1)
+            .pixels() == pixels;
+    }
+
+    private void checkFrame(@NotNull String identity, boolean repeated, int durationMillis, int pendingReservation)
+        throws IOException {
+        if (durationMillis <= 0) throw new IllegalArgumentException("Invalid animation duration");
+        if (durationMillis > PackFormat.MAX_ANIMATION_MILLIS)
+            throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation duration limit exceeded");
+        List<AnimationFrame> frames = animations.get(identity);
+        int duration = 0;
+        if (frames != null) for (AnimationFrame frame : frames) duration += frame.durationMillis();
+        if (duration > PackFormat.MAX_ANIMATION_MILLIS - durationMillis * (pendingReservation + 1))
+            throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation duration limit exceeded");
+        if (!repeated && frames != null && frames.size() + pendingReservation >= PackFormat.MAX_ANIMATION_FRAMES)
+            throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation frame limit exceeded");
+        if (!repeated && animationFrames + samples.size() >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
+            throw new CapacityException(CapacityException.Scope.EXPORT, "Animation frame limit exceeded");
+    }
+
+    private void appendFrame(@NotNull String identity, @NotNull PixelRecord record, int durationMillis) {
+        List<AnimationFrame> frames = animations.get(identity);
+        boolean repeated = repeats(identity, record);
         if (frames == null) {
             frames = new ArrayList<>();
-            animations.put(key.toString(), frames);
+            animations.put(identity, frames);
         }
-        if (repeated)
-            frames.set(frames.size() - 1, new AnimationFrame(record, previous.durationMillis() + durationMillis));
+        if (repeated) frames.set(
+            frames.size() - 1,
+            new AnimationFrame(
+                record,
+                frames.get(frames.size() - 1)
+                    .durationMillis() + durationMillis));
         else {
             frames.add(new AnimationFrame(record, durationMillis));
             animationFrames++;
@@ -171,6 +242,7 @@ public final class IconPackWriter implements Closeable {
     /** Keeps the static fallback; already allocated pixels can remain in retained atlas pages. */
     public void discardAnimation(@NotNull StableKey key) throws IOException {
         checkOpen();
+        samples.remove(key.toString());
         List<AnimationFrame> removed = animations.remove(key.toString());
         if (removed != null) animationFrames -= removed.size();
     }
@@ -182,7 +254,7 @@ public final class IconPackWriter implements Closeable {
             return match;
         }
         if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_KEYS)
-            throw new IOException("Too many distinct icon images");
+            throw new CapacityException(CapacityException.Scope.EXPORT, "Too many distinct icon images");
         int[] position = placePixels(pixels);
         long offset = pixelSpool.length();
         pixelSpool.seek(offset);
@@ -236,6 +308,48 @@ public final class IconPackWriter implements Closeable {
 
     @Desugar
     private record AnimationFrame(@NotNull PixelRecord pixels, int durationMillis) {}
+
+    @Desugar
+    private record TimedSample(@NotNull PixelRecord pixels, long submittedNanos, int previousIntervalMillis) {}
+
+    /** A declared format/export limit, distinct from failures reading, encoding or writing data. */
+    public static final class CapacityException extends IOException {
+
+        public enum Scope {
+            RESOURCE,
+            EXPORT
+        }
+
+        private final @NotNull Scope scope;
+
+        public CapacityException(@NotNull Scope scope, @NotNull String message) {
+            super(message);
+            this.scope = scope;
+        }
+
+        public @NotNull Scope scope() {
+            return scope;
+        }
+    }
+
+    private void finishSamples() throws IOException {
+        java.util.Iterator<Map.Entry<String, TimedSample>> iterator = samples.entrySet()
+            .iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, TimedSample> entry = iterator.next();
+            String key = entry.getKey();
+            TimedSample sample = entry.getValue();
+            iterator.remove();
+            if (sample.previousIntervalMillis() == 0) continue;
+            try {
+                checkFrame(key, repeats(key, sample.pixels()), sample.previousIntervalMillis(), 0);
+                appendFrame(key, sample.pixels(), sample.previousIntervalMillis());
+            } catch (CapacityException limit) {
+                discardAnimation(StableKey.parse(key));
+                failure(key + "/animation", limit.getMessage());
+            }
+        }
+    }
 
     public void failure(@NotNull String context, @NotNull String reason) throws IOException {
         checkOpen();
@@ -355,25 +469,22 @@ public final class IconPackWriter implements Closeable {
         throws IOException {
         checkOpen();
         checkCanceled(canceled);
+        finishSamples();
         flushPage();
         while (!pendingPages.isEmpty()) collectPage(canceled);
-        List<Page> sorted = referencedPages();
-        sorted.sort(Comparator.comparing(Page::digest));
-        Map<String, Object> root = manifest(sorted);
-        String packId = PackFormat.packId(
-            PackFormat.GSON.toJsonTree(root)
-                .getAsJsonObject());
-        root.put("packId", packId);
-        byte[] manifest = PackFormat.json(root);
-        if (manifest.length > PackFormat.MAX_MANIFEST) throw new IOException("Manifest too large");
         Path temporary = Files.createTempFile(outputDirectory, ".ae2wi-pack-", ".tmp");
         try {
-            try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(temporary))) {
-                PackFormat.zipEntry(zip, "manifest.json", manifest, false);
-                for (Page page : sorted) {
-                    checkCanceled(canceled);
-                    PackFormat
-                        .zipEntry(zip, page.path(), Files.readAllBytes(scratch.resolve(page.digest() + ".png")), true);
+            String packId;
+            while (true) {
+                try {
+                    packId = writeArchive(temporary, canceled);
+                    break;
+                } catch (CapacityException limit) {
+                    if (!staticSealed || animations.isEmpty()) throw limit;
+                    int omitted = animations.size();
+                    animations.clear();
+                    animationFrames = 0;
+                    failure("animations", "Omitted " + omitted + " animations: " + limit.getMessage());
                 }
             }
             checkCanceled(canceled);
@@ -396,6 +507,71 @@ public final class IconPackWriter implements Closeable {
                 failure.addSuppressed(cleanup);
             }
             throw failure;
+        }
+    }
+
+    private @NotNull String writeArchive(@NotNull Path temporary, @NotNull BooleanSupplier canceled)
+        throws IOException {
+        checkCanceled(canceled);
+        List<Page> sorted = referencedPages();
+        sorted.sort(Comparator.comparing(Page::digest));
+        Map<String, Object> root = manifest(sorted);
+        String packId = PackFormat.packId(
+            PackFormat.GSON.toJsonTree(root)
+                .getAsJsonObject());
+        root.put("packId", packId);
+        byte[] manifest = PackFormat.json(root);
+        if (manifest.length > PackFormat.MAX_MANIFEST)
+            throw new CapacityException(CapacityException.Scope.EXPORT, "Manifest too large");
+        ArchiveOutput output = new ArchiveOutput(Files.newOutputStream(temporary));
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            PackFormat.zipEntry(zip, "manifest.json", manifest, false);
+            for (Page page : sorted) {
+                checkCanceled(canceled);
+                if (output.exceeded) break;
+                PackFormat
+                    .zipEntry(zip, page.path(), Files.readAllBytes(scratch.resolve(page.digest() + ".png")), true);
+            }
+        }
+        if (output.exceeded)
+            throw new CapacityException(CapacityException.Scope.EXPORT, "Icon archive exceeds size limit");
+        return packId;
+    }
+
+    /** Count actual ZIP headers/compression; discard overflow until ZipOutputStream closes cleanly. */
+    private static final class ArchiveOutput extends OutputStream {
+
+        private final OutputStream output;
+        private long written;
+        private boolean exceeded;
+
+        private ArchiveOutput(OutputStream output) {
+            this.output = output;
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            if (exceeded || written == PackFormat.MAX_ARCHIVE) {
+                exceeded = true;
+                return;
+            }
+            output.write(value);
+            written++;
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            if (exceeded || length > PackFormat.MAX_ARCHIVE - written) {
+                exceeded = true;
+                return;
+            }
+            output.write(bytes, offset, length);
+            written += length;
+        }
+
+        @Override
+        public void close() throws IOException {
+            output.close();
         }
     }
 

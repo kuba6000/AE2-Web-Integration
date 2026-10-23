@@ -51,6 +51,156 @@ class IconPackAnimationTest {
     Path directory;
 
     @Test
+    void singleSampleAndDiscardedModesStayStaticWhileMaximumTimedSequenceFinishes() throws Exception {
+        StableKey single = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            writer.add(KEY, pixels(0xff112233));
+            writer.add(single, pixels(0xff112233));
+            writer.addAnimationFrame(KEY, pixels(0xff445566), 100);
+            assertThrows(IllegalStateException.class, () -> writer.addAnimationSample(KEY, pixels(0xff778899), 0));
+            writer.discardAnimation(KEY);
+            writer.addAnimationSample(single, pixels(0xff445566), Long.MIN_VALUE);
+            for (int index = 0; index < 256; index++)
+                writer.addAnimationSample(KEY, pixels(index % 2 == 0 ? 0xff445566 : 0xff778899), index * 1_000_000L);
+            IconPackWriter.CapacityException limit = assertThrows(
+                IconPackWriter.CapacityException.class,
+                () -> writer.addAnimationSample(KEY, pixels(0xff445566), 256_000_000L));
+            assertEquals(IconPackWriter.CapacityException.Scope.RESOURCE, limit.scope());
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertTrue(
+                pack.animation(single)
+                    .isEmpty());
+            assertEquals(
+                256,
+                pack.animation(KEY)
+                    .size());
+            assertEquals(
+                1,
+                pack.animation(KEY)
+                    .get(255)
+                    .durationMillis());
+        }
+    }
+
+    @Test
+    void timedBudgetReservesLastHoldAndRejectsModeOrTimestampChangesWithoutMutatingSequence() throws Exception {
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            writer.add(KEY, pixels(0xff112233));
+            writer.addAnimationSample(KEY, pixels(0xff445566), 0);
+            assertThrows(IllegalStateException.class, () -> writer.addAnimationFrame(KEY, pixels(0xff778899), 100));
+            assertThrows(IllegalArgumentException.class, () -> writer.addAnimationSample(KEY, pixels(0xff778899), -1));
+            assertThrows(
+                IconPackWriter.CapacityException.class,
+                () -> writer.addAnimationSample(KEY, pixels(0xff778899), 400_000_000_000L));
+            writer.addAnimationSample(KEY, pixels(0xff778899), 200_000_000_000L);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertEquals(
+                2,
+                pack.animation(KEY)
+                    .size());
+            assertEquals(
+                200000,
+                pack.animation(KEY)
+                    .get(0)
+                    .durationMillis());
+            assertEquals(
+                200000,
+                pack.animation(KEY)
+                    .get(1)
+                    .durationMillis());
+        }
+    }
+
+    @Test
+    void sealingStaticPagesKeepsOptionalImagesOutOfTheBaselineAtlas() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata(
+                "1.7.10",
+                "forge",
+                "1",
+                "test",
+                "today",
+                Collections.emptyMap(),
+                Collections.emptyList()),
+            512)) {
+            writer.add(KEY, pixels(0xff112233));
+            writer.sealStatic();
+            writer.sealStatic();
+            assertThrows(IllegalStateException.class, () -> writer.add(KEY, pixels(0xff112233)));
+            writer.addAnimationFrame(KEY, pixels(0xff445566), 100);
+            writer.addAnimationFrame(KEY, pixels(0xff778899), 200);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertEquals(
+                2,
+                pack.pages()
+                    .size());
+            assertNotEquals(
+                pack.find(KEY)
+                    .page(),
+                pack.animation(KEY)
+                    .get(0)
+                    .location()
+                    .page());
+            assertEquals(
+                pack.animation(KEY)
+                    .get(0)
+                    .location()
+                    .page(),
+                pack.animation(KEY)
+                    .get(1)
+                    .location()
+                    .page());
+        }
+    }
+
+    @Test
+    void sampledTimingUsesSubmissionIntervalsAndLastObservedIntervalAfterMerging() throws Exception {
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            writer.add(KEY, pixels(0xff112233));
+            writer.addAnimationSample(KEY, pixels(0xff445566), -900_000_000L);
+            writer.addAnimationSample(KEY, pixels(0xff445566), -800_000_000L);
+            writer.addAnimationSample(KEY, pixels(0xff778899), -550_000_000L);
+            writer.addAnimationSample(KEY, pixels(0xff778899), -350_000_000L);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            List<IconPack.Frame> frames = pack.animation(KEY);
+            assertEquals(2, frames.size());
+            assertEquals(
+                350,
+                frames.get(0)
+                    .durationMillis());
+            assertEquals(
+                400,
+                frames.get(1)
+                    .durationMillis());
+            assertEquals(
+                0xff445566,
+                color(
+                    pack,
+                    frames.get(0)
+                        .location()));
+            assertEquals(
+                0xff778899,
+                color(
+                    pack,
+                    frames.get(1)
+                        .location()));
+        }
+    }
+
+    @Test
     void animationRoundTripsTimingAndRepeatedImagesWithoutReplacingStaticIcon() throws Exception {
         Path output;
         try (IconPackWriter writer = writer()) {
@@ -148,8 +298,13 @@ class IconPackAnimationTest {
         try (IconPackWriter writer = writer()) {
             assertThrows(IllegalArgumentException.class, () -> writer.addAnimationFrame(KEY, pixels(1), 100));
             writer.add(KEY, pixels(0xff112233));
-            for (int duration : new int[] { -1, 0, 600001, Integer.MAX_VALUE }) {
+            for (int duration : new int[] { -1, 0 }) {
                 assertThrows(IllegalArgumentException.class, () -> writer.addAnimationFrame(KEY, pixels(1), duration));
+            }
+            for (int duration : new int[] { 600001, Integer.MAX_VALUE }) {
+                assertThrows(
+                    IconPackWriter.CapacityException.class,
+                    () -> writer.addAnimationFrame(KEY, pixels(1), duration));
             }
             writer.addAnimationFrame(KEY, pixels(0xff445566), 300000);
             writer.addAnimationFrame(KEY, pixels(0xff778899), 300000);
