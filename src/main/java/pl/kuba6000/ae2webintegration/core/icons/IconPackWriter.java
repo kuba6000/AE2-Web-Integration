@@ -59,6 +59,8 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull List<Map<String, String>> failures = new ArrayList<>();
     private final @NotNull Map<String, List<PixelRecord>> pixelIndex = new HashMap<>();
     private final @NotNull Map<String, PixelRecord> keyPixels = new HashMap<>();
+    private final @NotNull Map<String, List<AnimationFrame>> animations = new TreeMap<>();
+    private int animationFrames;
     private final @NotNull RandomAccessFile pixelSpool;
     private final byte @NotNull [] serializedPixels = new byte[PackFormat.ICON_BYTES];
     private final byte @NotNull [] comparedPixels = new byte[PackFormat.ICON_BYTES];
@@ -116,32 +118,81 @@ public final class IconPackWriter implements Closeable {
 
     public void add(@NotNull StableKey key, int @NotNull [] pixels) throws IOException {
         checkOpen();
-        if (pixels.length != PackFormat.ICON_PIXELS) throw new IllegalArgumentException("Expected 64x64 ARGB pixels");
-        pixelInts.clear();
-        pixelInts.put(pixels);
+        serializePixels(pixels);
         PixelRecord existingKey = keyPixels.get(key.toString());
         if (existingKey != null) {
             if (!samePixels(existingKey)) throw new IOException("Conflicting icon key");
             return;
         }
         if (entries.size() >= PackFormat.MAX_KEYS) throw new IOException("Too many icon mappings");
-        String pixelDigest = PackFormat.hash(serializedPixels);
-        List<PixelRecord> matches = pixelIndex.computeIfAbsent(pixelDigest, ignored -> new ArrayList<>());
-        for (PixelRecord match : matches) if (samePixels(match)) {
-            entries.put(key.toString(), match.position());
-            keyPixels.put(key.toString(), match);
-            return;
+        PixelRecord record = internPixels(pixels);
+        entries.put(key.toString(), record.position());
+        keyPixels.put(key.toString(), record);
+    }
+
+    /** Appends a timed sample after add established its static fallback. Caller pixels may be reused immediately. */
+    public void addAnimationFrame(@NotNull StableKey key, int @NotNull [] pixels, int durationMillis)
+        throws IOException {
+        checkOpen();
+        if (!entries.containsKey(key.toString()))
+            throw new IllegalArgumentException("Animation requires a static icon");
+        if (durationMillis <= 0 || durationMillis > PackFormat.MAX_ANIMATION_MILLIS)
+            throw new IllegalArgumentException("Invalid animation duration");
+        serializePixels(pixels);
+        List<AnimationFrame> frames = animations.get(key.toString());
+        int duration = 0;
+        if (frames != null) for (AnimationFrame frame : frames) duration += frame.durationMillis();
+        if (duration > PackFormat.MAX_ANIMATION_MILLIS - durationMillis)
+            throw new IOException("Animation duration limit exceeded");
+        AnimationFrame previous = frames == null ? null : frames.get(frames.size() - 1);
+        boolean repeated = previous != null && samePixels(previous.pixels());
+        if (!repeated && ((frames != null && frames.size() >= PackFormat.MAX_ANIMATION_FRAMES)
+            || animationFrames >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES))
+            throw new IOException("Animation frame limit exceeded");
+        PixelRecord record = repeated ? previous.pixels() : internPixels(pixels);
+        if (frames == null) {
+            frames = new ArrayList<>();
+            animations.put(key.toString(), frames);
         }
+        if (repeated)
+            frames.set(frames.size() - 1, new AnimationFrame(record, previous.durationMillis() + durationMillis));
+        else {
+            frames.add(new AnimationFrame(record, durationMillis));
+            animationFrames++;
+        }
+    }
+
+    private void serializePixels(int @NotNull [] pixels) {
+        if (pixels.length != PackFormat.ICON_PIXELS) throw new IllegalArgumentException("Expected 64x64 ARGB pixels");
+        pixelInts.clear();
+        pixelInts.put(pixels);
+    }
+
+    /** Keeps the static fallback; already allocated pixels can remain in retained atlas pages. */
+    public void discardAnimation(@NotNull StableKey key) throws IOException {
+        checkOpen();
+        List<AnimationFrame> removed = animations.remove(key.toString());
+        if (removed != null) animationFrames -= removed.size();
+    }
+
+    private @NotNull PixelRecord internPixels(int @NotNull [] pixels) throws IOException {
+        String pixelDigest = PackFormat.hash(serializedPixels);
+        List<PixelRecord> matches = pixelIndex.get(pixelDigest);
+        if (matches != null) for (PixelRecord match : matches) if (samePixels(match)) {
+            return match;
+        }
+        if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_KEYS)
+            throw new IOException("Too many distinct icon images");
         int[] position = placePixels(pixels);
-        entries.put(key.toString(), position);
         long offset = pixelSpool.length();
         pixelSpool.seek(offset);
         pixelSpool.write(serializedPixels);
         PixelRecord record = new PixelRecord(offset, position);
-        keyPixels.put(key.toString(), record);
-        matches.add(record);
+        pixelIndex.computeIfAbsent(pixelDigest, ignored -> new ArrayList<>())
+            .add(record);
         occupied++;
         if (occupied == columns * columns) flushPage();
+        return record;
     }
 
     private int @NotNull [] placePixels(int @NotNull [] pixels) {
@@ -182,6 +233,9 @@ public final class IconPackWriter implements Closeable {
 
     @Desugar
     private record PixelRecord(long offset, int @NotNull [] position) {}
+
+    @Desugar
+    private record AnimationFrame(@NotNull PixelRecord pixels, int durationMillis) {}
 
     public void failure(@NotNull String context, @NotNull String reason) throws IOException {
         checkOpen();
@@ -303,7 +357,7 @@ public final class IconPackWriter implements Closeable {
         checkCanceled(canceled);
         flushPage();
         while (!pendingPages.isEmpty()) collectPage(canceled);
-        List<Page> sorted = new ArrayList<>(pages);
+        List<Page> sorted = referencedPages();
         sorted.sort(Comparator.comparing(Page::digest));
         Map<String, Object> root = manifest(sorted);
         String packId = PackFormat.packId(
@@ -345,6 +399,18 @@ public final class IconPackWriter implements Closeable {
         }
     }
 
+    private @NotNull List<Page> referencedPages() {
+        boolean[] referenced = new boolean[pages.size()];
+        for (int[] position : entries.values()) referenced[position[0]] = true;
+        for (List<AnimationFrame> frames : animations.values()) if (frames.size() > 1) {
+            for (AnimationFrame frame : frames) referenced[frame.pixels()
+                .position()[0]] = true;
+        }
+        List<Page> result = new ArrayList<>();
+        for (int index = 0; index < pages.size(); index++) if (referenced[index]) result.add(pages.get(index));
+        return result;
+    }
+
     private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) {
         recordStatistic("pngWorkers", pngWorkers);
         recordStatistic("pngPeakPendingPages", peakPendingPages);
@@ -367,7 +433,24 @@ public final class IconPackWriter implements Closeable {
                     position[1], position[2] });
         }
         Map<String, Object> root = new TreeMap<>();
-        root.put("formatVersion", PackFormat.VERSION);
+        Map<String, List<int[]>> sequences = new TreeMap<>();
+        for (Map.Entry<String, List<AnimationFrame>> entry : animations.entrySet()) {
+            if (entry.getValue()
+                .size() < 2) continue;
+            List<int[]> sequence = new ArrayList<>();
+            for (AnimationFrame frame : entry.getValue()) {
+                int[] position = frame.pixels()
+                    .position();
+                sequence.add(
+                    new int[] { indices.get(
+                        pages.get(position[0])
+                            .digest()),
+                        position[1], position[2], frame.durationMillis() });
+            }
+            sequences.put(entry.getKey(), sequence);
+        }
+        root.put("formatVersion", sequences.isEmpty() ? PackFormat.VERSION : PackFormat.ANIMATED_VERSION);
+        if (!sequences.isEmpty()) root.put("animations", sequences);
         root.put("minecraftVersion", metadata.minecraftVersion());
         root.put("loader", metadata.loader());
         root.put("compatibilityVersion", metadata.compatibilityVersion());

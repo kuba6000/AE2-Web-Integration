@@ -49,17 +49,20 @@ public final class IconPack implements Closeable {
     private final @NotNull String packId;
     private final @NotNull List<Page> pages;
     private final @NotNull Map<StableKey, Location> entries;
+    private final @NotNull Map<StableKey, List<Frame>> animations;
     private final int failures;
     private int readers;
     private boolean closing;
 
     private IconPack(@NotNull ZipFile zip, @NotNull Metadata metadata, @NotNull String packId,
-        @NotNull List<Page> pages, @NotNull Map<StableKey, Location> entries, int failures) {
+        @NotNull List<Page> pages, @NotNull Map<StableKey, Location> entries,
+        @NotNull Map<StableKey, List<Frame>> animations, int failures) {
         this.zip = zip;
         this.metadata = metadata;
         this.packId = packId;
         this.pages = Collections.unmodifiableList(pages);
         this.entries = entries;
+        this.animations = animations;
         this.failures = failures;
     }
 
@@ -85,7 +88,8 @@ public final class IconPack implements Closeable {
         @NotNull String loader, @NotNull String compatibilityVersion) throws IOException {
         int archiveEntries = validateArchiveEntries(zip);
         JsonObject root = PackFormat.parse(bytes(zip, "manifest.json", PackFormat.MAX_MANIFEST));
-        if (PackFormat.integer(root.get("formatVersion")) != PackFormat.VERSION
+        int version = PackFormat.integer(root.get("formatVersion"));
+        if ((version != PackFormat.VERSION && version != PackFormat.ANIMATED_VERSION)
             || PackFormat.integer(root.get("contentWidth")) != PackFormat.ICON_SIZE
             || PackFormat.integer(root.get("contentHeight")) != PackFormat.ICON_SIZE)
             throw new IOException("Unsupported icon format");
@@ -97,10 +101,19 @@ public final class IconPack implements Closeable {
         PackFormat.digest(packId);
         if (!packId.equals(PackFormat.packId(root))) throw new IOException("Pack digest mismatch");
         List<Page> pages = readPages(zip, root.getAsJsonArray("pages"));
-        Map<StableKey, Location> entries = readLocations(root.getAsJsonObject("entries"), pages, archiveEntries);
+        Map<StableKey, Location> entries = readLocations(
+            root.getAsJsonObject("entries"),
+            pages,
+            archiveEntries,
+            version);
+        Map<StableKey, List<Frame>> animations = version == PackFormat.ANIMATED_VERSION
+            ? readAnimations(root.getAsJsonObject("animations"), pages, entries)
+            : Collections.emptyMap();
+        if (version == PackFormat.VERSION && root.has("animations"))
+            throw new IOException("Animations require format 3");
         int failureCount = validateFailures(root.getAsJsonObject("failures"));
         if (root.has("statistics")) validateStatistics(root.getAsJsonObject("statistics"));
-        return new IconPack(zip, metadata, packId, pages, entries, failureCount);
+        return new IconPack(zip, metadata, packId, pages, entries, animations, failureCount);
     }
 
     private static int validateArchiveEntries(@NotNull ZipFile zip) throws IOException {
@@ -143,11 +156,11 @@ public final class IconPack implements Closeable {
     }
 
     private static @NotNull Map<StableKey, Location> readLocations(@NotNull JsonObject mapping,
-        @NotNull List<Page> pages, int archiveEntries) throws IOException {
+        @NotNull List<Page> pages, int archiveEntries, int version) throws IOException {
         if (mapping.entrySet()
             .size() > PackFormat.MAX_KEYS || pages.size()
-                > mapping.entrySet()
-                    .size()
+                > (version == PackFormat.VERSION ? mapping.entrySet()
+                    .size() : PackFormat.MAX_KEYS)
             || archiveEntries != pages.size() + 1) throw new IOException("Invalid archive entry count");
         Map<StableKey, Location> entries = new HashMap<>();
         for (Map.Entry<String, JsonElement> entry : mapping.entrySet()) {
@@ -155,16 +168,59 @@ public final class IconPack implements Closeable {
             JsonArray coordinate = entry.getValue()
                 .getAsJsonArray();
             if (coordinate.size() != LOCATION_FIELDS) throw new IOException("Invalid icon rectangle");
-            int pageIndex = PackFormat.integer(coordinate.get(0));
-            int x = PackFormat.integer(coordinate.get(1));
-            int y = PackFormat.integer(coordinate.get(2));
-            if (pageIndex >= pages.size()) throw new IOException("Unknown page index");
-            Page page = pages.get(pageIndex);
-            if (x > page.width() - PackFormat.ICON_SIZE || y > page.height() - PackFormat.ICON_SIZE)
-                throw new IOException("Icon outside atlas");
-            entries.put(key, new Location(page, x, y));
+            entries.put(key, readLocation(coordinate, pages));
         }
         return entries;
+    }
+
+    private static @NotNull Location readLocation(@NotNull JsonArray coordinate, @NotNull List<Page> pages)
+        throws IOException {
+        int pageIndex = PackFormat.integer(coordinate.get(0));
+        int x = PackFormat.integer(coordinate.get(1));
+        int y = PackFormat.integer(coordinate.get(2));
+        if (pageIndex >= pages.size()) throw new IOException("Unknown page index");
+        Page page = pages.get(pageIndex);
+        if (x > page.width() - PackFormat.ICON_SIZE || y > page.height() - PackFormat.ICON_SIZE)
+            throw new IOException("Icon outside atlas");
+        return new Location(page, x, y);
+    }
+
+    private static @NotNull Map<StableKey, List<Frame>> readAnimations(@NotNull JsonObject mapping,
+        @NotNull List<Page> pages, @NotNull Map<StableKey, Location> entries) throws IOException {
+        if (mapping.entrySet()
+            .isEmpty()
+            || mapping.entrySet()
+                .size() > entries.size())
+            throw new IOException("Invalid animation count");
+        Map<StableKey, List<Frame>> animations = new HashMap<>();
+        int totalFrames = 0;
+        for (Map.Entry<String, JsonElement> entry : mapping.entrySet()) {
+            StableKey key = StableKey.parse(entry.getKey());
+            if (!entries.containsKey(key)) throw new IOException("Animation has no static icon");
+            JsonArray sequence = entry.getValue()
+                .getAsJsonArray();
+            totalFrames += sequence.size();
+            if (sequence.size() < 2 || sequence.size() > PackFormat.MAX_ANIMATION_FRAMES
+                || totalFrames > PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
+                throw new IOException("Animation frame limit exceeded");
+            List<Frame> frames = new ArrayList<>();
+            int totalMillis = 0;
+            Location previous = null;
+            for (JsonElement value : sequence) {
+                JsonArray coordinate = value.getAsJsonArray();
+                if (coordinate.size() != LOCATION_FIELDS + 1) throw new IOException("Invalid animation frame");
+                Location location = readLocation(coordinate, pages);
+                int duration = PackFormat.integer(coordinate.get(LOCATION_FIELDS));
+                if (duration == 0 || duration > PackFormat.MAX_ANIMATION_MILLIS - totalMillis)
+                    throw new IOException("Invalid animation duration");
+                if (location.equals(previous)) throw new IOException("Adjacent animation frames must be merged");
+                totalMillis += duration;
+                frames.add(new Frame(location, duration));
+                previous = location;
+            }
+            animations.put(key, Collections.unmodifiableList(frames));
+        }
+        return animations;
     }
 
     private static int validateFailures(@NotNull JsonObject failures) throws IOException {
@@ -282,6 +338,11 @@ public final class IconPack implements Closeable {
         return entries.get(key);
     }
 
+    /** Ordered frames with their display durations; empty when the resource has only a static icon. */
+    public @NotNull List<Frame> animation(@NotNull StableKey key) {
+        return animations.getOrDefault(key, Collections.emptyList());
+    }
+
     public int failureCount() {
         return failures;
     }
@@ -342,4 +403,7 @@ public final class IconPack implements Closeable {
 
     @Desugar
     public record Location(@NotNull Page page, int x, int y) {}
+
+    @Desugar
+    public record Frame(@NotNull Location location, int durationMillis) {}
 }

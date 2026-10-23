@@ -162,6 +162,7 @@ test {
             includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
             includeTestsMatching '*IconPackTest'
+            includeTestsMatching '*IconPackAnimationTest'
             includeTestsMatching '*OutputSnapshotTest'
             includeTestsMatching '*TrackingStatisticsResponseTest'
             includeTestsMatching '*ItemIdentityRequestTest'

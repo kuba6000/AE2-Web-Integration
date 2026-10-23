@@ -34,6 +34,10 @@ import com.google.gson.stream.JsonToken;
 final class PackFormat {
 
     static final int VERSION = 2;
+    static final int ANIMATED_VERSION = 3;
+    static final int MAX_ANIMATION_FRAMES = 256;
+    static final int MAX_TOTAL_ANIMATION_FRAMES = 1_000_000;
+    static final int MAX_ANIMATION_MILLIS = 600_000;
     static final int ICON_SIZE = 64;
     static final int ICON_PIXELS = ICON_SIZE * ICON_SIZE;
     static final int ICON_BYTES = ICON_PIXELS * Integer.BYTES;
