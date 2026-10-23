@@ -57,13 +57,13 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             .successful()) {
             Player player = src.player()
                 .orElse(null);
-            PlayerIdentity identity = player == null ? null
+            PlayerIdentity nativeRequester = player == null ? null
                 : new PlayerIdentity(
                     player.getUUID(),
                     player.getGameProfile()
                         .getName());
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) (Object) cpu, (IAEGrid) grid, false, player != null, identity);
+                .jobStarted((ICraftingCPUCluster) (Object) cpu, (IAEGrid) grid, false, player == null, nativeRequester);
         }
     }
 
