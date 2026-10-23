@@ -13,10 +13,12 @@ import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 
+import pl.kuba6000.ae2webintegration.core.http.contract.InputShape;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /** Server-settings projection. A response wraps its published, read-only configuration; input owns a fresh instance. */
 @Desugar
+@InputShape(value = ConfigSettings.class, excludeFieldsAnnotatedWith = WebSetting.class)
 public record EditableServerSettings(@NotNull ConfigSettings config) {
 
     /** Omitted values preserve active secrets; empty strings explicitly clear them. Never returned in responses. */

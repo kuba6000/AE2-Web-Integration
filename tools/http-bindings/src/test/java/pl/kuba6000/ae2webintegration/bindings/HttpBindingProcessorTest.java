@@ -126,6 +126,75 @@ class HttpBindingProcessorTest {
         }
     }
 
+    @Test
+    void projectedBodyShapesExcludeMarkedFieldsRecursivelyWithoutChangingOrdinaryShapes() throws Exception {
+        assertCompiles("""
+              @Body Input input;
+              public static final class Input { Projected projected; Source ordinary; }
+              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE)
+              @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+              public @interface Hidden {}
+              @InputShape(value=Source.class, excludeFieldsAnnotatedWith=Hidden.class)
+              public static final class Projected { long amount; Nested child; String adapterState; }
+              public static final class Source { long amount; Nested child; @Hidden String secret; }
+              public static final class Nested { boolean enabled; @Hidden String secret; }
+              public long amount() { return input.projected.amount; }
+            """);
+        try (URLClassLoader loader = new URLClassLoader(
+            new URL[] { directory.toUri()
+                .toURL() },
+            getClass().getClassLoader())) {
+            Class<?> endpoint = loader.loadClass("fixture.Example");
+            Object request = endpoint.getConstructor()
+                .newInstance();
+            Method bind = endpoint.getMethod("bind", InputValues.class);
+            String projected = "{\"amount\":7,\"child\":{\"enabled\":true}}";
+            String ordinary = "{\"amount\":8,\"child\":{\"enabled\":false,\"secret\":\"nested\"},\"secret\":\"root\"}";
+            bind.invoke(request, inputs("{\"projected\":" + projected + ",\"ordinary\":" + ordinary + "}"));
+            assertEquals(
+                7L,
+                endpoint.getMethod("amount")
+                    .invoke(request));
+            for (String invalid : Arrays.asList(
+                "{\"projected\":" + projected.replace("\"amount\":7", "\"amount\":7,\"secret\":\"x\"")
+                    + ",\"ordinary\":"
+                    + ordinary
+                    + "}",
+                "{\"projected\":" + projected.replace("\"enabled\":true", "\"enabled\":true,\"secret\":\"x\"")
+                    + ",\"ordinary\":"
+                    + ordinary
+                    + "}",
+                "{\"projected\":" + projected + ",\"ordinary\":" + projected + "}",
+                "{\"projected\":" + projected
+                    + ",\"ordinary\":"
+                    + ordinary.replace(",\"secret\":\"nested\"", "")
+                    + "}")) {
+                InvocationTargetException failure = assertThrows(
+                    InvocationTargetException.class,
+                    () -> bind.invoke(request, inputs(invalid)),
+                    invalid);
+                assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+            }
+        }
+    }
+
+    @Test
+    void rejectsNonObjectInputShapeTargetsAtCompilation() throws Exception {
+        Compilation result = compile("""
+              @Body Input input;
+              @InputShape(value=int.class, excludeFieldsAnnotatedWith=Deprecated.class)
+              public static final class Input {}
+            """);
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .getDiagnostics()
+                .stream()
+                .anyMatch(
+                    diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
+                        .contains("InputShape requires a class or record")));
+    }
+
     private InputValues inputs(String body) {
         return new InputValues(
             new RequestContext(

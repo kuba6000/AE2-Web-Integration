@@ -131,7 +131,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     field.getSimpleName(),
                     ClassName.get(input),
                     name,
-                    shape(input, false, shapes));
+                    shape(input, null, shapes));
                 continue;
             }
             String inputName = value(query != null ? query : path, "value");
@@ -261,16 +261,23 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         }
     }
 
-    private record Shape(TypeElement type, boolean serverSettings) {}
+    private record Shape(TypeElement type, TypeElement excludedAnnotation) {}
 
-    private String shape(TypeElement type, boolean serverSettings, Map<Shape, String> shapes) {
-        if (type.getQualifiedName()
-            .contentEquals("pl.kuba6000.ae2webintegration.core.config.EditableServerSettings")) {
-            type = processingEnv.getElementUtils()
-                .getTypeElement("pl.kuba6000.ae2webintegration.core.config.ConfigSettings");
-            serverSettings = true;
+    private String shape(TypeElement type, TypeElement excludedAnnotation, Map<Shape, String> shapes) {
+        AnnotationMirror projection = annotation(type, "InputShape");
+        if (projection != null) {
+            Element represented = processingEnv.getTypeUtils()
+                .asElement((TypeMirror) annotationValue(projection, "value"));
+            if (represented instanceof TypeElement representedType && (representedType.getKind() == ElementKind.CLASS
+                || representedType.getKind() == ElementKind.RECORD)) {
+                type = representedType;
+                excludedAnnotation = (TypeElement) processingEnv.getTypeUtils()
+                    .asElement((TypeMirror) annotationValue(projection, "excludeFieldsAnnotatedWith"));
+            } else {
+                error(type, "InputShape requires a class or record as its represented type");
+            }
         }
-        return shapes.computeIfAbsent(new Shape(type, serverSettings), ignored -> "validate" + shapes.size());
+        return shapes.computeIfAbsent(new Shape(type, excludedAnnotation), ignored -> "validate" + shapes.size());
     }
 
     private MethodSpec shapeValidator(Shape shape, Map<Shape, String> shapes) {
@@ -283,12 +290,12 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     .contains(Modifier.STATIC)
                     && !field.getModifiers()
                         .contains(Modifier.TRANSIENT)
-                    && !(shape.serverSettings() && field.getAnnotationMirrors()
+                    && !(shape.excludedAnnotation() != null && field.getAnnotationMirrors()
                         .stream()
                         .anyMatch(
                             annotation -> annotation.getAnnotationType()
-                                .toString()
-                                .equals("pl.kuba6000.ae2webintegration.core.config.WebSetting"))))
+                                .asElement()
+                                .equals(shape.excludedAnnotation()))))
             .toList();
         MethodSpec.Builder validate = MethodSpec.methodBuilder(shapes.get(shape))
             .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
@@ -338,7 +345,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     }
                     yield CodeBlock.of(
                         "$N($T.object($L, $S))",
-                        shape(nestedType, shape.serverSettings(), shapes),
+                        shape(nestedType, shape.excludedAnnotation(), shapes),
                         INPUT_VALUES,
                         value,
                         fieldName);
@@ -404,6 +411,10 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     }
 
     private String value(AnnotationMirror annotation, String name) {
+        return annotationValue(annotation, name).toString();
+    }
+
+    private Object annotationValue(AnnotationMirror annotation, String name) {
         for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : processingEnv.getElementUtils()
             .getElementValuesWithDefaults(annotation)
             .entrySet()) {
@@ -411,8 +422,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                 .getSimpleName()
                 .contentEquals(name))
                 return entry.getValue()
-                    .getValue()
-                    .toString();
+                    .getValue();
         }
         throw new IllegalArgumentException("Missing annotation value: " + name);
     }
