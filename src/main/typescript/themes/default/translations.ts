@@ -1,7 +1,9 @@
 import type { Dictionaries } from '../../app/i18n.js';
+import { serverSettingsTranslations } from './server-settings-translations.js';
 
 export const translations = {
     en: {
+        ...serverSettingsTranslations.en,
         exportAppearance: 'Appearance',
         exportPlan: 'Export PNG',
         exportAction: 'Export',
@@ -121,6 +123,7 @@ export const translations = {
         dismissIcons: 'Dismiss icon suggestion'
     },
     pl: {
+        ...serverSettingsTranslations.pl,
         exportAppearance: 'Wygląd',
         exportAction: 'Eksportuj',
         exportPlan: 'Eksport PNG',

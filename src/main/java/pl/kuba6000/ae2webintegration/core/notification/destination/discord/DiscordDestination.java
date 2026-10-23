@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
@@ -26,7 +27,8 @@ public class DiscordDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        String webhook = Config.INSTANCE.discord.webhook;
+        ConfigSettings settings = Config.INSTANCE;
+        String webhook = settings.discord.webhook;
         if (webhook.isEmpty()) return;
 
         DiscordPayload payload = null;
@@ -40,19 +42,20 @@ public class DiscordDestination implements INotificationDestination {
                     + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
                     + craftingMessage.durationString(),
-                craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
+                craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN,
+                settings.discord.roleId);
         } else if (message instanceof StatusMessage statusMessage) {
             StatusMessage.Severity severity = statusMessage.severity();
             int color = switch (severity) {
                 case ERROR -> COLOR_RED;
                 case WARNING -> COLOR_YELLOW;
-                default -> 0;
+                default -> COLOR_TURQUOISE;
             };
-            if (color != 0) {
-                payload = new DiscordPayload(statusMessage.title(), statusMessage.description(), color);
-            } else {
-                payload = new DiscordPayload(statusMessage.title(), statusMessage.description());
-            }
+            payload = new DiscordPayload(
+                statusMessage.title(),
+                statusMessage.description(),
+                color,
+                settings.discord.roleId);
         }
 
         WebhookHelper.sendPayload(webhook, "", "", payload);

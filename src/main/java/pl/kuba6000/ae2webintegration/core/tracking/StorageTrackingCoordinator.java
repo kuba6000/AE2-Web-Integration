@@ -46,7 +46,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private final RecentTrackingService recent;
     private final TerminalRegistry terminals;
     private final GridIdentityRegistry identities;
-    private final ConfigSettings.ResourceTracking settings;
+    private ConfigSettings.ResourceTracking settings;
     private final Map<StableKey, Binding> bindings = new HashMap<>();
     private final List<Binding> scheduled = new ArrayList<>();
     private long nextDiscovery;
@@ -67,6 +67,20 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         this.identities = identities;
         this.settings = settings;
         recent = new RecentTrackingService(terminals, settings.maxQueuedRows);
+    }
+
+    /** Server-thread application preserves capture ownership, pending flow and live subscriptions. */
+    public void applySettings(@NotNull ConfigSettings.ResourceTracking updated, long nowMillis) {
+        if (settings == updated) return;
+        for (Binding binding : bindings.values()) {
+            binding.capture.setMaximumResources(updated.maxResourcesPerGrid);
+            binding.nextViewerRead = Math.min(binding.nextViewerRead, nowMillis + updated.activeIntervalMillis);
+            binding.nextFull = Math
+                .min(binding.nextFull, nowMillis + TimeUnit.SECONDS.toMillis(updated.reconciliationIntervalSeconds));
+        }
+        service.setMaximumQueuedRows(updated.maxQueuedRows);
+        recent.applyLimits(updated.maxQueuedRows, updated.maxResourcesPerGrid);
+        settings = updated;
     }
 
     /** Off-thread read of an immutable worker publication; never touches native bindings or schedules work. */

@@ -81,6 +81,50 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
+    void liveSettingsChangeViewerCadenceWithoutReplacingCapture() {
+        Resource iron = new Resource("reload-iron", 20, false);
+        Grid grid = new Grid(710091, iron);
+        TestGridFixtures.resolvedKey(grid);
+        ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.activeIntervalMillis = 1000;
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                settings)) {
+            StorageSnapshot initial = coordinator.observeForViewer(grid, 1000);
+            assertNotNull(initial);
+            assertEquals(
+                20,
+                initial.rows()
+                    .get(0)
+                    .quantity());
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            grid.rows.set(0, new Resource("reload-iron", 25, false));
+            capture.markChanged(iron);
+            ConfigSettings.ResourceTracking updated = new ConfigSettings.ResourceTracking();
+            updated.activeIntervalMillis = 50;
+            coordinator.applySettings(updated, 1000);
+            StorageSnapshot beforeDue = coordinator.observeForViewer(grid, 1049);
+            assertNotNull(beforeDue);
+            assertEquals(
+                20,
+                beforeDue.rows()
+                    .get(0)
+                    .quantity());
+            StorageSnapshot afterDue = coordinator.observeForViewer(grid, 1050);
+            assertNotNull(afterDue);
+            assertEquals(
+                25,
+                afterDue.rows()
+                    .get(0)
+                    .quantity());
+            assertSame(capture, grid.web$getStorageCapture());
+        }
+    }
+
+    @Test
     void failedEnumerationRetainsCaptureAndObservationsUntilACompleteReconciliation() throws Exception {
         Resource iron = new Resource("enumeration-iron", 20, false);
         Grid grid = new Grid(710041, iron);

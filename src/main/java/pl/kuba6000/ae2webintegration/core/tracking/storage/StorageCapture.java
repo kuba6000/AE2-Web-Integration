@@ -30,7 +30,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 public final class StorageCapture implements IIdentityHolder, AutoCloseable {
 
     private final Thread producer = Thread.currentThread();
-    private final int maxResources;
+    private int maxResources;
     private final boolean flowEnabled;
     private final WeakReference<IAEGrid> grid;
     private final Map<StableKey, Entry> resources = new HashMap<>();
@@ -55,6 +55,13 @@ public final class StorageCapture implements IIdentityHolder, AutoCloseable {
         this.flowEnabled = flowEnabled;
         if (maxResources < 1) throw new IllegalArgumentException("Resource limit must be positive");
         this.maxResources = maxResources;
+    }
+
+    /** Changes admission only: already captured identities and undrained flow remain owned. */
+    public void setMaximumResources(int maximumResources) {
+        if (!isProducerThread()) throw new IllegalStateException("Resource limits require the producer thread");
+        if (maximumResources < 1) throw new IllegalArgumentException("Resource limit must be positive");
+        maxResources = maximumResources;
     }
 
     /** Idle flow capture needs only undrained counters; returning viewers require a fresh stock baseline. */

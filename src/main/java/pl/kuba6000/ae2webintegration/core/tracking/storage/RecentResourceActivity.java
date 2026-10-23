@@ -28,7 +28,7 @@ public final class RecentResourceActivity {
     public static final long BUCKET_MILLIS = 5_000;
     private final boolean stockEnabled;
     private final boolean flowEnabled;
-    private final int maximumResources;
+    private int maximumResources;
     private final Map<StableKey, Entry> resources = new HashMap<>();
     private final ArrayDeque<Long> stockSamples = new ArrayDeque<>();
     private @Nullable Long flowObservedAt;
@@ -43,6 +43,11 @@ public final class RecentResourceActivity {
         this.maximumResources = maximumResources;
         flowSince = flowEnabled ? startedAt : null;
         flowObservedAt = flowSince;
+    }
+
+    /** Existing measurements expire naturally; only admission of additional identities changes. */
+    void setMaximumResources(int maximumResources) {
+        this.maximumResources = maximumResources;
     }
 
     /** Decimal strings retain exact quantities in JavaScript, including totals exceeding a signed long. */

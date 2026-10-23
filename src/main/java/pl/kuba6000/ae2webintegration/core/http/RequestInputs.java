@@ -10,6 +10,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.EditableServerSettings;
+import pl.kuba6000.ae2webintegration.core.config.WebSetting;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
@@ -61,7 +64,7 @@ public final class RequestInputs {
                     hasBody = true;
                     JsonObject body = context.getBody();
                     if (body == null) throw new IllegalArgumentException("Missing JSON body");
-                    validate(body, field.getType());
+                    validate(body, field.getType(), false);
                     set(
                         field,
                         request,
@@ -97,11 +100,15 @@ public final class RequestInputs {
         }
     }
 
-    private static void validate(JsonObject body, Class<?> input) {
+    private static void validate(JsonObject body, Class<?> input, boolean serverSettings) {
+        if (input == EditableServerSettings.class) {
+            input = ConfigSettings.class;
+            serverSettings = true;
+        }
         Map<String, Field> fields = new HashMap<>();
         for (Field field : input.getDeclaredFields()) {
-            if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers()))
-                fields.put(field.getName(), field);
+            if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers())
+                && !(serverSettings && field.isAnnotationPresent(WebSetting.class))) fields.put(field.getName(), field);
         }
         for (Map.Entry<String, JsonElement> member : body.entrySet()) {
             String supplied = member.getKey();
@@ -118,7 +125,7 @@ public final class RequestInputs {
                 && inputType != Long.class) {
                 if (value == null || !value.isJsonObject())
                     throw new IllegalArgumentException("Missing or invalid JSON object: " + field.getName());
-                validate(value.getAsJsonObject(), inputType);
+                validate(value.getAsJsonObject(), inputType, serverSettings);
                 continue;
             }
             if (value == null || !value.isJsonPrimitive())

@@ -156,6 +156,7 @@ test {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*ServerSettingsHttpTest'
             includeTestsMatching '*AuthSessionTest'
             includeTestsMatching '*SessionStoreTest'
             includeTestsMatching '*CoreDataTest'
@@ -205,6 +206,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*CommandProcessorTest'
         includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
         includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*ServerSettingsHttpTest'
         includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')

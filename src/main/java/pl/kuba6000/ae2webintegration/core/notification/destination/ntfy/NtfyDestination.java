@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
@@ -14,9 +15,10 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public boolean isUsable() {
-        if (Config.INSTANCE.ntfy.host.isEmpty()) return false;
-        if (Config.INSTANCE.ntfy.topic.isEmpty()) return false;
-        if (Config.INSTANCE.ntfy.user.isEmpty() != Config.INSTANCE.ntfy.password.isEmpty()) return false;
+        ConfigSettings settings = Config.INSTANCE;
+        if (settings.ntfy.host.isEmpty()) return false;
+        if (settings.ntfy.topic.isEmpty()) return false;
+        if (settings.ntfy.user.isEmpty() != settings.ntfy.password.isEmpty()) return false;
         return true;
     }
 
@@ -27,10 +29,11 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        if (Config.INSTANCE.ntfy.host.isEmpty()) return;
+        ConfigSettings settings = Config.INSTANCE;
+        if (settings.ntfy.host.isEmpty()) return;
 
         // If no protocol is set in config, assume https
-        String host = Config.INSTANCE.ntfy.host;
+        String host = settings.ntfy.host;
         if (!host.contains("http")) host = "https://" + host;
 
         NtfyPayload payload = null;
@@ -49,7 +52,8 @@ public class NtfyDestination implements INotificationDestination {
                     + "!\nIt took "
                     + craftingMessage.durationString(),
                 NtfyPayload.Priority.NORMAL,
-                tags);
+                tags,
+                settings);
         } else if (message instanceof StatusMessage statusMessage) {
             StatusMessage.Severity severity = statusMessage.severity();
             List<String> tags = new ArrayList<>();
@@ -64,9 +68,9 @@ public class NtfyDestination implements INotificationDestination {
                     tags.add("warning");
                     break;
             }
-            payload = new NtfyPayload(statusMessage.title(), statusMessage.description(), priority, tags);
+            payload = new NtfyPayload(statusMessage.title(), statusMessage.description(), priority, tags, settings);
         }
 
-        WebhookHelper.sendPayload(host, Config.INSTANCE.ntfy.user, Config.INSTANCE.ntfy.password, payload);
+        WebhookHelper.sendPayload(host, settings.ntfy.user, settings.ntfy.password, payload);
     }
 }

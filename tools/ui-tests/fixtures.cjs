@@ -185,6 +185,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
         loggedOut: false,
         username: 'ExamplePlayer',
         isAdmin: false,
+        serverConfiguration: require('./server-settings-fixture.cjs').settings(),
+        serverConfigurationReadOnly: require('./server-settings-fixture.cjs').readOnly(),
+        serverConfigurationSecrets: {},
+        serverConfigurationRevision: 1,
         availableUpdate: {
             version: '10.0.0',
             tag: '1.7.10-10.0.0',
@@ -352,6 +356,60 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                                       user: options.loggedOut
                                           ? null
                                           : { username: options.username, isAdmin: options.isAdmin }
+                                  }
+                                : null
+                    })
+                );
+            } else if (resource === '/api/server/settings') {
+                let status = options.isAdmin ? 'OK' : 'NO_PERMISSIONS';
+                if (status === 'OK' && !options.serverConfigurationReadOnly.allowServerSettingsEditing)
+                    status = 'SERVER_SETTINGS_DISABLED';
+                if (status === 'OK' && request.method === 'POST') {
+                    const input = JSON.parse(Buffer.concat(body).toString());
+                    if (
+                        'readOnly' in input ||
+                        [
+                            'password',
+                            'port',
+                            'allowServerSettingsEditing',
+                            'publicMode',
+                            'allowNoPasswordOnLocalhost',
+                            'trustedProxies',
+                            'maxRequestsBeforeLoggedInPerMinute'
+                        ].some((key) => key in input.settings.general) ||
+                        'webhook' in input.settings.discord ||
+                        'password' in input.settings.ntfy ||
+                        (input.secrets !== undefined &&
+                            (input.secrets === null ||
+                                typeof input.secrets !== 'object' ||
+                                Array.isArray(input.secrets) ||
+                                Object.entries(input.secrets).some(
+                                    ([key, value]) =>
+                                        !['discordWebhook', 'ntfyPassword'].includes(key) || typeof value !== 'string'
+                                )))
+                    )
+                        status = 'BAD_PARAM';
+                    else if (input.revision !== String(options.serverConfigurationRevision)) status = 'CONFIG_CHANGED';
+                    else {
+                        options.serverConfiguration = input.settings;
+                        for (const [key, value] of Object.entries(input.secrets || {})) {
+                            options.serverConfigurationSecrets[key] = value;
+                            options.serverConfigurationReadOnly[`${key}Configured`] = value !== '';
+                        }
+                        options.serverConfigurationRevision++;
+                    }
+                }
+                response.statusCode =
+                    status === 'OK' ? 200 : status === 'CONFIG_CHANGED' ? 409 : status === 'BAD_PARAM' ? 400 : 403;
+                response.end(
+                    JSON.stringify({
+                        status,
+                        data:
+                            status === 'OK'
+                                ? {
+                                      revision: String(options.serverConfigurationRevision),
+                                      settings: options.serverConfiguration,
+                                      readOnly: options.serverConfigurationReadOnly
                                   }
                                 : null
                     })
