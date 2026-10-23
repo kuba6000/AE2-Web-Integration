@@ -62,6 +62,8 @@ tasks.named("shadowJar").configure {
     if (minimizeShadowedDependencies.toBoolean()) {
         // Object conversion discovers field annotations reflectively.
         minimize {
+            // Generated HTTP catalogs are reached through ServiceLoader.
+            exclude(project(':core'))
             exclude(dependency('org.xerial:sqlite-jdbc:.*'))
             exclude(dependency('com.electronwill.night-config:core:.*'))
             exclude(dependency('com.electronwill.night-config:toml:.*'))
