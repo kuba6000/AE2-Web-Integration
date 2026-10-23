@@ -205,7 +205,11 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         private AnimationConfirmation(@NotNull WorldClient world, boolean allowPbo) {
             this.world = world;
             this.allowPbo = allowPbo;
-            screen = new GuiYesNo(this, "Export animated icons?", "This can take a very long time.", 0);
+            screen = new GuiYesNo(
+                this,
+                "Animated export may take much longer.",
+                "Icon packs may be much larger. Continue?",
+                0);
         }
 
         private void tick(@NotNull Minecraft minecraft) {
