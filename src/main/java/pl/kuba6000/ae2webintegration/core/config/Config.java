@@ -19,6 +19,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.EnumGetMethod;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
 import com.electronwill.nightconfig.core.conversion.ObjectConverter;
 import com.electronwill.nightconfig.core.conversion.Path;
@@ -231,7 +232,7 @@ public class Config {
         ConfigSettings loaded = new ConfigSettings();
         CommentedConfig defaults = newDocument();
         CONVERTER.toConfig(loaded, defaults);
-        fillDefaults(document, defaults);
+        fillDefaults(document, defaults, "");
         CONVERTER.toObject(document, loaded);
         loaded.validate();
         addComments(document, loaded);
@@ -281,7 +282,7 @@ public class Config {
         }
     }
 
-    private static void fillDefaults(CommentedConfig document, UnmodifiableConfig defaults) {
+    private static void fillDefaults(CommentedConfig document, UnmodifiableConfig defaults, String prefix) {
         for (UnmodifiableConfig.Entry entry : defaults.entrySet()) {
             String key = entry.getKey();
             Object defaultValue = entry.getValue();
@@ -292,8 +293,12 @@ public class Config {
                 if (!(value instanceof CommentedConfig existing)) {
                     throw new IllegalArgumentException("Expected a configuration table: " + key);
                 }
-                fillDefaults(existing, section);
-            }
+                fillDefaults(existing, section, prefix + key + ".");
+            } else if (defaultValue instanceof Enum<?> defaultEnum
+                && !EnumGetMethod.NAME_IGNORECASE.validate(document.get(key), defaultEnum.getDeclaringClass())) {
+                    document.set(key, defaultValue);
+                    LOG.warn("Invalid enum setting {}; using default {}", prefix + key, defaultEnum.name());
+                }
         }
     }
 
