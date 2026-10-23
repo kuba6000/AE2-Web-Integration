@@ -93,12 +93,12 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
             if (cpu == null) return;
             EntityPlayer player = src.player()
                 .orElse(null);
-            boolean isMachine = (requestingMachine != null || src.machine()
+            boolean isMachineRequest = (requestingMachine != null || src.machine()
                 .isPresent()) && player == null;
-            PlayerIdentity requester = player == null ? null
+            PlayerIdentity nativeRequester = player == null ? null
                 : new PlayerIdentity(player.getUniqueID(), player.getName());
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) cpu, (IAEGrid) grid, false, !isMachine, requester);
+                .jobStarted((ICraftingCPUCluster) cpu, (IAEGrid) grid, false, isMachineRequest, nativeRequester);
         }
     }
 
