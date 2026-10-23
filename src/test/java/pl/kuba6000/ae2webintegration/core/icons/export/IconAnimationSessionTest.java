@@ -32,6 +32,104 @@ class IconAnimationSessionTest {
     final AtomicLong clock = new AtomicLong(-10_000_000_000L);
 
     @Test
+    void entirelyUnchangedCustomGroupFinishesAfterTheSecondProbeWithoutWaitingForTheWindow() throws Exception {
+        Candidate candidate = new Candidate(1);
+        candidate.sameSamples = true;
+        Renderer renderer = new Renderer(clock);
+        IconExportSession<Candidate> session = new IconExportSession<>(
+            directory,
+            canceled -> metadata(),
+            new Source(candidate),
+            renderer,
+            true,
+            clock::get);
+        tickUntil(session, () -> candidate.draws == 1);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+        tickUntil(session, () -> candidate.draws == 2);
+        finish(session);
+        assertEquals(2, candidate.draws);
+        assertTrue(candidate.closed);
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(candidate.key()));
+            assertTrue(
+                pack.animation(candidate.key())
+                    .isEmpty());
+            assertEquals(0, pack.failureCount());
+        }
+    }
+
+    @Test
+    void equalFirstTwoNativeFramesDoNotPruneTheRestOfTheKnownSequence() throws Exception {
+        Candidate candidate = new Candidate(1);
+        candidate.kind = IIconAnimation.Kind.SPRITE;
+        candidate.sameFirstTwo = true;
+        candidate.stopAfter = 3;
+        Renderer renderer = new Renderer(clock);
+        IconExportSession<Candidate> session = new IconExportSession<>(
+            directory,
+            canceled -> metadata(),
+            new Source(candidate),
+            renderer,
+            true,
+            clock::get);
+        finish(session);
+        assertEquals(3, candidate.draws);
+        try (IconPack pack = openPack()) {
+            List<IconPack.Frame> frames = pack.animation(candidate.key());
+            assertEquals(2, frames.size());
+            assertEquals(
+                200,
+                frames.get(0)
+                    .durationMillis());
+            assertEquals(
+                100,
+                frames.get(1)
+                    .durationMillis());
+        }
+    }
+
+    @Test
+    void equalProbeSamplesRetireSlowCustomIconsBeforeRecordingTheChangingGroup() throws Exception {
+        Candidate stationary = new Candidate(1), changing = new Candidate(2);
+        stationary.sameSamples = true;
+        stationary.drawNanos = TimeUnit.SECONDS.toNanos(2);
+        changing.stopAfter = 5;
+        Renderer renderer = new Renderer(clock);
+        IconExportSession<Candidate> session = new IconExportSession<>(
+            directory,
+            canceled -> metadata(),
+            new Source(stationary, changing),
+            renderer,
+            true,
+            clock::get);
+        try {
+            tickUntil(session, () -> changing.draws == 1);
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+            tickUntil(session, () -> changing.draws == 3);
+            assertEquals(2, stationary.draws);
+            assertTrue(stationary.closed);
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+            tickUntil(session, () -> changing.draws == 4);
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+            finish(session);
+            assertEquals(2, stationary.draws);
+            try (IconPack pack = openPack()) {
+                assertNotNull(pack.find(stationary.key()));
+                assertTrue(
+                    pack.animation(stationary.key())
+                        .isEmpty());
+                List<IconPack.Frame> frames = pack.animation(changing.key());
+                assertEquals(3, frames.size());
+                for (IconPack.Frame frame : frames) assertEquals(100, frame.durationMillis());
+                assertEquals(0, pack.failureCount());
+            }
+        } finally {
+            session.cancel("test cleanup");
+            finish(session);
+        }
+    }
+
+    @Test
     void sampledPassesYieldThroughGapsAndUseDrawTimesRatherThanDeferredDrainTimes() throws Exception {
         Candidate candidate = new Candidate(1);
         Source source = new Source(candidate);
@@ -53,9 +151,13 @@ class IconAnimationSessionTest {
         tickUntil(session, () -> renderer.draws == 2);
         clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(200));
         tickUntil(session, () -> renderer.draws == 3);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+        tickUntil(session, () -> renderer.draws == 4);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(200));
+        tickUntil(session, () -> renderer.draws == 5);
         clock.addAndGet(TimeUnit.SECONDS.toNanos(3));
         finish(session);
-        assertEquals(3, renderer.draws);
+        assertEquals(5, renderer.draws);
         assertTrue(renderer.closed);
         assertTrue(renderer.animationClosed);
         try (IconPack pack = openPack()) {
@@ -96,6 +198,9 @@ class IconAnimationSessionTest {
             assertEquals(1, renderer.draws);
             clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
             tickUntil(session, () -> renderer.draws == 2);
+            tickUntil(session, () -> renderer.draws == 3);
+            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+            tickUntil(session, () -> renderer.draws == 4);
             clock.addAndGet(TimeUnit.SECONDS.toNanos(3));
             finish(session);
             try (IconPack pack = openPack()) {
@@ -183,6 +288,9 @@ class IconAnimationSessionTest {
         clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
         tickUntil(session, () -> sampled.draws == 2);
         assertFalse(sampled.closed);
+        tickUntil(session, () -> sampled.draws == 3);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+        tickUntil(session, () -> sampled.draws == 4);
         clock.addAndGet(TimeUnit.SECONDS.toNanos(3));
         finish(session);
         try (IconPack pack = openPack()) {
@@ -203,7 +311,7 @@ class IconAnimationSessionTest {
     }
 
     @Test
-    void slowSampleGroupsCompleteTwoWholePassesWithoutAnExtraSweep() throws Exception {
+    void slowChangingGroupsRecordAfterBothProbePasses() throws Exception {
         Candidate first = new Candidate(1), second = new Candidate(2);
         first.drawNanos = second.drawNanos = TimeUnit.SECONDS.toNanos(2);
         Renderer renderer = new Renderer(clock);
@@ -217,9 +325,11 @@ class IconAnimationSessionTest {
         tickUntil(session, () -> second.draws == 1);
         assertEquals(1, first.draws);
         clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+        tickUntil(session, () -> second.draws == 3);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
         finish(session);
-        assertEquals(2, first.draws);
-        assertEquals(2, second.draws);
+        assertEquals(4, first.draws);
+        assertEquals(4, second.draws);
         try (IconPack pack = openPack()) {
             assertEquals(
                 4100,
@@ -238,7 +348,7 @@ class IconAnimationSessionTest {
     void safelyFailedAnimationKeepsItsBaselineAndOtherAnimations() throws Exception {
         Candidate broken = new Candidate(1), healthy = new Candidate(2);
         broken.failAt = 2;
-        healthy.stopAfter = 3;
+        healthy.stopAfter = 5;
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
@@ -250,6 +360,9 @@ class IconAnimationSessionTest {
         tickUntil(session, () -> healthy.draws == 1);
         clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
         tickUntil(session, () -> healthy.draws == 2);
+        tickUntil(session, () -> healthy.draws == 3);
+        clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+        tickUntil(session, () -> healthy.draws == 4);
         clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
         finish(session);
         assertTrue(broken.closed);
@@ -448,6 +561,8 @@ class IconAnimationSessionTest {
         int fatalAt;
         long drawNanos;
         boolean closed;
+        boolean sameSamples;
+        boolean sameFirstTwo;
         Error closeError;
 
         Candidate(int id) {
@@ -560,7 +675,10 @@ class IconAnimationSessionTest {
                     if (candidate.draws == candidate.fatalAt)
                         throw new IllegalStateException("Native state restoration failed");
                     int[] pixels = new int[4096];
-                    Arrays.fill(pixels, 0xff000000 | candidate.draws);
+                    Arrays.fill(
+                        pixels,
+                        0xff000000 | (candidate.sameSamples || candidate.sameFirstTwo && candidate.draws <= 2 ? 1
+                            : candidate.draws));
                     deferred.add(
                         candidate.kind == Kind.SPRITE ? PackExportWriter.Capture.frame(key, pixels, 100)
                             : PackExportWriter.Capture.sample(key, pixels, submitted));

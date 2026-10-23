@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.icons.export;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,10 @@ public final class PackExportWriter {
     private long assemblyBatches;
     private final Set<StableKey> disabledAnimations = new HashSet<>();
     private volatile boolean animationsStopped;
+    private final Set<StableKey> probedSamples = new HashSet<>();
+    private final Set<StableKey> unchangedSamples = new HashSet<>();
+    private boolean probingSamples = true;
+    private volatile @Nullable Set<StableKey> sampledStaticKeys;
 
     /** Takes ownership of the detached metadata source and invokes it once on the assembly worker. */
     public PackExportWriter(@NotNull Path root, @NotNull IMetadataSource environment) {
@@ -131,6 +136,23 @@ public final class PackExportWriter {
         return animationsStopped;
     }
 
+    /** Queued after both probe passes and their readback; publication is the worker-to-client barrier. */
+    void finishSampleProbe() {
+        requireAccepting();
+        submit(() -> {
+            for (StableKey key : probedSamples) output().discardAnimation(key);
+            probedSamples.clear();
+            probingSamples = false;
+            sampledStaticKeys = Collections.unmodifiableSet(unchangedSamples);
+            return null;
+        });
+    }
+
+    @Nullable
+    Set<StableKey> sampledStaticKeys() {
+        return sampledStaticKeys;
+    }
+
     private void writeBatch(@NotNull List<Capture> captures, @NotNull List<Failure> failures) throws IOException {
         if (failure != null || publication.get() == Publication.CANCELED) return;
         assemblyBatches++;
@@ -152,7 +174,14 @@ public final class PackExportWriter {
                 try {
                     if (capture.kind() == CaptureKind.FRAME)
                         output.addAnimationFrame(capture.key(), capture.pixels(), Math.toIntExact(capture.timing()));
-                    else output.addAnimationSample(capture.key(), capture.pixels(), capture.timing());
+                    else {
+                        boolean unchanged = output
+                            .addAnimationSample(capture.key(), capture.pixels(), capture.timing());
+                        if (probingSamples) {
+                            probedSamples.add(capture.key());
+                            if (unchanged) unchangedSamples.add(capture.key());
+                        }
+                    }
                 } catch (IconPackWriter.CapacityException limit) {
                     if (limit.scope() == IconPackWriter.CapacityException.Scope.EXPORT) animationsStopped = true;
                     disabledAnimations.add(capture.key());

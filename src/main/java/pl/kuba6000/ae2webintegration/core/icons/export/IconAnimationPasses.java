@@ -2,8 +2,10 @@ package pl.kuba6000.ae2webintegration.core.icons.export;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
@@ -30,6 +32,10 @@ final class IconAnimationPasses implements AutoCloseable {
     private int passes;
     private boolean passCompleted;
     private int steps;
+    private boolean awaitingProbe;
+    private boolean probeFinished;
+    private int recordedPasses;
+    private int pruned;
 
     IconAnimationPasses(@NotNull LongSupplier clock) {
         this.clock = clock;
@@ -42,7 +48,27 @@ final class IconAnimationPasses implements AutoCloseable {
     }
 
     boolean done() {
-        return sprites.isEmpty() && sampled.isEmpty();
+        return !awaitingProbe && sprites.isEmpty() && sampled.isEmpty();
+    }
+
+    boolean awaitingProbe() {
+        return awaitingProbe;
+    }
+
+    void finishProbe(@NotNull Set<StableKey> unchanged) {
+        Iterator<Entry> iterator = sampled.iterator();
+        while (iterator.hasNext()) {
+            Entry entry = iterator.next();
+            if (unchanged.contains(entry.key)) {
+                iterator.remove();
+                completed.addLast(entry);
+                pruned++;
+            } else entry.samples = 0;
+        }
+        probeFinished = true;
+        awaitingProbe = false;
+        sampling = false;
+        closeEntries(completed);
     }
 
     void capture(@NotNull List<PackExportWriter.Capture> captures, @NotNull BiConsumer<Entry, Throwable> omitted) {
@@ -69,6 +95,7 @@ final class IconAnimationPasses implements AutoCloseable {
             else if (!sprite) queue.addLast(entry);
             if (!sprite && --remaining == 0) {
                 passes++;
+                if (probeFinished) recordedPasses++;
                 passCompleted = true;
                 break;
             }
@@ -84,7 +111,7 @@ final class IconAnimationPasses implements AutoCloseable {
             nextPass = now;
         }
         if (remaining == 0) {
-            if (passes >= 2 && now - sampleStarted >= SAMPLE_WINDOW) {
+            if (probeFinished && recordedPasses >= 2 && now - sampleStarted >= SAMPLE_WINDOW) {
                 completed.addAll(sampled);
                 sampled.clear();
                 return false;
@@ -99,10 +126,12 @@ final class IconAnimationPasses implements AutoCloseable {
     void releaseCompleted() {
         if (passCompleted) {
             long now = clock.getAsLong();
-            if (passes >= 2 && now - sampleStarted >= SAMPLE_WINDOW || passes >= MAX_SAMPLES) {
-                completed.addAll(sampled);
-                sampled.clear();
-            }
+            if (!probeFinished && passes == 2) awaitingProbe = true;
+            else if (probeFinished
+                && (recordedPasses >= 2 && now - sampleStarted >= SAMPLE_WINDOW || recordedPasses >= MAX_SAMPLES)) {
+                    completed.addAll(sampled);
+                    sampled.clear();
+                }
             nextPass = now + PASS_GAP;
             passCompleted = false;
         }
@@ -144,6 +173,7 @@ final class IconAnimationPasses implements AutoCloseable {
     void statistics(@NotNull Map<String, Long> counts) {
         counts.put("animationCaptures", (long) steps);
         counts.put("animationPasses", (long) passes);
+        counts.put("animationPrunedStatic", (long) pruned);
     }
 
     static final class Entry {

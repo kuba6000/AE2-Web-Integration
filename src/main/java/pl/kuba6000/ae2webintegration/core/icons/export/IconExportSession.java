@@ -8,6 +8,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -45,6 +46,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private @Nullable C baseline;
     private boolean discoveryComplete;
     private boolean animationPhase;
+    private boolean sampleProbeSubmitted;
     private boolean finishing;
     private boolean canceling;
     private String status = "Preparing full icon export";
@@ -197,6 +199,11 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             finish(source);
             return;
         }
+        if (animations.awaitingProbe()) {
+            Set<StableKey> unchanged = writer.sampledStaticKeys();
+            if (unchanged == null) return;
+            animations.finishProbe(unchanged);
+        }
         List<Capture> captures = new ArrayList<>();
         animations.capture(captures, (entry, cause) -> omitAnimation(entry.key, entry.context, cause));
         renderer.drain(captures);
@@ -204,6 +211,10 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         if (!captures.isEmpty() || !failures.isEmpty()) {
             writer.write(captures, failures);
             failures = new ArrayList<>();
+        }
+        if (animations.awaitingProbe() && !sampleProbeSubmitted) {
+            writer.finishSampleProbe();
+            sampleProbeSubmitted = true;
         }
         if (animations.done()) finish(source);
     }

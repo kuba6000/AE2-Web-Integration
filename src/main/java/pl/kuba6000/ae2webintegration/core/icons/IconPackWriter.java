@@ -161,8 +161,8 @@ public final class IconPackWriter implements Closeable {
         appendFrame(identity, record, durationMillis);
     }
 
-    /** Uses draw-submission nanoTime values, including negative origins. Keeps no caller pixel arrays. */
-    public void addAnimationSample(@NotNull StableKey key, int @NotNull [] pixels, long submittedNanos)
+    /** Returns whether the first two samples match. Uses signed nanoTime; retains no caller arrays. */
+    public boolean addAnimationSample(@NotNull StableKey key, int @NotNull [] pixels, long submittedNanos)
         throws IOException {
         checkOpen();
         String identity = key.toString();
@@ -186,6 +186,7 @@ public final class IconPackWriter implements Closeable {
         PixelRecord record = internPixels(pixels);
         if (previous != null) appendFrame(identity, previous.pixels(), interval);
         samples.put(identity, new TimedSample(record, submittedNanos, interval));
+        return previous != null && previous.previousIntervalMillis() == 0 && previous.pixels() == record;
     }
 
     private void requireBaseline(@NotNull String identity) {
