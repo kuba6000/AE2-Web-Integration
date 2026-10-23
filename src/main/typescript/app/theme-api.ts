@@ -114,6 +114,8 @@ export type ThemeApplication = {
         save(): Promise<void>;
     };
     readonly icons: {
+        /** Opt into visible icon playback; reduced motion still takes precedence. Defaults to false per theme. */
+        animate(enabled: boolean): void;
         resolve(
             references: readonly import('./api-types.js').IconReference[],
             metadata: ThemeState['itemIcons'],

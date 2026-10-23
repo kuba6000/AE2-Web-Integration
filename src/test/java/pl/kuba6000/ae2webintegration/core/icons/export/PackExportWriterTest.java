@@ -102,9 +102,7 @@ class PackExportWriterTest {
         writer.close();
         try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
             assertNotNull(pack.find(key));
-            assertTrue(
-                pack.animation(key)
-                    .isEmpty());
+            assertNull(pack.animation(key));
             assertEquals(1, pack.failureCount());
         }
     }
@@ -148,21 +146,22 @@ class PackExportWriterTest {
         writer.close();
         try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
             assertNotNull(pack.find(limited));
-            assertTrue(
-                pack.animation(limited)
-                    .isEmpty());
+            assertNull(pack.animation(limited));
             assertEquals(
                 2,
                 pack.animation(healthy)
+                    .frames()
                     .size());
             assertEquals(
                 100,
                 pack.animation(healthy)
+                    .frames()
                     .get(0)
                     .durationMillis());
             assertEquals(
                 100,
                 pack.animation(healthy)
+                    .frames()
                     .get(1)
                     .durationMillis());
             assertEquals(1, pack.failureCount());

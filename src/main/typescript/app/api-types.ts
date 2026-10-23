@@ -34,12 +34,17 @@ export type ResourceDescription = {
 export type ResourceStack = ResourceDescription & {
     quantity: number;
 };
-export type IconReference = { page: number; x: number; y: number };
+export type IconReference = { page: number; x: number; y: number; animation?: number | null };
+export type IconAnimation = {
+    page: number;
+    frames: { x: number; y: number; durationMillis: number }[];
+};
 export type IconMetadata = {
     packId: string;
     width: number;
     height: number;
     pages: { digest: string; width: number; height: number }[];
+    animations?: IconAnimation[] | null;
 };
 export type TerminalView = { generation: string; revision: string };
 export type RecentResource = {

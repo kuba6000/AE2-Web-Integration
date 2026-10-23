@@ -984,6 +984,117 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void inventoryAnimationsUseOnePageAndRespectExactStaticBeforeAnimatedBase() throws Exception {
+        StableKey exact = TestGridFixtures.key(88101);
+        StableKey base = TestGridFixtures.key(88102);
+        StableKey sameAnimation = TestGridFixtures.key(88106);
+        Path generated;
+        IconPack.Metadata metadata = new IconPack.Metadata(
+            "1.7.10",
+            "forge",
+            "test-identity",
+            "test",
+            "today",
+            Collections.emptyMap(),
+            Collections.emptyList());
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+            int[] pixels = new int[4096];
+            Arrays.fill(pixels, 0xff112233);
+            writer.add(exact, pixels);
+            writer.add(base, pixels);
+            writer.add(sameAnimation, pixels);
+            writer.sealStatic();
+            for (StableKey key : Arrays.asList(base, sameAnimation)) {
+                Arrays.fill(pixels, 0xff445566);
+                writer.addAnimationFrame(key, pixels, 100);
+                Arrays.fill(pixels, 0xff778899);
+                writer.addAnimationFrame(key, pixels, 250);
+                Arrays.fill(pixels, 0xff445566);
+                writer.addAnimationFrame(key, pixels, 100);
+            }
+            generated = writer.finish();
+        }
+        Files.move(generated, directory.resolve("ae2webintegration/icons.ae2wi-icons"));
+        CoreEngine.onServerStarted();
+        AtomicInteger normalized = new AtomicInteger();
+        Grid grid = new Grid(
+            88103,
+            iconResource("exact-static", 12, exact, base, normalized),
+            iconResource("base-animation", 7, TestGridFixtures.key(88104), base, normalized),
+            iconResource("same-base-animation", 3, TestGridFixtures.key(88105), base, normalized),
+            iconResource("same-exact-animation", 5, sameAnimation, null, normalized));
+        AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+        JsonObject response = syncedJson("/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/items?icons=true");
+        Map<String, JsonObject> resources = new HashMap<>();
+        for (JsonElement value : response.getAsJsonArray("data")) {
+            JsonObject resource = value.getAsJsonObject();
+            resources.put(
+                resource.get("itemKey")
+                    .getAsString(),
+                resource);
+        }
+        JsonObject exactIcon = resources.get(exact.toString())
+            .getAsJsonObject("icon");
+        assertTrue(
+            exactIcon.has("animation") && exactIcon.get("animation")
+                .isJsonNull(),
+            exactIcon.toString());
+        JsonObject first = resources.get(
+            TestGridFixtures.key(88104)
+                .toString())
+            .getAsJsonObject("icon");
+        JsonObject second = resources.get(
+            TestGridFixtures.key(88105)
+                .toString())
+            .getAsJsonObject("icon");
+        assertEquals(first, second, "Variants using the same base must share the response animation");
+        assertEquals(
+            first,
+            resources.get(sameAnimation.toString())
+                .getAsJsonObject("icon"),
+            "Distinct resources with the same animation share its response entry");
+        JsonObject icons = response.getAsJsonObject("icons");
+        JsonArray animations = icons.getAsJsonArray("animations");
+        assertEquals(1, animations.size());
+        JsonObject animation = animations.get(
+            first.get("animation")
+                .getAsInt())
+            .getAsJsonObject();
+        JsonArray frames = animation.getAsJsonArray("frames");
+        assertEquals(3, frames.size());
+        int[] expectedDurations = { 100, 250, 100 };
+        int[] expectedColors = { 0xff445566, 0xff778899, 0xff445566 };
+        JsonObject page = icons.getAsJsonArray("pages")
+            .get(
+                animation.get("page")
+                    .getAsInt())
+            .getAsJsonObject();
+        String path = "/api/icon-packs/" + icons.get("packId")
+            .getAsString()
+            + "/pages/"
+            + page.get("digest")
+                .getAsString();
+        try (InputStream input = connection(path).getInputStream()) {
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(input);
+            for (int index = 0; index < frames.size(); index++) {
+                JsonObject frame = frames.get(index)
+                    .getAsJsonObject();
+                assertEquals(
+                    expectedDurations[index],
+                    frame.get("durationMillis")
+                        .getAsInt());
+                assertEquals(
+                    expectedColors[index],
+                    image.getRGB(
+                        frame.get("x")
+                            .getAsInt(),
+                        frame.get("y")
+                            .getAsInt()));
+            }
+        }
+    }
+
+    @Test
     void inventoryMappingsAreOptInExactFirstAndMemoizedWithoutChangingQuantities() throws Exception {
         StableKey exactKey = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey baseKey = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");

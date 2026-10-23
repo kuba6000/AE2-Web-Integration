@@ -75,6 +75,9 @@ export function createWebSettings(
                     <span data-theme-text="resourcesPerPage"></span>
                     <select id="terminal-page-size"></select>
                 </label>
+                <label class="web-preference-toggle">
+                    <span data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons">
+                </label>
             </section>
         </div>
         </div>
@@ -82,6 +85,7 @@ export function createWebSettings(
     const controls = {
         terminalDisplay: root.querySelector<HTMLSelectElement>('#terminal-display')!,
         pageSize: root.querySelector<HTMLSelectElement>('#terminal-page-size')!,
+        animatedIcons: root.querySelector<HTMLInputElement>('#animated-icons')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
@@ -119,6 +123,12 @@ export function createWebSettings(
     let terminalDisplay: TerminalDisplay =
         savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons' ? savedDisplay : 'both';
     application.displayIcons(terminalDisplay !== 'names');
+    controls.animatedIcons.checked = settings.get('animatedIcons') !== false;
+    application.icons.animate(controls.animatedIcons.checked);
+    controls.animatedIcons.addEventListener('change', () => {
+        settings.set('animatedIcons', controls.animatedIcons.checked);
+        application.icons.animate(controls.animatedIcons.checked);
+    });
 
     lifetime.onCleanup(() => {
         delete document.documentElement.dataset.appearance;

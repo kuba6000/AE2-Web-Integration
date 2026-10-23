@@ -62,7 +62,8 @@ class IconAnimationSessionTest {
             assertEquals(4, second.draws);
             try (IconPack pack = openPack()) {
                 for (Candidate candidate : Arrays.asList(first, second)) {
-                    List<IconPack.Frame> frames = pack.animation(candidate.key());
+                    List<IconPack.Frame> frames = pack.animation(candidate.key())
+                        .frames();
                     assertEquals(2, frames.size());
                     for (IconPack.Frame frame : frames) assertEquals(250, frame.durationMillis());
                 }
@@ -104,10 +105,12 @@ class IconAnimationSessionTest {
                 assertEquals(
                     3,
                     pack.animation(first.key())
+                        .frames()
                         .size());
                 assertEquals(
                     3,
                     pack.animation(second.key())
+                        .frames()
                         .size());
             }
         } finally {
@@ -165,7 +168,8 @@ class IconAnimationSessionTest {
             clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
             finish(session);
             try (IconPack pack = openPack()) {
-                List<IconPack.Frame> frames = pack.animation(candidate.key());
+                List<IconPack.Frame> frames = pack.animation(candidate.key())
+                    .frames();
                 assertEquals(5, frames.size());
                 for (IconPack.Frame frame : frames) assertEquals(1200, frame.durationMillis());
             }
@@ -195,9 +199,7 @@ class IconAnimationSessionTest {
         assertTrue(candidate.closed);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(candidate.key()));
-            assertTrue(
-                pack.animation(candidate.key())
-                    .isEmpty());
+            assertNull(pack.animation(candidate.key()));
             assertEquals(0, pack.failureCount());
         }
     }
@@ -219,7 +221,8 @@ class IconAnimationSessionTest {
         finish(session);
         assertEquals(3, candidate.draws);
         try (IconPack pack = openPack()) {
-            List<IconPack.Frame> frames = pack.animation(candidate.key());
+            List<IconPack.Frame> frames = pack.animation(candidate.key())
+                .frames();
             assertEquals(2, frames.size());
             assertEquals(
                 200,
@@ -259,10 +262,9 @@ class IconAnimationSessionTest {
             assertEquals(2, stationary.draws);
             try (IconPack pack = openPack()) {
                 assertNotNull(pack.find(stationary.key()));
-                assertTrue(
-                    pack.animation(stationary.key())
-                        .isEmpty());
-                List<IconPack.Frame> frames = pack.animation(changing.key());
+                assertNull(pack.animation(stationary.key()));
+                List<IconPack.Frame> frames = pack.animation(changing.key())
+                    .frames();
                 assertEquals(3, frames.size());
                 for (IconPack.Frame frame : frames) assertEquals(100, frame.durationMillis());
                 assertEquals(0, pack.failureCount());
@@ -305,7 +307,8 @@ class IconAnimationSessionTest {
         assertTrue(renderer.closed);
         assertTrue(renderer.animationClosed);
         try (IconPack pack = openPack()) {
-            List<IconPack.Frame> frames = pack.animation(candidate.key());
+            List<IconPack.Frame> frames = pack.animation(candidate.key())
+                .frames();
             assertEquals(3, frames.size());
             assertEquals(
                 100,
@@ -351,11 +354,13 @@ class IconAnimationSessionTest {
                 assertEquals(
                     300,
                     pack.animation(candidate.key())
+                        .frames()
                         .get(0)
                         .durationMillis());
                 assertEquals(
                     300,
                     pack.animation(candidate.key())
+                        .frames()
                         .get(1)
                         .durationMillis());
             }
@@ -441,14 +446,17 @@ class IconAnimationSessionTest {
             assertEquals(
                 3,
                 pack.animation(sprite.key())
+                    .frames()
                     .size());
             assertEquals(
                 2,
                 pack.animation(sampled.key())
+                    .frames()
                     .size());
             assertEquals(
                 100,
                 pack.animation(sampled.key())
+                    .frames()
                     .get(0)
                     .durationMillis());
         }
@@ -482,11 +490,13 @@ class IconAnimationSessionTest {
             assertEquals(
                 2100,
                 pack.animation(first.key())
+                    .frames()
                     .get(0)
                     .durationMillis());
             assertEquals(
                 2100,
                 pack.animation(second.key())
+                    .frames()
                     .get(1)
                     .durationMillis());
         }
@@ -517,12 +527,11 @@ class IconAnimationSessionTest {
         assertTrue(healthy.closed);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(broken.key()));
-            assertTrue(
-                pack.animation(broken.key())
-                    .isEmpty());
+            assertNull(pack.animation(broken.key()));
             assertEquals(
                 3,
                 pack.animation(healthy.key())
+                    .frames()
                     .size());
             assertEquals(1, pack.failureCount());
         }
@@ -602,9 +611,7 @@ class IconAnimationSessionTest {
         assertTrue(candidate.closed);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(candidate.key()));
-            assertTrue(
-                pack.animation(candidate.key())
-                    .isEmpty());
+            assertNull(pack.animation(candidate.key()));
             assertEquals(1, pack.failureCount());
         }
     }
@@ -622,9 +629,7 @@ class IconAnimationSessionTest {
         assertEquals(0, renderer.plans);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(candidate.key()));
-            assertTrue(
-                pack.animation(candidate.key())
-                    .isEmpty());
+            assertNull(pack.animation(candidate.key()));
         }
     }
 
@@ -643,9 +648,7 @@ class IconAnimationSessionTest {
         finish(session);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(candidate.key()));
-            assertTrue(
-                pack.animation(candidate.key())
-                    .isEmpty());
+            assertNull(pack.animation(candidate.key()));
         }
     }
 
@@ -664,9 +667,7 @@ class IconAnimationSessionTest {
         finish(session);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(candidate.key()));
-            assertTrue(
-                pack.animation(candidate.key())
-                    .isEmpty());
+            assertNull(pack.animation(candidate.key()));
             assertEquals(0, pack.failureCount());
         }
     }

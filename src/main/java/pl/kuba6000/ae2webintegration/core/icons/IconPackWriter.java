@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -53,8 +54,8 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Path outputDirectory;
     private final @NotNull Path scratch;
     private final @NotNull Metadata metadata;
-    private final int pageSize;
-    private final int columns;
+    private int pageSize;
+    private int columns;
     private final @NotNull Map<String, int[]> entries = new TreeMap<>();
     private final @NotNull List<Page> pages = new ArrayList<>();
     private final @NotNull List<Map<String, String>> failures = new ArrayList<>();
@@ -74,7 +75,7 @@ public final class IconPackWriter implements Closeable {
         4,
         Runtime.getRuntime()
             .availableProcessors() / 2);
-    private final int pendingPageLimit;
+    private int pendingPageLimit;
     private final @NotNull ExecutorService pngExecutor;
     private final @NotNull ArrayDeque<Future<EncodedPage>> pendingPages = new ArrayDeque<>();
     private long pngWorkNanosSum;
@@ -129,8 +130,13 @@ public final class IconPackWriter implements Closeable {
             return;
         }
         if (entries.size() >= PackFormat.MAX_KEYS) throw new IOException("Too many icon mappings");
-        PixelRecord record = internPixels(pixels);
-        entries.put(key.toString(), record.position());
+        PixelRecord record = internPixels();
+        if (record.staticPosition == null) {
+            record.staticPosition = placePixels(pixels);
+            occupied++;
+            if (occupied == columns * columns) flushPage();
+        }
+        entries.put(key.toString(), record.staticPosition);
         keyPixels.put(key.toString(), record);
     }
 
@@ -157,7 +163,7 @@ public final class IconPackWriter implements Closeable {
         AnimationFrame previous = frames == null ? null : frames.get(frames.size() - 1);
         boolean repeated = previous != null && samePixels(previous.pixels());
         checkFrame(identity, repeated, durationMillis, 0);
-        PixelRecord record = repeated ? previous.pixels() : internPixels(pixels);
+        PixelRecord record = repeated ? previous.pixels() : internPixels();
         appendFrame(identity, record, durationMillis);
     }
 
@@ -183,7 +189,7 @@ public final class IconPackWriter implements Closeable {
             interval = (int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(elapsed));
             checkFrame(identity, repeats(identity, previous.pixels()), interval, 1);
         }
-        PixelRecord record = internPixels(pixels);
+        PixelRecord record = internPixels();
         if (previous != null) appendFrame(identity, previous.pixels(), interval);
         samples.put(identity, new TimedSample(record, submittedNanos, interval));
         return previous != null && previous.previousIntervalMillis() == 0 && previous.pixels() == record;
@@ -240,7 +246,7 @@ public final class IconPackWriter implements Closeable {
         pixelInts.put(pixels);
     }
 
-    /** Keeps the static fallback; already allocated pixels can remain in retained atlas pages. */
+    /** Keeps the static fallback; discarded pixels remain interned in the bounded spool until close. */
     public void discardAnimation(@NotNull StableKey key) throws IOException {
         checkOpen();
         samples.remove(key.toString());
@@ -248,7 +254,7 @@ public final class IconPackWriter implements Closeable {
         if (removed != null) animationFrames -= removed.size();
     }
 
-    private @NotNull PixelRecord internPixels(int @NotNull [] pixels) throws IOException {
+    private @NotNull PixelRecord internPixels() throws IOException {
         String pixelDigest = PackFormat.hash(serializedPixels);
         List<PixelRecord> matches = pixelIndex.get(pixelDigest);
         if (matches != null) for (PixelRecord match : matches) if (samePixels(match)) {
@@ -256,15 +262,12 @@ public final class IconPackWriter implements Closeable {
         }
         if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_IMAGES)
             throw new CapacityException(CapacityException.Scope.EXPORT, "Too many distinct icon images");
-        int[] position = placePixels(pixels);
         long offset = pixelSpool.length();
         pixelSpool.seek(offset);
         pixelSpool.write(serializedPixels);
-        PixelRecord record = new PixelRecord(offset, position);
+        PixelRecord record = new PixelRecord(offset);
         pixelIndex.computeIfAbsent(pixelDigest, ignored -> new ArrayList<>())
             .add(record);
-        occupied++;
-        if (occupied == columns * columns) flushPage();
         return record;
     }
 
@@ -299,16 +302,28 @@ public final class IconPackWriter implements Closeable {
     }
 
     private boolean samePixels(@NotNull PixelRecord record) throws IOException {
-        pixelSpool.seek(record.offset());
+        pixelSpool.seek(record.offset);
         pixelSpool.readFully(comparedPixels);
         return Arrays.equals(comparedPixels, serializedPixels);
     }
 
-    @Desugar
-    private record PixelRecord(long offset, int @NotNull [] position) {}
+    private static final class PixelRecord {
+
+        final long offset;
+        int @Nullable [] staticPosition;
+
+        PixelRecord(long offset) {
+            this.offset = offset;
+        }
+    }
 
     @Desugar
-    private record AnimationFrame(@NotNull PixelRecord pixels, int durationMillis) {}
+    private record AnimationFrame(@NotNull PixelRecord pixels, int durationMillis, int @Nullable [] position) {
+
+        AnimationFrame(@NotNull PixelRecord pixels, int durationMillis) {
+            this(pixels, durationMillis, null);
+        }
+    }
 
     @Desugar
     private record TimedSample(@NotNull PixelRecord pixels, long submittedNanos, int previousIntervalMillis) {}
@@ -388,10 +403,14 @@ public final class IconPackWriter implements Closeable {
     }
 
     private void flushPage() throws IOException {
+        flushPage(() -> false);
+    }
+
+    private void flushPage(@NotNull BooleanSupplier canceled) throws IOException {
         if (image == null) return;
         if (pendingPages.size() == pendingPageLimit) {
             long started = System.nanoTime();
-            collectPage(() -> false);
+            collectPage(canceled);
             pngBackpressureNanos += System.nanoTime() - started;
         }
         BufferedImage completed = image;
@@ -413,7 +432,7 @@ public final class IconPackWriter implements Closeable {
         String digest = PackFormat.hash(bytes);
         Files.write(scratch.resolve(digest + ".png"), bytes);
         return new EncodedPage(
-            new Page(digest, "pages/" + digest + ".png", pageSize, pageSize, bytes.length),
+            new Page(digest, "pages/" + digest + ".png", completed.getWidth(), completed.getHeight(), bytes.length),
             System.nanoTime() - started,
             started - submitted);
     }
@@ -476,7 +495,9 @@ public final class IconPackWriter implements Closeable {
         checkOpen();
         checkCanceled(canceled);
         finishSamples();
-        flushPage();
+        flushPage(canceled);
+        layoutAnimations(canceled);
+        flushPage(canceled);
         while (!pendingPages.isEmpty()) collectPage(canceled);
         Path temporary = Files.createTempFile(outputDirectory, ".ae2wi-pack-", ".tmp");
         try {
@@ -544,6 +565,52 @@ public final class IconPackWriter implements Closeable {
         return packId;
     }
 
+    /** Each complete sequence stays within one page; optional pixels have not been PNG-encoded yet. */
+    private void layoutAnimations(@NotNull BooleanSupplier canceled) throws IOException {
+        Map<PixelRecord, int[]> positions = new HashMap<>();
+        int[] pixels = new int[PackFormat.ICON_PIXELS];
+        for (List<AnimationFrame> frames : animations.values()) {
+            checkCanceled(canceled);
+            if (frames.size() < 2) continue;
+            LinkedHashSet<PixelRecord> unique = new LinkedHashSet<>();
+            for (AnimationFrame frame : frames) unique.add(frame.pixels());
+            int missing = 0;
+            for (PixelRecord record : unique) if (!positions.containsKey(record)) missing++;
+            if (image == null || occupied + missing > columns * columns) {
+                flushPage(canceled);
+                positions.clear();
+                int normalColumns = PackFormat.DEFAULT_PAGE_DIMENSION / PackFormat.CELL_PITCH;
+                int dimension = unique.size() > normalColumns * normalColumns ? PackFormat.MAX_PAGE_DIMENSION
+                    : PackFormat.DEFAULT_PAGE_DIMENSION;
+                if (dimension != pageSize) {
+                    // Existing PNG queue estimates assume one dimension; settle it before changing that bound.
+                    while (!pendingPages.isEmpty()) collectPage(canceled);
+                    pageSize = dimension;
+                    columns = dimension / PackFormat.CELL_PITCH;
+                    pendingPageLimit = Math.min(
+                        MAX_PENDING_PAGES,
+                        PNG_BUFFER_BUDGET / (dimension * dimension * Integer.BYTES * PNG_BUFFERS_PER_PAGE));
+                }
+            }
+            for (PixelRecord record : unique) {
+                checkCanceled(canceled);
+                if (positions.containsKey(record)) continue;
+                pixelSpool.seek(record.offset);
+                pixelSpool.readFully(serializedPixels);
+                pixelInts.clear();
+                pixelInts.get(pixels);
+                positions.put(record, placePixels(pixels));
+                occupied++;
+            }
+            for (int index = 0; index < frames.size(); index++) {
+                AnimationFrame frame = frames.get(index);
+                frames.set(
+                    index,
+                    new AnimationFrame(frame.pixels(), frame.durationMillis(), positions.get(frame.pixels())));
+            }
+        }
+    }
+
     /** Count actual ZIP headers/compression; discard overflow until ZipOutputStream closes cleanly. */
     private static final class ArchiveOutput extends OutputStream {
 
@@ -585,12 +652,17 @@ public final class IconPackWriter implements Closeable {
         boolean[] referenced = new boolean[pages.size()];
         for (int[] position : entries.values()) referenced[position[0]] = true;
         for (List<AnimationFrame> frames : animations.values()) if (frames.size() > 1) {
-            for (AnimationFrame frame : frames) referenced[frame.pixels()
-                .position()[0]] = true;
+            for (AnimationFrame frame : frames) {
+                assert frame.position() != null : "Animation layout must finish before publication";
+                referenced[frame.position()[0]] = true;
+            }
         }
-        List<Page> result = new ArrayList<>();
-        for (int index = 0; index < pages.size(); index++) if (referenced[index]) result.add(pages.get(index));
-        return result;
+        Map<String, Page> result = new HashMap<>();
+        for (int index = 0; index < pages.size(); index++) if (referenced[index]) {
+            Page page = pages.get(index);
+            result.put(page.digest(), page);
+        }
+        return new ArrayList<>(result.values());
     }
 
     private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) {
@@ -622,8 +694,8 @@ public final class IconPackWriter implements Closeable {
                 .size() < 2) continue;
             List<int[]> sequence = new ArrayList<>();
             for (AnimationFrame frame : entry.getValue()) {
-                int[] position = frame.pixels()
-                    .position();
+                int[] position = frame.position();
+                assert position != null : "Animation layout must finish before publication";
                 sequence.add(
                     new int[] { indices.get(
                         pages.get(position[0])

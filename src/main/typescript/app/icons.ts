@@ -1,4 +1,5 @@
 import type { IconMetadata, IconReference } from './api-types.js';
+import { createIconPlayback, type AnimationDescriptor, type AtlasDescriptor } from './icon-playback.js';
 
 export type IconSprite = {
     url: string;
@@ -9,7 +10,7 @@ export type IconSprite = {
     pageWidth: number;
     pageHeight: number;
 };
-type Descriptor = Omit<IconSprite, 'url'> & { source: string };
+type Descriptor = AtlasDescriptor;
 type Page = {
     source: string;
     width: number;
@@ -35,6 +36,89 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
     let disposed = false;
     let active = 0;
     let checkedPack: string | null = null;
+    let animate = false;
+    const motion = matchMedia('(prefers-reduced-motion: reduce)');
+    const animationCache = new WeakMap<object, AnimationDescriptor | null>();
+    const playback = createIconPlayback((descriptor, changed) => {
+        const page = obtain(descriptor);
+        page.users.add(changed);
+        pump();
+        return {
+            read: () => ({ url: page.url, failed: page.status === 'failed' }),
+            release() {
+                page.users.delete(changed);
+                if (!page.users.size) remove(page);
+            }
+        };
+    });
+    const updateViews = () => {
+        playback.enabled(enabled && animate && !motion.matches && !document.hidden);
+        for (const update of views) update();
+    };
+    motion.addEventListener('change', updateViews);
+    document.addEventListener('visibilitychange', updateViews);
+
+    function obtain(descriptor: Descriptor) {
+        let page = pages.get(descriptor.source);
+        if (!page) {
+            page = {
+                source: descriptor.source,
+                width: descriptor.pageWidth,
+                height: descriptor.pageHeight,
+                users: new Set(),
+                status: 'queued',
+                controller: new AbortController()
+            };
+            pages.set(page.source, page);
+        }
+        return page;
+    }
+
+    function describeAnimation(metadata: IconMetadata | null, icon: IconReference | null | undefined) {
+        if (!metadata || !icon || !Number.isInteger(icon.animation)) return null;
+        const animation = metadata.animations?.[icon.animation!];
+        if (!animation || !Array.isArray(animation.frames)) return null;
+        const cached = animationCache.get(animation);
+        // The sequence's page is response-local, so a cache entry also belongs to its metadata.
+        if (
+            cached !== undefined &&
+            cached?.page.source === describe(metadata, { page: animation.page, x: 0, y: 0 })?.source
+        )
+            return cached;
+        const page = describe(metadata, { page: animation.page, x: 0, y: 0 });
+        let duration = 0;
+        const valid =
+            page &&
+            animation.frames.length >= 2 &&
+            animation.frames.length <= 256 &&
+            animation.frames.every((frame) => {
+                if (!frame) return false;
+                duration += frame.durationMillis;
+                return (
+                    frame &&
+                    Number.isInteger(frame.x) &&
+                    Number.isInteger(frame.y) &&
+                    frame.x >= 0 &&
+                    frame.y >= 0 &&
+                    frame.x + page.width <= page.pageWidth &&
+                    frame.y + page.height <= page.pageHeight &&
+                    Number.isInteger(frame.durationMillis) &&
+                    frame.durationMillis > 0 &&
+                    frame.durationMillis <= 600000
+                );
+            });
+        const result: AnimationDescriptor | null =
+            valid && page && duration <= 600000
+                ? {
+                      page,
+                      frames: animation.frames,
+                      duration,
+                      key: `${page.source}:${animation.frames.map((frame) => `${frame.x},${frame.y},${frame.durationMillis}`).join(';')}`
+                  }
+                : null;
+        animationCache.set(animation, result);
+        return result;
+    }
 
     function describe(metadata: IconMetadata | null, icon: IconReference | null | undefined): Descriptor | null {
         if (
@@ -238,15 +322,29 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
         },
         enabled(value: boolean) {
             enabled = value;
-            for (const update of views) update();
+            updateViews();
             if (!enabled) for (const page of pages.values()) remove(page);
         },
+        animate(value: boolean) {
+            animate = value;
+            updateViews();
+        },
         observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void) {
-            type Binding = { descriptor: Descriptor | null; visible: boolean; page?: Page; update: () => void };
+            type Binding = {
+                descriptor: Descriptor | null;
+                animation: AnimationDescriptor | null;
+                visible: boolean;
+                animationVisible: boolean;
+                page?: Page;
+                update: () => void;
+                playing?: { key: string; stop: () => void; sprite: IconSprite | null };
+            };
             const bindings = new Map<HTMLElement, Binding>();
             function release(binding: Binding) {
                 binding.page?.users.delete(binding.update);
                 binding.page = undefined;
+                binding.playing?.stop();
+                binding.playing = undefined;
             }
             function refresh(target: HTMLElement, binding: Binding) {
                 const descriptor = enabled && !disposed && binding.visible ? binding.descriptor : null;
@@ -255,21 +353,26 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                     paint(target, null);
                     return;
                 }
-                let page = pages.get(descriptor.source);
-                if (!page) {
-                    page = {
-                        source: descriptor.source,
-                        width: descriptor.pageWidth,
-                        height: descriptor.pageHeight,
-                        users: new Set(),
-                        status: 'queued',
-                        controller: new AbortController()
-                    };
-                    pages.set(page.source, page);
-                }
+                const page = obtain(descriptor);
                 binding.page = page;
                 page.users.add(binding.update);
-                paint(target, page.url ? { ...descriptor, url: page.url } : null);
+                const animation =
+                    animate && !motion.matches && !document.hidden && binding.animationVisible
+                        ? binding.animation
+                        : null;
+                if (binding.playing?.key !== animation?.key) {
+                    binding.playing?.stop();
+                    binding.playing = undefined;
+                    if (animation) {
+                        const playing = { key: animation.key, stop: () => {}, sprite: null as IconSprite | null };
+                        binding.playing = playing;
+                        playing.stop = playback.watch(animation, (sprite) => {
+                            playing.sprite = sprite;
+                            paint(target, sprite ?? (page.url ? { ...descriptor, url: page.url } : null));
+                        });
+                    }
+                }
+                paint(target, binding.playing?.sprite ?? (page.url ? { ...descriptor, url: page.url } : null));
             }
             const update = () => {
                 for (const [target, binding] of bindings) refresh(target, binding);
@@ -286,6 +389,16 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                 },
                 { root, rootMargin: '96px 0px' }
             );
+            const animationObserver = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        const binding = bindings.get(entry.target as HTMLElement);
+                        if (binding) binding.animationVisible = entry.isIntersecting;
+                    }
+                    update();
+                },
+                { root }
+            );
             views.add(update);
             return {
                 update(targets: IconTarget[], metadata: IconMetadata | null) {
@@ -295,6 +408,7 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                             release(binding);
                             paint(target, null);
                             observer.unobserve(target);
+                            animationObserver.unobserve(target);
                             bindings.delete(target);
                         }
                     for (const { element, icon } of targets) {
@@ -302,7 +416,9 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                         if (!binding) {
                             binding = {
                                 descriptor: null,
+                                animation: null,
                                 visible: false,
+                                animationVisible: false,
                                 update: () => {
                                     const current = bindings.get(element);
                                     if (current) refresh(element, current);
@@ -310,13 +426,16 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                             };
                             bindings.set(element, binding);
                             observer.observe(element);
+                            animationObserver.observe(element);
                         }
                         binding.descriptor = describe(metadata, icon);
+                        binding.animation = describeAnimation(metadata, icon);
                     }
                     update();
                 },
                 dispose() {
                     observer.disconnect();
+                    animationObserver.disconnect();
                     for (const [target, binding] of bindings) {
                         release(binding);
                         paint(target, null);
@@ -329,6 +448,9 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
         },
         dispose() {
             disposed = true;
+            playback.dispose();
+            motion.removeEventListener('change', updateViews);
+            document.removeEventListener('visibilitychange', updateViews);
             for (const page of pages.values()) remove(page);
             views.clear();
         }

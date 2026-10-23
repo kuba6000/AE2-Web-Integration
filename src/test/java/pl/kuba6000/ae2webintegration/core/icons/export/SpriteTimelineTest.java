@@ -38,23 +38,20 @@ class SpriteTimelineTest {
 
     private void verifyPack(SpriteTimeline timeline, int[] expectedTicks, int[] expectedDurations) throws Exception {
         try (IconPack pack = writePack(timeline)) {
-            List<IconPack.Frame> frames = pack.animation(KEY);
+            List<IconPack.Frame> frames = pack.animation(KEY)
+                .frames();
             assertEquals(expectedTicks.length, frames.size());
             for (int index = 0; index < expectedTicks.length; index++) {
                 IconPack.Frame frame = frames.get(index);
                 assertEquals(expectedDurations[index], frame.durationMillis());
                 try (InputStream input = pack.openPage(
-                    frame.location()
+                    pack.animation(KEY)
                         .page()
                         .digest())) {
                     assertEquals(
                         0xff000000 | expectedTicks[index],
                         ImageIO.read(input)
-                            .getRGB(
-                                frame.location()
-                                    .x(),
-                                frame.location()
-                                    .y()));
+                            .getRGB(frame.x(), frame.y()));
                 }
             }
         }
@@ -102,16 +99,19 @@ class SpriteTimelineTest {
                 assertEquals(
                     256,
                     pack.animation(KEY)
+                        .frames()
                         .size());
                 assertEquals(
                     12800,
                     pack.animation(KEY)
+                        .frames()
                         .stream()
                         .mapToInt(IconPack.Frame::durationMillis)
                         .sum());
                 assertEquals(
                     50,
                     pack.animation(KEY)
+                        .frames()
                         .get(255)
                         .durationMillis());
             }

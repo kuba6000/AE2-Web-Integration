@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
@@ -41,6 +42,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -49,6 +51,151 @@ class IconPackAnimationTest {
     private static final StableKey KEY = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
     @TempDir
     Path directory;
+
+    @ParameterizedTest
+    @ValueSource(ints = { 64, 512, 1024, 2048 })
+    void everyFrameOfMaximumUniqueSequenceLivesOnOnePage(int staticPageSize) throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata(
+                "1.7.10",
+                "forge",
+                "1",
+                "test",
+                "today",
+                Collections.emptyMap(),
+                Collections.emptyList()),
+            staticPageSize)) {
+            writer.add(KEY, pixels(0xff000000));
+            for (int index = 0; index < 256; index++)
+                writer.addAnimationFrame(KEY, pixels(0xff000000 | index), index + 1);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            List<IconPack.Frame> frames = pack.animation(KEY)
+                .frames();
+            assertEquals(256, frames.size());
+            Set<IconPack.Location> locations = new HashSet<>();
+            for (int index = 0; index < frames.size(); index++) {
+                locations.add(location(pack.animation(KEY), index));
+                assertEquals(
+                    index + 1,
+                    frames.get(index)
+                        .durationMillis());
+            }
+            assertEquals(256, locations.size());
+            assertEquals(
+                2048,
+                location(pack.animation(KEY), 0).page()
+                    .width());
+            assertEquals(0xff000000, color(pack, location(pack.animation(KEY), 0)));
+            assertEquals(0xff0000ff, color(pack, location(pack.animation(KEY), 255)));
+            assertEquals(0xff000000, color(pack, pack.find(KEY)));
+        }
+    }
+
+    @Test
+    void groupsShareAvailableSlotsButNeverSplitAcrossPages() throws Exception {
+        StableKey second = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
+        StableKey third = StableKey.parse("AgICAgICAgICAgICAgICAg");
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            for (StableKey key : Arrays.asList(KEY, second, third)) writer.add(key, pixels(0xff000000));
+            for (int index = 0; index < 220; index++) writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 10);
+            writer.addAnimationFrame(second, pixels(0xff001000), 20);
+            writer.addAnimationFrame(second, pixels(0xff002000), 30);
+            writer.addAnimationFrame(second, pixels(0xff001000), 40);
+            for (int index = 0; index < 10; index++) writer.addAnimationFrame(third, pixels(0xff003000 | index), 50);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            IconPack.Animation a = pack.animation(KEY);
+            IconPack.Animation b = pack.animation(second);
+            IconPack.Animation c = pack.animation(third);
+            assertEquals(location(a, 0), location(b, 0));
+            assertEquals(location(b, 0), location(b, 2));
+            assertEquals(
+                20,
+                b.frames()
+                    .get(0)
+                    .durationMillis());
+            assertEquals(
+                40,
+                b.frames()
+                    .get(2)
+                    .durationMillis());
+            assertEquals(location(a, 0).page(), location(b, 1).page());
+            assertNotEquals(location(a, 0).page(), location(c, 0).page());
+            assertEquals(0xff003009, color(pack, location(c, 9)));
+        }
+    }
+
+    @Test
+    void identicalCompletePagesAreReusedAfterInterveningAnimationPage() throws Exception {
+        StableKey second = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
+        StableKey third = StableKey.parse("AgICAgICAgICAgICAgICAg");
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            for (StableKey key : Arrays.asList(KEY, second, third)) writer.add(key, pixels(0xff000000));
+            for (int index = 0; index < 225; index++) {
+                writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 10);
+                writer.addAnimationFrame(second, pixels(0xff002000 | index), 20);
+                writer.addAnimationFrame(third, pixels(0xff001000 | index), 30);
+            }
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertEquals(
+                3,
+                pack.pages()
+                    .size());
+            for (int index = 0; index < 225; index++)
+                assertEquals(location(pack.animation(KEY), index), location(pack.animation(third), index));
+        }
+    }
+
+    @Test
+    void discardedOptionalPixelsNeverReachThePngEncoder() throws Exception {
+        try (ControlledPng encoder = new ControlledPng((image, delegate) -> delegate.run())) {
+            Path output;
+            try (IconPackWriter writer = writer()) {
+                writer.add(KEY, pixels(0xff000000));
+                for (int index = 0; index < 256; index++) writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 10);
+                writer.discardAnimation(KEY);
+                output = writer.finish();
+            }
+            assertEquals(1, encoder.completed.get());
+            try (IconPack pack = open(output)) {
+                assertEquals(
+                    1,
+                    pack.pages()
+                        .size());
+                assertNull(pack.animation(KEY));
+            }
+        }
+    }
+
+    @Test
+    void cancellationWhileEncodingFinalAnimationPagesSettlesWorkersAndPublishesNothing() throws Exception {
+        AtomicBoolean canceled = new AtomicBoolean();
+        try (ControlledPng encoder = new ControlledPng((image, delegate) -> {
+            if (image.getWidth() >= 1024) canceled.set(true);
+            delegate.run();
+        })) {
+            try (IconPackWriter writer = writer()) {
+                writer.add(KEY, pixels(0xff000000));
+                writer.addAnimationFrame(KEY, pixels(0xff001000), 10);
+                writer.addAnimationFrame(KEY, pixels(0xff002000), 20);
+                assertThrows(CancellationException.class, () -> writer.finish(canceled::get));
+            }
+            assertTrue(canceled.get());
+            assertEquals(2, encoder.completed.get());
+        }
+        try (Stream<Path> files = Files.list(directory)) {
+            assertEquals(0, files.count());
+        }
+    }
 
     @Test
     void singleSampleAndDiscardedModesStayStaticWhileMaximumTimedSequenceFinishes() throws Exception {
@@ -70,16 +217,16 @@ class IconPackAnimationTest {
             output = writer.finish();
         }
         try (IconPack pack = open(output)) {
-            assertTrue(
-                pack.animation(single)
-                    .isEmpty());
+            assertNull(pack.animation(single));
             assertEquals(
                 256,
                 pack.animation(KEY)
+                    .frames()
                     .size());
             assertEquals(
                 1,
                 pack.animation(KEY)
+                    .frames()
                     .get(255)
                     .durationMillis());
         }
@@ -103,15 +250,18 @@ class IconPackAnimationTest {
             assertEquals(
                 2,
                 pack.animation(KEY)
+                    .frames()
                     .size());
             assertEquals(
                 200000,
                 pack.animation(KEY)
+                    .frames()
                     .get(0)
                     .durationMillis());
             assertEquals(
                 200000,
                 pack.animation(KEY)
+                    .frames()
                     .get(1)
                     .durationMillis());
         }
@@ -147,19 +297,9 @@ class IconPackAnimationTest {
             assertNotEquals(
                 pack.find(KEY)
                     .page(),
-                pack.animation(KEY)
-                    .get(0)
-                    .location()
-                    .page());
-            assertEquals(
-                pack.animation(KEY)
-                    .get(0)
-                    .location()
-                    .page(),
-                pack.animation(KEY)
-                    .get(1)
-                    .location()
-                    .page());
+                location(pack.animation(KEY), 0).page());
+            assertEquals(0xff445566, color(pack, location(pack.animation(KEY), 0)));
+            assertEquals(0xff778899, color(pack, location(pack.animation(KEY), 1)));
         }
     }
 
@@ -175,7 +315,8 @@ class IconPackAnimationTest {
             output = writer.finish();
         }
         try (IconPack pack = open(output)) {
-            List<IconPack.Frame> frames = pack.animation(KEY);
+            List<IconPack.Frame> frames = pack.animation(KEY)
+                .frames();
             assertEquals(2, frames.size());
             assertEquals(
                 350,
@@ -185,18 +326,8 @@ class IconPackAnimationTest {
                 400,
                 frames.get(1)
                     .durationMillis());
-            assertEquals(
-                0xff445566,
-                color(
-                    pack,
-                    frames.get(0)
-                        .location()));
-            assertEquals(
-                0xff778899,
-                color(
-                    pack,
-                    frames.get(1)
-                        .location()));
+            assertEquals(0xff445566, color(pack, location(pack.animation(KEY), 0)));
+            assertEquals(0xff778899, color(pack, location(pack.animation(KEY), 1)));
         }
     }
 
@@ -213,7 +344,8 @@ class IconPackAnimationTest {
         }
         try (IconPack pack = open(output)) {
             assertEquals(0xff112233, color(pack, pack.find(KEY)));
-            List<IconPack.Frame> frames = pack.animation(KEY);
+            List<IconPack.Frame> frames = pack.animation(KEY)
+                .frames();
             assertEquals(3, frames.size());
             assertEquals(
                 250,
@@ -227,31 +359,15 @@ class IconPackAnimationTest {
                 300,
                 frames.get(2)
                     .durationMillis());
+            assertEquals(0xff445566, color(pack, location(pack.animation(KEY), 0)));
+            assertEquals(0xff778899, color(pack, location(pack.animation(KEY), 1)));
+            assertEquals(location(pack.animation(KEY), 0), location(pack.animation(KEY), 2));
             assertEquals(
-                0xff445566,
-                color(
-                    pack,
-                    frames.get(0)
-                        .location()));
-            assertEquals(
-                0xff778899,
-                color(
-                    pack,
-                    frames.get(1)
-                        .location()));
-            assertEquals(
-                frames.get(0)
-                    .location(),
-                frames.get(2)
-                    .location());
-            assertEquals(
-                3,
+                2,
                 pack.pages()
                     .size());
             assertThrows(UnsupportedOperationException.class, frames::clear);
-            assertTrue(
-                pack.animation(StableKey.random())
-                    .isEmpty());
+            assertNull(pack.animation(StableKey.random()));
         }
     }
 
@@ -270,9 +386,7 @@ class IconPackAnimationTest {
                 output = writer.finish();
             }
             try (IconPack pack = open(output)) {
-                assertTrue(
-                    pack.animation(KEY)
-                        .isEmpty());
+                assertNull(pack.animation(KEY));
                 assertEquals(
                     1,
                     pack.pages()
@@ -320,10 +434,12 @@ class IconPackAnimationTest {
             assertEquals(
                 256,
                 pack.animation(KEY)
+                    .frames()
                     .size());
             assertEquals(
                 200,
                 pack.animation(KEY)
+                    .frames()
                     .get(255)
                     .durationMillis());
             assertEquals(0xff112233, color(pack, pack.find(KEY)));
@@ -395,6 +511,27 @@ class IconPackAnimationTest {
                 }
             }, true));
         }
+    }
+
+    @Test
+    void animationCannotReferenceTwoValidPagesEvenWithRecomputedDigest() throws Exception {
+        Path valid = animatedPack();
+        Path changed = rewrite(valid, root -> {
+            JsonArray sequence = root.getAsJsonObject("animations")
+                .getAsJsonArray(KEY.toString());
+            JsonArray fallback = new JsonParser().parse(
+                root.getAsJsonObject("entries")
+                    .get(KEY.toString())
+                    .toString())
+                .getAsJsonArray();
+            fallback.add(new JsonPrimitive(200));
+            JsonArray modified = new JsonArray();
+            modified.add(sequence.get(0));
+            modified.add(fallback);
+            root.getAsJsonObject("animations")
+                .add(KEY.toString(), modified);
+        }, true);
+        assertRejected(changed);
     }
 
     @Test
@@ -527,6 +664,12 @@ class IconPackAnimationTest {
         int[] pixels = new int[4096];
         Arrays.fill(pixels, color);
         return pixels;
+    }
+
+    private static IconPack.Location location(IconPack.Animation animation, int index) {
+        IconPack.Frame frame = animation.frames()
+            .get(index);
+        return new IconPack.Location(animation.page(), frame.x(), frame.y());
     }
 
     private static int color(IconPack pack, IconPack.Location location) throws Exception {
