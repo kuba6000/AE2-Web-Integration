@@ -27,6 +27,7 @@ export type ServerConfiguration = {
 };
 export type ServerSettingsReadOnly = {
     port: number;
+    allowServerSettingsEditing: boolean;
     trustedProxies: string;
     maxRequestsBeforeLoggedInPerMinute: number;
     publicMode: boolean;
@@ -124,7 +125,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     status: 'ready',
                     current: result.settings,
                     readOnly: result.readOnly,
-                    draft: structuredClone(result.settings),
+                    draft: result.readOnly.allowServerSettingsEditing ? structuredClone(result.settings) : null,
                     secretChanges: {},
                     dirty: false,
                     uncertain: false
@@ -203,7 +204,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     status: 'ready',
                     current: result.settings,
                     readOnly: result.readOnly,
-                    draft: structuredClone(result.settings),
+                    draft: result.readOnly.allowServerSettingsEditing ? structuredClone(result.settings) : null,
                     secretChanges: {},
                     dirty: false,
                     saved: true,
@@ -213,7 +214,13 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 if (disposed) return;
                 const error = caught as ApiFailure;
                 if (['NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) denied();
-                else {
+                else if (error.status === 'SERVER_SETTINGS_DISABLED') {
+                    state.readOnly!.allowServerSettingsEditing = false;
+                    state.draft = null;
+                    state.secretChanges = {};
+                    state.dirty = false;
+                    state.uncertain = false;
+                } else {
                     state.error = error.status || 'NETWORK_ERROR';
                     state.uncertain = ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(
                         state.error

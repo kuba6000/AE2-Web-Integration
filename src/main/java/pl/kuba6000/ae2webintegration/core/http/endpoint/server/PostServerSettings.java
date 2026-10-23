@@ -26,7 +26,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
  * Saves and applies the complete editable server configuration without restarting the web listener.
- * Listener port, administrator password, public mode, localhost trust, proxy trust and request limit are file-only.
+ * Web editing must be enabled by general.allow_server_settings_editing in config.toml.
+ * Listener port, administrator password, access policy, proxy trust and request limit are file-only.
  * Requests contain revision, editable settings and optional secrets updates; readOnly metadata is rejected.
  * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty
  * string to clear it. Explicit null values are invalid; saved secrets are never returned.
@@ -34,7 +35,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * @response 200 {@link Response} Saved configuration and its new opaque configuration revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid, missing, unknown or file-only settings.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required; CSRF_REJECTED: missing request marker.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required; CSRF_REJECTED: missing request marker;
+ *           SERVER_SETTINGS_DISABLED: web editing is disabled in the active configuration.
  * @response 409 {@link ErrorResponse} CONFIG_CHANGED: active configuration changed since the settings were read; fetch
  *           it again before saving.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
@@ -69,6 +71,10 @@ public final class PostServerSettings extends IAsyncRequest {
         synchronized (Config.class) {
             if (!AE2Controller.isCurrentHTTPLifecycle(context.getLifecycleGeneration())) {
                 deny(ApiStatus.SERVER_STOPPING);
+                return;
+            }
+            if (!Config.INSTANCE.general.allowServerSettingsEditing) {
+                deny(ApiStatus.SERVER_SETTINGS_DISABLED);
                 return;
             }
             ServerSettingsSnapshot saved;

@@ -19,6 +19,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * Reads the active editable server configuration from memory. Administrator or trusted localhost access is required.
  * Read-only metadata includes listener port, access policy, proxy trust, request limit and configured-secret flags.
  * Administrator password, Discord webhook and ntfy password values are never returned.
+ * Read-only allowServerSettingsEditing reports whether web saves are enabled; reading remains available when disabled.
  * 
  * @response 200 {@link Response} Active editable configuration, file-only metadata and opaque configuration revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: unexpected request body.

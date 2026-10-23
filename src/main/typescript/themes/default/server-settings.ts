@@ -260,6 +260,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
 
     const general = group('serverGeneral');
     fileControl(general, 'port', 'serverPort', 'text');
+    fileControl(general, 'allowServerSettingsEditing', 'serverAllowEditing', 'checkbox');
     fileControl(general, 'adminPasswordConfigured', 'serverAdminPassword', 'password');
     fileControl(general, 'publicMode', 'serverPublicMode', 'checkbox');
     fileControl(general, 'allowNoPasswordOnLocalhost', 'serverLocalhost', 'checkbox');
@@ -373,6 +374,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             else if (config.error === 'NO_PERMISSIONS') message = locale.t('serverAccessDenied');
             else if (config.error) message = locale.common(config.error);
             else if (config.status === 'loading') message = locale.common('loading');
+            else if (config.readOnly?.allowServerSettingsEditing === false) message = locale.t('serverEditingDisabled');
             else if (config.saved) message = locale.t('serverSaved');
             else if (config.dirty) message = locale.common('settingsDraft');
             status.textContent = message;

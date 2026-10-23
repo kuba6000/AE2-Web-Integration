@@ -27,6 +27,11 @@ public final class ConfigSettings {
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public int port = 2324;
 
+        @Path("allow_server_settings_editing")
+        @Comment("Allow administrators and trusted localhost users to edit server settings through the web panel.")
+        @WebSetting(WebSetting.Access.FILE_ONLY)
+        public boolean allowServerSettingsEditing = true;
+
         @Comment("Password for the Admin web account. Keep this secret.")
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public String password = PasswordHelper.generateDefaultPassword();

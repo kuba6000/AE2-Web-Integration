@@ -11,7 +11,7 @@ public record ServerSettingsSnapshot(@NotNull String revision, @NotNull Editable
 
     /** File-only settings and secret-presence flags; never secret values or lengths. */
     @Desugar
-    public record ReadOnly(int port, boolean publicMode, boolean allowNoPasswordOnLocalhost,
-        @NotNull String trustedProxies, int maxRequestsBeforeLoggedInPerMinute, boolean adminPasswordConfigured,
-        boolean discordWebhookConfigured, boolean ntfyPasswordConfigured) {}
+    public record ReadOnly(int port, boolean allowServerSettingsEditing, boolean publicMode,
+        boolean allowNoPasswordOnLocalhost, @NotNull String trustedProxies, int maxRequestsBeforeLoggedInPerMinute,
+        boolean adminPasswordConfigured, boolean discordWebhookConfigured, boolean ntfyPasswordConfigured) {}
 }

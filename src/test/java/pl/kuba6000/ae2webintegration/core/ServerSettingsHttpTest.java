@@ -67,6 +67,82 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void fileOnlyEditingSwitchBlocksAdminAndLocalhostUntilReloadEnablesIt() throws Exception {
+        JsonObject enabled = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        assertTrue(
+            enabled.getAsJsonObject("readOnly")
+                .get("allowServerSettingsEditing")
+                .getAsBoolean());
+        assertFalse(
+            enabled.getAsJsonObject("settings")
+                .getAsJsonObject("general")
+                .has("allowServerSettingsEditing"));
+        JsonObject oldForm = readSettings();
+        oldForm.getAsJsonObject("settings")
+            .getAsJsonObject("notifications")
+            .addProperty("minimumCraftingAmount", 777);
+        setSecret(oldForm, "discordWebhook", "https://example.invalid/replacement");
+        setSecret(oldForm, "ntfyPassword", "");
+        config.write("general.allow_server_settings_editing", false);
+        Config.reload();
+        JsonObject disabled = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
+        assertFalse(
+            disabled.getAsJsonObject("readOnly")
+                .get("allowServerSettingsEditing")
+                .getAsBoolean());
+        byte[] before = Files.readAllBytes(
+            Config.getConfigFile("config.toml")
+                .toPath());
+        assertEquals(
+            "SERVER_SETTINGS_DISABLED",
+            request("POST", "/api/server/settings", token, oldForm.toString(), 403).get("status")
+                .getAsString());
+        assertArrayEquals(
+            before,
+            Files.readAllBytes(
+                Config.getConfigFile("config.toml")
+                    .toPath()));
+        assertEquals(disabled, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
+        config.set("general.allow_no_password_on_localhost", true);
+        JsonObject local = request("GET", "/api/server/settings", "local", null, 200).getAsJsonObject("data");
+        assertFalse(
+            local.getAsJsonObject("readOnly")
+                .get("allowServerSettingsEditing")
+                .getAsBoolean());
+        local.remove("readOnly");
+        setSecret(local, "discordWebhook", "");
+        setSecret(local, "ntfyPassword", "replacement");
+        before = Files.readAllBytes(
+            Config.getConfigFile("config.toml")
+                .toPath());
+        assertEquals(
+            "SERVER_SETTINGS_DISABLED",
+            request("POST", "/api/server/settings", "local", local.toString(), 403).get("status")
+                .getAsString());
+        assertArrayEquals(
+            before,
+            Files.readAllBytes(
+                Config.getConfigFile("config.toml")
+                    .toPath()));
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertNotEquals(777, Config.INSTANCE.notifications.minimumCraftingAmount);
+        config.write("general.allow_server_settings_editing", true);
+        request("POST", "/api/server/settings", "local", local.toString(), 403);
+        Config.reload();
+        JsonObject edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("notifications")
+            .addProperty("minimumCraftingAmount", 123);
+        JsonObject saved = request("POST", "/api/server/settings", token, edit.toString(), 200).getAsJsonObject("data");
+        assertTrue(
+            saved.getAsJsonObject("readOnly")
+                .get("allowServerSettingsEditing")
+                .getAsBoolean());
+        assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
+    }
+
+    @Test
     void readsActiveConfigurationAndStableRevisionWithoutReadingTheFile() throws Exception {
         JsonObject active = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         config.write("notifications.minimum_crafting_amount", 456);
@@ -469,7 +545,7 @@ class ServerSettingsHttpTest {
     void restrictedConfigurationFieldsRejectValidTypes() throws Exception {
         JsonObject restricted = new Gson().fromJson("""
             {"general":{"password":"other-password","port":65500,"publicMode":false,
-            "allowNoPasswordOnLocalhost":true,"trustedProxies":"192.0.2.0/24",
+            "allowServerSettingsEditing":false,"allowNoPasswordOnLocalhost":true,"trustedProxies":"192.0.2.0/24",
             "maxRequestsBeforeLoggedInPerMinute":37},"discord":{"webhook":"https://example.invalid/other"},
             "ntfy":{"password":"other-secret"}}
             """, JsonObject.class);

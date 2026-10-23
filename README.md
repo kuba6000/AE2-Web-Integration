@@ -217,6 +217,9 @@ Administrators and trusted localhost users can edit the active configuration in 
 The listener port, administrator password, public mode, password-free localhost access, trusted proxies
 and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
 Manual file edits take effect after reloading the configuration or restarting the server.
+Set `general.allow_server_settings_editing = false` in `config.toml` and reload to disable web edits,
+including edits by administrators and trusted localhost users. Web editing is enabled by default;
+the switch can only be changed in the file.
 Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
 to keep them, or explicitly replace or clear them.
 

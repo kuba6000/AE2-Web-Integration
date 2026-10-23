@@ -97,6 +97,7 @@ public class Config {
             new EditableServerSettings(loaded),
             new ServerSettingsSnapshot.ReadOnly(
                 loaded.general.port,
+                loaded.general.allowServerSettingsEditing,
                 loaded.general.publicMode,
                 loaded.general.allowNoPasswordOnLocalhost,
                 loaded.general.trustedProxies,

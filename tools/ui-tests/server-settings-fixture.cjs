@@ -23,6 +23,7 @@ const settings = () => ({
 
 const readOnly = () => ({
     port: 2324,
+    allowServerSettingsEditing: true,
     trustedProxies: '',
     maxRequestsBeforeLoggedInPerMinute: 20,
     publicMode: true,

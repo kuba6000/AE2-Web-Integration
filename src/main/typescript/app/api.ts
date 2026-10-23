@@ -42,6 +42,7 @@ const responseStatuses = new Set([
     'FAIL',
     'UPDATE_CHANGED',
     'CONFIG_CHANGED',
+    'SERVER_SETTINGS_DISABLED',
     'REQUEST_TOO_LARGE',
     'UNSUPPORTED_MEDIA_TYPE',
     'NOT_FOUND',

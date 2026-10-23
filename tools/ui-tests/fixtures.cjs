@@ -362,6 +362,12 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 );
             } else if (resource === '/api/server/settings') {
                 let status = options.isAdmin ? 'OK' : 'NO_PERMISSIONS';
+                if (
+                    status === 'OK' &&
+                    request.method === 'POST' &&
+                    !options.serverConfigurationReadOnly.allowServerSettingsEditing
+                )
+                    status = 'SERVER_SETTINGS_DISABLED';
                 if (status === 'OK' && request.method === 'POST') {
                     const input = JSON.parse(Buffer.concat(body).toString());
                     if (
@@ -369,6 +375,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                         [
                             'password',
                             'port',
+                            'allowServerSettingsEditing',
                             'publicMode',
                             'allowNoPasswordOnLocalhost',
                             'trustedProxies',

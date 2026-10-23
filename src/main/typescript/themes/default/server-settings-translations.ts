@@ -2,6 +2,8 @@ export const serverSettingsTranslations = {
     en: {
         serverFileOnly: 'This setting can only be changed in config.toml.',
         serverPort: 'Web server port',
+        serverAllowEditing: 'Allow editing server settings from the web',
+        serverEditingDisabled: 'Editing server settings has been disabled in config.toml.',
         serverAdminPassword: 'Administrator password',
         serverSecretRemove: 'Remove',
         serverSecretUndo: 'Undo',
@@ -74,6 +76,8 @@ export const serverSettingsTranslations = {
     pl: {
         serverFileOnly: 'To ustawienie można zmienić tylko w config.toml.',
         serverPort: 'Port serwera WWW',
+        serverAllowEditing: 'Zezwalaj na edycję ustawień serwera przez WWW',
+        serverEditingDisabled: 'Edycja ustawień serwera została wyłączona w config.toml.',
         serverAdminPassword: 'Hasło administratora',
         serverSecretRemove: 'Usuń',
         serverSecretUndo: 'Cofnij',

@@ -6,6 +6,62 @@ const { pathToFileURL } = require('node:url');
 const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/terminal.js'));
 const { settings, readOnly } = require('./server-settings-fixture.cjs');
 
+test('disabled web editing keeps metadata available but prevents edits and saves until reloaded', async (t) => {
+    let enabled = false;
+    let writes = 0;
+    const terminal = await application(t, true, {
+        serverSettings: async () => ({
+            revision: 'current',
+            settings: settings(),
+            readOnly: { ...readOnly(), allowServerSettingsEditing: enabled }
+        }),
+        saveServerSettings: async () => {
+            writes++;
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.status, 'ready');
+    assert.equal(terminal.state.serverSettings.readOnly.allowServerSettingsEditing, false);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
+    terminal.serverSettings.removeSecret('discordWebhook');
+    await terminal.serverSettings.save();
+    assert.equal(writes, 0);
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    enabled = true;
+    await terminal.serverSettings.reload();
+    assert.notEqual(terminal.state.serverSettings.draft, null);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    assert.equal(terminal.state.serverSettings.dirty, true);
+});
+
+test('server disabling editing after form load clears drafts and blocks another save', async (t) => {
+    let writes = 0;
+    const terminal = await application(t, true, {
+        saveServerSettings: async () => {
+            writes++;
+            throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+    assert.equal(terminal.state.serverSettings.readOnly.allowServerSettingsEditing, false);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.equal(terminal.state.serverSettings.error, null);
+    assert.equal(terminal.state.serverSettings.uncertain, false);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+});
+
 test('secret replacement and removal are explicit, undoable and never echoed into confirmed settings', async (t) => {
     const writes = [];
     let metadata = { ...readOnly(), discordWebhookConfigured: true, ntfyPasswordConfigured: true };
@@ -73,6 +129,7 @@ test('file-only metadata stays separate from edits and saves, then clears when a
     assert.deepEqual(Object.keys(submitted).sort(), ['revision', 'settings']);
     for (const field of [
         'port',
+        'allowServerSettingsEditing',
         'password',
         'publicMode',
         'allowNoPasswordOnLocalhost',
@@ -359,6 +416,7 @@ test('an explicit discard reload blocks saving the outgoing draft while the new 
 test('HTTP server settings transport sends revisioned JSON with CSRF header and retains conflict status', async (t) => {
     const http = require('node:http');
     const requests = [];
+    let failure = 'CONFIG_CHANGED';
     const server = http.createServer(async (request, response) => {
         let body = '';
         for await (const chunk of request) body += chunk;
@@ -372,8 +430,8 @@ test('HTTP server settings transport sends revisioned JSON with CSRF header and 
                 })
             );
         else {
-            response.statusCode = 409;
-            response.end(JSON.stringify({ status: 'CONFIG_CHANGED', data: null }));
+            response.statusCode = failure === 'CONFIG_CHANGED' ? 409 : 403;
+            response.end(JSON.stringify({ status: failure, data: null }));
         }
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -398,4 +456,6 @@ test('HTTP server settings transport sends revisioned JSON with CSRF header and 
     assert.equal('secrets' in result, false);
     assert.equal('webhook' in result.settings.discord, false);
     assert.equal('password' in result.settings.ntfy, false);
+    failure = 'SERVER_SETTINGS_DISABLED';
+    await assert.rejects(api.saveServerSettings(update), (error) => error.status === 'SERVER_SETTINGS_DISABLED');
 });
