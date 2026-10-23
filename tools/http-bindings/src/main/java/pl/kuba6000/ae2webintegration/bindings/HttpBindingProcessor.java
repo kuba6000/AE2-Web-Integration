@@ -40,7 +40,8 @@ import com.palantir.javapoet.TypeSpec;
 import com.palantir.javapoet.WildcardTypeName;
 
 /** Generates ordinary Java companions using only the standard compiler model. */
-@SupportedAnnotationTypes("pl.kuba6000.ae2webintegration.core.http.contract.Endpoint")
+@SupportedAnnotationTypes({ "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint",
+    "pl.kuba6000.ae2webintegration.core.http.contract.InputShape" })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedOptions("httpBindings.catalog")
 public final class HttpBindingProcessor extends AbstractProcessor {
@@ -53,6 +54,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         .get("pl.kuba6000.ae2webintegration.core.identity", "StableKey");
     private static final ClassName JSON_OBJECT = ClassName.get("com.google.gson", "JsonObject");
     private static final ClassName JSON_ELEMENT = ClassName.get("com.google.gson", "JsonElement");
+    private static final ClassName TYPE_ADAPTER = ClassName.get("com.google.gson", "TypeAdapter");
     private final Set<String> emitted = new HashSet<>();
 
     @Override
@@ -62,7 +64,11 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         if (marker == null || round.processingOver()) return false;
         List<TypeElement> endpoints = new ArrayList<>();
         for (Element element : round.getElementsAnnotatedWith(marker)) endpoints.add((TypeElement) element);
-        if (endpoints.isEmpty()) return false;
+        List<TypeElement> projections = new ArrayList<>();
+        TypeElement shapeMarker = processingEnv.getElementUtils()
+            .getTypeElement(CONTRACT + "InputShape");
+        for (Element element : round.getElementsAnnotatedWith(shapeMarker)) projections.add((TypeElement) element);
+        if (endpoints.isEmpty() && projections.isEmpty()) return false;
         endpoints.sort(
             Comparator.comparing(
                 type -> type.getQualifiedName()
@@ -71,9 +77,15 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             for (TypeElement endpoint : endpoints) {
                 for (TypeElement owner : hierarchy(endpoint)) emitOwner(owner);
             }
-            emitCatalog(endpoints);
+            List<TypeElement> validProjections = new ArrayList<>();
+            for (TypeElement projection : projections) {
+                if (emitProjection(projection)) validProjections.add(projection);
+            }
+            emitCatalog(endpoints, validProjections);
         } catch (IOException exception) {
-            error(endpoints.get(0), "Cannot generate HTTP bindings: " + exception.getMessage());
+            error(
+                endpoints.isEmpty() ? projections.get(0) : endpoints.get(0),
+                "Cannot generate HTTP bindings: " + exception.getMessage());
         }
         return true;
     }
@@ -217,7 +229,108 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         return binding;
     }
 
-    private void emitCatalog(List<TypeElement> endpoints) throws IOException {
+    private boolean emitProjection(TypeElement wrapper) throws IOException {
+        AnnotationMirror projection = annotation(wrapper, "InputShape");
+        Element represented = processingEnv.getTypeUtils()
+            .asElement((TypeMirror) annotationValue(projection, "value"));
+        if (!(represented instanceof TypeElement valueType)
+            || (valueType.getKind() != ElementKind.CLASS && valueType.getKind() != ElementKind.RECORD)) {
+            error(wrapper, "InputShape requires a class or record as its represented type");
+            return false;
+        }
+        List<VariableElement> fields = ElementFilter.fieldsIn(wrapper.getEnclosedElements())
+            .stream()
+            .filter(
+                field -> !field.getModifiers()
+                    .contains(Modifier.STATIC))
+            .toList();
+        if (fields.size() != 1 || !wrapper.getTypeParameters()
+            .isEmpty()
+            || !processingEnv.getTypeUtils()
+                .isSameType(
+                    fields.get(0)
+                        .asType(),
+                    valueType.asType())
+            || wrapper.getKind() != ElementKind.RECORD) {
+            error(
+                wrapper,
+                "InputShape requires one record component matching its represented type and no type parameters");
+            return false;
+        }
+        for (Element owner = wrapper; owner instanceof TypeElement; owner = owner.getEnclosingElement()) {
+            if (owner.getModifiers()
+                .contains(Modifier.PRIVATE)) {
+                error(wrapper, "InputShape wrapper must be accessible to its same-package adapter");
+                return false;
+            }
+        }
+        TypeElement excluded = (TypeElement) processingEnv.getTypeUtils()
+            .asElement((TypeMirror) annotationValue(projection, "excludeFieldsAnnotatedWith"));
+        AnnotationMirror retention = annotationNamed(excluded, "java.lang.annotation.Retention");
+        if (retention == null || !value(retention, "value").equals("RUNTIME")) {
+            error(wrapper, "InputShape exclusion annotation requires RUNTIME retention for Gson");
+            return false;
+        }
+        ClassName name = companion(wrapper, "_JsonAdapter");
+        ParameterizedTypeName wrapperAdapter = ParameterizedTypeName.get(TYPE_ADAPTER, ClassName.get(wrapper));
+        TypeSpec adapter = TypeSpec.anonymousClassBuilder("")
+            .superclass(wrapperAdapter)
+            .addMethod(
+                MethodSpec.methodBuilder("write")
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ClassName.get("com.google.gson.stream", "JsonWriter"), "output")
+                    .addParameter(ClassName.get(wrapper), "wrapper")
+                    .addException(IOException.class)
+                    .addStatement(
+                        "delegate.write(output, wrapper.$N())",
+                        fields.get(0)
+                            .getSimpleName())
+                    .build())
+            .addMethod(
+                MethodSpec.methodBuilder("read")
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(ClassName.get(wrapper))
+                    .addParameter(ClassName.get("com.google.gson.stream", "JsonReader"), "input")
+                    .addException(IOException.class)
+                    .addStatement("return new $T(delegate.read(input))", ClassName.get(wrapper))
+                    .build())
+            .build();
+        TypeSpec companion = TypeSpec.classBuilder(name)
+            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addOriginatingElement(wrapper)
+            .addMethod(
+                MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PRIVATE)
+                    .build())
+            .addMethod(
+                MethodSpec.methodBuilder("get")
+                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                    .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
+                    .returns(ParameterizedTypeName.get(TYPE_ADAPTER, WildcardTypeName.subtypeOf(Object.class)))
+                    .addParameter(
+                        ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                        "type")
+                    .addStatement("if (type != $T.class) return null", ClassName.get(wrapper))
+                    .addStatement(
+                        "$T delegate = $T.projectionAdapter($T.class, $T.class)",
+                        ParameterizedTypeName.get(TYPE_ADAPTER, ClassName.get(valueType)),
+                        ClassName.get("pl.kuba6000.ae2webintegration.core.utils", "GSONUtils"),
+                        ClassName.get(valueType),
+                        ClassName.get(excluded))
+                    .addStatement("return $L.nullSafe()", adapter)
+                    .build())
+            .build();
+        JavaFile.builder(name.packageName(), companion)
+            .indent("    ")
+            .skipJavaLangImports(true)
+            .build()
+            .writeTo(processingEnv.getFiler());
+        return true;
+    }
+
+    private void emitCatalog(List<TypeElement> endpoints, List<TypeElement> projections) throws IOException {
         String configuredName = processingEnv.getOptions()
             .getOrDefault("httpBindings.catalog", HTTP + ".GeneratedHttpBindings");
         int lastDot = configuredName.lastIndexOf('.');
@@ -245,17 +358,38 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         catalog.addMethod(
             lookup.addStatement("return null")
                 .build());
+        MethodSpec.Builder adapters = MethodSpec.methodBuilder("adapter")
+            .addAnnotation(Override.class)
+            .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(TYPE_ADAPTER, WildcardTypeName.subtypeOf(Object.class)))
+            .addParameter(
+                ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                "type");
+        if (!projections.isEmpty()) adapters.addStatement(
+            "$T adapter",
+            ParameterizedTypeName.get(TYPE_ADAPTER, WildcardTypeName.subtypeOf(Object.class)));
+        for (TypeElement projection : projections) {
+            catalog.addOriginatingElement(projection);
+            adapters.addStatement("adapter = $T.get(type)", companion(projection, "_JsonAdapter"))
+                .addStatement("if (adapter != null) return adapter");
+        }
+        catalog.addMethod(
+            adapters.addStatement("return null")
+                .build());
         JavaFile.builder(name.packageName(), catalog.build())
             .indent("    ")
             .skipJavaLangImports(true)
             .build()
             .writeTo(processingEnv.getFiler());
+        List<TypeElement> origins = new ArrayList<>(endpoints);
+        origins.addAll(projections);
         try (Writer writer = processingEnv.getFiler()
             .createResource(
                 StandardLocation.CLASS_OUTPUT,
                 "",
                 "META-INF/services/" + catalogType.canonicalName(),
-                endpoints.toArray(new Element[0]))
+                origins.toArray(new Element[0]))
             .openWriter()) {
             writer.write(name.canonicalName() + "\n");
         }
@@ -402,10 +536,14 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     }
 
     private AnnotationMirror annotation(Element element, String name) {
+        return annotationNamed(element, CONTRACT + name);
+    }
+
+    private AnnotationMirror annotationNamed(Element element, String name) {
         for (AnnotationMirror annotation : element.getAnnotationMirrors()) {
             if (annotation.getAnnotationType()
                 .toString()
-                .equals(CONTRACT + name)) return annotation;
+                .equals(name)) return annotation;
         }
         return null;
     }
@@ -428,6 +566,10 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     }
 
     private ClassName companion(TypeElement owner) {
+        return companion(owner, "_HttpBinding");
+    }
+
+    private ClassName companion(TypeElement owner, String suffix) {
         String packageName = processingEnv.getElementUtils()
             .getPackageOf(owner)
             .getQualifiedName()
@@ -436,7 +578,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .toString()
             .substring(packageName.length() + 1)
             .replace('.', '_');
-        return ClassName.get(packageName, simpleName + "_HttpBinding");
+        return ClassName.get(packageName, simpleName + suffix);
     }
 
     private void error(Element element, String message) {

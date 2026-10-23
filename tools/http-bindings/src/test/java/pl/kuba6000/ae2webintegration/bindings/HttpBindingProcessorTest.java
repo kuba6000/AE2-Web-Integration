@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.bindings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.ServiceLoader;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -26,11 +28,14 @@ import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.TypeAdapter;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.http.HttpBindingCatalog;
 import pl.kuba6000.ae2webintegration.core.http.InputValues;
 
 class HttpBindingProcessorTest {
@@ -86,6 +91,62 @@ class HttpBindingProcessorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked") // The generated lookup returns the adapter for this exact fixture type.
+    void outputOnlyProjectionGeneratesAUsableCatalogWithoutAnyEndpoint() throws Exception {
+        Compilation result = compileSource("""
+            package fixture;
+            import pl.kuba6000.ae2webintegration.core.http.contract.InputShape;
+            public final class Example {
+              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+              public @interface Hidden {}
+              public static final class Value { public long amount = 7; @Hidden public String secret = "hidden"; }
+              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
+              public record Projection(Value value) {}
+            }
+            """);
+        assertTrue(
+            result.success(),
+            result.diagnostics()
+                .getDiagnostics()
+                .toString());
+        try (URLClassLoader loader = new URLClassLoader(
+            new URL[] { directory.toUri()
+                .toURL() },
+            getClass().getClassLoader())) {
+            Class<?> wrapper = loader.loadClass("fixture.Example$Projection");
+            Class<?> value = loader.loadClass("fixture.Example$Value");
+            Object instance = wrapper.getConstructor(value)
+                .newInstance(
+                    value.getConstructor()
+                        .newInstance());
+            TypeAdapter<Object> adapter = null;
+            for (HttpBindingCatalog catalog : ServiceLoader.load(HttpBindingCatalog.class, loader)) {
+                TypeAdapter<?> candidate = catalog.adapter(wrapper);
+                if (candidate != null) adapter = (TypeAdapter<Object>) candidate;
+            }
+            assertNotNull(adapter);
+            JsonObject json = adapter.toJsonTree(instance)
+                .getAsJsonObject();
+            assertEquals(
+                7L,
+                json.get("amount")
+                    .getAsLong());
+            assertFalse(json.has("secret"));
+            Object decoded = adapter.fromJsonTree(JsonParser.parseString("{\"amount\":9,\"secret\":\"bad\"}"));
+            Object decodedValue = wrapper.getMethod("value")
+                .invoke(decoded);
+            assertEquals(
+                9L,
+                value.getField("amount")
+                    .get(decodedValue));
+            assertEquals(
+                "hidden",
+                value.getField("secret")
+                    .get(decodedValue));
+        }
+    }
+
+    @Test
     void generatedBodyBindingDecodesOnlyStrictValidShapes() throws Exception {
         assertCompiles(
             "  @Body Input input;\n"
@@ -131,14 +192,14 @@ class HttpBindingProcessorTest {
         assertCompiles("""
               @Body Input input;
               public static final class Input { Projected projected; Source ordinary; }
-              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE)
+              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
               @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
               public @interface Hidden {}
               @InputShape(value=Source.class, excludeFieldsAnnotatedWith=Hidden.class)
-              public static final class Projected { long amount; Nested child; String adapterState; }
+              public record Projected(Source value) {}
               public static final class Source { long amount; Nested child; @Hidden String secret; }
               public static final class Nested { boolean enabled; @Hidden String secret; }
-              public long amount() { return input.projected.amount; }
+              public long amount() { return input.ordinary.amount; }
             """);
         try (URLClassLoader loader = new URLClassLoader(
             new URL[] { directory.toUri()
@@ -152,7 +213,7 @@ class HttpBindingProcessorTest {
             String ordinary = "{\"amount\":8,\"child\":{\"enabled\":false,\"secret\":\"nested\"},\"secret\":\"root\"}";
             bind.invoke(request, inputs("{\"projected\":" + projected + ",\"ordinary\":" + ordinary + "}"));
             assertEquals(
-                7L,
+                8L,
                 endpoint.getMethod("amount")
                     .invoke(request));
             for (String invalid : Arrays.asList(
@@ -193,6 +254,42 @@ class HttpBindingProcessorTest {
                 .anyMatch(
                     diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
                         .contains("InputShape requires a class or record")));
+    }
+
+    @Test
+    void rejectsInputShapeWithoutOneMatchingRecordComponent() throws Exception {
+        Compilation result = compile("""
+              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Deprecated.class)
+              public record Projection(Value value, String extra) {}
+              public static final class Value { long amount; }
+            """);
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .getDiagnostics()
+                .stream()
+                .anyMatch(
+                    diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
+                        .contains("one record component")));
+    }
+
+    @Test
+    void rejectsInputShapeExclusionsWithoutRuntimeRetention() throws Exception {
+        Compilation result = compile("""
+              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE)
+              public @interface Hidden {}
+              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
+              public record Projection(Value value) {}
+              public static final class Value { long amount; }
+            """);
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .getDiagnostics()
+                .stream()
+                .anyMatch(
+                    diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
+                        .contains("RUNTIME retention")));
     }
 
     private InputValues inputs(String body) {

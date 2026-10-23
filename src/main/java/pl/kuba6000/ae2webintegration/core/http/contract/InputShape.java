@@ -7,10 +7,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Describes the JSON object validated for a wrapper input. Validation uses the declared fields of the
- * represented class or record, excluding fields carrying the specified annotation throughout its nested
- * object graph. Ordinary inputs of the represented type remain unaffected. This does not change Gson
- * decoding: the wrapper still needs its corresponding JSON representation or adapter.
+ * Defines a JSON projection for a non-generic record with one component of the represented type.
+ * The record and its enclosing types must be accessible to a same-package generated adapter.
+ * Shared Gson encodes the component directly and constructs the record when decoding. Fields carrying
+ * the specified runtime-retained annotation are excluded recursively in both directions. Ordinary
+ * serialization of the represented type is unaffected. HTTP input validation uses the same projected
+ * declared fields and additionally rejects unknown, missing required, or malformed members.
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.TYPE)

@@ -204,6 +204,8 @@ pluginManager.withPlugin('idea') {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
             includeTestsMatching '*ServerSettingsHttpTest'
+            includeTestsMatching '*GSONUtilsTest'
+            includeTestsMatching '*StableKeyGsonTest'
             includeTestsMatching '*AuthSessionTest'
             includeTestsMatching '*SessionStoreTest'
             includeTestsMatching '*CoreDataTest'
