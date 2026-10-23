@@ -14,6 +14,7 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -97,17 +98,31 @@ class DiscordCraftingCardTest {
             unknown.output(),
             unknown.durationString(),
             false,
-            Collections.singletonList(new PlayerIdentity(new UUID(0, 1), "Alice")));
+            Collections.singletonList(CraftingRequester.player(new PlayerIdentity(new UUID(0, 1), "Alice"))));
         CraftingMessage multiple = new CraftingMessage(
             unknown.gridName(),
             unknown.cpuName(),
             unknown.output(),
             unknown.durationString(),
             false,
-            Arrays.asList(new PlayerIdentity(new UUID(0, 1), "Alice"), new PlayerIdentity(new UUID(0, 2), "Bob")));
+            Arrays.asList(
+                CraftingRequester.player(new PlayerIdentity(new UUID(0, 1), "Alice")),
+                CraftingRequester.player(new PlayerIdentity(new UUID(0, 2), "Bob"))));
+        CraftingMessage sources = new CraftingMessage(
+            unknown.gridName(),
+            unknown.cpuName(),
+            unknown.output(),
+            unknown.durationString(),
+            false,
+            Arrays.asList(CraftingRequester.automation(), CraftingRequester.web()));
+        BufferedImage sourceNames = decode(renderer.render(sources, null));
         BufferedImage noNames = decode(renderer.render(unknown, null));
         BufferedImage oneName = decode(renderer.render(single, null));
         BufferedImage twoNames = decode(renderer.render(multiple, null));
+        assertFalse(
+            Arrays.equals(
+                noNames.getRGB(0, 300, 960, 84, null, 0, 960),
+                sourceNames.getRGB(0, 300, 960, 84, null, 0, 960)));
         assertEquals(noNames.getWidth(), twoNames.getWidth());
         assertEquals(noNames.getHeight(), twoNames.getHeight());
         assertTrue(noNames.getHeight() <= 500);

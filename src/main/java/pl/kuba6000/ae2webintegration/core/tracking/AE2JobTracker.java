@@ -4,10 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
 import org.jetbrains.annotations.NotNull;
@@ -16,8 +14,8 @@ import org.jetbrains.annotations.Nullable;
 import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -76,17 +74,25 @@ public class AE2JobTracker {
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
         public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
         public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
-        private final Map<UUID, PlayerIdentity> requestersById = new LinkedHashMap<>();
-        private volatile List<PlayerIdentity> requesters = Collections.emptyList();
+        private volatile List<CraftingRequester> requesters = Collections.emptyList();
 
-        public @NotNull List<PlayerIdentity> getRequesters() {
+        public @NotNull List<CraftingRequester> getRequesters() {
             return requesters;
         }
 
-        private void rememberRequester(@Nullable PlayerIdentity requester) {
-            if (requester == null) return;
-            requestersById.put(requester.uuid, requester);
-            requesters = Collections.unmodifiableList(new ArrayList<>(requestersById.values()));
+        private void rememberRequester(@NotNull CraftingRequester requester) {
+            List<CraftingRequester> updated = new ArrayList<>(requesters);
+            for (int i = 0; i < updated.size(); i++) {
+                CraftingRequester existing = updated.get(i);
+                if (existing.source() == requester.source()
+                    && (existing.player() == null || existing.player().uuid.equals(requester.player().uuid))) {
+                    updated.set(i, requester);
+                    requesters = Collections.unmodifiableList(updated);
+                    return;
+                }
+            }
+            updated.add(requester);
+            requesters = Collections.unmodifiableList(updated);
         }
 
         public boolean isDone = false;
@@ -121,7 +127,7 @@ public class AE2JobTracker {
     }
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging,
-        @Nullable PlayerIdentity requester) {
+        @NotNull CraftingRequester requester) {
         if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
         if (isMerging && info == null) return;

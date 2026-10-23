@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 /** The current world schema; all initial DDL commits atomically with its version marker. */
 final class WorldSchema {
 
-    private static final int VERSION = 8;
+    private static final int VERSION = 9;
     private static final Set<String> TABLES = new HashSet<>(
         Arrays.asList(
             "world_schema",
@@ -203,16 +203,23 @@ final class WorldSchema {
                 )
                 """);
             sql.execute("CREATE INDEX crafting_jobs_grid_id ON crafting_jobs(grid_id, id)");
-            sql.execute("""
-                CREATE TABLE crafting_requesters (
-                    job_id INTEGER NOT NULL REFERENCES crafting_jobs(id) ON DELETE CASCADE,
-                    ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 2147483647),
-                    player_uuid TEXT NOT NULL CHECK (typeof(player_uuid) = 'text' AND length(player_uuid) = 36),
-                    player_name TEXT NOT NULL CHECK (typeof(player_name) = 'text' AND length(player_name) <= 1048576),
-                    PRIMARY KEY (job_id, player_uuid),
-                    UNIQUE (job_id, ordinal)
-                )
-                """);
+            sql.execute(
+                """
+                    CREATE TABLE crafting_requesters (
+                        job_id INTEGER NOT NULL REFERENCES crafting_jobs(id) ON DELETE CASCADE,
+                        ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 2147483647),
+                        source TEXT NOT NULL CHECK (source IN ('PLAYER', 'AUTOMATION', 'WEB')),
+                        player_uuid TEXT CHECK (player_uuid IS NULL OR (typeof(player_uuid) = 'text' AND length(player_uuid) = 36)),
+                        player_name TEXT CHECK (player_name IS NULL OR (typeof(player_name) = 'text' AND length(player_name) <= 1048576)),
+                        CHECK ((source = 'PLAYER' AND player_uuid IS NOT NULL AND player_name IS NOT NULL)
+                            OR (source <> 'PLAYER' AND player_uuid IS NULL AND player_name IS NULL)),
+                        PRIMARY KEY (job_id, ordinal)
+                    )
+                    """);
+            sql.execute(
+                "CREATE UNIQUE INDEX crafting_requester_players ON crafting_requesters(job_id, player_uuid) WHERE source = 'PLAYER'");
+            sql.execute(
+                "CREATE UNIQUE INDEX crafting_requester_sources ON crafting_requesters(job_id, source) WHERE source <> 'PLAYER'");
             sql.execute(
                 """
                     CREATE TABLE crafting_resources (

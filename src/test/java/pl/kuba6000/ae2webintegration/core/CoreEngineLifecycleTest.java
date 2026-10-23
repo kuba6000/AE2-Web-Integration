@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -68,7 +69,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         int planId = gridData
             .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
-        AE2JobTracker.addJob(cpu, grid, false, null);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
         try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
             PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");

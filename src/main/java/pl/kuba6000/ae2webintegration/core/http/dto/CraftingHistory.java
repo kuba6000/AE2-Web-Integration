@@ -10,8 +10,8 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -25,7 +25,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
  * @param timeStarted    crafting start in Unix epoch milliseconds
  * @param timeDone       crafting completion or cancellation in Unix epoch milliseconds
  * @param wasCancelled   whether the crafting work was cancelled
- * @param requesters     identified player requesters, in submission order; empty when unavailable
+ * @param requesters     player, automation and web requesters, in submission order; empty when unavailable
  * @param items          per-resource crafting measurements
  * @param interfaceShare processing measurements grouped by pattern provider name
  * @example timeStarted 1700000000000
@@ -35,7 +35,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 @Desugar
 public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStarted, long timeDone, boolean wasCancelled,
     @NotNull ArrayList<ResourceTiming> items, @NotNull ArrayList<ProviderTiming> interfaceShare,
-    @NotNull List<PlayerIdentity> requesters) {
+    @NotNull List<CraftingRequester> requesters) {
 
     /**
      * One measured processing interval with absolute timestamps.

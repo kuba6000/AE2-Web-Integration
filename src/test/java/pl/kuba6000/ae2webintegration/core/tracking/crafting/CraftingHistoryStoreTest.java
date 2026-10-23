@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -57,7 +58,11 @@ class CraftingHistoryStoreTest {
             false,
             base.resources(),
             base.providers(),
-            Arrays.asList(new PlayerIdentity(first, "Alex"), new PlayerIdentity(second, "Alex")));
+            Arrays.asList(
+                CraftingRequester.player(new PlayerIdentity(first, "Alex")),
+                CraftingRequester.player(new PlayerIdentity(second, "Alex")),
+                CraftingRequester.automation(),
+                CraftingRequester.web()));
         CompletedCrafting renamed = new CompletedCrafting(
             base.finalOutput(),
             base.timeStarted(),
@@ -65,7 +70,7 @@ class CraftingHistoryStoreTest {
             false,
             base.resources(),
             base.providers(),
-            Collections.singletonList(new PlayerIdentity(first, "AlexRenamed")));
+            Collections.singletonList(CraftingRequester.player(new PlayerIdentity(first, "AlexRenamed"))));
         long originalId;
         long renamedId;
         try (WorldDatabase database = database()) {
@@ -84,21 +89,32 @@ class CraftingHistoryStoreTest {
             CompletedCrafting read = store.read(grid, originalId);
             assertNotNull(read);
             assertEquals(
-                2,
+                CraftingRequester.automation(),
+                read.requesters()
+                    .get(2));
+            assertEquals(
+                CraftingRequester.web(),
+                read.requesters()
+                    .get(3));
+            assertEquals(
+                4,
                 read.requesters()
                     .size());
             assertEquals(
                 first,
                 read.requesters()
-                    .get(0).uuid);
+                    .get(0)
+                    .player().uuid);
             assertEquals(
                 second,
                 read.requesters()
-                    .get(1).uuid);
+                    .get(1)
+                    .player().uuid);
             assertEquals(
                 "Alex",
                 read.requesters()
-                    .get(0).name);
+                    .get(0)
+                    .player().name);
             assertThrows(
                 UnsupportedOperationException.class,
                 () -> read.requesters()
@@ -114,7 +130,8 @@ class CraftingHistoryStoreTest {
                 firstPage.entries()
                     .get(0)
                     .requesters()
-                    .get(0).name);
+                    .get(0)
+                    .player().name);
             SqliteCraftingHistoryStore.Page olderPage = store.list(grid, firstPage.nextBefore(), 1);
             assertEquals(
                 originalId,
@@ -126,20 +143,35 @@ class CraftingHistoryStoreTest {
                 olderPage.entries()
                     .get(0)
                     .requesters()
-                    .get(0).name);
+                    .get(0)
+                    .player().name);
             assertEquals(
                 second,
                 olderPage.entries()
                     .get(0)
                     .requesters()
-                    .get(1).uuid);
+                    .get(1)
+                    .player().uuid);
+            assertEquals(
+                CraftingRequester.automation(),
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(2));
+            assertEquals(
+                CraftingRequester.web(),
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(3));
             store.maintain();
             assertNull(store.read(grid, originalId));
             assertEquals(
                 "AlexRenamed",
                 store.read(grid, renamedId)
                     .requesters()
-                    .get(0).name);
+                    .get(0)
+                    .player().name);
         }
     }
 
@@ -156,7 +188,9 @@ class CraftingHistoryStoreTest {
             false,
             base.resources(),
             base.providers(),
-            Arrays.asList(new PlayerIdentity(player, "Alex"), new PlayerIdentity(player, "AlexRenamed")));
+            Arrays.asList(
+                CraftingRequester.player(new PlayerIdentity(player, "Alex")),
+                CraftingRequester.player(new PlayerIdentity(player, "AlexRenamed"))));
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
@@ -166,6 +200,37 @@ class CraftingHistoryStoreTest {
                     .entries()
                     .isEmpty());
             assertTrue(store.append(grid, base) > 0);
+        }
+    }
+
+    @Test
+    void invalidAndRepeatedNonPlayerSourcesAreRejectedWithoutPublishingJobs() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        List<List<CraftingRequester>> invalid = Arrays.asList(
+            Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation()),
+            Arrays.asList(CraftingRequester.web(), CraftingRequester.web()),
+            Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null)),
+            Collections.singletonList(
+                new CraftingRequester(CraftingRequester.Source.WEB, new PlayerIdentity(UUID.randomUUID(), "Alex"))));
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            for (List<CraftingRequester> requesters : invalid) {
+                CompletedCrafting job = new CompletedCrafting(
+                    base.finalOutput(),
+                    base.timeStarted(),
+                    base.timeDone(),
+                    false,
+                    base.resources(),
+                    base.providers(),
+                    requesters);
+                assertThrows(RejectedCraftingException.class, () -> store.append(grid, job));
+            }
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
         }
     }
 

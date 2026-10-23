@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 
@@ -67,6 +67,6 @@ public class GetCPUClusterData {
      * @example 10000
      */
     public final long timeElapsed;
-    /** Identified player requesters of the tracked job, in submission order; empty when unavailable. */
-    public final @NotNull List<PlayerIdentity> requesters;
+    /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+    public final @NotNull List<CraftingRequester> requesters;
 }

@@ -36,6 +36,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -253,7 +254,7 @@ class CpuLiveHttpTest {
     void inventoryNotificationUpdatesStoredCountsWithoutAdvancingCraftingMeasurements() throws Exception {
         onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false, null);
+            AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             cpu.waiting.amounts.put(iron, 5L);
             AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
         });
@@ -387,7 +388,7 @@ class CpuLiveHttpTest {
     void restoredStateInvalidatesTheViewWithoutChangingJobMeasurements() throws Exception {
         AE2JobTracker.JobTrackingInfo measured = onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false, null);
+            AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             return AE2JobTracker.findActiveJob(cpu);
         });
         assertNotNull(measured);

@@ -172,6 +172,7 @@ test {
             includeTestsMatching '*DimensionalCoordsTest'
             includeTestsMatching '*GridAccessSourceTest'
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'
+            includeTestsMatching '*AE2JobTrackerLifecycleTest'
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'

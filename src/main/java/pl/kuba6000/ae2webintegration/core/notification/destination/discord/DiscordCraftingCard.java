@@ -14,7 +14,6 @@ import java.io.InputStream;
 import java.text.NumberFormat;
 import java.util.Iterator;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
@@ -116,12 +115,7 @@ final class DiscordCraftingCard {
                     text(graphics, cardFont, values[index], x, 283, 22, TEXT, 280);
                 }
                 text(graphics, cardFont, "REQUESTED BY", 30, 318, 14, MUTED, 900);
-                String requesters = message.requesters()
-                    .isEmpty() ? "Unknown"
-                        : message.requesters()
-                            .stream()
-                            .map(player -> player.name)
-                            .collect(Collectors.joining(", "));
+                String requesters = message.requesterNames();
                 text(graphics, cardFont, requesters, 30, 354, 22, TEXT, 900);
             } finally {
                 graphics.dispose();

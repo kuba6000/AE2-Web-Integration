@@ -19,6 +19,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -97,7 +98,7 @@ class CraftingNotificationTest extends GridTestScope {
                 assertNotNull(data);
                 GridSettingsData settings = data.getSettings();
                 settings.setName("Name when the job started");
-                AE2JobTracker.addJob(cpu, grid, false, null);
+                AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
                 String name = named ? "Factory \"A\" – Łódź" : "";
                 settings.setName(name);
 

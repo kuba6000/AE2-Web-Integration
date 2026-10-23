@@ -14,7 +14,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -133,8 +133,8 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean hasTrackingInfo = false;
-        /** Identified player requesters of the tracked job, in submission order; empty when unavailable. */
-        public @NotNull List<PlayerIdentity> requesters = Collections.emptyList();
+        /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+        public @NotNull List<CraftingRequester> requesters = Collections.emptyList();
         /**
          * Crafting start time in Unix epoch milliseconds; zero when unavailable.
          *

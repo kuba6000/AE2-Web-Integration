@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
 import java.io.IOException;
-import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,12 +43,7 @@ public class DiscordDestination implements INotificationDestination {
         if (message instanceof CraftingMessage craftingMessage) {
             payload = new DiscordPayload(
                 "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
-                "Requested by: " + (craftingMessage.requesters()
-                    .isEmpty() ? "Unknown"
-                        : craftingMessage.requesters()
-                            .stream()
-                            .map(player -> player.name)
-                            .collect(Collectors.joining(", ")))
+                "Requested by: " + craftingMessage.requesterNames()
                     + "\nCrafting for `"
                     + craftingMessage.output()
                         .description()

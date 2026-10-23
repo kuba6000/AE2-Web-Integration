@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core.notification.destination.ntfy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
@@ -42,12 +41,7 @@ public class NtfyDestination implements INotificationDestination {
 
             payload = new NtfyPayload(
                 "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
-                "Requested by: " + (craftingMessage.requesters()
-                    .isEmpty() ? "Unknown"
-                        : craftingMessage.requesters()
-                            .stream()
-                            .map(player -> player.name)
-                            .collect(Collectors.joining(", ")))
+                "Requested by: " + craftingMessage.requesterNames()
                     + "\nCrafting for `"
                     + craftingMessage.output()
                         .description()

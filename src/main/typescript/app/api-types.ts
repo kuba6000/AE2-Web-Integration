@@ -3,6 +3,8 @@
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
 export type PlayerIdentity = { uuid: string; name: string };
+export type CraftingRequester =
+    { source: 'PLAYER'; player: PlayerIdentity } | { source: 'AUTOMATION' | 'WEB'; player: null };
 export type ApplicationContext = {
     capabilities: {
         craftingLightMode?: boolean;
@@ -132,7 +134,7 @@ export type CpuInfo = {
     availableStorage: number;
     usedStorage: number;
     coProcessors: number;
-    requesters: PlayerIdentity[];
+    requesters: CraftingRequester[];
     hasTrackingInfo: boolean;
     timeStarted: number;
 };
@@ -155,7 +157,7 @@ export type CpuDetail = {
     isPaused: boolean;
     finalOutput: ResourceStack | null;
     items: CpuResource[] | null;
-    requesters: PlayerIdentity[];
+    requesters: CraftingRequester[];
     hasTrackingInfo: boolean;
     timeStarted: number;
     timeElapsed: number;
@@ -193,7 +195,7 @@ export type HistoryEntry = {
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;
-    requesters: PlayerIdentity[];
+    requesters: CraftingRequester[];
     finalOutput: ResourceStack;
     id: string;
 };
@@ -213,7 +215,7 @@ export type CraftingHistory = {
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;
-    requesters: PlayerIdentity[];
+    requesters: CraftingRequester[];
     items: ResourceTiming[];
     interfaceShare: ProviderTiming[];
 };

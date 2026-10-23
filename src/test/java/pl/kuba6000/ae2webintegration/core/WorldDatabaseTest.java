@@ -364,7 +364,7 @@ class WorldDatabaseTest {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 8");
+            statement.executeUpdate("UPDATE world_schema SET version = 9");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();

@@ -22,6 +22,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
@@ -53,14 +54,44 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         PlayerIdentity synthetic = new PlayerIdentity(AE2Controller.AEControllerUUID, "AE2CONTROLLER");
         crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, synthetic);
         assertStatus("OK", submit(grid, plan(grid), TestGridFixtures.principal(principal)));
-        List<PlayerIdentity> requesters = AE2JobTracker.findActiveJob(cpu)
+        List<CraftingRequester> requesters = AE2JobTracker.findActiveJob(cpu)
             .getRequesters();
-        if (principal < 0) assertTrue(requesters.isEmpty());
+        if (principal < 0) assertEquals(Collections.singletonList(CraftingRequester.web()), requesters);
         else {
             assertEquals(1, requesters.size());
-            assertEquals(TestGridFixtures.playerIdentity(principal).uuid, requesters.get(0).uuid);
-            assertEquals(TestGridFixtures.playerIdentity(principal).name, requesters.get(0).name);
+            assertEquals(
+                TestGridFixtures.playerIdentity(principal).uuid,
+                requesters.get(0)
+                    .player().uuid);
+            assertEquals(
+                TestGridFixtures.playerIdentity(principal).name,
+                requesters.get(0)
+                    .player().name);
         }
+    }
+
+    @Test
+    void mergedWebPlayerAndAutomationSubmissionsRetainEachSourceOnce() {
+        TestCraftingGrid crafting = new TestCraftingGrid(null);
+        TestGrid grid = new TestGrid(GRID_KEY, crafting);
+        TestGridFixtures.track(grid);
+        ICraftingCPUCluster cpu = cpu();
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, null);
+        assertStatus("OK", submit(grid, plan(grid), TestGridFixtures.principal(7)));
+        crafting.submitAction = () -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, null);
+        assertStatus("OK", submit(grid, plan(grid), WebPrincipal.admin()));
+        assertStatus("OK", submit(grid, plan(grid), WebPrincipal.admin()));
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
+        List<CraftingRequester> requesters = AE2JobTracker.findActiveJob(cpu)
+            .getRequesters();
+        assertEquals(3, requesters.size());
+        assertEquals(
+            TestGridFixtures.playerIdentity(7).uuid,
+            requesters.get(0)
+                .player().uuid);
+        assertEquals(CraftingRequester.web(), requesters.get(1));
+        assertEquals(CraftingRequester.automation(), requesters.get(2));
     }
 
     @Test
@@ -86,18 +117,19 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             throw new IllegalStateException("Outer submission failed");
         };
         assertThrows(IllegalStateException.class, () -> submit(outer, plan(outer), TestGridFixtures.principal(7)));
-        assertTrue(
+        assertEquals(
+            Collections.singletonList(CraftingRequester.web()),
             AE2JobTracker.findActiveJob(innerCpu)
-                .getRequesters()
-                .isEmpty());
+                .getRequesters());
         assertEquals(
             TestGridFixtures.playerIdentity(7).uuid,
             AE2JobTracker.findActiveJob(outerCpu)
                 .getRequesters()
-                .get(0).uuid);
+                .get(0)
+                .player().uuid);
         AEMixinCallbacks.INSTANCE.jobStarted(laterCpu, outer, false, true, nativePlayer);
         assertEquals(
-            Collections.singletonList(nativePlayer),
+            Collections.singletonList(CraftingRequester.player(nativePlayer)),
             AE2JobTracker.findActiveJob(laterCpu)
                 .getRequesters());
     }

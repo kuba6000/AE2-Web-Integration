@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
@@ -60,17 +61,26 @@ class CpuReaderTest extends GridTestScope {
         AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true, first);
         CpuObservation initial = CpuReader.read(cpu, true);
         AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true, second);
+        AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
         CpuObservation merged = CpuReader.read(cpu, cpu, Collections.emptyList());
         assertEquals(
-            Collections.singletonList(first),
+            Collections.singletonList(CraftingRequester.player(first)),
             initial.header()
                 .requesters());
         assertEquals(
-            Arrays.asList(first, second),
+            Arrays.asList(
+                CraftingRequester.player(first),
+                CraftingRequester.player(second),
+                CraftingRequester.automation()),
             merged.header()
                 .requesters());
         GetCPUClusterData body = new GetCPUClusterData(merged.header(), 1000, null);
-        assertEquals(Arrays.asList(first, second), body.requesters);
+        assertEquals(
+            Arrays.asList(
+                CraftingRequester.player(first),
+                CraftingRequester.player(second),
+                CraftingRequester.automation()),
+            body.requesters);
         cpu.busy = false;
         assertTrue(
             CpuReader.read(cpu, true)
@@ -311,7 +321,7 @@ class CpuReaderTest extends GridTestScope {
     void trackedJobAddsMeasurementsAndANonProgressingWaitingMarker() {
         cpu.set(iron, 1, 0, 0);
         TestGridFixtures.track(grid);
-        AE2JobTracker.addJob(cpu, grid, false, null);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         assertNotNull(info);
         info.timeStarted = 1000;
@@ -370,7 +380,7 @@ class CpuReaderTest extends GridTestScope {
     void partialReadKeepsMeasuredResourcesWithoutWorkAndFollowsTheirWaitingState() {
         TestGridFixtures.track(grid);
         cpu.set(gear, 0, 0, 1);
-        AE2JobTracker.addJob(cpu, grid, false, null);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         assertNotNull(info);
         info.timeSpentOn.put(iron, 10L);

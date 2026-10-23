@@ -26,6 +26,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -395,12 +396,12 @@ class OutputSnapshotTest extends GridTestScope {
                     .equals("web$getFinalOutput")) return output.get();
                 throw new AssertionError("Unexpected native CPU call");
             });
-        AE2JobTracker.addJob(cpu, grid, false, null);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         ResourceSnapshot initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         output.set(new Stack(new Resource(), 9));
-        AE2JobTracker.addJob(cpu, grid, true, null);
+        AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
         ResourceSnapshot merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;

@@ -21,6 +21,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -43,7 +44,7 @@ public final class SqliteCraftingHistoryStore {
 
     @Desugar
     public record Summary(long id, @NotNull ResourceSnapshot finalOutput, long timeStarted, long timeDone,
-        boolean wasCancelled, @NotNull List<PlayerIdentity> requesters) {}
+        boolean wasCancelled, @NotNull List<CraftingRequester> requesters) {}
 
     @Desugar
     public record Page(@NotNull List<Summary> entries, @Nullable Long nextBefore) {}
@@ -70,15 +71,20 @@ public final class SqliteCraftingHistoryStore {
                 insert.executeUpdate();
                 id = generatedId(insert);
             }
-            try (PreparedStatement insert = db.prepareStatement("""
-                INSERT INTO crafting_requesters(job_id, ordinal, player_uuid, player_name) VALUES (?, ?, ?, ?)
-                """)) {
+            try (PreparedStatement insert = db.prepareStatement(
+                """
+                    INSERT INTO crafting_requesters(job_id, ordinal, source, player_uuid, player_name) VALUES (?, ?, ?, ?, ?)
+                    """)) {
                 int position = 0;
-                for (PlayerIdentity requester : job.requesters()) {
+                for (CraftingRequester requester : job.requesters()) {
                     insert.setLong(1, id);
                     insert.setInt(2, position++);
-                    insert.setString(3, requester.uuid.toString());
-                    insert.setString(4, requester.name);
+                    insert.setString(
+                        3,
+                        requester.source()
+                            .name());
+                    insert.setString(4, requester.player() == null ? null : requester.player().uuid.toString());
+                    insert.setString(5, requester.player() == null ? null : requester.player().name);
                     insert.addBatch();
                 }
                 if (position > 0) insert.executeBatch();
@@ -127,10 +133,17 @@ public final class SqliteCraftingHistoryStore {
 
     private static void validate(CompletedCrafting job) throws RejectedCraftingException {
         validate(job.finalOutput());
-        Set<UUID> requesters = new HashSet<>();
-        for (PlayerIdentity requester : job.requesters()) {
-            if (!requesters.add(requester.uuid)) throw new RejectedCraftingException("Duplicate requester UUID");
-            validateLength(requester.name, 1048576, "requester name");
+        Set<UUID> players = new HashSet<>();
+        Set<CraftingRequester.Source> sources = new HashSet<>();
+        for (CraftingRequester requester : job.requesters()) {
+            PlayerIdentity player = requester.player();
+            if ((requester.source() == CraftingRequester.Source.PLAYER) != (player != null))
+                throw new RejectedCraftingException("Invalid requester identity");
+            if (player != null) {
+                if (!players.add(player.uuid)) throw new RejectedCraftingException("Duplicate requester UUID");
+                validateLength(player.name, 1048576, "requester name");
+            } else
+                if (!sources.add(requester.source())) throw new RejectedCraftingException("Duplicate requester source");
         }
         Set<String> providers = new HashSet<>();
         for (CompletedCrafting.Provider provider : job.providers()) {
@@ -311,7 +324,7 @@ public final class SqliteCraftingHistoryStore {
             if (next != null) entries.remove(entries.size() - 1);
             List<Long> ids = new ArrayList<>();
             for (Summary entry : entries) ids.add(entry.id());
-            Map<Long, List<PlayerIdentity>> requesters = requesters(db, ids);
+            Map<Long, List<CraftingRequester>> requesters = requesters(db, ids);
             for (int index = 0; index < entries.size(); index++) {
                 Summary entry = entries.get(index);
                 entries.set(
@@ -351,17 +364,21 @@ public final class SqliteCraftingHistoryStore {
         });
     }
 
-    private static Map<Long, List<PlayerIdentity>> requesters(Connection db, List<Long> jobs) throws SQLException {
-        Map<Long, List<PlayerIdentity>> result = new HashMap<>();
+    private static Map<Long, List<CraftingRequester>> requesters(Connection db, List<Long> jobs) throws SQLException {
+        Map<Long, List<CraftingRequester>> result = new HashMap<>();
         if (jobs.isEmpty()) return result;
         String placeholders = String.join(",", Collections.nCopies(jobs.size(), "?"));
         try (PreparedStatement query = db.prepareStatement(
-            "SELECT job_id, player_uuid, player_name FROM crafting_requesters WHERE job_id IN (" + placeholders
+            "SELECT job_id, source, player_uuid, player_name FROM crafting_requesters WHERE job_id IN (" + placeholders
                 + ") ORDER BY job_id, ordinal")) {
             for (int index = 0; index < jobs.size(); index++) query.setLong(index + 1, jobs.get(index));
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) result.computeIfAbsent(rows.getLong(1), ignored -> new ArrayList<>())
-                    .add(new PlayerIdentity(UUID.fromString(rows.getString(2)), rows.getString(3)));
+                    .add(
+                        new CraftingRequester(
+                            CraftingRequester.Source.valueOf(rows.getString(2)),
+                            rows.getString(3) == null ? null
+                                : new PlayerIdentity(UUID.fromString(rows.getString(3)), rows.getString(4))));
             }
         }
         result.replaceAll((id, identities) -> Collections.unmodifiableList(identities));

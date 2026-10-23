@@ -32,6 +32,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -220,15 +221,18 @@ class DiscordNotificationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "true, 0", "true, 1", "true, 2", "false, 0", "false, 1", "false, 2" })
+    @CsvSource({ "true, 0", "true, 1", "true, 2", "true, 3", "true, 4", "false, 0", "false, 1", "false, 2", "false, 3",
+        "false, 4" })
     void bothDestinationsPresentTheKnownRequestersWithoutGuessingUnknownOnes(boolean discord, int count)
         throws Exception {
         Config.INSTANCE.discord.imageCards = false;
         Config.INSTANCE.ntfy.host = Config.INSTANCE.discord.webhook;
         Config.INSTANCE.ntfy.topic = "crafting-test";
-        List<PlayerIdentity> requesters = new ArrayList<>();
-        if (count >= 1) requesters.add(new PlayerIdentity(new UUID(0, 1), "Alice"));
-        if (count >= 2) requesters.add(new PlayerIdentity(new UUID(0, 2), "Bob"));
+        List<CraftingRequester> requesters = new ArrayList<>();
+        if (count >= 1) requesters.add(CraftingRequester.player(new PlayerIdentity(new UUID(0, 1), "Alice")));
+        if (count >= 2) requesters.add(CraftingRequester.player(new PlayerIdentity(new UUID(0, 2), "Bob")));
+        if (count >= 3) requesters.add(CraftingRequester.automation());
+        if (count >= 4) requesters.add(CraftingRequester.web());
         CraftingMessage base = crafting("Powered Rail", false);
         CraftingMessage message = new CraftingMessage(
             base.gridName(),
@@ -254,7 +258,8 @@ class DiscordNotificationTest {
             if (count >= 2) assertTrue(text.contains("Bob"), text);
         }
         assertFalse(text.contains("Admin"), text);
-        assertFalse(text.contains("Automation"), text);
+        assertEquals(count >= 3, text.contains("Automation"), text);
+        assertEquals(count >= 4, text.contains("Web"), text);
     }
 
     @Test

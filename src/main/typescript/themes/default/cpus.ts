@@ -111,7 +111,7 @@ export function createCpuView(
         } else if (detail) output.textContent = t('cpuIdleMessage');
         requesters.textContent =
             detail?.isBusy && detail.requesters.length
-                ? `${t('craftingRequestersLabel')}: ${detail.requesters.map((player) => player.name).join(', ')}`
+                ? `${t('craftingRequestersLabel')}: ${detail.requesters.map((requester) => (requester.source === 'PLAYER' ? requester.player.name : t(requester.source === 'WEB' ? 'craftingRequesterWeb' : 'craftingRequesterAutomation'))).join(', ')}`
                 : '';
         requesters.hidden = !requesters.textContent;
         renderElapsed(state, locale);

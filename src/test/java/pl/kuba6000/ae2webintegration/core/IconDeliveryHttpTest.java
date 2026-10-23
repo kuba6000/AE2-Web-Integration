@@ -50,6 +50,7 @@ import pl.kuba6000.ae2webintegration.core.ItemIdentityRequestTest.Resource;
 import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -1700,9 +1701,9 @@ class IconDeliveryHttpTest {
             if (index == 0) exactOutput = output.get();
             if (index == 1) {
                 // A merge replaces both the previous exact identity and its output data.
-                AE2JobTracker.addJob(cpu, grid, true, null);
+                AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
             } else {
-                AE2JobTracker.addJob(cpu, grid, false, null);
+                AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             }
             waiting.set(10 + variant);
             AE2JobTracker.updateCraftingStatus(cpu, key);
@@ -1712,7 +1713,7 @@ class IconDeliveryHttpTest {
         }
         // Also retain an exact-match job independently of the merged fallback job.
         output.set(exactOutput);
-        AE2JobTracker.addJob(cpu, grid, false, null);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.completeCrafting(grid, cpu);
         assertEquals(
             3,

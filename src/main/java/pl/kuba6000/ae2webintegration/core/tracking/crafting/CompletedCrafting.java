@@ -10,8 +10,8 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
@@ -20,7 +20,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 @Desugar
 public record CompletedCrafting(@NotNull ResourceSnapshot finalOutput, long timeStarted, long timeDone,
     boolean wasCancelled, @NotNull List<Resource> resources, @NotNull List<Provider> providers,
-    @NotNull List<PlayerIdentity> requesters) {
+    @NotNull List<CraftingRequester> requesters) {
 
     @Desugar
     public record Interval(long started, long ended) {}

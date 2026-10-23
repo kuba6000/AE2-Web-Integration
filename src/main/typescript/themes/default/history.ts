@@ -238,7 +238,20 @@ export function createHistoryView(root: HTMLElement, application: Terminal, bind
                 const pair = element('div');
                 pair.append(
                     element('dt', t('craftingRequestersLabel')),
-                    element('dd', snapshot.requesters.map((player) => player.name).join(', '))
+                    element(
+                        'dd',
+                        snapshot.requesters
+                            .map((requester) =>
+                                requester.source === 'PLAYER'
+                                    ? requester.player.name
+                                    : t(
+                                          requester.source === 'WEB'
+                                              ? 'craftingRequesterWeb'
+                                              : 'craftingRequesterAutomation'
+                                      )
+                            )
+                            .join(', ')
+                    )
                 );
                 stats.append(pair);
             }
