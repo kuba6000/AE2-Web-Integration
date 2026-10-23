@@ -26,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
  * Saves and applies the complete editable server configuration without restarting the web listener.
- * Web editing must be enabled by general.allow_server_settings_editing in config.toml.
+ * Web settings access must be enabled by general.allow_server_settings_editing in config.toml.
  * Listener port, administrator password, access policy, proxy trust and request limit are file-only.
  * Requests contain revision, editable settings and optional secrets updates; readOnly metadata is rejected.
  * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty

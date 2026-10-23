@@ -28,7 +28,7 @@ public final class ConfigSettings {
         public int port = 2324;
 
         @Path("allow_server_settings_editing")
-        @Comment("Allow administrators and trusted localhost users to edit server settings through the web panel.")
+        @Comment("Allow administrators and trusted localhost users to view and edit server settings through the web panel.")
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean allowServerSettingsEditing = true;
 

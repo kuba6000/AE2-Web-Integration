@@ -77,15 +77,16 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
     let request: AbortController | undefined;
     let reading: Promise<void> | undefined;
 
-    function denied() {
+    function denied(error: 'NO_PERMISSIONS' | 'SERVER_SETTINGS_DISABLED' = 'NO_PERMISSIONS') {
         Object.assign(state, {
             status: 'error',
-            error: 'NO_PERMISSIONS',
+            error,
             current: null,
             draft: null,
             readOnly: null,
             secretChanges: {},
-            dirty: false
+            dirty: false,
+            uncertain: false
         });
         revision = null;
     }
@@ -125,7 +126,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     status: 'ready',
                     current: result.settings,
                     readOnly: result.readOnly,
-                    draft: result.readOnly.allowServerSettingsEditing ? structuredClone(result.settings) : null,
+                    draft: structuredClone(result.settings),
                     secretChanges: {},
                     dirty: false,
                     uncertain: false
@@ -134,6 +135,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 const error = caught as ApiFailure;
                 if (disposed || version !== generation || error.name === 'AbortError') return;
                 if (['NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) denied();
+                else if (error.status === 'SERVER_SETTINGS_DISABLED') denied(error.status);
                 else {
                     state.status = 'error';
                     state.error = error.status || 'NETWORK_ERROR';
@@ -204,7 +206,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     status: 'ready',
                     current: result.settings,
                     readOnly: result.readOnly,
-                    draft: result.readOnly.allowServerSettingsEditing ? structuredClone(result.settings) : null,
+                    draft: structuredClone(result.settings),
                     secretChanges: {},
                     dirty: false,
                     saved: true,
@@ -214,13 +216,8 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 if (disposed) return;
                 const error = caught as ApiFailure;
                 if (['NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) denied();
-                else if (error.status === 'SERVER_SETTINGS_DISABLED') {
-                    state.readOnly!.allowServerSettingsEditing = false;
-                    state.draft = null;
-                    state.secretChanges = {};
-                    state.dirty = false;
-                    state.uncertain = false;
-                } else {
+                else if (error.status === 'SERVER_SETTINGS_DISABLED') denied(error.status);
+                else {
                     state.error = error.status || 'NETWORK_ERROR';
                     state.uncertain = ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(
                         state.error

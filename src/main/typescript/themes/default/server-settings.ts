@@ -372,9 +372,9 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             else if (config.uncertain) message = locale.t('serverSaveUnconfirmed');
             else if (config.error === 'CONFIG_CHANGED') message = locale.t('serverConflict');
             else if (config.error === 'NO_PERMISSIONS') message = locale.t('serverAccessDenied');
+            else if (config.error === 'SERVER_SETTINGS_DISABLED') message = locale.t('serverEditingDisabled');
             else if (config.error) message = locale.common(config.error);
             else if (config.status === 'loading') message = locale.common('loading');
-            else if (config.readOnly?.allowServerSettingsEditing === false) message = locale.t('serverEditingDisabled');
             else if (config.saved) message = locale.t('serverSaved');
             else if (config.dirty) message = locale.common('settingsDraft');
             status.textContent = message;

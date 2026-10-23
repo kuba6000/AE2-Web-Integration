@@ -85,11 +85,16 @@ class ServerSettingsHttpTest {
         setSecret(oldForm, "ntfyPassword", "");
         config.write("general.allow_server_settings_editing", false);
         Config.reload();
-        JsonObject disabled = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
-        assertFalse(
-            disabled.getAsJsonObject("readOnly")
-                .get("allowServerSettingsEditing")
-                .getAsBoolean());
+        JsonObject disabled = request("GET", "/api/server/settings", token, null, 403);
+        assertEquals(
+            "SERVER_SETTINGS_DISABLED",
+            disabled.get("status")
+                .getAsString());
+        assertTrue(
+            disabled.get("data")
+                .isJsonNull());
+        request("GET", "/api/server/settings", null, null, 401);
+        request("GET", "/api/server/settings", "unknown-token", null, 401);
         byte[] before = Files.readAllBytes(
             Config.getConfigFile("config.toml")
                 .toPath());
@@ -102,22 +107,17 @@ class ServerSettingsHttpTest {
             Files.readAllBytes(
                 Config.getConfigFile("config.toml")
                     .toPath()));
-        assertEquals(disabled, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
+        assertEquals(disabled, request("GET", "/api/server/settings", token, null, 403));
         config.set("general.allow_no_password_on_localhost", true);
-        JsonObject local = request("GET", "/api/server/settings", "local", null, 200).getAsJsonObject("data");
-        assertFalse(
-            local.getAsJsonObject("readOnly")
-                .get("allowServerSettingsEditing")
-                .getAsBoolean());
-        local.remove("readOnly");
-        setSecret(local, "discordWebhook", "");
-        setSecret(local, "ntfyPassword", "replacement");
+        assertEquals(disabled, request("GET", "/api/server/settings", "local", null, 403));
+        setSecret(oldForm, "discordWebhook", "");
+        setSecret(oldForm, "ntfyPassword", "replacement");
         before = Files.readAllBytes(
             Config.getConfigFile("config.toml")
                 .toPath());
         assertEquals(
             "SERVER_SETTINGS_DISABLED",
-            request("POST", "/api/server/settings", "local", local.toString(), 403).get("status")
+            request("POST", "/api/server/settings", "local", oldForm.toString(), 403).get("status")
                 .getAsString());
         assertArrayEquals(
             before,
@@ -128,7 +128,8 @@ class ServerSettingsHttpTest {
         assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
         assertNotEquals(777, Config.INSTANCE.notifications.minimumCraftingAmount);
         config.write("general.allow_server_settings_editing", true);
-        request("POST", "/api/server/settings", "local", local.toString(), 403);
+        assertEquals(disabled, request("GET", "/api/server/settings", "local", null, 403));
+        request("POST", "/api/server/settings", "local", oldForm.toString(), 403);
         Config.reload();
         JsonObject edit = readSettings();
         edit.getAsJsonObject("settings")

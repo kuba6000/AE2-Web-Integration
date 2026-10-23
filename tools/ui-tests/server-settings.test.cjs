@@ -6,23 +6,24 @@ const { pathToFileURL } = require('node:url');
 const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/terminal.js'));
 const { settings, readOnly } = require('./server-settings-fixture.cjs');
 
-test('disabled web editing keeps metadata available but prevents edits and saves until reloaded', async (t) => {
+test('disabled server settings prevent loading, edits and saves until reenabled and reloaded', async (t) => {
     let enabled = false;
     let writes = 0;
     const terminal = await application(t, true, {
-        serverSettings: async () => ({
-            revision: 'current',
-            settings: settings(),
-            readOnly: { ...readOnly(), allowServerSettingsEditing: enabled }
-        }),
+        serverSettings: async () => {
+            if (!enabled) throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+            return { revision: 'current', settings: settings(), readOnly: readOnly() };
+        },
         saveServerSettings: async () => {
             writes++;
         }
     });
     terminal.route({ view: 'server-settings', gridKey: null });
     await terminal.refresh();
-    assert.equal(terminal.state.serverSettings.status, 'ready');
-    assert.equal(terminal.state.serverSettings.readOnly.allowServerSettingsEditing, false);
+    assert.equal(terminal.state.serverSettings.status, 'error');
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.equal(terminal.state.serverSettings.current, null);
     assert.equal(terminal.state.serverSettings.draft, null);
     terminal.serverSettings.edit('general', 'checkForUpdates', false);
     terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
@@ -52,14 +53,39 @@ test('server disabling editing after form load clears drafts and blocks another 
     terminal.serverSettings.edit('general', 'checkForUpdates', false);
     await terminal.serverSettings.save();
     assert.equal(writes, 1);
-    assert.equal(terminal.state.serverSettings.readOnly.allowServerSettingsEditing, false);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.equal(terminal.state.serverSettings.current, null);
     assert.equal(terminal.state.serverSettings.draft, null);
     assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
     assert.equal(terminal.state.serverSettings.dirty, false);
-    assert.equal(terminal.state.serverSettings.error, null);
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
     assert.equal(terminal.state.serverSettings.uncertain, false);
     await terminal.serverSettings.save();
     assert.equal(writes, 1);
+});
+
+test('disabled settings on reload remove previously loaded configuration and secret drafts', async (t) => {
+    let disabled = false;
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            if (disabled) throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+            return { revision: 'current', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: async () => assert.fail('Disabled settings must not be saved')
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.editSecret('ntfyPassword', 'discard-this-secret');
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    disabled = true;
+    await terminal.serverSettings.reload();
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    await terminal.serverSettings.save();
 });
 
 test('secret replacement and removal are explicit, undoable and never echoed into confirmed settings', async (t) => {
