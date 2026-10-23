@@ -113,7 +113,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
         @Override
         public @NotNull String getUsage(@NotNull ICommandSender sender) {
-            return "/ae2webicons <export [nopbo]|status|cancel>";
+            return "/ae2webicons <export [noanimation] [nopbo]|status|cancel>";
         }
 
         // ClientCommandHandler supplies no integrated server on a multiplayer connection.
@@ -121,8 +121,8 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         public @NotNull List<String> getTabCompletions(@Nullable MinecraftServer server, @NotNull ICommandSender sender,
             String @NotNull [] arguments, @Nullable BlockPos target) {
             if (arguments.length == 1) return getListOfStringsMatchingLastWord(arguments, "export", "status", "cancel");
-            if (arguments.length == 2 && "export".equals(arguments[0]))
-                return getListOfStringsMatchingLastWord(arguments, "nopbo");
+            if (arguments.length >= 2 && arguments.length <= 3 && "export".equals(arguments[0]))
+                return getListOfStringsMatchingLastWord(arguments, "noanimation", "nopbo");
             return Collections.emptyList();
         }
 
@@ -135,9 +135,12 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         public void execute(@Nullable MinecraftServer server, @NotNull ICommandSender sender,
             String @NotNull [] arguments) {
             String response;
-            if (arguments.length >= 1 && "export".equals(arguments[0])
-                && (arguments.length == 1 || arguments.length == 2 && "nopbo".equals(arguments[1]))) {
-                response = start(arguments.length == 1);
+            if (arguments.length >= 1 && "export".equals(arguments[0]) && validExportOptions(arguments)) {
+                response = start(
+                    !java.util.Arrays.asList(arguments)
+                        .contains("nopbo"),
+                    !java.util.Arrays.asList(arguments)
+                        .contains("noanimation"));
             } else if (arguments.length != 1) {
                 response = getUsage(sender);
             } else if ("status".equals(arguments[0])) {
@@ -151,13 +154,24 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
             sender.sendMessage(new TextComponentString(response));
         }
 
-        private String start(boolean allowPbo) {
+        private boolean validExportOptions(String[] arguments) {
+            boolean noAnimation = false;
+            boolean nopbo = false;
+            for (int index = 1; index < arguments.length; index++) {
+                if ("noanimation".equals(arguments[index]) && !noAnimation) noAnimation = true;
+                else if ("nopbo".equals(arguments[index]) && !nopbo) nopbo = true;
+                else return false;
+            }
+            return true;
+        }
+
+        private String start(boolean allowPbo, boolean animated) {
             if (session != null) return "An export is already active: " + session.status();
             Minecraft minecraft = Minecraft.getMinecraft();
             if (minecraft.world == null || minecraft.player == null) return "Open a client world before exporting";
             if (!OpenGlHelper.isFramebufferEnabled()) return "Enable framebuffer rendering before exporting";
             try {
-                session = new ExportSession(minecraft, allowPbo);
+                session = new ExportSession(minecraft, allowPbo, animated);
                 progressScreen = new ExportProgressScreen(
                     session.status(),
                     ClientBootstrap.this::cancel,

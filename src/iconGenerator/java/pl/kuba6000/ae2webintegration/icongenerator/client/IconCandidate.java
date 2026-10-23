@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -39,6 +40,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
     public final @NotNull String context() {
         return context;
     }
+
+    abstract @Nullable IIconAnimation animation(LegacyIconRenderer renderer, StableKey key);
 
     abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws LegacyIconRenderer.RenderFailure;
@@ -92,6 +95,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.item(renderer, this, key, stack);
+        }
+
+        @Override
         void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
             throws LegacyIconRenderer.RenderFailure {
             renderer.item(stack.copy(), key, captures);
@@ -122,6 +131,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         public @NotNull IconCandidate baseline() {
             return new FluidCandidate(context() + "/base", new FluidStack(stack.getFluid(), Fluid.BUCKET_VOLUME));
+        }
+
+        @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.fluid(renderer, this, key, stack);
         }
 
         @Override
