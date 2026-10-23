@@ -58,7 +58,7 @@ public final class GetTracking extends IAsyncRequest {
 
     /** Include product and resource icon references and atlas metadata; omitted means false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /**
      * Successful operation result.
@@ -73,7 +73,7 @@ public final class GetTracking extends IAsyncRequest {
         implements IResponseBody {}
 
     @PathParam("entryId")
-    private String id;
+    String id;
 
     @Override
     public void handle() {

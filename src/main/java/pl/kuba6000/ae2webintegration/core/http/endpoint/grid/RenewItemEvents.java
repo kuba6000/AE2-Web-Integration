@@ -43,7 +43,8 @@ public final class RenewItemEvents extends IAsyncRequest {
 
     /** Token belonging to the attached stream being acknowledged. */
     @QueryParam("subscription")
-    private @Nullable String subscription;
+    @Nullable
+    String subscription;
 
     @Override
     public void handle() {

@@ -51,7 +51,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 public final class PostServerSettings extends IAsyncRequest {
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     /** Complete editable values, current configuration revision and optional write-only notification secret updates. */
     @Desugar

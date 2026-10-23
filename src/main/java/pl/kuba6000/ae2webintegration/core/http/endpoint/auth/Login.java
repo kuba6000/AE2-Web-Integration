@@ -58,7 +58,7 @@ public final class Login extends IAsyncRequest {
     /** Account credentials and the requested session lifetime. */
     @Body
     @NotNull
-    private Input input;
+    Input input;
 
     /**
      * Login credentials.

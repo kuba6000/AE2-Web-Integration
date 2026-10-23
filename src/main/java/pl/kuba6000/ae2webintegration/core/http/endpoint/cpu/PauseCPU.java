@@ -86,10 +86,12 @@ public final class PauseCPU extends ISyncedRequest {
     public record Input(boolean paused) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuId;
+    @NotNull
+    StableKey cpuId;
 
     @Override
     protected void handle(IAEGrid grid) {

@@ -108,7 +108,8 @@ public final class CreateCraftingPlan extends ISyncedRequest {
         @OptionalInput boolean ignoreMissing, @OptionalInput boolean autoStart) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public boolean init(RequestContext context) {

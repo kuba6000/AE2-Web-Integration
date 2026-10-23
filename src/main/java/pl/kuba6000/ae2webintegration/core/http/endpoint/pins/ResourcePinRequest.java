@@ -32,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivit
 public abstract class ResourcePinRequest extends IAsyncRequest {
 
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<View> data, @Nullable IconMappings icons)

@@ -88,7 +88,7 @@ public final class GetItems extends LiveSnapshotRequest {
 
     /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     @Override
     protected void cancel(String token) {

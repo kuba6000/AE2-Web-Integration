@@ -202,9 +202,9 @@ class ApiRoutingHttpTest extends GridTestScope {
     public static class Echo extends ISyncedRequest {
 
         @PathParam("name")
-        private String name;
+        String name;
         @Body
-        private Input input;
+        Input input;
 
         @Desugar
         public record Input(long count, @OptionalInput Boolean enabled) {}
@@ -222,7 +222,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     public static class Read extends ISyncedRequest {
 
         @PathParam("name")
-        private String name;
+        String name;
 
         @Override
         public void handle() {
@@ -254,7 +254,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     public static class DetachedRead extends ISyncedRequest {
 
         @PathParam("mode")
-        private String mode;
+        String mode;
 
         @Override
         public void handle() {

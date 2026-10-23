@@ -26,7 +26,7 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
     private static final WebPrincipal ME = TestGridFixtures.principal(42);
 
     @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/probe")
-    private static class ProbeRequest extends IAsyncRequest {
+    static class ProbeRequest extends IAsyncRequest {
 
         boolean handlerRan;
 

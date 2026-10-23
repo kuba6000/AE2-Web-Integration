@@ -66,7 +66,7 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     @PathParam("planId")
-    private int jobId;
+    int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {

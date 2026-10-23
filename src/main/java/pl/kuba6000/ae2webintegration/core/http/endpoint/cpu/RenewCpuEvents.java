@@ -46,10 +46,12 @@ public final class RenewCpuEvents extends IAsyncRequest {
 
     /** Token belonging to the attached stream being acknowledged. */
     @QueryParam("subscription")
-    private @Nullable String subscription;
+    @Nullable
+    String subscription;
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuKey;
+    @NotNull
+    StableKey cpuKey;
 
     @Override
     public void handle() {

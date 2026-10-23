@@ -44,7 +44,8 @@ import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 public final class GetCPUEvents extends LiveEventsRequest {
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuKey;
+    @NotNull
+    StableKey cpuKey;
 
     @Override
     protected @NotNull LiveTopic.Key topicKey() {

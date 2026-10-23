@@ -51,7 +51,7 @@ public final class Register extends IAsyncRequest {
     /** Credentials for the account being registered by an online Minecraft player. */
     @Body
     @NotNull
-    private Input input;
+    Input input;
 
     /**
      * Requested account credentials.

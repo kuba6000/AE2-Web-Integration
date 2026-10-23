@@ -21,7 +21,8 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 public final class DeleteResourcePin extends ResourcePinRequest {
 
     @PathParam("pinKey")
-    private @NotNull StableKey pinKey;
+    @NotNull
+    StableKey pinKey;
 
     @Override
     public void handle() {

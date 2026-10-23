@@ -39,9 +39,11 @@ public final class PatchResourcePin extends ResourcePinRequest {
         @OptionalInput @Nullable MoveInput move, @OptionalInput @Nullable ResourcePinStore.HomeConfig homeConfig) {}
 
     @PathParam("pinKey")
-    private @NotNull StableKey pinKey;
+    @NotNull
+    StableKey pinKey;
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public void handle() {

@@ -35,7 +35,8 @@ public final class PostResourcePin extends ResourcePinRequest {
     public record Input(@NotNull StableKey itemKey, @NotNull String placement) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public void handle() {

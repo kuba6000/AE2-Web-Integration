@@ -57,10 +57,12 @@ public final class GetIconPage {
     private static final int STREAM_BUFFER_BYTES = 8 * 1024;
 
     @PathParam("packId")
-    private @NotNull String packId;
+    @NotNull
+    String packId;
 
     @PathParam("pageDigest")
-    private @NotNull String pageDigest;
+    @NotNull
+    String pageDigest;
 
     private GetIconPage() {}
 
