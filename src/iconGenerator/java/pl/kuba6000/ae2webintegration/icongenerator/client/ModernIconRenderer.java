@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,8 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     private CaptureKind captureKind = CaptureKind.STATIC;
     private long captureTiming;
     private LongSupplier drawClock = System::nanoTime;
+    private final Map<SpriteAnimation.Selection, Long> animationSelections = new EnumMap<>(
+        SpriteAnimation.Selection.class);
     private long spriteAnimationPlans, truncatedAnimationPlans;
     private long snapshotNanos, snapshotCount, setupNanos, setupCount;
     private long drawNanos, drawCount, restoreNanos, restoreCount;
@@ -262,6 +265,10 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         return animationState.snapshot();
     }
 
+    void animationSelection(SpriteAnimation.Selection selection) {
+        animationSelections.merge(selection, 1L, Long::sum);
+    }
+
     void animationPlan(boolean truncated) {
         spriteAnimationPlans++;
         if (truncated) truncatedAnimationPlans++;
@@ -269,6 +276,9 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
 
     @Override
     public void statistics(@NotNull Map<String, Long> counts) {
+        for (SpriteAnimation.Selection selection : SpriteAnimation.Selection.values()) {
+            counts.put(selection.statistic, animationSelections.getOrDefault(selection, 0L));
+        }
         counts.put("spriteAnimationPlans", spriteAnimationPlans);
         counts.put("truncatedAnimationPlans", truncatedAnimationPlans);
         counts.put("renderSnapshotNanos", snapshotNanos);

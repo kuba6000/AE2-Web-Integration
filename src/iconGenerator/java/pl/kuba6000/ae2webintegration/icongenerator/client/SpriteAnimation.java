@@ -8,7 +8,6 @@ import java.util.function.LongSupplier;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.block.model.ItemOverrides;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
@@ -40,6 +39,21 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Version-local GUI classification and controlled uploads; scratch starts only when its cursor runs. */
 final class SpriteAnimation implements IIconAnimation {
+
+    enum Selection {
+
+        STATIC("staticAnimationCandidates"),
+        CUSTOM_RENDERER("sampledCustomAnimationPlans"),
+        MODIFIED_ATLAS("unsupportedAtlasAnimations"),
+        SPRITE_IMPLEMENTATION("unsupportedSpriteAnimations"),
+        SCRATCH_LIMIT("unsupportedAnimationScratch");
+
+        final String statistic;
+
+        Selection(String statistic) {
+            this.statistic = statistic;
+        }
+    }
 
     private static final long MAX_SCRATCH_BYTES = 16L * 1024 * 1024;
     private final Minecraft minecraft;
@@ -78,18 +92,32 @@ final class SpriteAnimation implements IIconAnimation {
                         .apply(still));
                 sampled = false;
             }
+            if (sampled) {
+                renderer.animationSelection(Selection.CUSTOM_RENDERER);
+                return new SpriteAnimation(minecraft, renderer, candidate, key, List.of(), null);
+            }
+            List<TextureAtlasSprite> sprites = used.stream()
+                .filter(sprite -> sprite.contents().animatedTexture != null)
+                .toList();
+            if (sprites.isEmpty()) {
+                renderer.animationSelection(Selection.STATIC);
+                return null;
+            }
             // Shader companion atlases are not owned by vanilla SpriteContents uploads.
-            sampled |= ModList.get()
+            if (ModList.get()
                 .isLoaded("oculus")
                 || ModList.get()
-                    .isLoaded("iris");
-            long scratchBytes = 0;
-            for (TextureAtlasSprite sprite : used) {
-                sampled |= sprite.getClass() != TextureAtlasSprite.class || sprite.contents()
-                    .getClass() != SpriteContents.class;
+                    .isLoaded("iris")) {
+                renderer.animationSelection(Selection.MODIFIED_ATLAS);
+                return null;
             }
-            for (TextureAtlasSprite sprite : used) {
-                if (sprite.contents().animatedTexture == null) continue;
+            long scratchBytes = 0;
+            for (TextureAtlasSprite sprite : sprites) {
+                if (sprite.getClass() != TextureAtlasSprite.class || sprite.contents()
+                    .getClass() != SpriteContents.class) {
+                    renderer.animationSelection(Selection.SPRITE_IMPLEMENTATION);
+                    return null;
+                }
                 for (int mip = 0; mip < sprite.contents().byMipLevel.length; mip++) {
                     // GPU rectangle plus native interpolation image; conservative for non-interpolated tracks.
                     scratchBytes += (long) (sprite.contents()
@@ -98,12 +126,10 @@ final class SpriteAnimation implements IIconAnimation {
                         * 8;
                 }
             }
-            sampled |= scratchBytes > MAX_SCRATCH_BYTES;
-            if (sampled) return new SpriteAnimation(minecraft, renderer, candidate, key, List.of(), null);
-            List<TextureAtlasSprite> sprites = used.stream()
-                .filter(sprite -> sprite.contents().animatedTexture != null)
-                .toList();
-            if (sprites.isEmpty()) return null;
+            if (scratchBytes > MAX_SCRATCH_BYTES) {
+                renderer.animationSelection(Selection.SCRATCH_LIMIT);
+                return null;
+            }
             List<SpriteTimeline.Track> tracks = new ArrayList<>();
             for (TextureAtlasSprite sprite : sprites) {
                 SpriteContents.AnimatedTexture animation = sprite.contents().animatedTexture;
@@ -123,23 +149,16 @@ final class SpriteAnimation implements IIconAnimation {
     }
 
     private static boolean collectItem(Minecraft minecraft, ItemStack item, Set<TextureAtlasSprite> sprites) {
-        if (item.hasFoil() || dynamicOverrides(
-            minecraft.getItemRenderer()
-                .getItemModelShaper()
-                .getItemModel(item)))
-            return true;
         BakedModel model = minecraft.getItemRenderer()
             .getModel(item, minecraft.level, minecraft.player, 0);
         if (item.is(Items.TRIDENT) || item.is(Items.SPYGLASS)) {
             model = minecraft.getModelManager()
                 .getModel(ModelResourceLocation.vanilla(item.is(Items.TRIDENT) ? "trident" : "spyglass", "inventory"));
         }
-        if (dynamicOverrides(model)) return true;
         model = ForgeHooksClient.handleCameraTransforms(new PoseStack(), model, ItemDisplayContext.GUI, false);
-        if (model.isCustomRenderer() || dynamicOverrides(model)) return true;
+        if (model.isCustomRenderer()) return true;
         RandomSource random = RandomSource.create();
         for (BakedModel pass : model.getRenderPasses(item, true)) {
-            if (pass.isCustomRenderer() || dynamicOverrides(pass)) return true;
             // Native ItemRenderer obtains the same quad lists separately for each render type.
             for (RenderType ignored : pass.getRenderTypes(item, true)) {
                 for (Direction direction : Direction.values()) {
@@ -153,12 +172,6 @@ final class SpriteAnimation implements IIconAnimation {
             }
         }
         return false;
-    }
-
-    private static boolean dynamicOverrides(BakedModel model) {
-        ItemOverrides overrides = model.getOverrides();
-        return overrides.getClass() != ItemOverrides.class || !overrides.getOverrides()
-            .isEmpty();
     }
 
     @Override
