@@ -21,7 +21,9 @@ export function cpuRequesterText(
                       : t(requester.source === 'WEB' ? 'craftingRequesterWeb' : 'craftingRequesterAutomation')
               )
               .join(', ')
-        : cpu.nativeRequesterName;
+        : cpu.nativeRequesterName === 'AE2CONTROLLER'
+          ? t('craftingRequesterWeb')
+          : cpu.nativeRequesterName;
     return names ? `${t('craftingRequestersLabel')}: ${names}` : '';
 }
 

@@ -2,6 +2,39 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture, gridA, cpuWork, historyDetail } = require('./fixtures.cjs');
 
+test('CPU controller-name fallback displays Web while tracked player names stay literal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const web = { ...cpuWork, hasTrackingInfo: false, requesters: [], nativeRequesterName: 'AE2CONTROLLER' };
+    const player = {
+        ...cpuWork,
+        requesters: [
+            { source: 'PLAYER', player: { uuid: '11111111-1111-1111-1111-111111111111', name: 'AE2CONTROLLER' } }
+        ],
+        nativeRequesterName: 'AE2CONTROLLER'
+    };
+    options.cpus = {
+        'cpu-a': { ...options.cpus['cpu-a'], ...web, name: 'Web fallback' },
+        'cpu-b': { ...options.cpus['cpu-b'], ...player, name: 'Identified player' },
+        'cpu-c': { ...options.cpus['cpu-a'], ...web, name: 'Different name', nativeRequesterName: 'AE2CONTROLLER2' }
+    };
+    options.cpuDetails['cpu-a'] = web;
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const overview = page.getByRole('region', { name: 'CPUs', exact: true });
+    await overview.getByText('Requested by: Web', { exact: true }).waitFor({ timeout: 5000 });
+    await overview.getByText('Requested by: AE2CONTROLLER', { exact: true }).waitFor();
+    await overview.getByText('Requested by: AE2CONTROLLER2', { exact: true }).waitFor();
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page
+        .getByRole('region', { name: 'Current job', exact: true })
+        .getByText('Requested by: Web', { exact: true })
+        .waitFor();
+    await page
+        .getByRole('region', { name: 'CPU selector', exact: true })
+        .getByRole('link', { name: /Web fallback.*cpu-a/ })
+        .hover();
+    await page.getByRole('tooltip').getByText('Requested by: Web', { exact: true }).waitFor();
+});
+
 test('CPU and completed crafting details show identified requesters safely and omit unknown attribution', async (t) => {
     const { page, options, base } = await fixture(t);
     const requesters = [
