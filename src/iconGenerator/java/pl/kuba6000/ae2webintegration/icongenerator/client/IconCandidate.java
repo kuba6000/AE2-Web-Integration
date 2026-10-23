@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -35,6 +36,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
 
     abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws LegacyIconRenderer.RenderFailure;
+
+    abstract @Nullable IIconAnimation animation(LegacyIconRenderer renderer, StableKey key);
 
     @Override
     public @NotNull String context() {
@@ -92,6 +95,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.item(renderer, this, key, stack);
+        }
+
+        @Override
         void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
             throws LegacyIconRenderer.RenderFailure {
             renderer.item(stack, LegacyIconRenderer.ICON_SIZE, key, captures);
@@ -123,6 +132,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @NotNull
         public IconCandidate baseline() {
             return fluid(context + "/base", LegacyResourceBaseline.fluid(stack));
+        }
+
+        @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.fluid(renderer, this, key, stack);
         }
 
         @Override

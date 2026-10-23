@@ -13,7 +13,7 @@ final class ExportSession {
     private final WorldClient world;
     private final IconExportSession<IconCandidate> session;
 
-    ExportSession(@NotNull Minecraft minecraft, boolean allowPbo) {
+    ExportSession(@NotNull Minecraft minecraft, boolean allowPbo, boolean animated) {
         world = minecraft.theWorld;
         IMetadataSource environment = ExportEnvironment.capture(minecraft);
         IconCatalogue catalogue = new IconCatalogue(minecraft);
@@ -22,7 +22,8 @@ final class ExportSession {
                 .resolve("ae2webicons"),
             environment,
             catalogue,
-            new LegacyIconRenderer(minecraft, allowPbo));
+            new LegacyIconRenderer(minecraft, allowPbo),
+            animated);
     }
 
     boolean tick(@NotNull Minecraft minecraft) {
