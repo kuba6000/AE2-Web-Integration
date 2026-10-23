@@ -22,6 +22,7 @@ import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
+import net.minecraftforge.oredict.OreDictionary;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
-/** Incremental native default/subitem discovery plus optional full JEI ingredients and registered fluids. */
+/** Incremental native/JEI/OreDictionary discovery plus registered fluids. */
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
@@ -53,6 +54,13 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int tabIndex;
     private int variantIndex;
     private int jeiIndex;
+    private String[] oreNames = new String[0];
+    private int oreNameIndex;
+    private List<ItemStack> oreEntries = Collections.emptyList();
+    private int oreEntryIndex;
+    private int oreDictionaryCandidates;
+    private int oreDictionarySkippedInvalid;
+    private int oreDictionarySkippedWildcard;
     private boolean done;
     private String context = "native";
     private int nativeCandidates;
@@ -74,7 +82,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         } catch (LinkageError failure) {
             jeiUnavailable = true;
             useJei = false;
-            String warning = "JEI catalogue unavailable (incompatible integration); exporting native items and fluids only";
+            String warning = "JEI catalogue unavailable (incompatible integration); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
             if (minecraft.player != null) minecraft.player.sendMessage(new TextComponentString(warning));
         }
@@ -88,6 +96,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
                 item -> item.getRegistryName()
                     .toString()));
         items = registered.iterator();
+        oreNames = OreDictionary.getOreNames();
+        Arrays.sort(oreNames);
         fluids = new TreeMap<>(FluidRegistry.getRegisteredFluids()).entrySet()
             .iterator();
         prepared = true;
@@ -107,6 +117,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             jeiCandidates++;
             return jei.candidate(jeiIndex++);
         }
+        if (oreEntryIndex < oreEntries.size() || oreNameIndex < oreNames.length) return nextOreDictionary();
         if (fluids.hasNext()) {
             Map.Entry<String, Fluid> fluid = fluids.next();
             context = "fluid/" + fluid.getKey();
@@ -115,6 +126,27 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         }
         done = true;
         return null;
+    }
+
+    private @Nullable IconCandidate nextOreDictionary() {
+        if (oreEntryIndex >= oreEntries.size()) {
+            context = "ore-dictionary/" + oreNames[oreNameIndex];
+            oreEntries = OreDictionary.getOres(oreNames[oreNameIndex++], false);
+            oreEntryIndex = 0;
+            return null;
+        }
+        context = "ore-dictionary/" + oreNames[oreNameIndex - 1] + "/" + oreEntryIndex;
+        ItemStack stack = oreEntries.get(oreEntryIndex++);
+        oreDictionaryCandidates++;
+        if (stack.isEmpty()) {
+            oreDictionarySkippedInvalid++;
+            return null;
+        }
+        if (stack.getItemDamage() == OreDictionary.WILDCARD_VALUE) {
+            oreDictionarySkippedWildcard++;
+            return null;
+        }
+        return IconCandidate.item(context, stack);
     }
 
     private @Nullable IconCandidate nextNative() {
@@ -176,18 +208,25 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         counts.put("nativeCandidates", (long) nativeCandidates);
         counts.put("jeiCandidates", (long) jeiCandidates);
         counts.put("fluidCandidates", (long) fluidCandidates);
+        counts.put("oreDictionaryCandidates", (long) oreDictionaryCandidates);
+        counts.put("oreDictionarySkippedInvalid", (long) oreDictionarySkippedInvalid);
+        counts.put("oreDictionarySkippedWildcard", (long) oreDictionarySkippedWildcard);
         counts.put("skippedEmpty", (long) skippedEmpty);
         return counts;
     }
 
     @Override
     public @NotNull List<String> sources() {
-        return Arrays.asList("native", useJei ? "jei" : jeiUnavailable ? "jei-unavailable" : "jei-absent", "fluids");
+        return Arrays.asList(
+            "native",
+            useJei ? "jei" : jeiUnavailable ? "jei-unavailable" : "jei-absent",
+            "ore-dictionary",
+            "fluids");
     }
 
     @Override
     public @NotNull String note() {
-        return jeiUnavailable ? " (JEI unavailable; native catalogue only)" : "";
+        return jeiUnavailable ? " (JEI unavailable; native and OreDictionary catalogues)" : "";
     }
 
     @Override
