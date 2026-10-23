@@ -22,8 +22,8 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.http.contract.InputShape;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class GSONUtilsTest {
@@ -33,7 +33,7 @@ class GSONUtilsTest {
     @interface ProtectedField {}
 
     @Desugar
-    @InputShape(value = ProjectionValue.class, excludeFieldsAnnotatedWith = ProtectedField.class)
+    @JsonProjection(value = ProjectionValue.class, excludeFieldsAnnotatedWith = ProtectedField.class)
     record Projection(ProjectionValue value) {}
 
     static final class ProjectionValue {

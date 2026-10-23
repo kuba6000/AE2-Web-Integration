@@ -35,7 +35,7 @@ import com.google.gson.TypeAdapter;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.http.HttpBindingCatalog;
+import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;
 import pl.kuba6000.ae2webintegration.core.http.InputValues;
 
 class HttpBindingProcessorTest {
@@ -53,6 +53,7 @@ class HttpBindingProcessorTest {
         Compilation result = compileSource(
             "package fixture;\n" + "import pl.kuba6000.ae2webintegration.core.http.contract.*;\n"
                 + "import pl.kuba6000.ae2webintegration.core.http.*;\n"
+                + "import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;\n"
                 + "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;\n"
                 + "class Owner {\n"
                 + " @Endpoint(method=HttpMethod.GET,path=\"/api/nested\")\n"
@@ -60,7 +61,7 @@ class HttpBindingProcessorTest {
                 + "}\n"
                 + "public final class Example {\n"
                 + " public static Object create() {\n"
-                + "  for (HttpBindingCatalog catalog : java.util.ServiceLoader.load(HttpBindingCatalog.class, Example.class.getClassLoader())) {\n"
+                + "  for (BindingCatalog catalog : java.util.ServiceLoader.load(BindingCatalog.class, Example.class.getClassLoader())) {\n"
                 + "   HttpBinding binding = catalog.get(Owner.Nested.class);\n"
                 + "   if (binding != null) return binding.factory().get();\n"
                 + "  }\n"
@@ -95,12 +96,12 @@ class HttpBindingProcessorTest {
     void outputOnlyProjectionGeneratesAUsableCatalogWithoutAnyEndpoint() throws Exception {
         Compilation result = compileSource("""
             package fixture;
-            import pl.kuba6000.ae2webintegration.core.http.contract.InputShape;
+            import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
             public final class Example {
               @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
               public @interface Hidden {}
               public static final class Value { public long amount = 7; @Hidden public String secret = "hidden"; }
-              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
+              @JsonProjection(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
               public record Projection(Value value) {}
             }
             """);
@@ -120,7 +121,7 @@ class HttpBindingProcessorTest {
                     value.getConstructor()
                         .newInstance());
             TypeAdapter<Object> adapter = null;
-            for (HttpBindingCatalog catalog : ServiceLoader.load(HttpBindingCatalog.class, loader)) {
+            for (BindingCatalog catalog : ServiceLoader.load(BindingCatalog.class, loader)) {
                 TypeAdapter<?> candidate = catalog.adapter(wrapper);
                 if (candidate != null) adapter = (TypeAdapter<Object>) candidate;
             }
@@ -195,7 +196,7 @@ class HttpBindingProcessorTest {
               @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
               @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
               public @interface Hidden {}
-              @InputShape(value=Source.class, excludeFieldsAnnotatedWith=Hidden.class)
+              @JsonProjection(value=Source.class, excludeFieldsAnnotatedWith=Hidden.class)
               public record Projected(Source value) {}
               public static final class Source { long amount; Nested child; @Hidden String secret; }
               public static final class Nested { boolean enabled; @Hidden String secret; }
@@ -240,10 +241,10 @@ class HttpBindingProcessorTest {
     }
 
     @Test
-    void rejectsNonObjectInputShapeTargetsAtCompilation() throws Exception {
+    void rejectsNonObjectJsonProjectionTargetsAtCompilation() throws Exception {
         Compilation result = compile("""
               @Body Input input;
-              @InputShape(value=int.class, excludeFieldsAnnotatedWith=Deprecated.class)
+              @JsonProjection(value=int.class, excludeFieldsAnnotatedWith=Deprecated.class)
               public static final class Input {}
             """);
         assertFalse(result.success());
@@ -253,13 +254,13 @@ class HttpBindingProcessorTest {
                 .stream()
                 .anyMatch(
                     diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
-                        .contains("InputShape requires a class or record")));
+                        .contains("JsonProjection requires a class or record")));
     }
 
     @Test
-    void rejectsInputShapeWithoutOneMatchingRecordComponent() throws Exception {
+    void rejectsJsonProjectionWithoutOneMatchingRecordComponent() throws Exception {
         Compilation result = compile("""
-              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Deprecated.class)
+              @JsonProjection(value=Value.class, excludeFieldsAnnotatedWith=Deprecated.class)
               public record Projection(Value value, String extra) {}
               public static final class Value { long amount; }
             """);
@@ -274,11 +275,11 @@ class HttpBindingProcessorTest {
     }
 
     @Test
-    void rejectsInputShapeExclusionsWithoutRuntimeRetention() throws Exception {
+    void rejectsJsonProjectionExclusionsWithoutRuntimeRetention() throws Exception {
         Compilation result = compile("""
               @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE)
               public @interface Hidden {}
-              @InputShape(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
+              @JsonProjection(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
               public record Projection(Value value) {}
               public static final class Value { long amount; }
             """);
@@ -360,6 +361,7 @@ class HttpBindingProcessorTest {
                 Arrays.asList(
                     "package fixture;",
                     "import pl.kuba6000.ae2webintegration.core.http.contract.*;",
+                    "import pl.kuba6000.ae2webintegration.core.json.JsonProjection;",
                     "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;",
                     "@Endpoint(method=HttpMethod.GET,path=\"/api/example\")",
                     "public final class Example extends IAsyncRequest {",
@@ -388,7 +390,7 @@ class HttpBindingProcessorTest {
                         directory.toString(),
                         "-processor",
                         "pl.kuba6000.ae2webintegration.bindings.HttpBindingProcessor",
-                        "-AhttpBindings.catalog=fixture.GeneratedBindings"),
+                        "-Abindings.catalog=fixture.GeneratedBindings"),
                     null,
                     files.getJavaFileObjects(source.toFile()))
                 .call();

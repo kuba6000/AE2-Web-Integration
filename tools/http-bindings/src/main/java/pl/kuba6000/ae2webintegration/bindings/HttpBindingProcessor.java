@@ -41,12 +41,14 @@ import com.palantir.javapoet.WildcardTypeName;
 
 /** Generates ordinary Java companions using only the standard compiler model. */
 @SupportedAnnotationTypes({ "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint",
-    "pl.kuba6000.ae2webintegration.core.http.contract.InputShape" })
+    "pl.kuba6000.ae2webintegration.core.json.JsonProjection" })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
-@SupportedOptions("httpBindings.catalog")
+@SupportedOptions("bindings.catalog")
 public final class HttpBindingProcessor extends AbstractProcessor {
 
     private static final String CONTRACT = "pl.kuba6000.ae2webintegration.core.http.contract.";
+    private static final String BINDINGS = "pl.kuba6000.ae2webintegration.core.binding";
+    private static final String JSON_PROJECTION = "pl.kuba6000.ae2webintegration.core.json.JsonProjection";
     private static final String HTTP = "pl.kuba6000.ae2webintegration.core.http";
     private static final ClassName INPUT_VALUES = ClassName.get(HTTP, "InputValues");
     private static final ClassName HTTP_BINDING = ClassName.get(HTTP, "HttpBinding");
@@ -59,14 +61,21 @@ public final class HttpBindingProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+        if (round.processingOver()) return false;
         TypeElement marker = processingEnv.getElementUtils()
             .getTypeElement(CONTRACT + "Endpoint");
-        if (marker == null || round.processingOver()) return false;
+        TypeElement shapeMarker = processingEnv.getElementUtils()
+            .getTypeElement(JSON_PROJECTION);
+        if (marker == null || shapeMarker == null) {
+            processingEnv.getMessager()
+                .printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Binding processor requires Endpoint and JsonProjection on the compilation classpath");
+            return false;
+        }
         List<TypeElement> endpoints = new ArrayList<>();
         for (Element element : round.getElementsAnnotatedWith(marker)) endpoints.add((TypeElement) element);
         List<TypeElement> projections = new ArrayList<>();
-        TypeElement shapeMarker = processingEnv.getElementUtils()
-            .getTypeElement(CONTRACT + "InputShape");
         for (Element element : round.getElementsAnnotatedWith(shapeMarker)) projections.add((TypeElement) element);
         if (endpoints.isEmpty() && projections.isEmpty()) return false;
         endpoints.sort(
@@ -230,12 +239,12 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     }
 
     private boolean emitProjection(TypeElement wrapper) throws IOException {
-        AnnotationMirror projection = annotation(wrapper, "InputShape");
+        AnnotationMirror projection = annotationNamed(wrapper, JSON_PROJECTION);
         Element represented = processingEnv.getTypeUtils()
             .asElement((TypeMirror) annotationValue(projection, "value"));
         if (!(represented instanceof TypeElement valueType)
             || (valueType.getKind() != ElementKind.CLASS && valueType.getKind() != ElementKind.RECORD)) {
-            error(wrapper, "InputShape requires a class or record as its represented type");
+            error(wrapper, "JsonProjection requires a class or record as its represented type");
             return false;
         }
         List<VariableElement> fields = ElementFilter.fieldsIn(wrapper.getEnclosedElements())
@@ -254,13 +263,13 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             || wrapper.getKind() != ElementKind.RECORD) {
             error(
                 wrapper,
-                "InputShape requires one record component matching its represented type and no type parameters");
+                "JsonProjection requires one record component matching its represented type and no type parameters");
             return false;
         }
         for (Element owner = wrapper; owner instanceof TypeElement; owner = owner.getEnclosingElement()) {
             if (owner.getModifiers()
                 .contains(Modifier.PRIVATE)) {
-                error(wrapper, "InputShape wrapper must be accessible to its same-package adapter");
+                error(wrapper, "JsonProjection wrapper must be accessible to its same-package adapter");
                 return false;
             }
         }
@@ -268,7 +277,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .asElement((TypeMirror) annotationValue(projection, "excludeFieldsAnnotatedWith"));
         AnnotationMirror retention = annotationNamed(excluded, "java.lang.annotation.Retention");
         if (retention == null || !value(retention, "value").equals("RUNTIME")) {
-            error(wrapper, "InputShape exclusion annotation requires RUNTIME retention for Gson");
+            error(wrapper, "JsonProjection exclusion annotation requires RUNTIME retention for Gson");
             return false;
         }
         ClassName name = companion(wrapper, "_JsonAdapter");
@@ -332,10 +341,10 @@ public final class HttpBindingProcessor extends AbstractProcessor {
 
     private void emitCatalog(List<TypeElement> endpoints, List<TypeElement> projections) throws IOException {
         String configuredName = processingEnv.getOptions()
-            .getOrDefault("httpBindings.catalog", HTTP + ".GeneratedHttpBindings");
+            .getOrDefault("bindings.catalog", BINDINGS + ".GeneratedBindings");
         int lastDot = configuredName.lastIndexOf('.');
         ClassName name = ClassName.get(configuredName.substring(0, lastDot), configuredName.substring(lastDot + 1));
-        ClassName catalogType = ClassName.get(HTTP, "HttpBindingCatalog");
+        ClassName catalogType = ClassName.get(BINDINGS, "BindingCatalog");
         TypeSpec.Builder catalog = TypeSpec.classBuilder(name)
             .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
             .addSuperinterface(catalogType);
@@ -398,7 +407,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     private record Shape(TypeElement type, TypeElement excludedAnnotation) {}
 
     private String shape(TypeElement type, TypeElement excludedAnnotation, Map<Shape, String> shapes) {
-        AnnotationMirror projection = annotation(type, "InputShape");
+        AnnotationMirror projection = annotationNamed(type, JSON_PROJECTION);
         if (projection != null) {
             Element represented = processingEnv.getTypeUtils()
                 .asElement((TypeMirror) annotationValue(projection, "value"));
@@ -408,7 +417,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                 excludedAnnotation = (TypeElement) processingEnv.getTypeUtils()
                     .asElement((TypeMirror) annotationValue(projection, "excludeFieldsAnnotatedWith"));
             } else {
-                error(type, "InputShape requires a class or record as its represented type");
+                error(type, "JsonProjection requires a class or record as its represented type");
             }
         }
         return shapes.computeIfAbsent(new Shape(type, excludedAnnotation), ignored -> "validate" + shapes.size());

@@ -319,7 +319,7 @@ tasks.withType(JavaCompile).configureEach {
 tasks.named('compileBindingProcessorTestJava', JavaCompile) { options.release = 17 }
 tasks.named('compileBindingProcessorJava', JavaCompile) { options.release = 17 }
 tasks.named('compileTestJava', JavaCompile) {
-    options.compilerArgs += '-AhttpBindings.catalog=pl.kuba6000.ae2webintegration.core.http.GeneratedTestHttpBindings'
+    options.compilerArgs += '-Abindings.catalog=pl.kuba6000.ae2webintegration.core.binding.GeneratedTestBindings'
 }
 
 // Client tools share the canonical key implementation without bundling the server or web assets.

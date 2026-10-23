@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.http.contract;
+package pl.kuba6000.ae2webintegration.core.json;
 
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
@@ -16,7 +16,7 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.TYPE)
-public @interface InputShape {
+public @interface JsonProjection {
 
     Class<?> value();
 

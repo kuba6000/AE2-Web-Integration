@@ -21,8 +21,8 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
-import pl.kuba6000.ae2webintegration.core.http.HttpBindingCatalog;
-import pl.kuba6000.ae2webintegration.core.http.HttpBindingCatalogs;
+import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;
+import pl.kuba6000.ae2webintegration.core.binding.BindingCatalogs;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public class GSONUtils {
@@ -37,7 +37,7 @@ public class GSONUtils {
             @Override
             @SuppressWarnings("unchecked") // Catalog lookup uses the exact requested wrapper class.
             public <T> @Nullable TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-                for (HttpBindingCatalog catalog : HttpBindingCatalogs.ALL) {
+                for (BindingCatalog catalog : BindingCatalogs.ALL) {
                     TypeAdapter<?> adapter = catalog.adapter(type.getRawType());
                     if (adapter != null) return (TypeAdapter<T>) adapter;
                 }

@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core.http;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;
+import pl.kuba6000.ae2webintegration.core.binding.BindingCatalogs;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 
 /** Resolves generated endpoint bindings while leaving internal requests unbound. */
@@ -11,7 +13,7 @@ public final class RequestInputs {
     private RequestInputs() {}
 
     public static @Nullable HttpBinding find(Class<?> type) {
-        for (HttpBindingCatalog catalog : HttpBindingCatalogs.ALL) {
+        for (BindingCatalog catalog : BindingCatalogs.ALL) {
             HttpBinding binding = catalog.get(type);
             if (binding != null) return binding;
         }

@@ -5,12 +5,12 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.http.contract.InputShape;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
+import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
 
 /** Server-settings projection. A response wraps its published, read-only configuration; input owns a fresh instance. */
 @Desugar
-@InputShape(value = ConfigSettings.class, excludeFieldsAnnotatedWith = WebSetting.class)
+@JsonProjection(value = ConfigSettings.class, excludeFieldsAnnotatedWith = WebSetting.class)
 public record EditableServerSettings(@NotNull ConfigSettings config) {
 
     /** Omitted values preserve active secrets; empty strings explicitly clear them. Never returned in responses. */
