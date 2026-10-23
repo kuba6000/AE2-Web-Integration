@@ -18,7 +18,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 final class IconAnimationPasses implements AutoCloseable {
 
     private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(10);
-    private static final long SAMPLE_WINDOW = TimeUnit.SECONDS.toNanos(3);
+    private static final long SAMPLE_WINDOW = TimeUnit.SECONDS.toNanos(10);
     private static final long PASS_GAP = TimeUnit.MILLISECONDS.toNanos(100);
     private static final int MAX_SAMPLES = 256;
     private final @NotNull LongSupplier clock;
