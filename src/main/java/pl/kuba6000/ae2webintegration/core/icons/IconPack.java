@@ -121,7 +121,7 @@ public final class IconPack implements Closeable {
         Enumeration<? extends ZipEntry> all = zip.entries();
         while (all.hasMoreElements()) {
             ZipEntry entry = all.nextElement();
-            if (!names.add(entry.getName()) || names.size() > PackFormat.MAX_KEYS + 1
+            if (!names.add(entry.getName()) || names.size() > PackFormat.MAX_IMAGES + 1
                 || (!entry.getName()
                     .equals("manifest.json")
                     && !entry.getName()
@@ -160,7 +160,7 @@ public final class IconPack implements Closeable {
         if (mapping.entrySet()
             .size() > PackFormat.MAX_KEYS || pages.size()
                 > (version == PackFormat.VERSION ? mapping.entrySet()
-                    .size() : PackFormat.MAX_KEYS)
+                    .size() : PackFormat.MAX_IMAGES)
             || archiveEntries != pages.size() + 1) throw new IOException("Invalid archive entry count");
         Map<StableKey, Location> entries = new HashMap<>();
         for (Map.Entry<String, JsonElement> entry : mapping.entrySet()) {

@@ -254,7 +254,7 @@ public final class IconPackWriter implements Closeable {
         if (matches != null) for (PixelRecord match : matches) if (samePixels(match)) {
             return match;
         }
-        if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_KEYS)
+        if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_IMAGES)
             throw new CapacityException(CapacityException.Scope.EXPORT, "Too many distinct icon images");
         int[] position = placePixels(pixels);
         long offset = pixelSpool.length();

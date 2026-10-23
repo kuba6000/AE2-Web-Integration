@@ -54,6 +54,8 @@ final class PackFormat {
     private static final int MAX_TEXT_LENGTH = 4096;
     private static final @NotNull Pattern NONNEGATIVE_INTEGER = Pattern.compile("0|[1-9][0-9]*");
     static final int MAX_KEYS = 250_000;
+    // Static resources and their animation frames share pixels, but not the resource-key budget.
+    static final int MAX_IMAGES = 1_000_000;
     static final int MAX_MANIFEST = 64 * 1024 * 1024;
     static final int MAX_PAGE = 16 * 1024 * 1024;
     static final long MAX_ARCHIVE = 1024L * 1024 * 1024;
