@@ -52,6 +52,7 @@ public final class PackExportWriter {
     private @Nullable Future<?> terminal;
     private @Nullable IconPackWriter writer;
     private @Nullable Path completed;
+    private int completedFailures;
     private int maxBufferedBatches;
     private long assemblyWorkNanos;
     private long assemblyBatches;
@@ -176,6 +177,7 @@ public final class PackExportWriter {
                 completed = output.finish(
                     () -> publication.get() == Publication.CANCELED,
                     () -> publication.compareAndSet(Publication.OPEN, Publication.COMMITTING));
+                completedFailures = output.failureCount();
                 publication.set(Publication.COMPLETE);
             } catch (CancellationException exception) {
                 if (exception.getSuppressed().length != 0) throw new IOException("Icon pack cleanup failed", exception);
@@ -208,6 +210,11 @@ public final class PackExportWriter {
     /** Only available after finished reports successful publication. */
     public @Nullable Path completedPath() {
         return completed;
+    }
+
+    /** Only available after finished reports successful publication, including final capacity fallback. */
+    public int failureCount() {
+        return completedFailures;
     }
 
     /** Releases the executor after terminal settlement; active callers must cancel and keep polling first. */

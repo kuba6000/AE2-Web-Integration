@@ -363,6 +363,11 @@ public final class IconPackWriter implements Closeable {
         }
     }
 
+    /** Includes writer-side capacity omissions; remains available after successful publication. */
+    public int failureCount() {
+        return failureCount;
+    }
+
     private static @NotNull String bounded(@NotNull String value) {
         return value.substring(0, Math.min(PackFormat.MAX_FAILURE_TEXT, value.length()));
     }
@@ -588,6 +593,7 @@ public final class IconPackWriter implements Closeable {
     }
 
     private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) {
+        recordStatistic("failures", failureCount);
         recordStatistic("pngWorkers", pngWorkers);
         recordStatistic("pngPeakPendingPages", peakPendingPages);
         recordStatistic("pngWorkNanosSum", pngWorkNanosSum);

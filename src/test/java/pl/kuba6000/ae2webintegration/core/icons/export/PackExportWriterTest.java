@@ -144,6 +144,7 @@ class PackExportWriterTest {
         writer.finish(new HashMap<>(), Collections.emptyList());
         awaitFinished(writer);
         assertFalse(writer.animationsStopped());
+        assertEquals(1, writer.failureCount());
         writer.close();
         try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
             assertNotNull(pack.find(limited));

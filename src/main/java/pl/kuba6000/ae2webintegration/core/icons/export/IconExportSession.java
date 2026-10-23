@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,6 +36,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private final IIconCapture<C> renderer;
     private final PackExportWriter writer;
     private final IconExportProgress progress = new IconExportProgress();
+    private final @Nullable IconAnimationPasses animations;
     private final Map<StableKey, C> identities = new HashMap<>();
     private final Deque<QueuedIcon<C>> pendingIcons = new ArrayDeque<>();
     private List<Failure> failures = new ArrayList<>();
@@ -42,6 +44,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private String sourceNote = "";
     private @Nullable C baseline;
     private boolean discoveryComplete;
+    private boolean animationPhase;
     private boolean finishing;
     private boolean canceling;
     private String status = "Preparing full icon export";
@@ -49,8 +52,21 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     /** Takes ownership of the native source/capture backend and the detached metadata source. */
     public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
         @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer) {
+        this(root, environment, catalogue, renderer, false);
+    }
+
+    public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
+        @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer, boolean animated) {
+        this(root, environment, catalogue, renderer, animated, System::nanoTime);
+    }
+
+    /** The same monotonic clock controls pass scheduling and native draw-submission timestamps. */
+    public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
+        @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer, boolean animated,
+        @NotNull LongSupplier clock) {
         this.catalogue = catalogue;
         this.renderer = renderer;
+        animations = animated ? new IconAnimationPasses(clock) : null;
         try {
             writer = new PackExportWriter(root, environment);
         } catch (RuntimeException | Error failure) {
@@ -75,7 +91,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                 if (!writer.finished()) return false;
                 writer.close();
                 if (canceling) return true;
-                status = progress.complete(writer.completedPath(), sourceNote);
+                status = progress.complete(writer.completedPath(), writer.failureCount(), sourceNote);
                 return true;
             }
             if (!writer.ready()) {
@@ -92,7 +108,8 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                 return false;
             }
             source.verify();
-            if (discoveryComplete) captureBatch(source);
+            if (animationPhase) captureAnimations(source);
+            else if (discoveryComplete) captureBatch(source);
             else discoverBatch(source);
             return false;
         } catch (InterruptedException exception) {
@@ -165,15 +182,39 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             writer.write(captures, failures);
             failures = new ArrayList<>();
         }
-        if (pendingIcons.isEmpty()) finish(source);
+        if (pendingIcons.isEmpty()) {
+            if (animations != null && !animations.done()) {
+                writer.beginAnimations();
+                animationPhase = true;
+            } else finish(source);
+        }
+    }
+
+    private void captureAnimations(@NotNull IIconSource<C> source) {
+        assert animations != null;
+        if (writer.animationsStopped()) {
+            animations.close();
+            finish(source);
+            return;
+        }
+        List<Capture> captures = new ArrayList<>();
+        animations.capture(captures, (entry, cause) -> omitAnimation(entry.key, entry.context, cause));
+        renderer.drain(captures);
+        animations.releaseCompleted();
+        if (!captures.isEmpty() || !failures.isEmpty()) {
+            writer.write(captures, failures);
+            failures = new ArrayList<>();
+        }
+        if (animations.done()) finish(source);
     }
 
     private void finish(@NotNull IIconSource<C> source) {
         source.verify();
-        renderer.close();
+        closeNative();
         Map<String, Long> counts = source.counts();
         progress.addStatistics(counts);
         renderer.statistics(counts);
+        if (animations != null) animations.statistics(counts);
         writer.finish(counts, source.sources());
         catalogue = null;
         finishing = true;
@@ -228,6 +269,23 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                     .context() + "/"
                     + queued.key(),
                 failure.getCause());
+            return;
+        }
+        if (animations != null) {
+            try {
+                IIconAnimation cursor = renderer.animation(queued.candidate(), queued.key());
+                if (cursor != null) animations.add(
+                    queued.key(),
+                    queued.candidate()
+                        .context(),
+                    cursor);
+            } catch (IIconCapture.RenderFailure failure) {
+                omitAnimation(
+                    queued.key(),
+                    queued.candidate()
+                        .context(),
+                    failure.getCause());
+            }
         }
     }
 
@@ -245,7 +303,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         baseline = null;
         catalogue = null;
         try {
-            renderer.close();
+            closeNative();
         } catch (Throwable failure) {
             rethrowFatal(failure);
             LOG.warn("Icon renderer cleanup failed", failure);
@@ -256,6 +314,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     @NotNull
     public String status() {
         if (!discoveryComplete || finishing || canceling) return status;
+        if (animationPhase && animations != null) return animations.status();
         return progress.rendering(sourceNote);
     }
 
@@ -263,6 +322,19 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private record QueuedIcon<C extends IIconCandidate<C>>(@NotNull StableKey key, @NotNull C candidate) {}
 
     private void omit(@NotNull String context, @NotNull Throwable failure) {
+        String reason = failureReason(failure);
+        failures.add(new Failure(context, reason));
+        progress.omitted++;
+        LOG.warn("Icon candidate omitted ({}): {}", context, reason);
+    }
+
+    private void omitAnimation(@NotNull StableKey key, @NotNull String context, @NotNull Throwable failure) {
+        String reason = failureReason(failure);
+        failures.add(Failure.animation(key, context + "/animation", reason));
+        LOG.warn("Icon animation omitted ({}): {}", context, reason);
+    }
+
+    private @NotNull String failureReason(@NotNull Throwable failure) {
         assert catalogue != null : "Only active discovery/capture can omit candidates";
         Throwable cause = catalogue.failureCause(failure);
         rethrowFatal(cause);
@@ -274,9 +346,27 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                 .replace('\t', ' ')
                 .replace('\r', ' ')
                 .replace('\n', ' ');
-        failures.add(new Failure(context, reason));
-        progress.omitted++;
-        LOG.warn("Icon candidate omitted ({}): {}", context, reason);
+        return reason;
+    }
+
+    private void closeNative() {
+        Throwable failure = null;
+        try {
+            if (animations != null) animations.close();
+        } catch (RuntimeException | Error cleanup) {
+            failure = cleanup;
+        }
+        try {
+            renderer.close();
+        } catch (RuntimeException | Error cleanup) {
+            if (failure == null) failure = cleanup;
+            else if (cleanup instanceof VirtualMachineError || cleanup instanceof ThreadDeath) {
+                if (cleanup != failure) cleanup.addSuppressed(failure);
+                failure = cleanup;
+            } else if (cleanup != failure) failure.addSuppressed(cleanup);
+        }
+        if (failure instanceof Error error) throw error;
+        if (failure instanceof RuntimeException cleanup) throw cleanup;
     }
 
     private static void rethrowFatal(@NotNull Throwable failure) {

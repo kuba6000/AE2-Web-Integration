@@ -80,14 +80,14 @@ final class IconExportProgress {
     }
 
     @NotNull
-    String complete(@Nullable Path completedPath, @NotNull String sourceNote) {
+    String complete(@Nullable Path completedPath, int failures, @NotNull String sourceNote) {
         return "Icon export complete: " + processed
             + "/"
             + total
             + " icons processed, "
             + captured
             + " captured, "
-            + omitted
+            + failures
             + " failures; "
             + completedPath
             + sourceNote;
