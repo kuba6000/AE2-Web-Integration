@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
@@ -37,7 +38,8 @@ public class DiscordDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        String webhook = Config.INSTANCE.discord.webhook;
+        ConfigSettings settings = Config.INSTANCE;
+        String webhook = settings.discord.webhook;
         if (webhook.isEmpty()) return;
 
         DiscordPayload payload = null;
@@ -60,8 +62,9 @@ public class DiscordDestination implements INotificationDestination {
                     + craftingMessage.gridName()
                     + "\nCPU: "
                     + craftingMessage.cpuName(),
-                craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
-            CraftingStyle style = Config.INSTANCE.discord.craftingStyle;
+                craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN,
+                settings.discord.roleId);
+            CraftingStyle style = settings.discord.craftingStyle;
             if (style != CraftingStyle.SIMPLE) {
                 byte[] png = null;
                 try {
@@ -87,18 +90,19 @@ public class DiscordDestination implements INotificationDestination {
                     return;
                 }
             }
+
         } else if (message instanceof StatusMessage statusMessage) {
             StatusMessage.Severity severity = statusMessage.severity();
             int color = switch (severity) {
                 case ERROR -> COLOR_RED;
                 case WARNING -> COLOR_YELLOW;
-                default -> 0;
+                default -> COLOR_TURQUOISE;
             };
-            if (color != 0) {
-                payload = new DiscordPayload(statusMessage.title(), statusMessage.description(), color);
-            } else {
-                payload = new DiscordPayload(statusMessage.title(), statusMessage.description());
-            }
+            payload = new DiscordPayload(
+                statusMessage.title(),
+                statusMessage.description(),
+                color,
+                settings.discord.roleId);
         }
 
         WebhookHelper.sendPayload(webhook, "", "", payload);

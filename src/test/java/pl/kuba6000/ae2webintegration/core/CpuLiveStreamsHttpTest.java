@@ -117,6 +117,27 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void liveCadenceChangeKeepsSubscriptionAndPendingResourceUpdate() throws Exception {
+        settings.activeIntervalMillis = 1000;
+        cpu.set(iron, 4, 0, 0);
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            cpu.set(iron, 3, 0, 1);
+            coordinator.dirty(cpu, iron);
+            ConfigSettings.ResourceTracking updated = new ConfigSettings.ResourceTracking();
+            updated.activeIntervalMillis = 50;
+            coordinator.applySettings(updated, clock);
+            tick(49);
+            assertEquals(reads, cpu.bulkReads);
+            tick(1);
+            assertEquals(
+                3,
+                update(delta(stream), iron).get("active")
+                    .getAsLong());
+        }
+    }
+
+    @Test
     void jobChangeReleasesLiveRowsOutputAndPendingNotificationsWithoutAnotherRead() throws Exception {
         cpu.set(iron, 4, 0, 0);
         CpuRegistry.Bootstrap snapshot = view(cpu);

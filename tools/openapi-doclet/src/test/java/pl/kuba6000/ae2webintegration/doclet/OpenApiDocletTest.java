@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.tools.DocumentationTool;
 import javax.tools.StandardJavaFileManager;
@@ -1415,6 +1416,123 @@ class OpenApiDocletTest {
                 .isEmpty(),
             parsed.getMessages()
                 .toString());
+    }
+
+    @Test
+    void serverSettingsProjectionFiltersOnlyTheWebViewAndRetainsTypedInputs() throws Exception {
+        List<Path> sources = fixture("""
+            /** Edits settings.
+             * @response 200 {@link Response} Settings.
+             */
+            @Endpoint(method = HttpMethod.POST, path = "/api/server/settings")
+            public class Grids {
+                @Body private Input input;
+                public record Input(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings) {}
+                public record Response(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings,
+                    pl.kuba6000.ae2webintegration.core.config.ConfigSettings raw) {}
+            }
+            """);
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/WebSetting.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+            public @interface WebSetting {
+                Access value();
+                enum Access { FILE_ONLY, SECRET }
+            }
+            """));
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/ConfigSettings.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            public final class ConfigSettings {
+                public General general;
+                public Notifications notifications;
+                public static final class General {
+                    @WebSetting(WebSetting.Access.FILE_ONLY) public String password;
+                    @WebSetting(WebSetting.Access.FILE_ONLY) public int port;
+                    public boolean newSwitch;
+                }
+                public static final class Notifications {
+                    @WebSetting(WebSetting.Access.SECRET) public String secret;
+                    public int amount;
+                }
+            }
+            """));
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/EditableServerSettings.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            public final class EditableServerSettings {
+                private ConfigSettings config;
+            }
+            """));
+        Path output = directory.resolve("web-settings.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject document = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject();
+        JsonObject operation = document.getAsJsonObject("paths")
+            .getAsJsonObject("/api/server/settings")
+            .getAsJsonObject("post");
+        JsonObject response = dereference(
+            document,
+            operation.getAsJsonObject("responses")
+                .getAsJsonObject("200")
+                .getAsJsonObject("content")
+                .getAsJsonObject("application/json")
+                .getAsJsonObject("schema"));
+        JsonObject input = dereference(
+            document,
+            operation.getAsJsonObject("requestBody")
+                .getAsJsonObject("content")
+                .getAsJsonObject("application/json")
+                .getAsJsonObject("schema"));
+        for (JsonObject envelope : List.of(input, response)) {
+            JsonObject settings = dereference(
+                document,
+                envelope.getAsJsonObject("properties")
+                    .getAsJsonObject("settings"));
+            assertNotNull(
+                settings.getAsJsonObject("properties")
+                    .get("general"),
+                "Web settings must expose the projected config shape");
+            JsonObject general = dereference(
+                document,
+                settings.getAsJsonObject("properties")
+                    .getAsJsonObject("general"));
+            assertEquals(
+                Set.of("newSwitch"),
+                general.getAsJsonObject("properties")
+                    .keySet());
+            assertEquals(
+                "boolean",
+                general.getAsJsonObject("properties")
+                    .getAsJsonObject("newSwitch")
+                    .get("type")
+                    .getAsString());
+            JsonObject notifications = dereference(
+                document,
+                settings.getAsJsonObject("properties")
+                    .getAsJsonObject("notifications"));
+            assertEquals(
+                Set.of("amount"),
+                notifications.getAsJsonObject("properties")
+                    .keySet());
+            assertEquals(
+                "integer",
+                notifications.getAsJsonObject("properties")
+                    .getAsJsonObject("amount")
+                    .get("type")
+                    .getAsString());
+        }
+        JsonObject raw = dereference(
+            document,
+            response.getAsJsonObject("properties")
+                .getAsJsonObject("raw"));
+        JsonObject general = dereference(
+            document,
+            raw.getAsJsonObject("properties")
+                .getAsJsonObject("general"));
+        assertEquals(
+            Set.of("newSwitch", "password", "port"),
+            general.getAsJsonObject("properties")
+                .keySet());
     }
 
     private static JsonObject dereference(JsonObject document, JsonObject schema) {

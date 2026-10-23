@@ -15,8 +15,14 @@ public class DiscordPayload implements INotificationPayload {
     final int color;
     private boolean includeImage;
     private boolean thumbnail;
+    private final String roleId;
 
     public DiscordPayload(String title, String description, int color) {
+        this(title, description, color, Config.INSTANCE.discord.roleId);
+    }
+
+    DiscordPayload(String title, String description, int color, String roleId) {
+        this.roleId = roleId;
         this.title = title;
         this.description = description;
         this.color = color;
@@ -33,11 +39,9 @@ public class DiscordPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String roleID = Config.INSTANCE.discord.roleId;
-
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");
-        json.addProperty("content", !roleID.isEmpty() ? "<@&" + roleID + ">" : "");
+        json.addProperty("content", !roleId.isEmpty() ? "<@&" + roleId + ">" : "");
         JsonArray embeds = new JsonArray();
         JsonObject embed = new JsonObject();
         embed.addProperty("title", limit(this.title, 256));

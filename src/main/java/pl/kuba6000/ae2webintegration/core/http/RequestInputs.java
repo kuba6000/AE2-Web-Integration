@@ -10,6 +10,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.EditableServerSettings;
+import pl.kuba6000.ae2webintegration.core.config.WebSetting;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
@@ -61,7 +64,7 @@ public final class RequestInputs {
                     hasBody = true;
                     JsonObject body = context.getBody();
                     if (body == null) throw new IllegalArgumentException("Missing JSON body");
-                    validate(body, field.getType());
+                    validate(body, field.getType(), false);
                     set(
                         field,
                         request,
@@ -97,11 +100,15 @@ public final class RequestInputs {
         }
     }
 
-    private static void validate(JsonObject body, Class<?> input) {
+    private static void validate(JsonObject body, Class<?> input, boolean serverSettings) {
+        if (input == EditableServerSettings.class) {
+            input = ConfigSettings.class;
+            serverSettings = true;
+        }
         Map<String, Field> fields = new HashMap<>();
         for (Field field : input.getDeclaredFields()) {
-            if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers()))
-                fields.put(field.getName(), field);
+            if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers())
+                && !(serverSettings && field.isAnnotationPresent(WebSetting.class))) fields.put(field.getName(), field);
         }
         for (Map.Entry<String, JsonElement> member : body.entrySet()) {
             String supplied = member.getKey();
@@ -111,21 +118,33 @@ public final class RequestInputs {
             JsonElement value = body.get(field.getName());
             if (value == null && field.isAnnotationPresent(OptionalInput.class)) continue;
             Class<?> inputType = field.getType();
-            if (!inputType.isPrimitive() && inputType != String.class
+            if (!inputType.isPrimitive() && !inputType.isEnum()
+                && inputType != String.class
                 && inputType != StableKey.class
                 && inputType != Boolean.class
                 && inputType != Integer.class
                 && inputType != Long.class) {
                 if (value == null || !value.isJsonObject())
                     throw new IllegalArgumentException("Missing or invalid JSON object: " + field.getName());
-                validate(value.getAsJsonObject(), inputType);
+                validate(value.getAsJsonObject(), inputType, serverSettings);
                 continue;
             }
             if (value == null || !value.isJsonPrimitive())
                 throw new IllegalArgumentException("Missing or invalid JSON member: " + field.getName());
             JsonPrimitive scalar = value.getAsJsonPrimitive();
             Class<?> type = field.getType();
-            if (type == String.class || type == StableKey.class) {
+            if (type.isEnum()) {
+                if (!scalar.isString()) throw new IllegalArgumentException("Expected enum name: " + field.getName());
+                boolean known = false;
+                for (Object constant : type.getEnumConstants()) {
+                    if (((Enum<?>) constant).name()
+                        .equals(scalar.getAsString())) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) throw new IllegalArgumentException("Unknown enum value: " + field.getName());
+            } else if (type == String.class || type == StableKey.class) {
                 if (!scalar.isString()) throw new IllegalArgumentException("Expected string: " + field.getName());
                 if (type == StableKey.class) StableKey.parse(scalar.getAsString());
             } else if (type == boolean.class || type == Boolean.class) {

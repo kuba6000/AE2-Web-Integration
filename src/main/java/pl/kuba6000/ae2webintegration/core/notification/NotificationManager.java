@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -23,7 +24,7 @@ public class NotificationManager extends Thread {
     private static NotificationManager thread;
 
     private static final BlockingQueue<IMessage> toPush = new LinkedBlockingQueue<>();
-    private static final List<INotificationDestination> destinations = new ArrayList<>();
+    private static volatile List<INotificationDestination> destinations = Collections.emptyList();
 
     private static final long FRACTIONAL_SECONDS_THRESHOLD_MILLIS = 5000L;
 
@@ -31,12 +32,7 @@ public class NotificationManager extends Thread {
         LOG.info("Initializing NotificationManager");
         if (thread != null) shutdown();
 
-        destinations.clear();
-
-        DiscordDestination discord = new DiscordDestination();
-        if (discord.isUsable()) destinations.add(discord);
-        NtfyDestination ntfy = new NtfyDestination();
-        if (ntfy.isUsable()) destinations.add(ntfy);
+        reloadSettings();
 
         if (!Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
@@ -54,6 +50,16 @@ public class NotificationManager extends Thread {
         thread = new NotificationManager();
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Replaces destinations without starting a worker or sending a startup notification. */
+    public static void reloadSettings() {
+        List<INotificationDestination> updated = new ArrayList<>();
+        DiscordDestination discord = new DiscordDestination();
+        if (discord.isUsable()) updated.add(discord);
+        NtfyDestination ntfy = new NtfyDestination();
+        if (ntfy.isUsable()) updated.add(ntfy);
+        destinations = Collections.unmodifiableList(updated);
     }
 
     public static void shutdown() {
