@@ -72,6 +72,16 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
             && FluidStack.isSameFluidSameComponents(fluid, other.fluid);
     }
 
+    @NotNull
+    ItemStack animationItem() {
+        return item.copy();
+    }
+
+    @NotNull
+    FluidStack animationFluid() {
+        return fluid.copy();
+    }
+
     void render(@NotNull ModernIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws ModernIconRenderer.RenderFailure {
         // Mod renderers may mutate their input; retain the owned stack for collision comparisons.
