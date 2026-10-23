@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
@@ -60,11 +61,19 @@ public class DiscordDestination implements INotificationDestination {
                     + "\nCPU: "
                     + craftingMessage.cpuName(),
                 craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
-            if (Config.INSTANCE.discord.imageCards) {
+            CraftingStyle style = Config.INSTANCE.discord.craftingStyle;
+            if (style != CraftingStyle.SIMPLE) {
                 byte[] png = null;
                 try {
-                    if (card == null) card = new DiscordCraftingCard();
-                    png = card.render(craftingMessage, CoreEngine.getIconPack());
+                    if (style == CraftingStyle.SMALL_ICON) {
+                        png = DiscordCraftingIcon.thumbnail(
+                            CoreEngine.getIconPack(),
+                            craftingMessage.output()
+                                .description());
+                    } else {
+                        if (card == null) card = new DiscordCraftingCard();
+                        png = card.render(craftingMessage, CoreEngine.getIconPack());
+                    }
                 } catch (IOException | RuntimeException | LinkageError failure) {
                     // Avoid including native names or webhook credentials in diagnostics.
                     LOG.warn(
@@ -73,7 +82,7 @@ public class DiscordDestination implements INotificationDestination {
                             .getSimpleName());
                 }
                 if (png != null) {
-                    payload.includeImage();
+                    payload.includeImage(style == CraftingStyle.SMALL_ICON);
                     WebhookHelper.sendPng(webhook, payload, png);
                     return;
                 }

@@ -5,29 +5,18 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontFormatException;
 import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.NumberFormat;
-import java.util.Iterator;
 import java.util.Locale;
-
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReadParam;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.MemoryCacheImageInputStream;
-import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Location;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Fixed dark card, rendered only by the notification worker from detached data. */
 final class DiscordCraftingCard {
@@ -70,7 +59,7 @@ final class DiscordCraftingCard {
                     status,
                     270);
                 frame(graphics, 24, 82, 912, 126, SLOT);
-                BufferedImage icon = icon(
+                BufferedImage icon = DiscordCraftingIcon.read(
                     pack,
                     message.output()
                         .description());
@@ -121,11 +110,7 @@ final class DiscordCraftingCard {
                 graphics.dispose();
             }
             try {
-                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                try (MemoryCacheImageOutputStream output = new MemoryCacheImageOutputStream(bytes)) {
-                    if (!ImageIO.write(image, "png", output)) throw new IOException("PNG encoder unavailable");
-                }
-                return bytes.toByteArray();
+                return DiscordCraftingIcon.png(image);
             } finally {
                 image.flush();
             }
@@ -176,28 +161,4 @@ final class DiscordCraftingCard {
         graphics.drawString(label, x, y);
     }
 
-    private static @Nullable BufferedImage icon(@Nullable IconPack pack, @NotNull ResourceDescriptor description)
-        throws IOException {
-        if (pack == null) return null;
-        Location location = description.itemKey() == null ? null : pack.find(description.itemKey());
-        if (location == null && description.baseKey() != null) location = pack.find(description.baseKey());
-        if (location == null) return null;
-        try (InputStream page = pack.openPage(
-            location.page()
-                .digest());
-            MemoryCacheImageInputStream input = new MemoryCacheImageInputStream(page)) {
-            Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("png");
-            if (!readers.hasNext()) throw new IOException("PNG decoder unavailable");
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(input, true, true);
-                ImageReadParam parameters = reader.getDefaultReadParam();
-                parameters.setSourceRegion(
-                    new Rectangle(location.x(), location.y(), IconPack.CONTENT_SIZE, IconPack.CONTENT_SIZE));
-                return reader.read(0, parameters);
-            } finally {
-                reader.dispose();
-            }
-        }
-    }
 }

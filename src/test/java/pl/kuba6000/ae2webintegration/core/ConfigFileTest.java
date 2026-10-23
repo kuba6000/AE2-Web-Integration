@@ -25,6 +25,36 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 class ConfigFileTest {
 
     @Test
+    void discordCraftingStylesRoundTripThroughToml() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals("IMAGE_CARD", document.get("discord.crafting_style"));
+        for (String style : new String[] { "SIMPLE", "SMALL_ICON", "IMAGE_CARD" }) {
+            document.set("discord.crafting_style", style);
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            Config.reload();
+            assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
+            Config.init(root.toFile());
+            assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
+            CommentedConfig restored = new TomlParser()
+                .parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            assertEquals(style, restored.get("discord.crafting_style"));
+        }
+        ConfigSettings active = Config.INSTANCE;
+        document.set("discord.crafting_style", "INVALID");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(RuntimeException.class, Config::reload);
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
     void craftingRetentionUsesIndependentBoundsAndSurvivesDetachedCopy() {
         ConfigSettings.ResourceHistory resource = new ConfigSettings.ResourceHistory();
         ConfigSettings.CraftingHistory crafting = new ConfigSettings.CraftingHistory();

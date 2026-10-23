@@ -36,6 +36,7 @@ import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
@@ -133,9 +134,9 @@ class DiscordNotificationTest {
     @Test
     void disablingImagesPersistsAndKeepsCancelledCraftingAsOrdinaryTextJson() throws Exception {
         String webhook = Config.INSTANCE.discord.webhook;
-        config.set("discord.image_cards", false);
+        config.set("discord.crafting_style", "SIMPLE");
         Config.INSTANCE.discord.webhook = webhook;
-        assertFalse(Config.INSTANCE.discord.imageCards);
+        assertEquals(CraftingStyle.SIMPLE, Config.INSTANCE.discord.craftingStyle);
         new DiscordDestination().sendNotification(crafting("Powered Rail", true));
         Upload upload = upload();
         assertEquals("application/json", upload.contentType);
@@ -225,7 +226,7 @@ class DiscordNotificationTest {
         "false, 4" })
     void bothDestinationsPresentTheKnownRequestersWithoutGuessingUnknownOnes(boolean discord, int count)
         throws Exception {
-        Config.INSTANCE.discord.imageCards = false;
+        Config.INSTANCE.discord.craftingStyle = CraftingStyle.SIMPLE;
         Config.INSTANCE.ntfy.host = Config.INSTANCE.discord.webhook;
         Config.INSTANCE.ntfy.topic = "crafting-test";
         List<CraftingRequester> requesters = new ArrayList<>();
@@ -264,7 +265,7 @@ class DiscordNotificationTest {
 
     @Test
     void longNamesStayWithinDiscordEmbedLimitsAndRetainTheNetworkName() throws Exception {
-        Config.INSTANCE.discord.imageCards = false;
+        Config.INSTANCE.discord.craftingStyle = CraftingStyle.SIMPLE;
         new DiscordDestination()
             .sendNotification(crafting(String.join("", Collections.nCopies(5000, "Long name")), false));
         JsonObject embed = parse(upload().body).getAsJsonArray("embeds")

@@ -271,7 +271,8 @@ Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Int
 `discord.role_id` configures an optional role mention.
 
 Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
-Install an icon pack to include item icons. Set `discord.image_cards = false` for text-only notifications.
+Set `discord.crafting_style` to `IMAGE_CARD` (default) for the full card, `SMALL_ICON` for a text embed with an item thumbnail, or `SIMPLE` for text only.
+Install an icon pack to supply item images. `SMALL_ICON` sends text only when no usable icon is available; `IMAGE_CARD` falls back to text if rendering fails.
 
 #### NTFY Integration
 

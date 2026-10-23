@@ -21,6 +21,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -78,7 +79,7 @@ class CraftingNotificationTest extends GridTestScope {
         server.start();
         try (ConfigTestFixture ignored = new ConfigTestFixture()) {
             Config.INSTANCE.general.publicMode = false;
-            Config.INSTANCE.discord.imageCards = false;
+            Config.INSTANCE.discord.craftingStyle = CraftingStyle.SIMPLE;
             String endpoint = "http://127.0.0.1:" + server.getAddress()
                 .getPort();
             Config.INSTANCE.discord.webhook = endpoint + "/discord";

@@ -14,6 +14,7 @@ public class DiscordPayload implements INotificationPayload {
     final String description;
     final int color;
     private boolean includeImage;
+    private boolean thumbnail;
 
     public DiscordPayload(String title, String description, int color) {
         this.title = title;
@@ -25,8 +26,9 @@ public class DiscordPayload implements INotificationPayload {
         this(title, description, COLOR_TURQUOISE);
     }
 
-    void includeImage() {
+    void includeImage(boolean thumbnail) {
         includeImage = true;
+        this.thumbnail = thumbnail;
     }
 
     @Override
@@ -44,7 +46,7 @@ public class DiscordPayload implements INotificationPayload {
         if (includeImage) {
             JsonObject image = new JsonObject();
             image.addProperty("url", "attachment://crafting.png");
-            embed.add("image", image);
+            embed.add(thumbnail ? "thumbnail" : "image", image);
         }
         embeds.add(embed);
         json.add("embeds", embeds);

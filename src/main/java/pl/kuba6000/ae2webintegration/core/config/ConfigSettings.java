@@ -78,9 +78,15 @@ public final class ConfigSettings {
         @Comment("Discord webhook URL. Empty disables notifications; public mode must also be disabled.")
         public String webhook = "";
 
-        @Path("image_cards")
-        @Comment("Attach dark image cards to crafting notifications, using the installed icon pack when available.")
-        public boolean imageCards = true;
+        public enum CraftingStyle {
+            SIMPLE,
+            SMALL_ICON,
+            IMAGE_CARD
+        }
+
+        @Path("crafting_style")
+        @Comment("Crafting notification style: SIMPLE (text), SMALL_ICON (item thumbnail), IMAGE_CARD (dark card). Images use the installed icon pack when available.")
+        public CraftingStyle craftingStyle = CraftingStyle.IMAGE_CARD;
 
         @Path("role_id")
         @Comment("Role to mention on errors. Empty disables mentions.")
