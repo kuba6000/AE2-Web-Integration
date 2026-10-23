@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,8 +42,9 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Native plans retain sprite metadata, never raw captured pixels or a modified shared atlas. */
 final class NativeIconAnimation implements IIconAnimation {
 
-    private static final boolean MODIFIED_ATLAS = Loader.isModLoaded("angelica") || FMLClientHandler.instance()
+    private static final boolean MODIFIED_ATLAS = FMLClientHandler.instance()
         .hasOptifine();
+    private static final Method GUTTER = gutterAccessor();
     private static final int MAX_TICKS = 1200;
     private static final int MAX_FRAMES = 256;
     private static final Field METADATA = ReflectionHelper
@@ -69,14 +72,24 @@ final class NativeIconAnimation implements IIconAnimation {
         @NotNull StableKey key, @NotNull ItemStack stack) {
         ResourceLocation atlas = stack.getItemSpriteNumber() == 0 ? TextureMap.locationBlocksTexture
             : TextureMap.locationItemsTexture;
-        if (MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY) != null
-            || stack.hasEffect(0)) return sampled(renderer, candidate, key, atlas);
+        IItemRenderer custom = MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY);
+        if (custom != null) {
+            renderer.animationCustomRenderers.merge(
+                custom.getClass()
+                    .getName(),
+                1L,
+                Long::sum);
+            return sampled(renderer, candidate, key, atlas);
+        }
         List<IIcon> icons = new ArrayList<>();
         if (stack.getItemSpriteNumber() == 0) {
             Block block = Block.getBlockFromItem(stack.getItem());
             int renderType = block.getRenderType();
             if (RenderBlocks.renderItemIn3d(renderType)) {
-                if (renderType != 0) return sampled(renderer, candidate, key, atlas);
+                if (renderType != 0) {
+                    renderer.animationUnsupportedShape++;
+                    return null;
+                }
                 // RenderBlocks normal-cube inventory path fixes the front face of these vanilla blocks.
                 int metadata = block == Blocks.dispenser || block == Blocks.dropper || block == Blocks.furnace ? 3
                     : stack.getItemDamage();
@@ -92,7 +105,6 @@ final class NativeIconAnimation implements IIconAnimation {
                     .getRenderPasses(stack.getItemDamage())
                 : 1;
         for (int pass = 0; pass < passes; pass++) {
-            if (stack.hasEffect(pass)) return sampled(renderer, candidate, key, atlas);
             icons.add(
                 stack.getItem()
                     .requiresMultipleRenderPasses()
@@ -128,45 +140,75 @@ final class NativeIconAnimation implements IIconAnimation {
 
     private static @Nullable IIconAnimation plan(@NotNull LegacyIconRenderer renderer, @NotNull IconCandidate candidate,
         @NotNull StableKey key, @NotNull ResourceLocation atlas, @NotNull List<IIcon> icons) {
-        // Modified atlas uploads may include gutters or shader textures outside vanilla sprite rectangles.
-        if (MODIFIED_ATLAS || GLContext.getCapabilities().OpenGL20 && GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
-            renderer.animationAtlasFallbacks++;
-            return sampled(renderer, candidate, key, atlas);
-        }
         List<NativeSprite> timelines = new ArrayList<>();
         List<SpriteTimeline.Track> tracks = new ArrayList<>();
         long scratchBytes = 0;
         for (IIcon icon : icons) {
-            if (icon == null || icon.getClass() != TextureAtlasSprite.class)
-                return sampled(renderer, candidate, key, atlas);
+            if (icon == null || icon.getClass() != TextureAtlasSprite.class) {
+                renderer.animationUnsupportedSprite++;
+                return null;
+            }
             TextureAtlasSprite sprite = (TextureAtlasSprite) icon;
             if (!sprite.hasAnimationMetadata()) continue;
             if (timelines.stream()
                 .anyMatch(t -> t.sprite == sprite)) continue;
-            NativeSprite timeline = timeline(sprite);
-            if (timeline == null) {
-                renderer.animationTimelineFallbacks++;
-                return sampled(renderer, candidate, key, atlas);
+            int gutter = gutter(sprite);
+            if (gutter < 0 || gutter > 4096 || sprite.getOriginX() < gutter || sprite.getOriginY() < gutter) {
+                renderer.animationUnsupportedAtlas++;
+                return null;
             }
-            for (int[] pixels : timeline.pixels(0))
-                if (pixels != null) scratchBytes += (long) pixels.length * Integer.BYTES;
+            NativeSprite timeline = timeline(sprite, gutter);
+            if (timeline == null) {
+                renderer.animationUnsupportedTimeline++;
+                return null;
+            }
+            scratchBytes += timeline.scratchBytes();
             if (scratchBytes > AtlasFrameScope.MAX_SCRATCH_BYTES) {
-                renderer.animationTimelineFallbacks++;
-                return sampled(renderer, candidate, key, atlas);
+                renderer.animationUnsupportedTimeline++;
+                return null;
             }
             timelines.add(timeline);
             tracks.add(new SpriteTimeline.Track(timeline.durations, timeline.interpolated));
         }
         if (timelines.isEmpty()) return null;
+        // Unknown shader atlas layouts cannot be safely controlled; keep the successful static icon.
+        if (MODIFIED_ATLAS || GLContext.getCapabilities().OpenGL20 && GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
+            renderer.animationUnsupportedAtlas++;
+            return null;
+        }
+
         SpriteTimeline timing = SpriteTimeline.create(tracks);
         if (timing.truncated()) {
-            renderer.animationTimelineFallbacks++;
-            return sampled(renderer, candidate, key, atlas);
+            renderer.animationUnsupportedTimeline++;
+            return null;
         }
         return new NativeIconAnimation(renderer, candidate, key, atlas, timelines, timing.frames());
     }
 
-    private static @Nullable NativeSprite timeline(@NotNull TextureAtlasSprite sprite) {
+    private static @Nullable Method gutterAccessor() {
+        if (!Loader.isModLoaded("angelica")) return null;
+        try {
+            return TextureAtlasSprite.class.getMethod("angelica$getGutterWidth");
+        } catch (NoSuchMethodException absent) {
+            return null;
+        }
+    }
+
+    private static int gutter(@NotNull TextureAtlasSprite sprite) {
+        if (!Loader.isModLoaded("angelica")) return 0;
+        if (GUTTER == null) return -1;
+        try {
+            return (Integer) GUTTER.invoke(sprite);
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("Cannot read Angelica sprite gutter", cause);
+        } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("Cannot read Angelica sprite gutter", failure);
+        }
+    }
+
+    private static @Nullable NativeSprite timeline(@NotNull TextureAtlasSprite sprite, int gutter) {
         try {
             AnimationMetadataSection metadata = (AnimationMetadataSection) METADATA.get(sprite);
             int count = metadata.getFrameCount();
@@ -185,7 +227,7 @@ final class NativeIconAnimation implements IIconAnimation {
                 ends[index] = (int) total;
                 indexes[index] = image;
             }
-            return new NativeSprite(sprite, indexes, ends, durations, (int) total, false);
+            return new NativeSprite(sprite, indexes, ends, durations, (int) total, false, gutter);
         } catch (IllegalAccessException failure) {
             throw new IllegalStateException("Cannot read native sprite animation metadata", failure);
         }
@@ -246,15 +288,17 @@ final class NativeIconAnimation implements IIconAnimation {
         final int cycle;
         final int[] durations;
         final boolean interpolated;
+        final int gutter;
 
         NativeSprite(@NotNull TextureAtlasSprite sprite, int[] indexes, int[] ends, int[] durations, int cycle,
-            boolean interpolated) {
+            boolean interpolated, int gutter) {
             this.sprite = sprite;
             this.indexes = indexes;
             this.ends = ends;
             this.cycle = cycle;
             this.durations = durations;
             this.interpolated = interpolated;
+            this.gutter = gutter;
         }
 
         int position(int tick) {
@@ -268,8 +312,41 @@ final class NativeIconAnimation implements IIconAnimation {
             return sprite.getFrameTextureData(indexes[position(tick)]);
         }
 
+        int width(int level) {
+            return (sprite.getIconWidth() >> level) + 2 * (gutter >> level);
+        }
+
+        int height(int level) {
+            return (sprite.getIconHeight() >> level) + 2 * (gutter >> level);
+        }
+
+        long scratchBytes() {
+            long bytes = 0;
+            int[][] data = pixels(0);
+            for (int level = 0; level < data.length; level++) {
+                if (data[level] != null) bytes += (long) width(level) * height(level) * Integer.BYTES;
+            }
+            return bytes;
+        }
+
         void write(int tick, int level, @NotNull IntBuffer output) {
-            output.put(pixels(tick)[level]);
+            int[] pixels = pixels(tick)[level];
+            int width = sprite.getIconWidth() >> level;
+            int height = sprite.getIconHeight() >> level;
+            if (pixels == null || pixels.length != width * height)
+                throw new IllegalStateException("Sprite mip dimensions changed during export");
+            int padding = gutter >> level;
+            if (padding == 0) {
+                output.put(pixels);
+                return;
+            }
+            // Angelica 2.2.25 SpritePadding duplicates edge texels into each mip's gutter.
+            for (int y = -padding; y < height + padding; y++) {
+                int row = Math.max(0, Math.min(height - 1, y)) * width;
+                for (int x = 0; x < padding; x++) output.put(pixels[row]);
+                output.put(pixels, row, width);
+                for (int x = 0; x < padding; x++) output.put(pixels[row + width - 1]);
+            }
         }
     }
 }

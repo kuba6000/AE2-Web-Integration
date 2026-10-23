@@ -36,12 +36,7 @@ final class AtlasFrameScope implements AutoCloseable {
         this.sprites = sprites;
         try {
             long totalBytes = 0;
-            for (NativeIconAnimation.NativeSprite timeline : sprites) {
-                int[][] data = timeline.pixels(0);
-                for (int level = 0; level < data.length; level++) {
-                    if (data[level] != null) totalBytes += (long) data[level].length * Integer.BYTES;
-                }
-            }
+            for (NativeIconAnimation.NativeSprite timeline : sprites) totalBytes += timeline.scratchBytes();
             if (totalBytes > MAX_SCRATCH_BYTES)
                 throw new IllegalArgumentException("Sprite mip scratch exceeds animation limit");
             scratch.reserve((int) totalBytes);
@@ -64,8 +59,8 @@ final class AtlasFrameScope implements AutoCloseable {
                 NativeIconAnimation.NativeSprite timeline = sprites.get(index);
                 int[][] data = timeline.pixels(0);
                 for (int level = 0; level < data.length; level++) {
-                    int width = timeline.sprite.getIconWidth() >> level;
-                    int height = timeline.sprite.getIconHeight() >> level;
+                    int width = timeline.width(level);
+                    int height = timeline.height(level);
                     if (width == 0 || height == 0 || data[level] == null) continue;
                     bytes += (long) width * height * Integer.BYTES;
                     if (bytes > MAX_SCRATCH_BYTES)
@@ -73,8 +68,8 @@ final class AtlasFrameScope implements AutoCloseable {
                     Rectangle rectangle = new Rectangle(
                         index,
                         level,
-                        timeline.sprite.getOriginX() >> level,
-                        timeline.sprite.getOriginY() >> level,
+                        (timeline.sprite.getOriginX() >> level) - (timeline.gutter >> level),
+                        (timeline.sprite.getOriginY() >> level) - (timeline.gutter >> level),
                         width,
                         height,
                         scratch);
@@ -119,10 +114,6 @@ final class AtlasFrameScope implements AutoCloseable {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         modified = true;
         for (Rectangle rectangle : rectangles) {
-            int[] pixels = sprites.get(rectangle.sprite)
-                .pixels(tick)[rectangle.level];
-            if (pixels == null || pixels.length != rectangle.width * rectangle.height)
-                throw new IllegalStateException("Sprite mip dimensions changed during export");
             rectangle.upload.clear();
             sprites.get(rectangle.sprite)
                 .write(tick, rectangle.level, rectangle.upload);

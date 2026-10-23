@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.LongSupplier;
@@ -18,6 +19,8 @@ import net.minecraft.util.IIcon;
 import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.FluidStack;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
@@ -37,6 +40,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Client-thread inventory capture. Each call restores the caller's GL state, including on failure. */
 final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
 
+    private static final Logger LOGGER = LogManager.getLogger(LegacyIconRenderer.class);
     static final int ICON_SIZE = 64;
     private static final int GUI_SIZE = 16;
     private static final int GUI_DEPTH = 1000;
@@ -52,8 +56,11 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     private CaptureKind captureKind = CaptureKind.STATIC;
     private long frameDuration;
     private LongSupplier drawClock = System::nanoTime;
-    long animationAtlasFallbacks;
-    long animationTimelineFallbacks;
+    long animationUnsupportedAtlas;
+    long animationUnsupportedShape;
+    long animationUnsupportedSprite;
+    final Map<String, Long> animationCustomRenderers = new HashMap<>();
+    long animationUnsupportedTimeline;
     private long animationSpriteCursors;
     private long animationSampledCursors;
     private long snapshotNanos;
@@ -270,8 +277,13 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         counts.put("renderRestoreCount", restoreCount);
         counts.put("animationSpriteCursors", animationSpriteCursors);
         counts.put("animationSampledCursors", animationSampledCursors);
-        counts.put("animationAtlasFallbacks", animationAtlasFallbacks);
-        counts.put("animationTimelineFallbacks", animationTimelineFallbacks);
+        counts.put("animationUnsupportedAtlas", animationUnsupportedAtlas);
+        counts.put("animationUnsupportedShape", animationUnsupportedShape);
+        counts.put("animationUnsupportedSprite", animationUnsupportedSprite);
+        counts.put("animationCustomRendererClasses", (long) animationCustomRenderers.size());
+        if (!animationCustomRenderers.isEmpty())
+            LOGGER.info("Icon animation custom renderer candidates: {}", animationCustomRenderers);
+        counts.put("animationUnsupportedTimeline", animationUnsupportedTimeline);
         readback.statistics(counts);
     }
 
