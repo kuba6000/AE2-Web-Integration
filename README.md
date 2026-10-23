@@ -212,6 +212,18 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+Administrators and trusted localhost users can edit the active configuration in **Server settings**.
+**Save and apply** writes `config.toml` and applies the changes without restarting the web server.
+The listener port, administrator password, public mode, password-free localhost access, trusted proxies
+and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
+Manual file edits take effect after reloading the configuration or restarting the server.
+Set `general.allow_server_settings_editing = false` in `config.toml` and reload to disable reading and
+editing server settings through the web, including for administrators and trusted localhost users.
+The tab then shows a disabled notice instead of the settings. Access is enabled by default; the switch
+can only be changed in the file.
+Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
+to keep them, or explicitly replace or clear them.
+
 Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
 **Include machine-requested crafting** there to also track jobs started by machines on that network.
 The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
@@ -262,13 +274,17 @@ Crafting completion notifications can be filtered with `minimum_crafting_duratio
 which keeps all crafting completion notifications enabled.
 Notifications are initialized ONLY for tracked grids
 
+Crafting updates include the requesting players when identified, using the authenticated account for
+orders placed through the web terminal. Administrator and localhost access have no player identity.
+
 #### Discord Integration
 
-Create a Discord webhook and set its URL as `discord_webhook` in the AE2 Web Integration config. You can also
-set `discord_role_id` if a role should be pinged on errors.
+Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
+`discord.role_id` configures an optional role mention.
 
-
-<img width="467" height="224" alt="AE2 Web Integration Discord message" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
+Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
+Set `discord.crafting_style` to `IMAGE_CARD` (default) for the full card, `SMALL_ICON` for a text embed with an item thumbnail, or `SIMPLE` for text only.
+Install an icon pack to supply item images. `SMALL_ICON` sends text only when no usable icon is available; `IMAGE_CARD` falls back to text if rendering fails.
 
 #### NTFY Integration
 

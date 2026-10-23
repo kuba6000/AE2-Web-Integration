@@ -28,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
 
 /**
  * Submits a completed crafting plan to a crafting CPU.
@@ -136,7 +137,12 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
                         return;
                     }
                 }
-                String error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
+                String error;
+                try (CraftingRequesterContext ignored = CraftingRequesterContext.open(
+                    context.getPrincipal()
+                        .getPlayerIdentity())) {
+                    error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
+                }
                 if (error != null) {
                     respond(HttpURLConnection.HTTP_CONFLICT, new FailureResponse(ApiStatus.FAIL, error));
                 } else {

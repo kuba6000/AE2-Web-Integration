@@ -60,6 +60,7 @@ test('crafting history pages preserve large IDs and replace rows when navigating
 // links, and persist browser preferences without pretending to mutate server settings.
 test('global settings tabs preserve grid navigation and browser preferences', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
+    options.isAdmin = true;
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
@@ -100,6 +101,7 @@ test('global settings tabs preserve grid navigation and browser preferences', as
 
 test('global settings direct routes work without an available grid', async (t) => {
     const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
     options.empty = true;
     for (const [route, heading] of [
         ['web-settings', 'Web settings'],

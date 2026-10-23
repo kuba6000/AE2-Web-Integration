@@ -79,7 +79,8 @@ export function boot(
                 createIconLoader(base, returnToLogin, async () => {
                     await application?.refresh();
                 }),
-                metadata.capabilities
+                metadata.capabilities,
+                metadata.user.isAdmin
             );
             const context = {
                 ...theme,

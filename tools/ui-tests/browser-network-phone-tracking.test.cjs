@@ -21,6 +21,176 @@ const {
     atlasFixture
 } = require('./fixtures.cjs');
 
+test('server configuration is hidden from players and a direct route never requests it', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/server-settings`);
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /permission|access/i })
+        .waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Server settings', exact: true }).isVisible(), false);
+    assert.equal(await page.locator('#server-settings form').isVisible(), false);
+    assert.equal(
+        options.requests.some((request) => request.path === '/api/server/settings'),
+        false
+    );
+});
+
+test('server configuration phone form preserves focus and drafts, detects conflicts and saves explicitly', async (t) => {
+    const { page, options, base } = await refreshingFixture(t, '/ae2', {
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true
+    });
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    const amount = page.getByRole('spinbutton', { name: 'Minimum crafted amount', exact: true });
+    await amount.waitFor();
+    for (const field of [
+        'port',
+        'adminPasswordConfigured',
+        'publicMode',
+        'allowNoPasswordOnLocalhost',
+        'trustedProxies',
+        'maxRequestsBeforeLoggedInPerMinute'
+    ]) {
+        assert.equal(await page.locator(`#server-file-${field}`).isDisabled(), true);
+    }
+    assert.equal(
+        await page.locator('#server-file-port').inputValue(),
+        String(options.serverConfigurationReadOnly.port)
+    );
+    assert.equal(await page.locator('#server-file-adminPasswordConfigured').getAttribute('type'), 'password');
+    assert.ok((await page.locator('#server-file-adminPasswordConfigured').inputValue()).length > 0);
+    const fileOnly = page.locator('.server-setting-file-only').first();
+    await fileOnly.focus();
+    await page
+        .locator('#resource-tooltip')
+        .filter({ hasText: /config\.toml/ })
+        .waitFor();
+    assert.equal(await page.locator('#server-ntfy-password').getAttribute('type'), 'password');
+    await amount.fill('37');
+    const reads = options.requests.filter((request) => request.path === '/api/server/settings').length;
+    await page.clock.fastForward(15000);
+    assert.equal(await amount.evaluate((input) => document.activeElement === input), true);
+    assert.equal(await amount.inputValue(), '37');
+    assert.equal(options.requests.filter((request) => request.path === '/api/server/settings').length, reads);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+    options.serverConfigurationRevision++;
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /changed on the server/ })
+        .waitFor();
+    assert.equal(await amount.inputValue(), '37');
+    assert.equal(await save.isDisabled(), true);
+    await page.getByRole('button', { name: 'Discard changes and reload', exact: true }).click();
+    await page.waitForFunction(
+        () => document.querySelector('#server-notifications-minimumCraftingAmount')?.value === '0'
+    );
+    await amount.fill('38');
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /saved and applied/ })
+        .waitFor();
+    assert.equal(options.serverConfiguration.notifications.minimumCraftingAmount, 38);
+    assert.equal(await save.isDisabled(), true);
+});
+
+test('server settings keep neighboring inputs aligned when labels wrap at different widths', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    const duration = page.getByRole('spinbutton', { name: 'Minimum crafting duration (seconds)', exact: true });
+    const amount = page.getByRole('spinbutton', { name: 'Minimum crafted amount', exact: true });
+    await duration.waitFor();
+    for (const width of [1000, 1150, 1300]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settleFrames(page);
+        const first = await duration.boundingBox();
+        const second = await amount.boundingBox();
+        assert.ok(first && second);
+        assert.ok(Math.abs(first.y - second.y) < 1, `Inputs must align at viewport width ${width}`);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    }
+});
+
+test('notification secrets use empty inputs with placeholders and clear only after an explicit saved removal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    options.serverConfigurationReadOnly.discordWebhookConfigured = true;
+    options.serverConfigurationReadOnly.ntfyPasswordConfigured = true;
+    options.serverConfigurationSecrets = { discordWebhook: 'stored-webhook', ntfyPassword: 'stored-password' };
+    await page.goto(`${base}#/server-settings`);
+    const webhook = page.getByLabel('Webhook URL', { exact: true });
+    const password = page.locator('#server-ntfy-password');
+    await webhook.waitFor();
+    assert.equal(await webhook.inputValue(), '');
+    assert.equal(await password.inputValue(), '');
+    assert.ok(await webhook.getAttribute('placeholder'));
+    assert.ok(await password.getAttribute('placeholder'));
+    const remove = page.getByRole('button', { name: 'Remove: Webhook URL', exact: true });
+    await remove.click();
+    assert.equal(await webhook.getAttribute('placeholder'), '');
+    assert.equal(await page.locator('#server-discord-webhook-status').isVisible(), true);
+    assert.equal(options.serverConfigurationSecrets.discordWebhook, 'stored-webhook');
+    await page.getByRole('button', { name: 'Undo: Webhook URL', exact: true }).click();
+    assert.ok(await webhook.getAttribute('placeholder'));
+    const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+    assert.equal(await save.isDisabled(), true);
+    await webhook.fill('replacement-webhook');
+    await webhook.fill('');
+    assert.equal(await save.isDisabled(), true);
+    await remove.click();
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /saved and applied/ })
+        .waitFor();
+    assert.equal(options.serverConfigurationSecrets.discordWebhook, '');
+    assert.equal(options.serverConfigurationSecrets.ntfyPassword, 'stored-password');
+    assert.equal(await webhook.getAttribute('placeholder'), '');
+    assert.equal(await remove.isVisible(), false);
+    await password.fill('replacement-password');
+    await save.click();
+    await page.waitForFunction(() => document.querySelector('#server-ntfy-password').value === '');
+    assert.equal(options.serverConfigurationSecrets.ntfyPassword, 'replacement-password');
+    assert.ok(await password.getAttribute('placeholder'));
+});
+
+test('a completed settings save clears a replacement secret even after navigating away', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    await page.locator('#server-ntfy-password').fill('pending-replacement');
+    let release;
+    const captured = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/server/settings', (route) =>
+        route.request().method() === 'POST' ? release(route) : route.continue()
+    );
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    const pending = await captured;
+    await clickTab(page, 'About');
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                revision: 'saved',
+                settings: options.serverConfiguration,
+                readOnly: { ...options.serverConfigurationReadOnly, ntfyPasswordConfigured: true }
+            }
+        })
+    });
+    await page.waitForFunction(() => document.querySelector('#server-ntfy-password').value === '');
+    assert.equal(await page.locator('#server-settings').isVisible(), false);
+});
+
 test('crafting retention is independent per network and persists while collection is disabled', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);

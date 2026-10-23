@@ -28,6 +28,7 @@ import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
@@ -113,6 +114,27 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     private void tick(long advanceMillis) {
         clock += advanceMillis;
         coordinator.tick(clock);
+    }
+
+    @Test
+    void liveCadenceChangeKeepsSubscriptionAndPendingResourceUpdate() throws Exception {
+        settings.activeIntervalMillis = 1000;
+        cpu.set(iron, 4, 0, 0);
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            cpu.set(iron, 3, 0, 1);
+            coordinator.dirty(cpu, iron);
+            ConfigSettings.ResourceTracking updated = new ConfigSettings.ResourceTracking();
+            updated.activeIntervalMillis = 50;
+            coordinator.applySettings(updated, clock);
+            tick(49);
+            assertEquals(reads, cpu.bulkReads);
+            tick(1);
+            assertEquals(
+                3,
+                update(delta(stream), iron).get("active")
+                    .getAsLong());
+        }
     }
 
     @Test
@@ -298,7 +320,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
     private void track(CpuFixtures.Resource waitingFor) {
         TestGridFixtures.track(nativeGrid);
-        AE2JobTracker.addJob(cpu, nativeGrid, false);
+        AE2JobTracker.addJob(cpu, nativeGrid, false, CraftingRequester.automation());
         cpu.waiting.amounts.put(waitingFor, 5L);
         AE2JobTracker.updateCraftingStatus(cpu, waitingFor);
     }
@@ -546,7 +568,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     void runningMeasurementIsDeliveredWhenTheJobStartsOrStopsWaitingAndWhenItsCountsChange() throws Exception {
         cpu.set(iron, 4, 0, 0);
         TestGridFixtures.track(nativeGrid);
-        AE2JobTracker.addJob(cpu, nativeGrid, false);
+        AE2JobTracker.addJob(cpu, nativeGrid, false, CraftingRequester.automation());
         try (Connection stream = open(view(cpu), cpu)) {
             cpu.waiting.amounts.put(iron, 5L);
             AE2JobTracker.updateCraftingStatus(cpu, iron);

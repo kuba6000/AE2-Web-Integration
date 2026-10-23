@@ -19,6 +19,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
@@ -91,7 +92,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                 MethodSpec.constructorBuilder()
                     .addModifiers(Modifier.PRIVATE)
                     .build());
-        Map<TypeElement, String> shapes = new LinkedHashMap<>();
+        Map<Shape, String> shapes = new LinkedHashMap<>();
         MethodSpec.Builder bind = MethodSpec.methodBuilder("bind")
             .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
             .addParameter(ClassName.get(owner), "target")
@@ -130,7 +131,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     field.getSimpleName(),
                     ClassName.get(input),
                     name,
-                    shape(input, shapes));
+                    shape(input, false, shapes));
                 continue;
             }
             String inputName = value(query != null ? query : path, "value");
@@ -165,7 +166,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                         .addStatement("return type == $T.class ? $N : null", ClassName.get(owner), binding)
                         .build());
         }
-        List<TypeElement> pending = new ArrayList<>(shapes.keySet());
+        List<Shape> pending = new ArrayList<>(shapes.keySet());
         for (int shapeIndex = 0; shapeIndex < pending.size(); shapeIndex++) {
             companion.addMethod(shapeValidator(pending.get(shapeIndex), shapes));
             pending = new ArrayList<>(shapes.keySet());
@@ -260,20 +261,36 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         }
     }
 
-    private String shape(TypeElement type, Map<TypeElement, String> shapes) {
-        return shapes.computeIfAbsent(type, ignored -> "validate" + shapes.size());
+    private record Shape(TypeElement type, boolean serverSettings) {}
+
+    private String shape(TypeElement type, boolean serverSettings, Map<Shape, String> shapes) {
+        if (type.getQualifiedName()
+            .contentEquals("pl.kuba6000.ae2webintegration.core.config.EditableServerSettings")) {
+            type = processingEnv.getElementUtils()
+                .getTypeElement("pl.kuba6000.ae2webintegration.core.config.ConfigSettings");
+            serverSettings = true;
+        }
+        return shapes.computeIfAbsent(new Shape(type, serverSettings), ignored -> "validate" + shapes.size());
     }
 
-    private MethodSpec shapeValidator(TypeElement type, Map<TypeElement, String> shapes) {
-        List<VariableElement> fields = ElementFilter.fieldsIn(type.getEnclosedElements())
+    private MethodSpec shapeValidator(Shape shape, Map<Shape, String> shapes) {
+        List<VariableElement> fields = ElementFilter.fieldsIn(
+            shape.type()
+                .getEnclosedElements())
             .stream()
             .filter(
                 field -> !field.getModifiers()
                     .contains(Modifier.STATIC)
                     && !field.getModifiers()
-                        .contains(Modifier.TRANSIENT))
+                        .contains(Modifier.TRANSIENT)
+                    && !(shape.serverSettings() && field.getAnnotationMirrors()
+                        .stream()
+                        .anyMatch(
+                            annotation -> annotation.getAnnotationType()
+                                .toString()
+                                .equals("pl.kuba6000.ae2webintegration.core.config.WebSetting"))))
             .toList();
-        MethodSpec.Builder validate = MethodSpec.methodBuilder(shapes.get(type))
+        MethodSpec.Builder validate = MethodSpec.methodBuilder(shapes.get(shape))
             .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
             .addParameter(JSON_OBJECT, "body")
             .beginControlFlow(
@@ -315,8 +332,16 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                         error(field, "Unsupported JSON member type: " + fieldType);
                         yield CodeBlock.of("");
                     }
-                    yield CodeBlock
-                        .of("$N($T.object($L, $S))", shape(nestedType, shapes), INPUT_VALUES, value, fieldName);
+                    if (nestedType.getKind() == ElementKind.ENUM) {
+                        validate.addStatement("$T.string($L, $S)", INPUT_VALUES, value, fieldName);
+                        yield CodeBlock.of("$T.valueOf($L.getAsString())", ClassName.get(nestedType), value);
+                    }
+                    yield CodeBlock.of(
+                        "$N($T.object($L, $S))",
+                        shape(nestedType, shape.serverSettings(), shapes),
+                        INPUT_VALUES,
+                        value,
+                        fieldName);
                 }
             };
             validate.addStatement("$L", call);

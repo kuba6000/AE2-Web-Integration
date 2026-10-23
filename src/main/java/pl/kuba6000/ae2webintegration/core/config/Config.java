@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
@@ -14,8 +15,11 @@ import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.EnumGetMethod;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
 import com.electronwill.nightconfig.core.conversion.ObjectConverter;
 import com.electronwill.nightconfig.core.conversion.Path;
@@ -24,6 +28,7 @@ import com.electronwill.nightconfig.toml.TomlFormat;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.electronwill.nightconfig.toml.TomlWriter;
 
+import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
 
@@ -33,10 +38,11 @@ public class Config {
 
     private static final ObjectConverter CONVERTER = new ObjectConverter();
 
-    /** Replaced as a whole on init and reload. Fields of a published instance are read-only. */
+    /** Replaced as a whole on init, reload and web save. Fields of a published instance are read-only. */
     public static volatile ConfigSettings INSTANCE = new ConfigSettings();
 
     private static File configDirectory;
+    private static String revision = PasswordHelper.generateToken(32);
 
     // --- Directory / file setup ---
 
@@ -82,6 +88,93 @@ public class Config {
         } catch (IOException e) {
             throw new UncheckedIOException("Could not reload configuration: " + file, e);
         }
+    }
+
+    /** Returns a read-only view of active settings without exposing secret values. */
+    public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() {
+        ConfigSettings loaded = INSTANCE;
+        return new ServerSettingsSnapshot(
+            revision,
+            new EditableServerSettings(loaded),
+            new ServerSettingsSnapshot.ReadOnly(
+                loaded.general.port,
+                loaded.general.allowServerSettingsEditing,
+                loaded.general.publicMode,
+                loaded.general.allowNoPasswordOnLocalhost,
+                loaded.general.trustedProxies,
+                loaded.general.maxRequestsBeforeLoggedInPerMinute,
+                !loaded.general.password.isEmpty(),
+                !loaded.discord.webhook.isEmpty(),
+                !loaded.ntfy.password.isEmpty()));
+    }
+
+    /** Returns null when another configuration publication superseded the submitted revision. */
+    public static synchronized @Nullable ServerSettingsSnapshot saveServerSettings(@NotNull String expectedRevision,
+        @NotNull EditableServerSettings settings, @Nullable EditableServerSettings.SecretUpdates secrets)
+        throws IOException {
+        if (!revision.equals(expectedRevision)) return null;
+        File file = getConfigFile("config.toml");
+        CommentedConfig document = read(file);
+        applyWebEdits(document, settings.config(), INSTANCE);
+        if (secrets != null) {
+            if (secrets.discordWebhook() != null) document.set("discord.webhook", secrets.discordWebhook());
+            if (secrets.ntfyPassword() != null) document.set("ntfy.password", secrets.ntfyPassword());
+        }
+        publish(file, document, true);
+        return readServerSettings();
+    }
+
+    private static void applyWebEdits(CommentedConfig document, ConfigSettings settings, ConfigSettings active) {
+        try {
+            applyWebFields(document, settings, active);
+        } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("Cannot read editable configuration fields", failure);
+        }
+    }
+
+    private static void applyWebFields(CommentedConfig document, Object settings, Object active)
+        throws IllegalAccessException {
+        for (Field field : settings.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting access = field.getAnnotation(WebSetting.class);
+            if (access != null && access.value() == WebSetting.Access.FILE_ONLY) continue;
+            Path path = field.getAnnotation(Path.class);
+            String key = path == null ? field.getName() : path.value();
+            Object value = field.get(access != null && access.value() == WebSetting.Access.SECRET ? active : settings);
+            if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
+                Object existing = document.get(key);
+                if (existing == null) {
+                    existing = newDocument();
+                    document.set(key, existing);
+                }
+                if (!(existing instanceof CommentedConfig target)) {
+                    throw new IllegalArgumentException("Expected a configuration table");
+                }
+                applyWebFields(target, value, field.get(active));
+            } else {
+                document.set(key, value);
+            }
+        }
+    }
+
+    private static void preserveFileOnlySettings(Object loaded, Object active) throws IllegalAccessException {
+        for (Field field : loaded.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting setting = field.getAnnotation(WebSetting.class);
+            if (setting != null && setting.value() == WebSetting.Access.FILE_ONLY) {
+                field.set(loaded, field.get(active));
+            } else if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
+                    preserveFileOnlySettings(field.get(loaded), field.get(active));
+                }
+        }
+    }
+
+    private static boolean isConfigField(Field field) {
+        return !Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers());
     }
 
     private static CommentedConfig newDocument() {
@@ -130,11 +223,16 @@ public class Config {
     }
 
     private static void publish(File file, CommentedConfig document) throws IOException {
+        publish(file, document, false);
+    }
+
+    private static void publish(File file, CommentedConfig document, boolean preserveFileOnlySettings)
+        throws IOException {
         document.remove("tracking");
         ConfigSettings loaded = new ConfigSettings();
         CommentedConfig defaults = newDocument();
         CONVERTER.toConfig(loaded, defaults);
-        fillDefaults(document, defaults);
+        fillDefaults(document, defaults, "");
         CONVERTER.toObject(document, loaded);
         loaded.validate();
         addComments(document, loaded);
@@ -142,8 +240,17 @@ public class Config {
         serializer.setIndent("");
         serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
         disableMultilineStrings(serializer);
+        String nextRevision = PasswordHelper.generateToken(32);
+        if (preserveFileOnlySettings) {
+            try {
+                preserveFileOnlySettings(loaded, INSTANCE);
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException("Cannot preserve active file-only configuration fields", failure);
+            }
+        }
         AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
         INSTANCE = loaded;
+        revision = nextRevision;
     }
 
     private static boolean useLiteralString(String value) {
@@ -175,7 +282,7 @@ public class Config {
         }
     }
 
-    private static void fillDefaults(CommentedConfig document, UnmodifiableConfig defaults) {
+    private static void fillDefaults(CommentedConfig document, UnmodifiableConfig defaults, String prefix) {
         for (UnmodifiableConfig.Entry entry : defaults.entrySet()) {
             String key = entry.getKey();
             Object defaultValue = entry.getValue();
@@ -186,8 +293,12 @@ public class Config {
                 if (!(value instanceof CommentedConfig existing)) {
                     throw new IllegalArgumentException("Expected a configuration table: " + key);
                 }
-                fillDefaults(existing, section);
-            }
+                fillDefaults(existing, section, prefix + key + ".");
+            } else if (defaultValue instanceof Enum<?> defaultEnum
+                && !EnumGetMethod.NAME_IGNORECASE.validate(document.get(key), defaultEnum.getDeclaringClass())) {
+                    document.set(key, defaultValue);
+                    LOG.warn("Invalid enum setting {}; using default {}", prefix + key, defaultEnum.name());
+                }
         }
     }
 

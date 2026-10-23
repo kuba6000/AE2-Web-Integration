@@ -203,6 +203,7 @@ pluginManager.withPlugin('idea') {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*ServerSettingsHttpTest'
             includeTestsMatching '*AuthSessionTest'
             includeTestsMatching '*SessionStoreTest'
             includeTestsMatching '*CoreDataTest'
@@ -219,6 +220,7 @@ pluginManager.withPlugin('idea') {
             includeTestsMatching '*DimensionalCoordsTest'
             includeTestsMatching '*GridAccessSourceTest'
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'
+            includeTestsMatching '*AE2JobTrackerLifecycleTest'
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'
@@ -252,6 +254,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*CommandProcessorTest'
         includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
         includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*ServerSettingsHttpTest'
         includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')
