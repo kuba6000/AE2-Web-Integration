@@ -322,6 +322,13 @@ header {
     font-size: 11px;
     color: var(--muted);
 }
+.cpu-card-requesters {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
 .cpu-card-output-value {
     display: flex;
     align-items: baseline;

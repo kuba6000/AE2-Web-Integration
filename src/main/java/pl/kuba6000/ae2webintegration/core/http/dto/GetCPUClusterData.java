@@ -24,6 +24,7 @@ public class GetCPUClusterData {
         hasTrackingInfo = header.hasTrackingInfo();
         timeStarted = header.timeStarted();
         requesters = header.requesters();
+        nativeRequesterName = header.nativeRequesterName();
         timeElapsed = header.timeElapsed(at);
     }
 
@@ -69,4 +70,6 @@ public class GetCPUClusterData {
     public final long timeElapsed;
     /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
     public final @NotNull List<CraftingRequester> requesters;
+    /** Native requester name for a busy CPU without tracked requesters; null when unavailable. */
+    public final @Nullable String nativeRequesterName;
 }

@@ -135,6 +135,7 @@ export type CpuInfo = {
     usedStorage: number;
     coProcessors: number;
     requesters: CraftingRequester[];
+    nativeRequesterName: string | null;
     hasTrackingInfo: boolean;
     timeStarted: number;
 };
@@ -158,6 +159,7 @@ export type CpuDetail = {
     finalOutput: ResourceStack | null;
     items: CpuResource[] | null;
     requesters: CraftingRequester[];
+    nativeRequesterName: string | null;
     hasTrackingInfo: boolean;
     timeStarted: number;
     timeElapsed: number;

@@ -40,7 +40,7 @@ public record CpuObservation(boolean full, @NotNull Header header, @NotNull List
     @Desugar
     public record Header(long size, boolean busy, @Nullable CpuSelectionMode selectionMode, boolean supportsPause,
         boolean paused, @Nullable ResourceSnapshot finalOutput, boolean hasTrackingInfo, long timeStarted,
-        @NotNull List<CraftingRequester> requesters) {
+        @NotNull List<CraftingRequester> requesters, @Nullable String nativeRequesterName) {
 
         /** Job elapsed time at {@code at}; zero without tracking. */
         public long timeElapsed(long at) {

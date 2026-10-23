@@ -68,6 +68,7 @@ const readyPlan = {
 };
 
 const cpu = {
+    nativeRequesterName: null,
     requesters: [],
     acceptsPlayerJobs: true,
     selectionMode: null,
@@ -81,6 +82,7 @@ const cpu = {
 };
 
 const cpuWork = {
+    nativeRequesterName: null,
     requesters: [],
     selectionMode: null,
     size: 8192,

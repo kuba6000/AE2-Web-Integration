@@ -17,6 +17,7 @@ import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -104,6 +105,114 @@ class CpuLiveHttpTest {
     private void onGame(Runnable task) throws Exception {
         game.submit(task)
             .get(3, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void nativeRequesterFallbackRoundTripsThroughListAndDetailAndYieldsToTrackedSources() throws Exception {
+        String listUrl = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + gridKey + "/cpus";
+        onGame(() -> { cpu.nativeRequesterName = "Native crafter"; });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertEquals(
+                "Native crafter",
+                data.get("nativeRequesterName")
+                    .getAsString());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+        onGame(() -> TestGridFixtures.track(grid));
+        for (CraftingRequester requester : Arrays.asList(
+            CraftingRequester.player(TestGridFixtures.playerIdentity(7)),
+            CraftingRequester.web(),
+            CraftingRequester.automation())) {
+            onGame(() -> AE2JobTracker.addJob(cpu, grid, false, requester));
+            for (JsonObject data : Arrays.asList(
+                json(listUrl).getAsJsonObject("data")
+                    .getAsJsonObject(cpu.key.toString()),
+                json(base).getAsJsonObject("data"))) {
+                assertTrue(
+                    data.get("nativeRequesterName")
+                        .isJsonNull());
+                assertEquals(
+                    requester.source()
+                        .name(),
+                    data.getAsJsonArray("requesters")
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("source")
+                        .getAsString());
+            }
+        }
+        onGame(() -> { cpu.busy = false; });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertTrue(
+                data.get("nativeRequesterName")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+        onGame(() -> {
+            AE2JobTracker.clearActiveJobs();
+            cpu.busy = true;
+            cpu.nativeRequesterName = null;
+        });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertTrue(
+                data.get("nativeRequesterName")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+    }
+
+    @Test
+    void nativeRequesterNameChangesReachAnExistingSseViewer() throws Exception {
+        onGame(() -> { cpu.nativeRequesterName = "First crafter"; });
+        JsonObject live = json(base + "?live=true");
+        assertEquals(
+            "First crafter",
+            live.getAsJsonObject("data")
+                .get("nativeRequesterName")
+                .getAsString());
+        String token = live.get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        stream.setReadTimeout(3000);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            onGame(() -> {
+                cpu.nativeRequesterName = "Second crafter";
+                AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
+            });
+            CpuFixtures.Event event = CpuFixtures.readEvent(input);
+            assertEquals("delta", event.name());
+            assertEquals(
+                "Second crafter",
+                event.data()
+                    .getAsJsonObject("cpu")
+                    .get("nativeRequesterName")
+                    .getAsString());
+        } finally {
+            stream.disconnect();
+        }
     }
 
     @ParameterizedTest

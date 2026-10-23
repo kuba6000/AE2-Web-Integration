@@ -135,6 +135,8 @@ public final class GetCPUList extends ISyncedRequest {
         public boolean hasTrackingInfo = false;
         /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
         public @NotNull List<CraftingRequester> requesters = Collections.emptyList();
+        /** Native requester name for a busy CPU without tracked requesters; null when unavailable. */
+        public @Nullable String nativeRequesterName;
         /**
          * Crafting start time in Unix epoch milliseconds; zero when unavailable.
          *
@@ -176,6 +178,7 @@ public final class GetCPUList extends ISyncedRequest {
                     cpuInfo.requesters = trackingInfo.getRequesters();
                 }
             }
+            cpuInfo.nativeRequesterName = CpuReader.nativeRequesterName(cluster, cpuInfo.isBusy, cpuInfo.requesters);
             cpuList.put(entry.getKey(), cpuInfo);
         }
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));

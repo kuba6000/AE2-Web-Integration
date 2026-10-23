@@ -7,6 +7,24 @@ import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js'
 import { userIcon } from './icons/hackernoon/user.js';
 import { cpuChipIcon } from './icons/pixel/cpu-controls.js';
 
+export function cpuRequesterText(
+    cpu: Pick<ThemeState['cpus']['cpus'][number], 'isBusy' | 'requesters' | 'nativeRequesterName'>,
+    locale: Translator
+) {
+    if (!cpu.isBusy) return '';
+    const t = locale.common;
+    const names = cpu.requesters.length
+        ? cpu.requesters
+              .map((requester) =>
+                  requester.source === 'PLAYER'
+                      ? requester.player.name
+                      : t(requester.source === 'WEB' ? 'craftingRequesterWeb' : 'craftingRequesterAutomation')
+              )
+              .join(', ')
+        : cpu.nativeRequesterName;
+    return names ? `${t('craftingRequestersLabel')}: ${names}` : '';
+}
+
 export const selectionModes: Record<CpuSelectionMode, { order: number; label: string }> = {
     PLAYER_ONLY: { order: 0, label: 'cpuPlayerOnly' },
     ALL: { order: 1, label: 'cpuAllSources' },

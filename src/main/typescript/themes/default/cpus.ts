@@ -7,7 +7,7 @@ import { createCpuOverview } from './cpu-overview.js';
 import { createCpuSelector } from './cpu-selector.js';
 import { createCpuResources } from './cpu-resources.js';
 import { createCpuTooltips } from './cpu-tooltips.js';
-import { renderCpuState, renderCpuActions, cpuOutcomeText } from './cpu-presentation.js';
+import { renderCpuState, renderCpuActions, cpuOutcomeText, cpuRequesterText } from './cpu-presentation.js';
 
 export function createCpuView(
     root: HTMLElement,
@@ -109,10 +109,7 @@ export function createCpuView(
                 );
             } else output.textContent = t('cpuOutputUnknown');
         } else if (detail) output.textContent = t('cpuIdleMessage');
-        requesters.textContent =
-            detail?.isBusy && detail.requesters.length
-                ? `${t('craftingRequestersLabel')}: ${detail.requesters.map((requester) => (requester.source === 'PLAYER' ? requester.player.name : t(requester.source === 'WEB' ? 'craftingRequesterWeb' : 'craftingRequesterAutomation'))).join(', ')}`
-                : '';
+        requesters.textContent = detail ? cpuRequesterText(detail, locale) : '';
         requesters.hidden = !requesters.textContent;
         renderElapsed(state, locale);
         tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';

@@ -54,7 +54,40 @@ class CpuReaderTest extends GridTestScope {
     }
 
     @Test
+    void untrackedBusyCpuExposesDetachedNativeNameWithoutInventingRequesterIdentity() {
+        cpu.nativeRequesterName = "Native crafter";
+        CpuObservation initial = CpuReader.read(cpu, true);
+        assertEquals("Native crafter", new GetCPUClusterData(initial.header(), 1000, null).nativeRequesterName);
+        assertTrue(
+            initial.header()
+                .requesters()
+                .isEmpty());
+        cpu.nativeRequesterName = "Next crafter";
+        CpuObservation updated = CpuReader.read(cpu, cpu, Collections.emptyList());
+        assertEquals(
+            "Next crafter",
+            updated.header()
+                .nativeRequesterName());
+        assertEquals(
+            "Native crafter",
+            initial.header()
+                .nativeRequesterName());
+        cpu.busy = false;
+        assertNull(
+            CpuReader.read(cpu, true)
+                .header()
+                .nativeRequesterName());
+        cpu.busy = true;
+        cpu.nativeRequesterName = null;
+        assertNull(
+            CpuReader.read(cpu, true)
+                .header()
+                .nativeRequesterName());
+    }
+
+    @Test
     void requesterHeadersRemainDetachedAcrossMergesAndDisappearingCpuWork() {
+        cpu.nativeRequesterName = "Native crafter";
         TestGridFixtures.track(grid);
         PlayerIdentity first = TestGridFixtures.playerIdentity(7);
         PlayerIdentity second = TestGridFixtures.playerIdentity(8);
@@ -74,6 +107,12 @@ class CpuReaderTest extends GridTestScope {
                 CraftingRequester.automation()),
             merged.header()
                 .requesters());
+        assertNull(
+            initial.header()
+                .nativeRequesterName());
+        assertNull(
+            merged.header()
+                .nativeRequesterName());
         GetCPUClusterData body = new GetCPUClusterData(merged.header(), 1000, null);
         assertEquals(
             Arrays.asList(
