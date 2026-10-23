@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Proxy;
@@ -11,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,6 +32,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import javax.imageio.ImageIO;
+
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -43,6 +48,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.ItemIdentityRequestTest.Grid;
@@ -50,10 +56,12 @@ import pl.kuba6000.ae2webintegration.core.ItemIdentityRequestTest.Resource;
 import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -75,6 +83,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Pin;
@@ -158,6 +169,170 @@ class IconDeliveryHttpTest {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousPlatform;
         config.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 1, 2, 3, 4, 5 })
+    void discordThumbnailUsesInstalledIconsOrFallsBackToText(int scenario) throws Exception {
+        StableKey exact = StableKey.random();
+        StableKey base = StableKey.random();
+        if (scenario != 3) {
+            IconPack.Metadata metadata = new IconPack.Metadata(
+                "1.7.10",
+                "forge",
+                "test-identity",
+                "test",
+                "today",
+                Collections.emptyMap(),
+                Collections.emptyList());
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+                int[] pixels = new int[4096];
+                Arrays.fill(pixels, 0xff1234ab);
+                writer.add(exact, pixels);
+                Arrays.fill(pixels, 0xffab3412);
+                writer.add(base, pixels);
+                Files.move(writer.finish(), directory.resolve("ae2webintegration/icons.ae2wi-icons"));
+            }
+        }
+        CoreEngine.onServerStarted();
+        if (scenario == 4) CoreEngine.getIconPack()
+            .close();
+        AtomicReference<String> contentType = new AtomicReference<>();
+        AtomicReference<byte[]> body = new AtomicReference<>();
+        HttpServer endpoint = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        endpoint.createContext("/", exchange -> {
+            contentType.set(
+                exchange.getRequestHeaders()
+                    .getFirst("Content-Type"));
+            body.set(IOUtils.toByteArray(exchange.getRequestBody()));
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        endpoint.start();
+        try {
+            Config.INSTANCE.discord.webhook = "http://127.0.0.1:" + endpoint.getAddress()
+                .getPort() + "/";
+            Config.INSTANCE.discord.roleId = "12345";
+            Config.INSTANCE.discord.craftingStyle = CraftingStyle.SMALL_ICON;
+            CraftingMessage message = new CraftingMessage(
+                "Factory",
+                "CPU",
+                new ResourceSnapshot(
+                    new ResourceDescriptor(
+                        "minecraft",
+                        "rail",
+                        0,
+                        0,
+                        "Rail",
+                        ResourceType.ITEM,
+                        scenario == 1 || scenario == 2 ? StableKey.random() : exact,
+                        scenario == 2 ? null : base),
+                    64),
+                "1m",
+                false,
+                Arrays.asList(CraftingRequester.automation(), CraftingRequester.web()));
+            URL classes = DiscordDestination.class.getProtectionDomain()
+                .getCodeSource()
+                .getLocation();
+            try (URLClassLoader loader = new URLClassLoader(new URL[] { classes }, getClass().getClassLoader()) {
+
+                @Override
+                protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                    if (scenario == 5 && name.equals("java.awt.Rectangle"))
+                        throw new java.awt.AWTError("Graphics unavailable");
+                    if (name.equals("java.awt.Font")) throw new NoClassDefFoundError("Fonts unavailable");
+                    if (!name.startsWith("pl.kuba6000.ae2webintegration.core.notification.destination.discord."))
+                        return super.loadClass(name, resolve);
+                    Class<?> loaded = findLoadedClass(name);
+                    if (loaded == null) loaded = findClass(name);
+                    if (resolve) resolveClass(loaded);
+                    return loaded;
+                }
+
+                @Override
+                public InputStream getResourceAsStream(String name) {
+                    return name.endsWith(".ttf") ? null : super.getResourceAsStream(name);
+                }
+            }) {
+                Class<?> destination = loader.loadClass(DiscordDestination.class.getName());
+                destination.getMethod("sendNotification", IMessage.class)
+                    .invoke(
+                        destination.getConstructor()
+                            .newInstance(),
+                        message);
+            }
+            assertNotNull(body.get());
+            JsonObject payload;
+            if (scenario < 2) {
+                assertTrue(
+                    contentType.get()
+                        .startsWith("multipart/form-data;"),
+                    contentType.get());
+                String wire = new String(body.get(), StandardCharsets.ISO_8859_1);
+                String boundary = contentType.get()
+                    .substring(
+                        contentType.get()
+                            .indexOf("boundary=") + 9);
+                int start = wire.indexOf("\r\n\r\n") + 4;
+                payload = new JsonParser().parse(wire.substring(start, wire.indexOf("\r\n--" + boundary, start)))
+                    .getAsJsonObject();
+                int pngStart = wire.indexOf("\r\n\r\n", wire.indexOf("name=\"files[0]\"")) + 4;
+                int pngEnd = wire.indexOf("\r\n--" + boundary, pngStart);
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(body.get(), pngStart, pngEnd - pngStart));
+                assertNotNull(image);
+                assertEquals(64, image.getWidth());
+                assertEquals(64, image.getHeight());
+                assertEquals(scenario == 0 ? 0xff1234ab : 0xffab3412, image.getRGB(32, 32));
+                assertEquals(
+                    "attachment://crafting.png",
+                    payload.getAsJsonArray("embeds")
+                        .get(0)
+                        .getAsJsonObject()
+                        .getAsJsonObject("thumbnail")
+                        .get("url")
+                        .getAsString());
+                assertEquals(
+                    "crafting.png",
+                    payload.getAsJsonArray("attachments")
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("filename")
+                        .getAsString());
+            } else {
+                assertEquals("application/json", contentType.get());
+                payload = new JsonParser().parse(new String(body.get(), StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+                assertEquals(
+                    0,
+                    payload.getAsJsonArray("attachments")
+                        .size());
+                assertFalse(
+                    payload.getAsJsonArray("embeds")
+                        .get(0)
+                        .getAsJsonObject()
+                        .has("thumbnail"));
+            }
+            assertEquals(
+                "<@&12345>",
+                payload.get("content")
+                    .getAsString());
+            JsonObject embed = payload.getAsJsonArray("embeds")
+                .get(0)
+                .getAsJsonObject();
+            assertFalse(embed.has("image"));
+            assertTrue(
+                embed.get("description")
+                    .getAsString()
+                    .contains("Rail x64"));
+            assertTrue(
+                embed.get("description")
+                    .getAsString()
+                    .contains("Automation, Web"));
+        } finally {
+            endpoint.stop(0);
+        }
+        CoreEngine.onServerStopped();
+        if (scenario != 3) Files.delete(directory.resolve("ae2webintegration/icons.ae2wi-icons"));
     }
 
     @Test
@@ -1629,7 +1804,6 @@ class IconDeliveryHttpTest {
         AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
         TestGridFixtures.track(grid);
         AtomicBoolean unavailable = new AtomicBoolean();
-        AtomicInteger normalizations = new AtomicInteger();
         AtomicReference<IAEGenericStack> output = new AtomicReference<>();
         AtomicInteger waiting = new AtomicInteger();
         Thread serverThread = Thread.currentThread();
@@ -1678,7 +1852,6 @@ class IconDeliveryHttpTest {
                         case "web$getComponentCount", "web$getDamage" -> 0;
                         case "web$getRegistryPath", "web$getDisplayName" -> "product-" + variant;
                         case "web$getBaseKey" -> {
-                            normalizations.incrementAndGet();
                             if (variant == 2) throw new IllegalStateException("Unsupported base identity");
                             yield base;
                         }
@@ -1700,9 +1873,9 @@ class IconDeliveryHttpTest {
             if (index == 0) exactOutput = output.get();
             if (index == 1) {
                 // A merge replaces both the previous exact identity and its output data.
-                AE2JobTracker.addJob(cpu, grid, true);
+                AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
             } else {
-                AE2JobTracker.addJob(cpu, grid, false);
+                AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             }
             waiting.set(10 + variant);
             AE2JobTracker.updateCraftingStatus(cpu, key);
@@ -1711,13 +1884,11 @@ class IconDeliveryHttpTest {
             if (index != 0) AE2JobTracker.completeCrafting(grid, cpu);
         }
         // Also retain an exact-match job independently of the merged fallback job.
+        // Unowned identity entries may be reclaimed between jobs; history must not depend on their lifetime.
+        AE2Controller.itemIdentities.clear();
         output.set(exactOutput);
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.completeCrafting(grid, cpu);
-        assertEquals(
-            3,
-            normalizations.get(),
-            "Every captured description retains its base variant independently of icons");
         unavailable.set(true);
         AE2Controller.itemIdentities.clear();
         CraftingHistoryService history = CoreEngine.getCraftingHistory();
@@ -1826,7 +1997,6 @@ class IconDeliveryHttpTest {
                 }
             }
         }
-        assertEquals(3, normalizations.get());
     }
 
     @SuppressWarnings("BusyWait")

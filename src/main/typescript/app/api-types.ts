@@ -2,6 +2,9 @@
  * JSON contracts from the core endpoint responses and API models.
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
+export type PlayerIdentity = { uuid: string; name: string };
+export type CraftingRequester =
+    { source: 'PLAYER'; player: PlayerIdentity } | { source: 'AUTOMATION' | 'WEB'; player: null };
 export type ApplicationContext = {
     capabilities: {
         craftingLightMode?: boolean;
@@ -86,7 +89,7 @@ export type StoredResource = ResourceStack & {
 };
 export type Position = { dimensionId: string; x: number; y: number; z: number };
 export type AccessSource = {
-    player: { uuid: string; name: string };
+    player: PlayerIdentity;
     kind: string;
     position: Position;
     side: string | null;
@@ -131,6 +134,8 @@ export type CpuInfo = {
     availableStorage: number;
     usedStorage: number;
     coProcessors: number;
+    requesters: CraftingRequester[];
+    nativeRequesterName: string | null;
     hasTrackingInfo: boolean;
     timeStarted: number;
 };
@@ -153,6 +158,8 @@ export type CpuDetail = {
     isPaused: boolean;
     finalOutput: ResourceStack | null;
     items: CpuResource[] | null;
+    requesters: CraftingRequester[];
+    nativeRequesterName: string | null;
     hasTrackingInfo: boolean;
     timeStarted: number;
     timeElapsed: number;
@@ -190,6 +197,7 @@ export type HistoryEntry = {
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;
+    requesters: CraftingRequester[];
     finalOutput: ResourceStack;
     id: string;
 };
@@ -209,6 +217,7 @@ export type CraftingHistory = {
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;
+    requesters: CraftingRequester[];
     items: ResourceTiming[];
     interfaceShare: ProviderTiming[];
 };

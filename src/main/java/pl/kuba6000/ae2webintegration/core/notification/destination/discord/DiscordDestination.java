@@ -1,7 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
+import java.io.IOException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
@@ -9,6 +17,9 @@ import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
 public class DiscordDestination implements INotificationDestination {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration - DISCORD INTEGRATION");
+    private @Nullable DiscordCraftingCard card;
 
     public static final int COLOR_TURQUOISE = 0x1ABC9C;
     public static final int COLOR_RED = 0xED4245;
@@ -34,16 +45,52 @@ public class DiscordDestination implements INotificationDestination {
         DiscordPayload payload = null;
         if (message instanceof CraftingMessage craftingMessage) {
             payload = new DiscordPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
-                "Crafting for `" + craftingMessage.outputItemName()
+                "AE2 Job Tracker [ Grid " + craftingMessage.gridName() + " ][ " + craftingMessage.cpuName() + " ]",
+                "Requested by: " + craftingMessage.requesterNames()
+                    + "\nCrafting for `"
+                    + craftingMessage.output()
+                        .description()
+                        .displayName()
                     + " x"
-                    + craftingMessage.outputItemAmount()
+                    + craftingMessage.output()
+                        .quantity()
                     + "` "
                     + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
-                    + craftingMessage.durationString(),
+                    + craftingMessage.durationString()
+                    + "\nNetwork: "
+                    + craftingMessage.gridName()
+                    + "\nCPU: "
+                    + craftingMessage.cpuName(),
                 craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN,
                 settings.discord.roleId);
+            CraftingStyle style = settings.discord.craftingStyle;
+            if (style != CraftingStyle.SIMPLE) {
+                byte[] png = null;
+                try {
+                    if (style == CraftingStyle.SMALL_ICON) {
+                        png = DiscordCraftingIcon.thumbnail(
+                            CoreEngine.getIconPack(),
+                            craftingMessage.output()
+                                .description());
+                    } else {
+                        if (card == null) card = new DiscordCraftingCard();
+                        png = card.render(craftingMessage, CoreEngine.getIconPack());
+                    }
+                } catch (IOException | RuntimeException | LinkageError failure) {
+                    // Avoid including native names or webhook credentials in diagnostics.
+                    LOG.warn(
+                        "Crafting image unavailable; sending text notification ({})",
+                        failure.getClass()
+                            .getSimpleName());
+                }
+                if (png != null) {
+                    payload.includeImage(style == CraftingStyle.SMALL_ICON);
+                    WebhookHelper.sendPng(webhook, payload, png);
+                    return;
+                }
+            }
+
         } else if (message instanceof StatusMessage statusMessage) {
             StatusMessage.Severity severity = statusMessage.severity();
             int color = switch (severity) {

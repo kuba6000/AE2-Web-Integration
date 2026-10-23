@@ -1,11 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 
@@ -21,6 +23,8 @@ public class GetCPUClusterData {
         finalOutput = header.finalOutput() == null ? null : new ResourceStack(header.finalOutput(), mappings);
         hasTrackingInfo = header.hasTrackingInfo();
         timeStarted = header.timeStarted();
+        requesters = header.requesters();
+        nativeRequesterName = header.nativeRequesterName();
         timeElapsed = header.timeElapsed(at);
     }
 
@@ -64,4 +68,8 @@ public class GetCPUClusterData {
      * @example 10000
      */
     public final long timeElapsed;
+    /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+    public final @NotNull List<CraftingRequester> requesters;
+    /** Native requester name for a busy CPU without tracked requesters; null when unavailable. */
+    public final @Nullable String nativeRequesterName;
 }

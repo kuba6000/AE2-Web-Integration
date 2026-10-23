@@ -29,6 +29,12 @@ export const serverSettingsTranslations = {
             'Remove the webhook to disable Discord notifications. Player accounts must also be disabled to use Discord notifications.',
         serverWebhook: 'Webhook URL',
         serverRole: 'Role ID to mention on errors',
+        serverCraftingStyle: 'Crafting notification style',
+        serverCraftingStyleSimple: 'Text only',
+        serverCraftingStyleSmallIcon: 'Small item icon',
+        serverCraftingStyleImageCard: 'Full image card',
+        serverCraftingStyleHelp:
+            'Small icons use the installed icon pack and fall back to text when unavailable. Full cards fall back to text if rendering fails.',
         serverNtfy: 'ntfy',
         serverNtfyHelp:
             'An empty host or topic disables ntfy notifications. For topics without authentication, clear the username and remove the stored password.',
@@ -104,6 +110,12 @@ export const serverSettingsTranslations = {
             'Usuń webhook, aby wyłączyć powiadomienia Discord. Korzystanie z nich wymaga również wyłączenia kont graczy.',
         serverWebhook: 'Adres webhooka',
         serverRole: 'ID roli oznaczanej przy błędach',
+        serverCraftingStyle: 'Styl powiadomień o wytwarzaniu',
+        serverCraftingStyleSimple: 'Tylko tekst',
+        serverCraftingStyleSmallIcon: 'Mała ikona przedmiotu',
+        serverCraftingStyleImageCard: 'Pełna karta graficzna',
+        serverCraftingStyleHelp:
+            'Małe ikony pochodzą z zainstalowanej paczki ikon. Gdy ikona jest niedostępna lub renderowanie pełnej karty się nie powiedzie, wysyłane jest powiadomienie tekstowe.',
         serverNtfy: 'ntfy',
         serverNtfyHelp:
             'Pusty host lub temat wyłącza powiadomienia ntfy. Dla tematów bez uwierzytelniania wyczyść użytkownika i usuń zapisane hasło.',

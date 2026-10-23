@@ -9,7 +9,7 @@ export type ServerConfiguration = {
         defaultTheme: string;
     };
     notifications: { minimumCraftingDurationSeconds: number; minimumCraftingAmount: number; fullDomain: string };
-    discord: { roleId: string };
+    discord: { roleId: string; craftingStyle: 'SIMPLE' | 'SMALL_ICON' | 'IMAGE_CARD' };
     ntfy: { host: string; topic: string; user: string };
     resourceHistory: {
         stockSampleIntervalSeconds: SettingRange;

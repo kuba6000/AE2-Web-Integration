@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -201,6 +202,7 @@ public final class CpuReader {
 
     private static CpuObservation.Header header(ICraftingCPUCluster cpu, boolean busy,
         @Nullable ResourceSnapshot finalOutput, @Nullable AE2JobTracker.JobTrackingInfo tracking) {
+        List<CraftingRequester> requesters = tracking == null ? Collections.emptyList() : tracking.getRequesters();
         return new CpuObservation.Header(
             cpu.web$getAvailableStorage(),
             busy,
@@ -209,7 +211,15 @@ public final class CpuReader {
             busy && cpu instanceof IPausableCraftingCPU pausable && pausable.web$isPaused(),
             finalOutput,
             tracking != null,
-            tracking == null ? 0 : tracking.timeStarted);
+            tracking == null ? 0 : tracking.timeStarted,
+            requesters,
+            nativeRequesterName(cpu, busy, requesters));
+    }
+
+    /** Reads optional native attribution only for busy jobs without tracked requesters. Server thread only. */
+    public static @Nullable String nativeRequesterName(@NotNull ICraftingCPUCluster cpu, boolean busy,
+        @NotNull List<CraftingRequester> requesters) {
+        return busy && requesters.isEmpty() ? cpu.web$getRequesterName() : null;
     }
 
     private static @Nullable CpuObservation.Tracking tracking(AE2JobTracker.JobTrackingInfo info, IAEKey key) {

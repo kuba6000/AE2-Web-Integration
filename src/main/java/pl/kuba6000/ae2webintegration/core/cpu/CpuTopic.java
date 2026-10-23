@@ -39,7 +39,9 @@ public final class CpuTopic extends LiveTopic {
         false,
         null,
         false,
-        0);
+        0,
+        Collections.emptyList(),
+        null);
     private final Map<StableKey, CpuObservation.Row> rows = new HashMap<>();
     private final Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
     private List<CpuObservation.UnkeyedRow> unkeyed = Collections.emptyList();

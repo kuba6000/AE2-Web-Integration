@@ -41,7 +41,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     root.append(view);
     let locale: Translator;
     const labels: { node: HTMLElement; key: string }[] = [];
-    const inputs: { input: HTMLInputElement; update(draft: Draft): void }[] = [];
+    const inputs: { input: HTMLInputElement | HTMLSelectElement; update(draft: Draft): void }[] = [];
     const validations: (() => void)[] = [];
     const fileControls: { input: HTMLInputElement; update(settings: FileSettings): void }[] = [];
     const secretControls: ((state: ThemeState['serverSettings']) => void)[] = [];
@@ -74,18 +74,28 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
         section: S,
         field: F,
         key: string,
-        type: 'text' | 'password' | 'checkbox' | 'number' = 'text',
-        options: { min?: number; max?: number; help?: string } = {}
+        type: 'text' | 'password' | 'checkbox' | 'number' | 'select' = 'text',
+        options: {
+            min?: number;
+            max?: number;
+            help?: string;
+            choices?: readonly { value: ServerConfiguration[S][F]; label: string }[];
+        } = {}
     ) {
         const wrapper = element('div', '', 'server-setting');
         const header = element('div', '', 'server-setting-label');
         const label = translated(element('label'), key);
-        const input = element('input');
-        input.type = type;
+        const input = type === 'select' ? element('select') : element('input');
+        if (input instanceof HTMLInputElement) input.type = type;
+        for (const choice of options.choices || []) {
+            const option = translated(element('option'), choice.label);
+            option.value = String(choice.value);
+            input.append(option);
+        }
         input.id = `server-${section}-${String(field)}`;
         label.htmlFor = input.id;
         input.autocomplete = type === 'password' ? 'new-password' : 'off';
-        if (type === 'number') {
+        if (type === 'number' && input instanceof HTMLInputElement) {
             input.required = true;
             input.step = '1';
             input.min = String(options.min ?? 0);
@@ -97,15 +107,20 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
         controlField.append(input);
         wrapper.append(header, controlField);
         container.append(wrapper);
-        input.addEventListener(type === 'checkbox' ? 'change' : 'input', () => {
-            const value = type === 'checkbox' ? input.checked : type === 'number' ? input.valueAsNumber : input.value;
+        input.addEventListener(type === 'checkbox' || type === 'select' ? 'change' : 'input', () => {
+            const value =
+                input instanceof HTMLInputElement && type === 'checkbox'
+                    ? input.checked
+                    : input instanceof HTMLInputElement && type === 'number'
+                      ? input.valueAsNumber
+                      : input.value;
             application.serverSettings.edit(section, field, value as ServerConfiguration[S][F]);
         });
         inputs.push({
             input,
             update(draft) {
                 const value = draft[section][field];
-                if (type === 'checkbox') input.checked = value === true;
+                if (type === 'checkbox' && input instanceof HTMLInputElement) input.checked = value === true;
                 else if (document.activeElement !== input) {
                     const text = typeof value === 'number' && !Number.isFinite(value) ? '' : String(value);
                     if (input.value !== text) input.value = text;
@@ -275,6 +290,14 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     const discord = group('serverDiscord', 'serverDiscordHelp');
     secretControl(discord, 'discordWebhook', 'discordWebhookConfigured', 'serverWebhook', 'server-discord-webhook');
     control(discord, 'discord', 'roleId', 'serverRole');
+    control(discord, 'discord', 'craftingStyle', 'serverCraftingStyle', 'select', {
+        help: 'serverCraftingStyleHelp',
+        choices: [
+            { value: 'SIMPLE', label: 'serverCraftingStyleSimple' },
+            { value: 'SMALL_ICON', label: 'serverCraftingStyleSmallIcon' },
+            { value: 'IMAGE_CARD', label: 'serverCraftingStyleImageCard' }
+        ]
+    });
     const ntfy = group('serverNtfy', 'serverNtfyHelp');
     control(ntfy, 'ntfy', 'host', 'serverNtfyHost');
     control(ntfy, 'ntfy', 'topic', 'serverNtfyTopic');
@@ -356,7 +379,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
                 if (config.draft) control.update(config.draft);
                 else {
                     control.input.value = '';
-                    control.input.checked = false;
+                    if (control.input instanceof HTMLInputElement) control.input.checked = false;
                 }
             }
             for (const control of fileControls) {

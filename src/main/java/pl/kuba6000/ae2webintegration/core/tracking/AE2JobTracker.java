@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 
@@ -12,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -71,6 +74,27 @@ public class AE2JobTracker {
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
         public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
         public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
+        private volatile List<CraftingRequester> requesters = Collections.emptyList();
+
+        public @NotNull List<CraftingRequester> getRequesters() {
+            return requesters;
+        }
+
+        private void rememberRequester(@NotNull CraftingRequester requester) {
+            List<CraftingRequester> updated = new ArrayList<>(requesters);
+            for (int i = 0; i < updated.size(); i++) {
+                CraftingRequester existing = updated.get(i);
+                if (existing.source() == requester.source()
+                    && (existing.player() == null || existing.player().uuid.equals(requester.player().uuid))) {
+                    updated.set(i, requester);
+                    requesters = Collections.unmodifiableList(updated);
+                    return;
+                }
+            }
+            updated.add(requester);
+            requesters = Collections.unmodifiableList(updated);
+        }
+
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
@@ -102,7 +126,8 @@ public class AE2JobTracker {
         trackingInfoMap.clear();
     }
 
-    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging) {
+    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging,
+        @NotNull CraftingRequester requester) {
         if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
         if (isMerging && info == null) return;
@@ -120,8 +145,10 @@ public class AE2JobTracker {
         if (isMerging) {
             info.finalOutput = finalOutput;
         } else {
-            trackingInfoMap.put(cpuCluster, new JobTrackingInfo(finalOutput));
+            info = new JobTrackingInfo(finalOutput);
+            trackingInfoMap.put(cpuCluster, info);
         }
+        info.rememberRequester(requester);
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, @NotNull IAEKey keyDiff) {
@@ -235,15 +262,16 @@ public class AE2JobTracker {
             // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
             grid.web$getCraftingGrid()
                 .web$getCPUs();
+            String gridName = data.getSettings()
+                .getName();
             NotificationManager.postMessageNonBlocking(
                 new CraftingMessage(
-                    key,
+                    gridName.isEmpty() ? key.toString() : gridName,
                     cpu.web$getName(),
-                    info.finalOutput.description()
-                        .displayName(),
-                    craftedAmount,
+                    info.finalOutput,
                     NotificationManager.formatDuration(durationMillis),
-                    info.wasCancelled));
+                    info.wasCancelled,
+                    info.getRequesters()));
         }
     }
 

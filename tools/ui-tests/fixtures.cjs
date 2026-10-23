@@ -68,6 +68,8 @@ const readyPlan = {
 };
 
 const cpu = {
+    nativeRequesterName: null,
+    requesters: [],
     acceptsPlayerJobs: true,
     selectionMode: null,
     name: 'Assembler',
@@ -80,6 +82,8 @@ const cpu = {
 };
 
 const cpuWork = {
+    nativeRequesterName: null,
+    requesters: [],
     selectionMode: null,
     size: 8192,
     isBusy: true,
@@ -111,6 +115,7 @@ const cpuWork = {
 };
 
 const historyEntry = {
+    requesters: [],
     id: '1',
     finalOutput: { ...iron, quantity: 12 },
     timeStarted: 1700000000000,

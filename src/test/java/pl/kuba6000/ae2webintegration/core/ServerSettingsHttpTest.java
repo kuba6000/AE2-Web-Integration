@@ -67,6 +67,48 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void discordCraftingStyleRoundTripsThroughWebEditingAndReload() throws Exception {
+        for (String style : new String[] { "SIMPLE", "SMALL_ICON", "IMAGE_CARD" }) {
+            JsonObject edit = readSettings();
+            edit.getAsJsonObject("settings")
+                .getAsJsonObject("discord")
+                .addProperty("craftingStyle", style);
+            request("POST", "/api/server/settings", token, edit.toString(), 200);
+            assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
+            Config.reload();
+            assertEquals(
+                style,
+                readSettings().getAsJsonObject("settings")
+                    .getAsJsonObject("discord")
+                    .get("craftingStyle")
+                    .getAsString());
+        }
+    }
+
+    @Test
+    void invalidDiscordCraftingStyleDoesNotChangeActiveSettingsOrFile() throws Exception {
+        JsonObject original = readSettings();
+        byte[] before = Files.readAllBytes(
+            Config.getConfigFile("config.toml")
+                .toPath());
+        Object active = Config.INSTANCE;
+        for (JsonElement invalid : new JsonElement[] { JsonNull.INSTANCE, new JsonPrimitive("INVALID"),
+            new JsonPrimitive(42) }) {
+            JsonObject edit = new Gson().fromJson(original.toString(), JsonObject.class);
+            edit.getAsJsonObject("settings")
+                .getAsJsonObject("discord")
+                .add("craftingStyle", invalid);
+            request("POST", "/api/server/settings", token, edit.toString(), 400);
+            assertSame(active, Config.INSTANCE);
+            assertArrayEquals(
+                before,
+                Files.readAllBytes(
+                    Config.getConfigFile("config.toml")
+                        .toPath()));
+        }
+    }
+
+    @Test
     void fileOnlyEditingSwitchBlocksAdminAndLocalhostUntilReloadEnablesIt() throws Exception {
         JsonObject enabled = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         assertTrue(

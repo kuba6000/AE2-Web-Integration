@@ -12,6 +12,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
@@ -23,6 +25,61 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 
 class ConfigFileTest {
+
+    @Test
+    void discordCraftingStylesRoundTripThroughToml() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals("IMAGE_CARD", document.get("discord.crafting_style"));
+        for (String style : new String[] { "SIMPLE", "SMALL_ICON", "IMAGE_CARD" }) {
+            document.set("discord.crafting_style", style);
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            Config.reload();
+            assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
+            Config.init(root.toFile());
+            assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
+            CommentedConfig restored = new TomlParser()
+                .parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            assertEquals(style, restored.get("discord.crafting_style"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void invalidCraftingStyleUsesDefaultWithoutResettingOtherSettings(boolean reload) throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("general.password", "keep-this-password");
+        document.set("discord.role_id", "123456789");
+        for (Object invalid : new Object[] { "INVALID", "", 1, true }) {
+            document.set("discord.crafting_style", "SIMPLE");
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            Config.reload();
+            document.set("discord.crafting_style", invalid);
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            if (reload) Config.reload();
+            else Config.init(root.toFile());
+            assertEquals(ConfigSettings.Discord.CraftingStyle.IMAGE_CARD, Config.INSTANCE.discord.craftingStyle);
+            assertEquals("keep-this-password", Config.INSTANCE.general.password);
+            assertEquals("123456789", Config.INSTANCE.discord.roleId);
+            CommentedConfig restored = new TomlParser()
+                .parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            assertEquals("IMAGE_CARD", restored.get("discord.crafting_style"));
+            assertEquals("keep-this-password", restored.get("general.password"));
+            assertEquals("123456789", restored.get("discord.role_id"));
+        }
+    }
 
     @Test
     void craftingRetentionUsesIndependentBoundsAndSurvivesDetachedCopy() {

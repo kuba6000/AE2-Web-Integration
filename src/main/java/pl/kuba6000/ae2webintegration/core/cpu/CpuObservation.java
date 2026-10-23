@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
@@ -38,7 +39,8 @@ public record CpuObservation(boolean full, @NotNull Header header, @NotNull List
      */
     @Desugar
     public record Header(long size, boolean busy, @Nullable CpuSelectionMode selectionMode, boolean supportsPause,
-        boolean paused, @Nullable ResourceSnapshot finalOutput, boolean hasTrackingInfo, long timeStarted) {
+        boolean paused, @Nullable ResourceSnapshot finalOutput, boolean hasTrackingInfo, long timeStarted,
+        @NotNull List<CraftingRequester> requesters, @Nullable String nativeRequesterName) {
 
         /** Job elapsed time at {@code at}; zero without tracking. */
         public long timeElapsed(long at) {

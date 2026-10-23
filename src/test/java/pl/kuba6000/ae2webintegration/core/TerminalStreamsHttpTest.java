@@ -28,6 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,6 +37,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
@@ -62,6 +64,69 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFix
 class TerminalStreamsHttpTest extends GridTestScope {
 
     private TestGridFixtures.TestGrid nativeGrid;
+
+    @Test
+    void overlappingResetsCloseEachExchangeOnceAndAllowNewStreams() throws Exception {
+        CountDownLatch ready = new CountDownLatch(1);
+        CountDownLatch closing = new CountDownLatch(1);
+        CountDownLatch releaseClose = new CountDownLatch(1);
+        AtomicBoolean closeStarted = new AtomicBoolean();
+        ExecutorService resets = Executors.newSingleThreadExecutor();
+        OutputStream output = new OutputStream() {
+
+            @Override
+            public void write(int value) {}
+
+            @Override
+            public void write(byte @NotNull [] bytes, int offset, int length) {
+                if (new String(bytes, offset, length, StandardCharsets.UTF_8).startsWith("event: heartbeat"))
+                    ready.countDown();
+            }
+        };
+        TestGridFixtures.TestExchange exchange = new TestGridFixtures.TestExchange(null) {
+
+            @Override
+            public InputStream getRequestBody() {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+
+            @Override
+            public OutputStream getResponseBody() {
+                return output;
+            }
+
+            @Override
+            public void close() {
+                assertTrue(closeStarted.compareAndSet(false, true), "An HTTP response must finish only once");
+                closing.countDown();
+                assertTrue(Uninterruptibles.awaitUninterruptibly(releaseClose, 3, TimeUnit.SECONDS));
+            }
+        };
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            fixture.streams.open(
+                new AE2Controller.RequestContext(exchange, fixture.session),
+                StorageTopic.keyOf(fixture.grid),
+                fixture.reserve(),
+                false);
+            assertTrue(ready.await(2, TimeUnit.SECONDS));
+            Future<?> reset = resets.submit(fixture.streams::reset);
+            try {
+                assertTrue(closing.await(2, TimeUnit.SECONDS));
+                assertDoesNotThrow(fixture.streams::reset);
+            } finally {
+                releaseClose.countDown();
+                reset.get(3, TimeUnit.SECONDS);
+            }
+            fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
+            fixture.publish(2, Collections.emptyList());
+            try (Connection reopened = fixture.open(fixture.reserve())) {
+                assertEquals("ready", readEvent(reopened.input).name());
+            }
+        } finally {
+            releaseClose.countDown();
+            resets.shutdownNow();
+        }
+    }
 
     @Test
     void exchangeCloseFailureDoesNotAbortResetOrLaterStreaming() throws Exception {

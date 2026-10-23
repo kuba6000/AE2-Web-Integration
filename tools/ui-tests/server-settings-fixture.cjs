@@ -4,7 +4,7 @@ const settings = () => ({
         defaultTheme: 'builtin:default'
     },
     notifications: { minimumCraftingDurationSeconds: 0, minimumCraftingAmount: 0, fullDomain: '' },
-    discord: { roleId: '' },
+    discord: { roleId: '', craftingStyle: 'IMAGE_CARD' },
     ntfy: { host: '', topic: '', user: '' },
     resourceHistory: {
         stockSampleIntervalSeconds: { min: 60, max: 900, defaultValue: 300 },

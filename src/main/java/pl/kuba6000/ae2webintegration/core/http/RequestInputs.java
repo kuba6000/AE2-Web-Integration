@@ -118,7 +118,8 @@ public final class RequestInputs {
             JsonElement value = body.get(field.getName());
             if (value == null && field.isAnnotationPresent(OptionalInput.class)) continue;
             Class<?> inputType = field.getType();
-            if (!inputType.isPrimitive() && inputType != String.class
+            if (!inputType.isPrimitive() && !inputType.isEnum()
+                && inputType != String.class
                 && inputType != StableKey.class
                 && inputType != Boolean.class
                 && inputType != Integer.class
@@ -132,7 +133,18 @@ public final class RequestInputs {
                 throw new IllegalArgumentException("Missing or invalid JSON member: " + field.getName());
             JsonPrimitive scalar = value.getAsJsonPrimitive();
             Class<?> type = field.getType();
-            if (type == String.class || type == StableKey.class) {
+            if (type.isEnum()) {
+                if (!scalar.isString()) throw new IllegalArgumentException("Expected enum name: " + field.getName());
+                boolean known = false;
+                for (Object constant : type.getEnumConstants()) {
+                    if (((Enum<?>) constant).name()
+                        .equals(scalar.getAsString())) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) throw new IllegalArgumentException("Unknown enum value: " + field.getName());
+            } else if (type == String.class || type == StableKey.class) {
                 if (!scalar.isString()) throw new IllegalArgumentException("Expected string: " + field.getName());
                 if (type == StableKey.class) StableKey.parse(scalar.getAsString());
             } else if (type == boolean.class || type == Boolean.class) {
