@@ -32,12 +32,18 @@ public class BaseCommandHandler extends CommandBase {
 
     @Override
     public @NotNull String getUsage(@NotNull ICommandSender sender) {
-        return "ae2webintegration <reload/auth>";
+        return "ae2webintegration <reload/auth/telemetry>";
     }
 
     @Override
     public int getRequiredPermissionLevel() {
         return 0;
+    }
+
+    @Override
+    public boolean checkPermission(@NotNull MinecraftServer server, @NotNull ICommandSender sender) {
+        // Vanilla still checks operator status at level zero; each subcommand enforces its own access.
+        return true;
     }
 
     @Override
@@ -57,7 +63,8 @@ public class BaseCommandHandler extends CommandBase {
             }
             matched.handler.accept(new CommandContext(sender, args));
         } else {
-            sender.sendMessage(new TextComponentString(TextFormatting.RED + "/ae2webintegration <reload/auth>"));
+            sender.sendMessage(
+                new TextComponentString(TextFormatting.RED + "/ae2webintegration <reload/auth/telemetry>"));
         }
     }
 
