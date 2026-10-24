@@ -232,6 +232,8 @@ pluginManager.withPlugin('idea') {
             includeTestsMatching '*LiveTerminalHttpTest'
             includeTestsMatching '*StorageTrackingServiceTest'
             includeTestsMatching '*CoreEngineTest'
+            includeTestsMatching '*TelemetryTest'
+            includeTestsMatching '*JarProofTest'
         }
         shouldRunAfter tasks.named('test')
     }
@@ -254,6 +256,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*ConfigFileTest'
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
+        includeTestsMatching '*CommandBootstrapTest'
         includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
         includeTestsMatching '*ServerLifecycleHttpTest'
         includeTestsMatching '*ServerSettingsHttpTest'

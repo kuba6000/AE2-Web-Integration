@@ -309,6 +309,22 @@ A few additional compatibility notes:
 - The 1.20.1 and 1.21.1 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
 
+## Telemetry
+
+Telemetry is enabled by default outside development environments. The mod sends a small HTTPS usage
+report ten minutes after server startup and approximately once per hour:
+**Hashed mod version**, Minecraft version, public-mode and singleplayer settings, and a random session ID
+that changes on server restart and at the first report of each new UTC day.
+No player identities, world or network contents are reported.
+See the [privacy policy](https://ae2web.kuba6000.pl/privacy) for data handling and retention.
+
+We’d appreciate you keeping it enabled to help guide development.
+
+Disable reporting in **Server settings**, with `enabled = false` under `[telemetry]` in
+`config/ae2webintegration/config.toml` followed by a config reload, or with
+`/ae2webintegration telemetry off`. Use `on` to re-enable or `status` to inspect the setting.
+The singleplayer owner can use these commands without cheats; on a dedicated server they require permission level 4.
+
 ## Development
 
 ### Repository architecture

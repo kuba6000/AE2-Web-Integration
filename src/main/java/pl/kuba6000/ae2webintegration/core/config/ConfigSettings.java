@@ -8,6 +8,7 @@ import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 public final class ConfigSettings {
 
     public General general = new General();
+    public Telemetry telemetry = new Telemetry();
     public Notifications notifications = new Notifications();
     public Discord discord = new Discord();
     public Ntfy ntfy = new Ntfy();
@@ -20,6 +21,14 @@ public final class ConfigSettings {
     @Path("resource_tracking")
     @Comment("Live observation and background capacity controls. Changes apply on the next server tick.")
     public ResourceTracking resourceTracking = new ResourceTracking();
+
+    public static final class Telemetry {
+
+        @Comment({
+            "Send a hashed mod version, Minecraft version, public mode, singleplayer status and a per-start session ID over HTTPS.",
+            "Disable here or with /ae2webintegration telemetry off. No player, world or network contents are sent." })
+        public boolean enabled = true;
+    }
 
     public static final class General {
 

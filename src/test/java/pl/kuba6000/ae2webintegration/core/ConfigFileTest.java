@@ -27,6 +27,55 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 class ConfigFileTest {
 
     @Test
+    void telemetryTogglePersistsWithoutReloadingOtherSettings() throws Exception {
+        Config.init(root.toFile());
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("general.public_mode", false);
+        document.set("notifications.minimum_crafting_amount", 123);
+        document.set("discord.webhook", "https://example.invalid/pending-secret");
+        document.set("future.value", "preserved");
+        document.setComment("future.value", " custom comment");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        ConfigSettings before = Config.INSTANCE;
+
+        Config.setTelemetryEnabled(false);
+
+        assertTrue(before.telemetry.enabled);
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        assertTrue(Config.INSTANCE.general.publicMode, "an explicit telemetry command must not reload unrelated edits");
+        assertEquals(before.notifications.minimumCraftingAmount, Config.INSTANCE.notifications.minimumCraftingAmount);
+        assertEquals(before.discord.webhook, Config.INSTANCE.discord.webhook);
+        CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals("preserved", saved.get("future.value"));
+        assertEquals(" custom comment", saved.getComment("future.value"));
+        assertEquals(123, (Integer) saved.get("notifications.minimum_crafting_amount"));
+        assertEquals("https://example.invalid/pending-secret", saved.get("discord.webhook"));
+        Config.reload();
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
+        assertEquals("https://example.invalid/pending-secret", Config.INSTANCE.discord.webhook);
+    }
+
+    @Test
+    void failedTelemetryWriteKeepsThePublishedSettingAndExistingFile() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        byte[] malformed = "[telemetry\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, malformed);
+        ConfigSettings before = Config.INSTANCE;
+        assertThrows(RuntimeException.class, () -> Config.setTelemetryEnabled(false));
+        assertSame(before, Config.INSTANCE);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        assertArrayEquals(malformed, Files.readAllBytes(file));
+    }
+
+    @Test
     void discordCraftingStylesRoundTripThroughToml() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");

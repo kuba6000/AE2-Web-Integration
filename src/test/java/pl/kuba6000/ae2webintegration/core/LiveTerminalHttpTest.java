@@ -286,6 +286,16 @@ class LiveTerminalHttpTest {
     private record Platform(File root) implements IServerPlatform {
 
         @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
+
+        @Override
         public UUID getOnlinePlayerUUID(String username) {
             return null;
         }

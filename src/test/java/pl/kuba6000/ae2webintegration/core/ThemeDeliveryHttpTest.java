@@ -52,6 +52,16 @@ class ThemeDeliveryHttpTest {
         Config.reload();
         AE2Controller.serverPlatform = new IServerPlatform() {
 
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
             public @NotNull String getModVersion() {
                 return "1.2.0";
             }

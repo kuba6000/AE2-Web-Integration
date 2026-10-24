@@ -1,4 +1,5 @@
 const settings = () => ({
+    telemetry: { enabled: true },
     general: {
         checkForUpdates: true,
         defaultTheme: 'builtin:default'

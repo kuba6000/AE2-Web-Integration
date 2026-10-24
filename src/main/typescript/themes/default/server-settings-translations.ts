@@ -13,6 +13,11 @@ export const serverSettingsTranslations = {
         serverPublicMode: 'Allow player accounts',
         serverLocalhost: 'Allow localhost without a password',
         serverUpdates: 'Check for mod updates',
+        serverTelemetryGroup: 'Telemetry',
+        serverTelemetryPrivacy: 'Mod privacy policy (opens in a new tab)',
+        serverTelemetry: 'Enable telemetry',
+        serverTelemetryHelp:
+            'Optional telemetry helps us understand how the mod is used and publish aggregate activity statistics. Reports contain a hashed mod version, Minecraft version, public-mode and singleplayer settings, and a temporary session ID. The service also derives an approximate country from the connection. Reports do not include player names, inventories or world data. You can disable telemetry without affecting the mod’s functionality.',
         serverLoginRate: 'Unauthenticated requests per minute',
         serverProxies: 'Trusted proxies',
         serverDefaultTheme: 'Default theme',
@@ -94,6 +99,11 @@ export const serverSettingsTranslations = {
         serverPublicMode: 'Zezwalaj na konta graczy',
         serverLocalhost: 'Zezwalaj na localhost bez hasła',
         serverUpdates: 'Sprawdzaj aktualizacje moda',
+        serverTelemetryGroup: 'Telemetria',
+        serverTelemetryPrivacy: 'Polityka prywatności moda (otwiera się w nowej karcie)',
+        serverTelemetry: 'Włącz telemetrię',
+        serverTelemetryHelp:
+            'Opcjonalna telemetria pomaga nam zrozumieć, jak używany jest mod, i publikować zbiorcze statystyki aktywności. Raporty zawierają haszowaną wersję moda, wersję Minecrafta, ustawienia trybu publicznego i jednoosobowego oraz tymczasowy identyfikator sesji. Usługa ustala też przybliżony kraj na podstawie połączenia. Raporty nie zawierają nazw graczy, ekwipunków ani danych świata. Wyłączenie telemetrii nie wpływa na działanie moda.',
         serverLoginRate: 'Żądania bez logowania na minutę',
         serverProxies: 'Zaufane proxy',
         serverDefaultTheme: 'Domyślny motyw',

@@ -4,6 +4,7 @@ import type { SettingRange } from './api-types.js';
 
 /** Editable configuration; listener and login access settings remain file-only. */
 export type ServerConfiguration = {
+    telemetry: { enabled: boolean };
     general: {
         checkForUpdates: boolean;
         defaultTheme: string;

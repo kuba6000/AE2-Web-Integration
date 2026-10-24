@@ -123,6 +123,16 @@ class IconDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1109,6 +1119,16 @@ class IconDeliveryHttpTest {
         installPack();
         IServerPlatform platform = AE2Controller.serverPlatform;
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {

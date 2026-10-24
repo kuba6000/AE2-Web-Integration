@@ -351,6 +351,15 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
         min: 1,
         help: 'serverQueueCapHelp'
     });
+    const telemetry = group('serverTelemetryGroup', 'serverTelemetryHelp');
+    const privacy = translated(element('a'), 'serverTelemetryPrivacy');
+    privacy.href = 'https://ae2web.kuba6000.pl/privacy#overview';
+    privacy.target = '_blank';
+    privacy.rel = 'noopener noreferrer';
+    const privacyNote = element('p', '', 'hint');
+    privacyNote.append(privacy);
+    telemetry.before(privacyNote);
+    control(telemetry, 'telemetry', 'enabled', 'serverTelemetry', 'checkbox');
     // The actions remain visible when loading failed; only the form is hidden without confirmed data.
     save.addEventListener('click', () => form.requestSubmit());
     form.addEventListener('submit', (event) => {

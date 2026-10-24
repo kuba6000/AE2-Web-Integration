@@ -1,9 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.commands;
 
+import java.io.IOException;
+
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 
 /**
  * Defines ALL commands for AE2 Web Integration.
@@ -29,13 +32,39 @@ public class CommandBootstrap {
      * Builds and registers all commands through the given builder.
      */
     public static void init(ICommandBuilder builder) {
-        builder.literal("ae2webintegration", 0)
-            .literal("reload", ADMIN_PERMISSION_LEVEL)
-            .executes(CommandBootstrap::handleReload)
-            .literal("auth", 0)
+        ICommandBuilder root = builder.literal("ae2webintegration", 0);
+        root.literal("reload", ADMIN_PERMISSION_LEVEL)
+            .executes(CommandBootstrap::handleReload);
+        root.literal("auth", 0)
             .argument("token")
             .executes(CommandBootstrap::handleAuth);
+        root.literal("telemetry", 0)
+            .argument("on|off|status")
+            .executes(CommandBootstrap::handleTelemetry);
         builder.register();
+    }
+
+    private static void handleTelemetry(ICommandContext ctx) {
+        if (!ctx.isSingleplayerOwner() && !ctx.hasPermission(ADMIN_PERMISSION_LEVEL)) {
+            ctx.sendError("You do not have permission to use this command!");
+            return;
+        }
+        String[] args = ctx.getArgs();
+        if (args.length != 2 || !(args[1].equals("on") || args[1].equals("off") || args[1].equals("status"))) {
+            ctx.sendError("/ae2webintegration telemetry <on|off|status>");
+            return;
+        }
+        if (!args[1].equals("status")) {
+            try {
+                Config.setTelemetryEnabled(args[1].equals("on"));
+            } catch (IOException | RuntimeException failure) {
+                ctx.sendError("Could not save telemetry preference. The setting has not changed.");
+                return;
+            }
+        }
+        ctx.sendMessage(
+            "Telemetry is " + (Config.INSTANCE.telemetry.enabled ? "enabled (disabled in development environments)."
+                : "disabled."));
     }
 
     private static void handleReload(ICommandContext ctx) {

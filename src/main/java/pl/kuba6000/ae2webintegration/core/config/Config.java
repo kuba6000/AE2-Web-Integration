@@ -181,6 +181,20 @@ public class Config {
         return CommentedConfig.of(LinkedHashMap::new, TomlFormat.instance());
     }
 
+    /** Persists this preference without reloading other file edits or restarting the web server. */
+    public static synchronized void setTelemetryEnabled(boolean enabled) throws IOException {
+        File file = getConfigFile("config.toml");
+        CommentedConfig document = read(file);
+        document.set("telemetry.enabled", enabled);
+        ConfigSettings updated = new ConfigSettings();
+        CommentedConfig current = newDocument();
+        CONVERTER.toConfig(INSTANCE, current);
+        CONVERTER.toObject(current, updated);
+        updated.telemetry.enabled = enabled;
+        write(file, document);
+        INSTANCE = updated;
+    }
+
     private static CommentedConfig read(File file) throws IOException {
         CommentedConfig document = newDocument();
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
@@ -236,11 +250,6 @@ public class Config {
         CONVERTER.toObject(document, loaded);
         loaded.validate();
         addComments(document, loaded);
-        TomlWriter serializer = new TomlWriter();
-        serializer.setIndent("");
-        serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
-        disableMultilineStrings(serializer);
-        String nextRevision = PasswordHelper.generateToken(32);
         if (preserveFileOnlySettings) {
             try {
                 preserveFileOnlySettings(loaded, INSTANCE);
@@ -248,8 +257,17 @@ public class Config {
                 throw new IllegalStateException("Cannot preserve active file-only configuration fields", failure);
             }
         }
-        AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
+        write(file, document);
         INSTANCE = loaded;
+    }
+
+    private static void write(File file, CommentedConfig document) throws IOException {
+        TomlWriter serializer = new TomlWriter();
+        serializer.setIndent("");
+        serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
+        disableMultilineStrings(serializer);
+        String nextRevision = PasswordHelper.generateToken(32);
+        AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
         revision = nextRevision;
     }
 

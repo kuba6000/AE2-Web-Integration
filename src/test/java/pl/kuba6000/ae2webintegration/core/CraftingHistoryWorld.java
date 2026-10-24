@@ -40,6 +40,16 @@ final class CraftingHistoryWorld implements AutoCloseable {
     @Desugar
     private record Platform(File root) implements IServerPlatform {
 
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
+
         public @NotNull String getModVersion() {
             return "test";
         }

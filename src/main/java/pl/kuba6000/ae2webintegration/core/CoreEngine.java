@@ -34,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.telemetry.Telemetry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
@@ -71,6 +72,7 @@ public class CoreEngine {
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
     private static volatile @Nullable VersionChecker versionChecker;
+    private static @Nullable Telemetry telemetry;
     private static boolean serverRunning;
     private static volatile @Nullable WorldDatabase worldDatabase;
     private static @Nullable ScheduledExecutorService gridFlushScheduler;
@@ -89,6 +91,7 @@ public class CoreEngine {
         serverRunning = false;
         stopStorageTracking();
         stopVersionChecker();
+        stopTelemetry();
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory(), serverPlatform::getLegacyConfig);
         CoreEngine.modVersion = serverPlatform.getModVersion();
@@ -181,6 +184,7 @@ public class CoreEngine {
             StartupHandler.logOpenAdminAccessWarning();
             maintainVersionChecker();
             StartupHandler.handleNotificationIntegration();
+            startTelemetry();
         } catch (RuntimeException failure) {
             onServerStopping();
             LOG.error("World services failed during startup", failure);
@@ -237,6 +241,21 @@ public class CoreEngine {
             checker.close();
             versionChecker = null;
         }
+    }
+
+    private static void startTelemetry() {
+        try {
+            IServerPlatform platform = AE2Controller.serverPlatform;
+            telemetry = new Telemetry(platform.getMinecraftVersion(), platform.isSingleplayer(), platform.getModFile());
+        } catch (RuntimeException ignored) {
+            // Optional telemetry must not tear down already initialized world services.
+        }
+    }
+
+    private static void stopTelemetry() {
+        Telemetry previous = telemetry;
+        telemetry = null;
+        if (previous != null) previous.close();
     }
 
     public static @Nullable ReleaseManifest.Release getAvailableUpdate() {
@@ -310,6 +329,7 @@ public class CoreEngine {
 
     public static void onServerStopping() {
         serverRunning = false;
+        stopTelemetry();
         stopVersionChecker();
         stopLiveStreams();
         AE2Controller.stopHTTPServer();
@@ -322,6 +342,7 @@ public class CoreEngine {
 
     public static synchronized void onServerStopped() {
         serverRunning = false;
+        stopTelemetry();
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         stopLiveStreams();

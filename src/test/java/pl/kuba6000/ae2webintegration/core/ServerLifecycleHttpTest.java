@@ -83,6 +83,16 @@ class ServerLifecycleHttpTest {
     private static final class BlockingPlayerLookup implements IServerPlatform {
 
         @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
+
+        @Override
         public @NotNull String getModVersion() {
             return "test-version";
         }
@@ -746,6 +756,16 @@ class ServerLifecycleHttpTest {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return version;
             }
@@ -1027,6 +1047,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1123,6 +1153,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1203,6 +1243,16 @@ class ServerLifecycleHttpTest {
     void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {
@@ -1438,6 +1488,16 @@ class ServerLifecycleHttpTest {
     void registrationReturnsAnAcceptedTokenWithoutInstallingACookie() throws Exception {
         UUID player = UUID.fromString("12121212-3434-5656-7878-909090909090");
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {

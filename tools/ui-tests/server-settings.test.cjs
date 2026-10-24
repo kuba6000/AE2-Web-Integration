@@ -6,6 +6,27 @@ const { pathToFileURL } = require('node:url');
 const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/terminal.js'));
 const { settings, readOnly } = require('./server-settings-fixture.cjs');
 
+test('telemetry preference is edited and saved through the revisioned server settings state', async (t) => {
+    const writes = [];
+    const terminal = await application(t, true, {
+        saveServerSettings: async (body) => {
+            writes.push(body);
+            return { revision: 'saved', settings: body.settings, readOnly: readOnly() };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.draft.telemetry.enabled, true);
+    terminal.serverSettings.edit('telemetry', 'enabled', false);
+    assert.equal(terminal.state.serverSettings.dirty, true);
+    assert.equal(terminal.state.serverSettings.current.telemetry.enabled, true);
+    await terminal.serverSettings.save();
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].settings.telemetry.enabled, false);
+    assert.equal(terminal.state.serverSettings.current.telemetry.enabled, false);
+    assert.equal(terminal.state.serverSettings.dirty, false);
+});
+
 test('disabled server settings prevent loading, edits and saves until reenabled and reloaded', async (t) => {
     let enabled = false;
     let writes = 0;

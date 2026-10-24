@@ -67,6 +67,35 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void telemetryCanBeChangedThroughWebAndCommandWithoutStaleFormsOverwritingIt() throws Exception {
+        JsonObject original = readSettings();
+        assertTrue(
+            original.getAsJsonObject("settings")
+                .getAsJsonObject("telemetry")
+                .get("enabled")
+                .getAsBoolean());
+        JsonObject edit = new Gson().fromJson(original.toString(), JsonObject.class);
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("telemetry")
+            .addProperty("enabled", false);
+        request("POST", "/api/server/settings", token, edit.toString(), 200);
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        Config.reload();
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        JsonObject beforeCommand = readSettings();
+        Config.setTelemetryEnabled(true);
+        request("POST", "/api/server/settings", token, beforeCommand.toString(), 409);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        assertTrue(
+            readSettings().getAsJsonObject("settings")
+                .getAsJsonObject("telemetry")
+                .get("enabled")
+                .getAsBoolean());
+        Config.reload();
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+    }
+
+    @Test
     void discordCraftingStyleRoundTripsThroughWebEditingAndReload() throws Exception {
         for (String style : new String[] { "SIMPLE", "SMALL_ICON", "IMAGE_CARD" }) {
             JsonObject edit = readSettings();
@@ -541,6 +570,9 @@ class ServerSettingsHttpTest {
     @Test
     void anonymousAndPlayerCannotReadOrSaveButTrustedLocalhostCan() throws Exception {
         JsonObject edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("telemetry")
+            .addProperty("enabled", false);
         request("GET", "/api/server/settings", null, null, 401);
         request("POST", "/api/server/settings", null, edit.toString(), 401);
         CoreData.setPassword(
@@ -557,6 +589,7 @@ class ServerSettingsHttpTest {
         request("GET", "/api/server/settings", player, null, 403);
         request("POST", "/api/server/settings", player, edit.toString(), 403);
         request("POST", "/api/server/settings", "cookie:" + token, edit.toString(), 403);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
         config.set("general.allow_no_password_on_localhost", true);
         JsonObject local = request("GET", "/api/server/settings", null, null, 200).getAsJsonObject("data");
         local.remove("readOnly");
