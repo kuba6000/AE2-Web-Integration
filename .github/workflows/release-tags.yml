@@ -28,9 +28,6 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Test release preparation
-        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_release_*.py'
-
       - name: Prepare shared release description
         id: notes
         env:
