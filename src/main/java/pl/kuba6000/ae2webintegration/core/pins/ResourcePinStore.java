@@ -56,7 +56,18 @@ public final class ResourcePinStore {
     public record Move(@NotNull Placement placement, @NotNull Direction direction) {}
 
     /**
-     * Independent chart and historical-flow ranges are exact milliseconds; recent flow uses the fixed hot-cache window.
+     * Display settings for a home-page resource pin.
+     *
+     * @param showStock       show the last recorded stock quantity
+     * @param showFlow        show flow totals for flowRangeMillis
+     * @param showChart       show the history chart
+     * @param stock           show the stock series on the chart
+     * @param input           show the input series on the chart
+     * @param output          show the output series on the chart
+     * @param net             show input minus output on the chart
+     * @param rangeMillis     chart time range in milliseconds, from 60000 to 31536000000
+     * @param showRecentFlow  show the two-minute flow summary
+     * @param flowRangeMillis flow-total time range in milliseconds, from 60000 to 31536000000; independent of the chart
      */
     @Desugar
     public record HomeConfig(boolean showStock, boolean showFlow, boolean showChart, boolean stock, boolean input,

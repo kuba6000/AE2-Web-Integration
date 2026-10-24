@@ -15,26 +15,20 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
- * Revokes the current web session.
+ * Log out.
  * <p>
- * Browser clients return to the website after logout so its cookie is cleared at the correct mount path.
+ * Revokes the current session. Browser clients should return to the website to clear its session cookie.
  * 
  * @response 200 {@link Response} Session revoked.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} CSRF_REJECTED: cookie or configured-local mutations require X-AE2-Request:
- *           true.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
- * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
- * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
- *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link Response} SERVER_STOPPING: the originating HTTP lifecycle ended before logout.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
+ * @response 403 {@link ErrorResponse} CSRF_REJECTED: cookie or trusted localhost requests require X-AE2-Request: true.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link Response} SERVER_STOPPING: server stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"CSRF_REJECTED","data":null}

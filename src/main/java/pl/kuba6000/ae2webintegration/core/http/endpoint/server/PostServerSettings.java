@@ -25,14 +25,13 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
- * Saves and applies the complete editable server configuration without restarting the web listener.
- * Web settings access must be enabled by general.allow_server_settings_editing in config.toml.
- * Listener port, administrator password, access policy, proxy trust and request limit are file-only.
- * Requests contain revision, editable settings and optional secrets updates; readOnly metadata is rejected.
- * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty
- * string to clear it. Explicit null values are invalid; saved secrets are never returned.
+ * Update server settings.
+ * <p>
+ * Replaces all editable settings and applies them immediately. Read the current settings first to obtain the revision.
+ * Requires administrator or trusted localhost access and general.allow_server_settings_editing enabled in config.toml.
+ * Read-only settings cannot be changed through the API.
  * 
- * @response 200 {@link Response} Saved configuration and its new opaque configuration revision.
+ * @response 200 {@link Response} Saved server settings and new revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid, missing, unknown or file-only settings.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required; CSRF_REJECTED: missing request marker;
@@ -44,7 +43,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: rate limit exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: configuration could not be saved.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: originating listener has stopped.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: server stopping.
  * @responseExample 409 {"status":"CONFIG_CHANGED","data":null}
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/server/settings")
@@ -54,7 +53,12 @@ public final class PostServerSettings extends IAsyncRequest {
     @NotNull
     Input input;
 
-    /** Complete editable values, current configuration revision and optional write-only notification secret updates. */
+    /**
+     * @param revision revision from the most recent server settings response
+     * @param settings complete editable server settings
+     * @param secrets  notification secrets to update; omitted fields keep their values, empty strings clear them,
+     *                 and nonempty strings replace them. Explicit null values are invalid.
+     */
     @Desugar
     public record Input(@NotNull String revision, @NotNull EditableServerSettings settings,
         @OptionalInput @Nullable EditableServerSettings.SecretUpdates secrets) {}

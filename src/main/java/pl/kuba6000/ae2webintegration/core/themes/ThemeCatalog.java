@@ -62,11 +62,28 @@ public final class ThemeCatalog implements Closeable {
             "plan",
             "tracking"));
 
+    /**
+     * Installed theme and its entry points.
+     *
+     * @param id                  theme identifier used in asset URLs
+     * @param name                display name
+     * @param version             theme version
+     * @param supportedModVersion mod version family supported by the theme
+     * @param views               views implemented by the theme
+     * @param entry               JavaScript entry path relative to the theme's asset URL
+     * @param styles              stylesheet paths relative to the theme's asset URL
+     */
     @Desugar
     public record Manifest(@NotNull String id, @NotNull String name, @NotNull String version,
         @NotNull String supportedModVersion, @NotNull List<String> views, @NotNull String entry,
         @NotNull List<String> styles) {}
 
+    /**
+     * Available themes and the server's default choice.
+     *
+     * @param defaultTheme default theme identifier
+     * @param themes       installed themes
+     */
     @Desugar
     public record Description(@NotNull String defaultTheme, @NotNull List<Manifest> themes) {}
 

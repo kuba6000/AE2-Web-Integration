@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 
+/** Current job and capabilities of a crafting CPU. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class GetCPUClusterData {
 
@@ -40,13 +41,13 @@ public class GetCPUClusterData {
      * @example true
      */
     public final boolean isBusy;
-    /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+    /** Automatic CPU selection policy; null when unsupported or unknown. Does not restrict manual submission. */
     public final @Nullable CpuSelectionMode selectionMode;
     /** Whether this CPU supports pausing the scheduling of its current job. */
     public final boolean supportsPause;
     /** Whether the active job is paused; false for idle or unsupported CPUs. */
     public final boolean isPaused;
-    /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
+    /** Final crafting output; null when the CPU is idle or its output is unavailable. */
     public final @Nullable ResourceStack finalOutput;
     /** Resource details for current work; null when the CPU is idle. */
     public @Nullable ArrayList<CpuResource> items;

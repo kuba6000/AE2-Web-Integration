@@ -25,31 +25,28 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 
 /**
- * Sets whether a crafting CPU's current job schedules new work.
- * Work already handed to external machines can still finish while paused.
+ * Pause or resume crafting.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @pathParam cpuKey Stable crafting CPU identifier.
- * @response 200 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid. CSRF_REJECTED: cookie or
+ * <p>
+ * Pausing prevents the CPU from scheduling new work. Work already sent to machines can still finish.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @pathParam cpuKey Crafting CPU identifier.
+ * @response 200 {@link Response} Pause state updated.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
  *           configured-local mutations require X-AE2-Request: true.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: the grid does not exist. CPU_NOT_FOUND: no CPU has this key.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found. CPU_NOT_FOUND: no CPU has this key.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 409 {@link ErrorResponse} CPU_NOT_BUSY: the CPU has no current work. CPU_PAUSE_UNSUPPORTED: the CPU does
  *           not support pausing.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -66,8 +63,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 public final class PauseCPU extends ISyncedRequest {
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
      * @param data   always {@code null} after the requested pause state has been applied
      * @example status OK

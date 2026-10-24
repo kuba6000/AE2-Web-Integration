@@ -33,14 +33,18 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
- * Reads sampled stock and input/output counts. GAP markers identify incomplete coverage; partial counts are retained.
+ * Get resource history.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @response 200 {@link Response} Bounded history query result.
+ * <p>
+ * Returns stock measurements and input/output totals, with the newest matching points ordered oldest first.
+ * {@code GAP} marks missing coverage; partial counts are retained.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 200 {@link Response} Measurements and coverage information.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid key, timestamp or limit outside 1-10000.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: this grid is not accessible.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: the grid is not loaded.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found or unavailable.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: request body exceeds the limit.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: rate limit exceeded.
@@ -62,37 +66,63 @@ public final class GetResourceHistory extends IAsyncRequest {
     private static final int DEFAULT_QUERY_LIMIT = 200;
     private static final int MAX_QUERY_LIMIT = 10000;
 
-    /** Optional exact resource key. Omit to read all resources. */
+    /** Filter by resource key; omit to include all resources. */
     @QueryParam("itemKey")
     @Nullable
     StableKey itemKey;
     /** Earliest observation time in Unix epoch milliseconds, inclusive; defaults to zero. */
     @QueryParam("from")
     long from;
-    /** Maximum points selected, from 1 through 10000; defaults to 200. One boundary GAP may be added. */
+    /**
+     * Maximum number of newest matching points, from 1 to 10000; defaults to 200. One extra boundary GAP may be
+     * returned.
+     */
     @QueryParam("limit")
     int limit = DEFAULT_QUERY_LIMIT;
 
-    /** Include response-local icon references and the atlas page table. */
+    /** Include resource icons and atlas metadata; defaults to false. */
     @QueryParam("icons")
     boolean icons;
 
+    /**
+     * Resource history result.
+     *
+     * @param status {@code OK} for a successful request
+     * @param data   measurements and coverage information
+     * @param icons  icon atlas metadata; null when not requested or unavailable
+     */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull History data, @Nullable IconMappings icons)
         implements IResponseBody {}
 
     /**
-     * Baseline is the last retained stock measurement preceding the returned window, or null when unknown.
-     * It keeps its original timestamp and is not counted against limit. A same-time boundary GAP may also exceed limit
-     * by one point so partial measurements retain their coverage context.
+     * Measurements and coverage for the requested period.
+     *
+     * @param points    newest matching points, ordered oldest first; may include one extra boundary GAP beyond limit
+     * @param complete  false when the requested period includes a known gap or expired history
+     * @param truncated whether the result omits points because of the limit or expired history
+     * @param enabled   whether stock or flow tracking is currently enabled for the network
+     * @param baseline  last known stock before the returned window for the requested resource, at its original time;
+     *                  null when unavailable or itemKey was omitted. Not counted against limit
      */
     @Desugar
     public record History(@NotNull List<Point> points, boolean complete, boolean truncated, boolean enabled,
         @Nullable Point baseline) {}
 
     /**
-     * Decimal strings preserve exact quantities and accepted positive-transfer counts. Operation counts are zero for
-     * non-FLOW points; flowFrom starts a FLOW or FLOW_OBSERVATION interval ending at observedAt.
+     * A measurement or coverage marker. Counts use decimal strings to preserve exact values.
+     *
+     * @param observedAt       observation time in Unix epoch milliseconds
+     * @param generation       tracking session identifier; a change marks a break in continuity
+     * @param kind             STOCK or FLOW for measurements; OBSERVATION and FLOW_OBSERVATION mark coverage,
+     *                         and GAP marks missing data
+     * @param resource         measured resource; null for coverage markers. Its quantity is only meaningful for STOCK
+     * @param input            resource units inserted during the flow interval; zero for other kinds
+     * @param output           resource units extracted during the flow interval; zero for other kinds
+     * @param inputOperations  number of accepted insertions during the flow interval; zero for other kinds
+     * @param outputOperations number of accepted extractions during the flow interval; zero for other kinds
+     * @param flowFrom         flow interval start in Unix epoch milliseconds, ending at observedAt; null when
+     *                         unavailable
      */
     @Desugar
     public record Point(long observedAt, @NotNull String generation, @NotNull StorageHistoryPoint.Kind kind,

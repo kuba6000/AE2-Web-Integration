@@ -39,9 +39,35 @@ public final class StorageTopic extends LiveTopic {
     private @Nullable RecentResourceActivity.Summary recent;
     private long recentToken;
 
+    /**
+     * Current stored quantity and craftability for one resource.
+     *
+     * @param itemKey   resource key matching a snapshot row or a definition in this event
+     * @param quantity  absolute stored quantity in resource units
+     * @param craftable whether the resource can currently be crafted
+     * @example itemKey AAAAAAAAAAAAAAAAAAAAAA
+     * @example quantity 64
+     * @example craftable true
+     */
     @Desugar
     private record Amount(@NotNull StableKey itemKey, long quantity, boolean craftable) {}
 
+    /**
+     * Changes to a resource snapshot. Empty arrays contain no changes; nullable fields have separate rules below.
+     *
+     * @param view        snapshot generation and decimal revision; revisions may skip numbers
+     * @param updates     absolute quantities and craftability for changed keyed resources
+     * @param definitions full rows for new or changed resources, replacing rows with the same itemKey
+     * @param removed     resource keys to remove from both the resource list and recent tracking measurements
+     * @param unkeyed     complete replacement of rows without keys; null keeps the previous list, empty clears it
+     * @param icons       atlas metadata for this event's icon references; null adds none. Resolve icon.page against
+     *                    these pages, not the snapshot's pages. A changed packId requires a new snapshot
+     * @param recent      recent tracking update; null keeps the previous summary. Replace summary metadata and merge
+     *                    resources by key, retaining omitted entries. Null measurements mean unavailable, not zero
+     * @example unkeyed null
+     * @example icons null
+     * @example recent null
+     */
     @Desugar
     private record Delta(@NotNull LiveView view, @NotNull List<Amount> updates,
         @NotNull List<StoredResource> definitions, @NotNull List<StableKey> removed,

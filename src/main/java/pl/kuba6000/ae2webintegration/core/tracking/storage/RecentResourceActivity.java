@@ -50,12 +50,34 @@ public final class RecentResourceActivity {
         this.maximumResources = maximumResources;
     }
 
-    /** Decimal strings retain exact quantities in JavaScript, including totals exceeding a signed long. */
+    /**
+     * Recent measurements as exact decimal strings. Null means unavailable, not zero.
+     *
+     * @param input            resource units inserted during the flow window
+     * @param output           resource units extracted during the flow window
+     * @param inputOperations  number of insert operations during the flow window
+     * @param outputOperations number of extract operations during the flow window
+     * @param stockChange      latest stock minus the earliest available stock sample in the stock window
+     */
     @Desugar
     public record Amount(@Nullable String input, @Nullable String output, @Nullable String inputOperations,
         @Nullable String outputOperations, @Nullable String stockChange) {}
 
-    /** Since fields identify the available observation period; null means the measurement is unavailable. */
+    /**
+     * Recent flow and stock measurements. Their observation periods are independent.
+     *
+     * @param flowWindowMillis  rolling flow window in milliseconds
+     * @param stockWindowMillis stock sample window in milliseconds
+     * @param bucketMillis      flow time resolution in milliseconds
+     * @param observedAt        summary time in Unix epoch milliseconds
+     * @param flowObservedAt    latest flow observation time in Unix epoch milliseconds; null when unavailable
+     * @param stockObservedAt   latest stock sample time in Unix epoch milliseconds; null when unavailable
+     * @param flowSince         flow observation start time in Unix epoch milliseconds; null when unavailable
+     * @param stockSince        earliest stock sample time in Unix epoch milliseconds; null when unavailable
+     * @param flowComplete      whether the flow window has no known missing observations
+     * @param stockComplete     whether the available stock period has no known missing observations
+     * @param resources         measurements indexed by resource key
+     */
     @Desugar
     public record Summary(long flowWindowMillis, long stockWindowMillis, long bucketMillis, long observedAt,
         @Nullable Long flowObservedAt, @Nullable Long stockObservedAt, @Nullable Long flowSince,

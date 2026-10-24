@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -53,12 +54,16 @@ public final class OpenApiDoclet implements Doclet {
     private record Category(String packageName, String name, String description) {}
 
     private static final List<Category> CATEGORIES = List.of(
-        new Category("grid", "Grids", "Discover accessible ME grids, browse their items and manage grid settings."),
-        new Category("cpu", "CPUs", "Inspect crafting CPUs and cancel their current work."),
+        new Category("grid", "Networks", "Browse ME networks, stream resources and manage network settings."),
+        new Category("cpu", "Crafting CPUs", "Monitor crafting CPUs, stream job progress and control crafting."),
         new Category("icons", "Icons", "Discover the server's icon pack and retrieve its atlas pages."),
         new Category("crafting", "Crafting plans", "Create, inspect, submit and discard crafting plans."),
         new Category("tracking", "History", "Browse recorded crafting jobs, resource stock and transfer measurements."),
-        new Category("auth", "Authentication", "Obtain or revoke session tokens and start account registration."));
+        new Category("auth", "Authentication", "Log in, log out and register an account."),
+        new Category("pins", "Resource pins", "Manage personal resource pins for the terminal and home page."),
+        new Category("server", "Server settings", "Read and update server settings as an administrator."),
+        new Category("themes", "Themes", "List available themes and retrieve their assets."),
+        new Category("updates", "Updates", "Manage update notifications."));
 
     private static final String ENDPOINT = "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint";
     private static final String PATH_PARAM = "pl.kuba6000.ae2webintegration.core.http.contract.PathParam";
@@ -209,8 +214,10 @@ public final class OpenApiDoclet implements Doclet {
                     "version",
                     version,
                     "description",
-                    "Development API. Configured local access may bypass credentials; "
-                        + "the server's trusted-client configuration determines that exception."),
+                    "Browse ME networks, manage crafting and read resource history. Networks are identified by gridKey. "
+                        + "Authenticate with a bearer token or session cookie obtained at login. "
+                        + "Requests that change data require X-AE2-Request: true when using cookies or trusted local access. "
+                        + "The server may allow configured local clients to connect without credentials."),
                 "paths",
                 paths,
                 "tags",
@@ -233,6 +240,7 @@ public final class OpenApiDoclet implements Doclet {
             JsonObject specification = JSON.toJsonTree(document)
                 .getAsJsonObject();
             OpenApiExamples.completeExamples(specification);
+            OpenApiEvents.complete(specification);
             Path parent = output.toAbsolutePath()
                 .getParent();
             Files.createDirectories(parent);
@@ -253,8 +261,29 @@ public final class OpenApiDoclet implements Doclet {
         Map<String, String> responseMedia = new TreeMap<>();
         Map<String, Map<String, Object>> responseHeaders = new TreeMap<>();
         Map<String, String> pathDescriptions = new TreeMap<>();
+        Map<String, Map<String, Object>> events = new LinkedHashMap<>();
+        Map<String, JsonElement> eventExamples = new TreeMap<>();
         for (DocTree tag : comment.getBlockTags()) {
             if (!(tag instanceof UnknownBlockTagTree block)) continue;
+            if (block.getTagName()
+                .equals("eventExample")) {
+                String[] example = text(block.getContent()).split("\\s+", 2);
+                if (example.length != 2) throw problem(endpoint, "Expected @eventExample <name> <JSON>");
+                JsonElement value;
+                try {
+                    value = JSON.fromJson(example[1], JsonElement.class);
+                } catch (JsonParseException invalid) {
+                    throw problem(endpoint, "Invalid @eventExample JSON: " + invalid.getMessage());
+                }
+                if (eventExamples.putIfAbsent(example[0], value) != null)
+                    throw problem(endpoint, "Duplicate @eventExample name: " + example[0]);
+                continue;
+            }
+            if (block.getTagName()
+                .equals("event")) {
+                readEvent(endpoint, comment, block, events);
+                continue;
+            }
             if (block.getTagName()
                 .equals("responseMedia")) {
                 readResponseMedia(endpoint, block, responseMedia);
@@ -348,6 +377,11 @@ public final class OpenApiDoclet implements Doclet {
             }
         }
         if (responses.isEmpty()) throw problem(endpoint, "Missing @response declarations");
+        for (Map.Entry<String, JsonElement> example : eventExamples.entrySet()) {
+            Map<String, Object> event = events.get(example.getKey());
+            if (event == null) throw problem(endpoint, "@eventExample requires a declared event: " + example.getKey());
+            event.put("example", example.getValue());
+        }
         JsonObject documentedResponses = JSON.toJsonTree(responses)
             .getAsJsonObject();
         applyResponseMetadata(endpoint, documentedResponses, responseMedia, responseHeaders);
@@ -372,6 +406,7 @@ public final class OpenApiDoclet implements Doclet {
             text(comment.getBody()),
             "responses",
             documentedResponses);
+        if (!events.isEmpty()) operation.put("x-sse-events", events);
         addInputs(endpoint, routePath, pathDescriptions, operation);
         switch (annotationValue(route, "authentication").toString()) {
             case "REQUIRED" -> {
@@ -382,6 +417,58 @@ public final class OpenApiDoclet implements Doclet {
             default -> throw problem(endpoint, "Unsupported authentication policy");
         }
         return operation;
+    }
+
+    private void readEvent(TypeElement endpoint, DocCommentTree comment, UnknownBlockTagTree block,
+        Map<String, Map<String, Object>> events) {
+        List<? extends DocTree> content = block.getContent();
+        if (content.isEmpty() || content.get(0)
+            .getKind() != DocTree.Kind.TEXT)
+            throw problem(endpoint, "Expected @event <name> [type link] <description>");
+        String[] initial = content.get(0)
+            .toString()
+            .stripLeading()
+            .split("\\s+", 2);
+        if (!initial[0].matches("[A-Za-z][A-Za-z0-9_-]*")) throw problem(endpoint, "Invalid @event name");
+        StringBuilder description = new StringBuilder(initial.length == 2 ? initial[1] : "");
+        List<DocTree> descriptionParts = new ArrayList<>();
+        Map<String, Object> data = object("type", "object", "properties", object(), "additionalProperties", false);
+        boolean linked = false;
+        for (int index = 1; index < content.size(); index++) {
+            DocTree part = content.get(index);
+            if (part instanceof LinkTree link) {
+                if (linked || !description.toString()
+                    .isBlank() || !descriptionParts.isEmpty())
+                    throw problem(endpoint, "@event type link must follow its name");
+                DocTreePath path = DocTreePath.getPath(
+                    environment.getDocTrees()
+                        .getPath(endpoint),
+                    comment,
+                    link.getReference());
+                Element target = environment.getDocTrees()
+                    .getElement(path);
+                if (!(target instanceof TypeElement type))
+                    throw problem(endpoint, "Unresolved @event type: " + link.getReference());
+                data = schema(type.asType());
+                if (!data.containsKey("$ref")) throw problem(endpoint, "@event requires an object payload type");
+                linked = true;
+            } else {
+                if (part.getKind() == DocTree.Kind.ERRONEOUS) throw problem(endpoint, "Malformed @event declaration");
+                descriptionParts.add(part);
+            }
+        }
+        description.append(text(descriptionParts));
+        if (description.toString()
+            .isBlank()) throw problem(endpoint, "Missing @event description");
+        if (events.putIfAbsent(
+            initial[0],
+            object(
+                "description",
+                description.toString()
+                    .strip(),
+                "schema",
+                data))
+            != null) throw problem(endpoint, "Duplicate @event name: " + initial[0]);
     }
 
     private void readResponseMedia(TypeElement endpoint, UnknownBlockTagTree block, Map<String, String> responseMedia) {

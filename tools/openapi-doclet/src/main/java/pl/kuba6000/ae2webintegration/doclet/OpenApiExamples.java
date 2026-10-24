@@ -117,7 +117,7 @@ final class OpenApiExamples {
         }
     }
 
-    private static boolean matches(JsonElement value, JsonObject schema, JsonObject definitions) {
+    static boolean matches(JsonElement value, JsonObject schema, JsonObject definitions) {
         if (schema.has("$ref")) {
             String reference = schema.get("$ref")
                 .getAsString();
@@ -176,7 +176,7 @@ final class OpenApiExamples {
         }
     }
 
-    private static JsonElement generate(JsonObject schema, JsonObject definitions, Set<String> visiting) {
+    static JsonElement generate(JsonObject schema, JsonObject definitions, Set<String> visiting) {
         if (schema.has("examples")) return schema.getAsJsonArray("examples")
             .get(0);
         if (schema.has("$ref")) {

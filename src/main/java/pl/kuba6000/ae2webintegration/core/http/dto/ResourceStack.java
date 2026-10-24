@@ -9,7 +9,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
-/** A resource quantity with a response-local icon, independent of grid craftability. */
+/** A resource and its quantity. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class ResourceStack extends ResourceDescription {
 

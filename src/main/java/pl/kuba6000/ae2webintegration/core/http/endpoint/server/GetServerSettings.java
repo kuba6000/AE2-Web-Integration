@@ -16,12 +16,13 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
- * Reads the active editable server configuration from memory. Administrator or trusted localhost access is required.
- * Read-only metadata includes listener port, access policy, proxy trust, request limit and configured-secret flags.
- * Administrator password, Discord webhook and ntfy password values are never returned.
- * When general.allow_server_settings_editing is disabled, no configuration or metadata is returned.
+ * Get server settings.
+ * <p>
+ * Requires administrator or trusted localhost access and general.allow_server_settings_editing enabled in config.toml.
+ * Returns editable settings, read-only settings and the revision needed to save changes. Secret values are never
+ * returned.
  * 
- * @response 200 {@link Response} Active editable configuration, file-only metadata and opaque configuration revision.
+ * @response 200 {@link Response} Current server settings and revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: unexpected request body.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: administrator required;
@@ -29,7 +30,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: rate limit exceeded.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: originating listener has stopped.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: server stopping.
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/server/settings")
 public final class GetServerSettings extends IAsyncRequest {

@@ -24,27 +24,24 @@ import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /**
- * Updates selected grid settings.
- * <p>
- * Omitted settings remain unchanged. Returns the settings after applying the update.
+ * Update network settings.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @response 200 {@link Response} Updated grid settings.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid. CSRF_REJECTED: cookie or
+ * <p>
+ * Omitted settings remain unchanged. Returns the applied settings.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 200 {@link Response} Updated network settings.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
  *           configured-local mutations require X-AE2-Request: true.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: the grid does not exist.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -64,10 +61,8 @@ public final class PatchGridSettings extends IAsyncRequest {
     private static final String NAME_WHITESPACE = " \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
-     * @param data   settings after the requested changes have been applied and saved
+     * @param data   updated network settings
      * @example status OK
      */
     @Desugar
@@ -76,22 +71,19 @@ public final class PatchGridSettings extends IAsyncRequest {
     /**
      * Settings to update; omitted members remain unchanged.
      *
-     * @param isTracked                    whether the grid should collect crafting history
+     * @param isTracked                    whether the network should collect crafting history
      * @param trackMachineCrafting         whether new machine-origin jobs are recorded while crafting tracking is
      *                                     enabled
-     * @param isStorageTracked             whether the grid should collect periodic resource quantities
-     * @param isFlowTracked                whether the grid should collect accepted input/output history
+     * @param isStorageTracked             whether the network should collect periodic resource quantities
+     * @param isFlowTracked                whether the network should collect accepted input/output history
      * @param stockSampleIntervalSeconds   seconds between stock samples, within the active server bounds
-     * @param flowFlushIntervalSeconds     seconds covered by durable flow totals, within the active server bounds
+     * @param flowFlushIntervalSeconds     seconds between saved flow totals, within the server bounds
      * @param historyRetentionDays         resource history days, within the active server bounds
      * @param craftingHistoryRetentionDays completed crafting history days, within the active server bounds
-     * @param name                         custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
-     *                                     trimmed,
-     *                                     matching JavaScript String.trim after control characters are rejected.
-     *                                     At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-     *                                     U+007F–009F) are rejected even at the edges. Null is invalid; omission
-     *                                     preserves the
-     *                                     name.
+     * @param name                         custom network name; empty clears it. Leading and trailing whitespace is
+     *                                     trimmed.
+     *                                     Maximum 128 UTF-16 code units after trimming; control characters and null
+     *                                     are rejected.
      * @example isTracked true
      * @example name Factory
      */

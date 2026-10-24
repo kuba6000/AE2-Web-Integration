@@ -12,28 +12,42 @@ import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
 import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 
 /**
- * Opens the live stream of a crafting CPU.
- * The single-use subscription token is returned by a live snapshot, GET cpus/{cpuKey} with live=true.
- * Updates contain the absolute work of changed resources, with definitions only for new or changed resources.
- * Measured time is sent as of the update; while crafting is true a client extends it with its own clock, and derives
- * timing ratios itself. Updates are sent only when work, counts or the crafting flag change, never for clock progress.
- * Removed keys disappear from the CPU. An optional unkeyed array replaces all unkeyed resources, and an optional cpu
- * object replaces the CPU header without items.
- * Reset and invalidate require a new snapshot and subscription; a job starting, merging, completing or being cancelled
- * invalidates, as does a CPU that no longer exists. Revoked indicates lost access.
- * Reconnection never replays intermediate events. Last-Event-ID is not used.
- * Heartbeat events must be acknowledged by POST to this path with the subscription token.
- * Renew about every 30 seconds; a stream without acknowledgement expires after 90 seconds.
+ * Stream CPU updates.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @pathParam cpuKey Stable crafting CPU identifier.
+ * <p>
+ * Open the single-use subscription from {@code GET /api/grids/{gridKey}/cpus/{cpuKey}?live=true}
+ * within 10 seconds, using the same login session. Renew it by POSTing to this path about every 30 seconds; it expires
+ * after 90 seconds without renewal.
+ *
+ * <p>
+ * After disconnection, reset or invalidate, fetch a new live snapshot and subscription.
+ * Events are not replayed; Last-Event-ID is ignored. Delta quantities are absolute values, not increments.
+ * Apply removed keys, then definitions, then updates. A generation mismatch or an unknown update key
+ * requires a new snapshot; ignore revisions that are not newer than the current revision.
+ *
+ * <p>
+ * Time passing alone does not trigger updates. While a resource's crafting flag is true,
+ * extend its processing time from the local receipt time, including while the CPU is paused.
+ * Derive production rates and time shares from those measurements and the job elapsed time.
+ *
+ * @event ready The stream is open; keep the initial snapshot.
+ * @event delta {@link pl.kuba6000.ae2webintegration.core.cpu.CpuTopic.Delta} Apply changed CPU data to the snapshot.
+ * @event heartbeat The connection is alive; renew by POST with the subscription token about every 30 seconds.
+ * @event reset Close the stream and fetch a new live snapshot and subscription.
+ * @event invalidate The snapshot is no longer valid; close the stream and fetch a new live snapshot and subscription.
+ * @event revoked Access or login expired; close the stream and restore access before reconnecting.
+ * @eventExample delta
+ *               {"view":{"generation":"1.0","revision":"2"},"updates":[{"itemKey":"AAAAAAAAAAAAAAAAAAAAAA","active":16,"pending":32,"stored":8,"craftedTotal":64,"timeSpentCrafting":5000,"crafting":true}],"definitions":[],"removed":[],"unkeyed":null,"cpu":null,"icons":null}
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @pathParam cpuKey Crafting CPU identifier.
  * @response 200 Server-sent ready, delta, heartbeat, reset, invalidate and revoked events.
  * @responseMedia 200 text/event-stream
  * @responseHeader 200 Cache-Control No-store: event streams must not be cached.
  * @response 400 {@link ErrorResponse} Invalid, expired or already used subscription.
  * @response 401 {@link ErrorResponse} Authentication required.
- * @response 403 {@link ErrorResponse} Grid permission denied.
- * @response 404 {@link ErrorResponse} Grid not found.
+ * @response 403 {@link ErrorResponse} Network access denied.
+ * @response 404 {@link ErrorResponse} Network not found.
  * @response 405 {@link ErrorResponse} Method not allowed.
  * @response 413 {@link ErrorResponse} Request body too large.
  * @response 429 {@link ErrorResponse} Request rate limit exceeded.

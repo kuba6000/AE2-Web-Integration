@@ -8,7 +8,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
 
-/** Server-settings projection. A response wraps its published, read-only configuration; input owns a fresh instance. */
+/** Server settings that can be read and changed through the API. */
 @Desugar
 @JsonProjection(value = ConfigSettings.class, excludeFieldsAnnotatedWith = WebSetting.class)
 public record EditableServerSettings(@NotNull ConfigSettings config) {

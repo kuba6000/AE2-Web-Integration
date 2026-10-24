@@ -6,7 +6,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 /**
- * Detached attribution for a crafting submission.
+ * Who requested a crafting job.
  * 
  * @param source player, native automation, or web submission without a Minecraft identity
  * @param player Minecraft UUID and last observed name; present only for PLAYER

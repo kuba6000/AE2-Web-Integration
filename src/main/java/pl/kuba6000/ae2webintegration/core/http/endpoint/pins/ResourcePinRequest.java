@@ -28,16 +28,34 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 
-/** Common owner-list response; visibility checks happen after SQL releases its writer gate. */
+/** Shared resource pin request and response fields. */
 public abstract class ResourcePinRequest extends IAsyncRequest {
 
+    /** Include icon references and mappings when an icon pack is available. */
     @QueryParam("icons")
     boolean icons;
 
+    /**
+     * @param status {@code OK} when the request succeeds
+     * @param data   current account's pins
+     * @param icons  mappings for resource icon references, or null when not requested or unavailable
+     */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<View> data, @Nullable IconMappings icons)
         implements IResponseBody {}
 
+    /**
+     * @param pinKey        pin identifier
+     * @param available     whether the network is available and accessible to the current account
+     * @param gridKey       network identifier, or null when unavailable
+     * @param itemKey       resource identifier, or null when unavailable
+     * @param gridName      network name, or null when unavailable
+     * @param resource      resource description, or null when unavailable
+     * @param terminalOrder order within this network's terminal pins, or null when not pinned there
+     * @param homeOrder     order among all Home pins, or null when not pinned there
+     * @param homeConfig    Home card display settings
+     * @param recent        recent flow for this resource, or null when unavailable, disabled or not shown on Home
+     */
     @Desugar
     public record View(@NotNull StableKey pinKey, boolean available, @Nullable StableKey gridKey,
         @Nullable StableKey itemKey, @Nullable String gridName, @Nullable ResourceDescription resource,

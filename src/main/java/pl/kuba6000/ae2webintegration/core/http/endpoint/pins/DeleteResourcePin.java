@@ -12,10 +12,13 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 
 /**
- * Removes an owned pin even when grid access has ended; absent or other-owner tokens are idempotent no-ops.
+ * Delete resource pin.
+ * <p>
+ * Removes both placements of the current account's pin. Network access is not required.
+ * Missing pins and pins owned by another account are ignored.
  * 
- * @pathParam pinKey Opaque pin identifier.
- * @response 200 {@link Response} Remaining owner pins.
+ * @pathParam pinKey Pin identifier.
+ * @response 200 {@link Response} Remaining account pins.
  */
 @Endpoint(method = HttpMethod.DELETE, path = "/api/resource-pins/{pinKey}")
 public final class DeleteResourcePin extends ResourcePinRequest {

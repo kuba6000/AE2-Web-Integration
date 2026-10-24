@@ -21,7 +21,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 /**
  * A completed or cancelled crafting job with resource and pattern-provider timing measurements.
  *
- * @param finalOutput    detached snapshot of the final crafting output
+ * @param finalOutput    final crafting output and quantity
  * @param timeStarted    crafting start in Unix epoch milliseconds
  * @param timeDone       crafting completion or cancellation in Unix epoch milliseconds
  * @param wasCancelled   whether the crafting work was cancelled

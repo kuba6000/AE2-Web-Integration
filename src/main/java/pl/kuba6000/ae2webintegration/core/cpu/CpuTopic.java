@@ -47,11 +47,49 @@ public final class CpuTopic extends LiveTopic {
     private List<CpuObservation.UnkeyedRow> unkeyed = Collections.emptyList();
     private CpuObservation.Header header = IDLE;
 
-    /** Absolute work of one resource at the moment its update was built. */
+    /**
+     * Absolute resource quantities and processing time measured for this update.
+     *
+     * @param itemKey           resource key matching a snapshot row or a definition in this event
+     * @param active            resource units currently being processed
+     * @param pending           resource units waiting to be processed
+     * @param stored            resource units held by the crafting CPU
+     * @param craftedTotal      resource units produced during the measured work; zero when tracking is unavailable
+     * @param timeSpentCrafting processing time in milliseconds as of this update; zero when tracking is unavailable.
+     *                          No server timestamp is included; extend from local receipt time while crafting is true
+     * @param crafting          whether this resource's processing time is still increasing, even while the CPU is
+     *                          paused
+     * @example itemKey AAAAAAAAAAAAAAAAAAAAAA
+     * @example active 16
+     * @example pending 32
+     * @example stored 8
+     * @example craftedTotal 64
+     * @example timeSpentCrafting 5000
+     * @example crafting true
+     */
     @Desugar
     private record Value(@NotNull StableKey itemKey, long active, long pending, long stored, long craftedTotal,
         long timeSpentCrafting, boolean crafting) {}
 
+    /**
+     * Changes to a CPU snapshot. All quantities replace previous values; they are not increments.
+     *
+     * @param view        snapshot generation and decimal revision; revisions may skip numbers
+     * @param updates     absolute work quantities and measured processing times for changed keyed resources
+     * @param definitions full rows for new or changed resources, replacing rows with the same itemKey. Streamed time
+     *                    ratios are not calculated; derive them from processing times and the job elapsed time
+     * @param removed     resource keys to remove from the CPU resource list
+     * @param unkeyed     complete replacement of rows without keys; null keeps the previous list, empty clears it.
+     *                    Derive time ratios as for definitions
+     * @param cpu         updated CPU details; null keeps the previous details. Its items field is null and must not
+     *                    clear the resource list. Extend timeElapsed from local receipt time while isBusy and
+     *                    hasTrackingInfo are true
+     * @param icons       atlas metadata for this event's icon references; null adds none. Resolve icon.page against
+     *                    these pages, not the snapshot's pages. A changed packId requires a new snapshot
+     * @example unkeyed null
+     * @example cpu null
+     * @example icons null
+     */
     @Desugar
     private record Delta(@NotNull LiveView view, @NotNull List<Value> updates, @NotNull List<CpuResource> definitions,
         @NotNull List<StableKey> removed, @Nullable List<CpuResource> unkeyed, @Nullable GetCPUClusterData cpu,

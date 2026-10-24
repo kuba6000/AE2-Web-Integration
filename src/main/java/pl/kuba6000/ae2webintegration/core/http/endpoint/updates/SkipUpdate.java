@@ -19,8 +19,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
- * Skips the displayed update for this server installation. Administrator access is required.
- * Newer releases remain eligible for notifications. The installed version remains outdated.
+ * Skip update notification.
+ * <p>
+ * Suppresses the current release recommendation for this server. Requires administrator access.
+ * Newer releases still trigger notifications; isOutdated remains true.
  *
  * @response 200 {@link Response} The skip was saved, or this recommendation was already skipped.
  * @response 400 {@link ErrorResponse} BAD_PARAM: missing, empty or invalid tag.
@@ -32,7 +34,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the skip could not be saved.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: request belongs to a stopped server lifecycle.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: server stopping.
  * @responseExample 200 {"status":"OK","data":null}
  * @responseExample 409 {"status":"UPDATE_CHANGED","data":null}
  */
@@ -48,7 +50,7 @@ public final class SkipUpdate extends IAsyncRequest {
     public record Input(@NotNull String tag) {}
 
     /**
-     * @param status OK after durable save
+     * @param status OK when the preference is saved
      * @param data   always null
      */
     @Desugar
