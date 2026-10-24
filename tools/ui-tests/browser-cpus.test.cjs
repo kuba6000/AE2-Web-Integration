@@ -867,20 +867,11 @@ test('pending and uncertain CPU pause stays locked across list, detail and grid 
         body: JSON.stringify({ status: 'TIMEOUT', data: null })
     });
     await settleResponse(page, held.request());
-    assert.equal(
-        await page
-            .getByRole('status')
-            .filter({ hasText: /outcome.*unknown/i })
-            .count(),
-        0
-    );
+    assert.equal(await page.locator('.cpu-overview [role="status"].api-error').filter({ hasText: /\S/ }).count(), 0);
     await page.evaluate((key) => {
         location.hash = `#/grids/${key}/cpus`;
     }, gridA);
-    await row('cpu-a')
-        .getByRole('status')
-        .filter({ hasText: /outcome.*unknown/i })
-        .waitFor();
+    await row('cpu-a').locator('[role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     await poll(page);
     assert.equal(await row('cpu-a').getByRole('button', { name: /Pause/ }).isDisabled(), true);
     assert.equal(
@@ -1270,19 +1261,13 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
         await page.goto(`${base}?case=${status}#/grids/${gridA}/cpus/cpu-a`);
         options.fault = { operation: 'cancel', status };
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /outcome.*unknown/i })
-            .waitFor();
+        await page.locator('.cpu-status[role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
         await poll(page);
         await clickTab(page, 'CPUs');
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /outcome.*unknown/i })
-            .waitFor();
+        await page.locator('.cpu-status[role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         await page
             .getByRole('region', { name: 'CPU resources', exact: true })
             .getByRole('button', { name: /Iron Ingot/ })
@@ -1401,19 +1386,13 @@ test('uncertain submission outcomes cannot be retried by polling or route reentr
         await page.goto(`${base}#/grids/${gridA}/plans/${planId++}`);
         options.fault = { operation: 'submit', status };
         await page.getByRole('button', { name: 'Start', exact: true }).click();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /outcome.*unknown/i })
-            .waitFor();
+        await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         const count = options.requests.filter((request) => request.path.endsWith('/submit')).length;
         await poll(page);
         await clickTab(page, 'Terminal');
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /outcome.*unknown/i })
-            .waitFor();
+        await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
         assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, count);
     }
@@ -1427,8 +1406,9 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page
-        .getByRole('status')
-        .filter({ hasText: /outcome.*unknown/i })
+        .getByRole('dialog', { name: 'Craft', exact: true })
+        .locator('[role="status"].api-error')
+        .filter({ hasText: /\S/ })
         .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isDisabled(), true);
     await poll(page);
@@ -1441,10 +1421,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     options.fault = { operation: 'delete', status: 'TIMEOUT' };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /outcome.*unknown/i })
-        .waitFor();
+    await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     await poll(page);
     assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);

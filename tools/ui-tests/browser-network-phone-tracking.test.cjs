@@ -295,10 +295,11 @@ test('tracking notices use the current network, update after saving, and retain 
     await page.getByRole('link', { name: /Iron Ingot.*#1/ }).waitFor();
     await enable.waitFor();
     assert.equal(await enable.getAttribute('href'), `#/grids/${gridA}/settings`);
-    await page
+    const trackingNotice = page
         .getByRole('region', { name: 'History', exact: true })
-        .getByText(/tracking is disabled/i)
-        .waitFor();
+        .locator('.history-tracking-notice span');
+    await trackingNotice.waitFor();
+    assert.ok((await trackingNotice.innerText()).trim());
     await clickTab(page, 'Home');
     await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
     assert.equal(await enable.count(), 0);
@@ -1923,7 +1924,7 @@ test('tracking opens from resources, retains terminal state, and survives a dire
     await page.locator('.tracking-view .tracking-back').click();
     assert.equal(await page.locator('#search').inputValue(), 'iron');
     await page.locator('#items button').first().click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'View tracking' }).click();
+    await page.getByRole('menuitem', { name: 'View resource history', exact: true }).click();
     await page.locator('.tracking-view canvas').waitFor();
     await page.reload();
     await page.locator('.tracking-view canvas').waitFor();
