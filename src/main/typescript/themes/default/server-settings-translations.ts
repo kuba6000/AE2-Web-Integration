@@ -17,7 +17,7 @@ export const serverSettingsTranslations = {
         serverProxies: 'Trusted proxies',
         serverDefaultTheme: 'Default theme',
         serverDefaultThemeHelp:
-            'Use builtin:default or server:<theme id>. Applies on the next page load for browsers following the server default. Theme ZIPs are discovered at server startup.',
+            'Use builtin:default or server:<theme id>. Reload the page to apply it when using the server default. Restart the server after adding theme ZIPs.',
         serverNotifications: 'Notifications',
         serverNotificationsHelp: 'Both minimums must be met. Zero disables a filter.',
         serverMinimumDuration: 'Minimum crafting duration (seconds)',
@@ -28,13 +28,13 @@ export const serverSettingsTranslations = {
         serverDiscordHelp:
             'Remove the webhook to disable Discord notifications. Player accounts must also be disabled to use Discord notifications.',
         serverWebhook: 'Webhook URL',
-        serverRole: 'Role ID to mention on errors',
+        serverRole: 'Role ID to mention in every notification',
         serverCraftingStyle: 'Crafting notification style',
         serverCraftingStyleSimple: 'Text only',
         serverCraftingStyleSmallIcon: 'Small item icon',
         serverCraftingStyleImageCard: 'Full image card',
         serverCraftingStyleHelp:
-            'Small icons use the installed icon pack and fall back to text when unavailable. Full cards fall back to text if rendering fails.',
+            'Small icons require an icon pack. If an image is unavailable, a text notification is sent.',
         serverNtfy: 'ntfy',
         serverNtfyHelp:
             'An empty host or topic disables ntfy notifications. For topics without authentication, clear the username and remove the stored password.',
@@ -44,31 +44,31 @@ export const serverSettingsTranslations = {
         serverNtfyPassword: 'Password',
         serverResourceHistory: 'Resource history',
         serverHistoryHelp:
-            'Each network chooses its own values within these bounds. A record cap may shorten retention. Cleanup runs in the background.',
+            'Each network chooses its settings within these limits. The record limit can shorten the saved history.',
         serverStockInterval: 'Stock sample interval (seconds)',
         serverFlowInterval: 'Flow save interval (seconds)',
-        serverRetention: 'Retention (days)',
+        serverRetention: 'History duration (days)',
         serverBoundmin: 'Minimum',
         serverBounddefaultValue: 'Default',
         serverBoundmax: 'Maximum',
         serverBoundsInvalid: 'Minimum must not exceed default, and default must not exceed maximum.',
         serverRecordCap: 'Maximum history records per network',
         serverRecordCapHelp:
-            'Approximate flow rows: days × 86400 × active resources ÷ flow interval in seconds. Add stock and coverage records. Lowering this cap may delete older history.',
+            'Estimated flow records: days × 86400 × active resources ÷ flow interval in seconds. Stock samples and other history records also count toward the limit. Lowering it may delete older history.',
         serverCraftingHistory: 'Crafting history',
         serverCraftingHistoryHelp:
             'Completed and cancelled jobs. The cap removes oldest jobs in full and may shorten retention.',
         serverJobCap: 'Maximum jobs per network',
-        serverAdvanced: 'Live observation and capacity',
+        serverAdvanced: 'Live updates and limits',
         serverAdvancedHelp:
-            'These limits control observation cost and background queues. Queue overflow records a gap in history.',
-        serverActiveInterval: 'Minimum live observation interval (ms)',
-        serverReconciliation: 'Full storage reconciliation interval (seconds)',
+            'Limits for live updates and pending history records. If the queue fills, some history may be missing.',
+        serverActiveInterval: 'Minimum live update interval (ms)',
+        serverReconciliation: 'Full storage refresh interval (seconds)',
         serverResourceCap: 'Maximum tracked resources per network',
         serverResourceCapHelp: 'A lower cap limits additional resources. Resources already being tracked are retained.',
         serverQueueCap: 'Maximum queued history rows',
         serverQueueCapHelp:
-            'A lower cap limits new queued work. Already accepted history data is kept until it is processed.',
+            'Limits history records waiting to be saved. Lowering it does not discard records already queued.',
         serverSave: 'Save and apply',
         serverReload: 'Reload from server',
         serverDiscardReload: 'Discard changes and reload',
@@ -77,7 +77,7 @@ export const serverSettingsTranslations = {
         serverConflict:
             'Configuration changed on the server. Your edits have been kept. Reload the latest settings before saving again.',
         serverSaveUnconfirmed:
-            'The save could not be confirmed. Your edits have been kept. Reload the server configuration to check what was applied.'
+            'Could not confirm the save. Your edits are kept; reload the settings to check whether they were saved.'
     },
     pl: {
         serverFileOnly: 'To ustawienie można zmienić tylko w config.toml.',
@@ -98,7 +98,7 @@ export const serverSettingsTranslations = {
         serverProxies: 'Zaufane proxy',
         serverDefaultTheme: 'Domyślny motyw',
         serverDefaultThemeHelp:
-            'Wpisz builtin:default lub server:<id motywu>. Zmiana działa po ponownym załadowaniu strony w przeglądarkach używających domyślnego motywu serwera. Paczki ZIP są wykrywane przy uruchamianiu serwera.',
+            'Wpisz builtin:default lub server:<id motywu>. Jeśli używasz domyślnego motywu serwera, odśwież stronę, aby zobaczyć zmianę. Po dodaniu paczek ZIP uruchom serwer ponownie.',
         serverNotifications: 'Powiadomienia',
         serverNotificationsHelp: 'Oba minima muszą być spełnione. Zero wyłącza dany filtr.',
         serverMinimumDuration: 'Minimalny czas craftingu (sekundy)',
@@ -109,13 +109,13 @@ export const serverSettingsTranslations = {
         serverDiscordHelp:
             'Usuń webhook, aby wyłączyć powiadomienia Discord. Korzystanie z nich wymaga również wyłączenia kont graczy.',
         serverWebhook: 'Adres webhooka',
-        serverRole: 'ID roli oznaczanej przy błędach',
+        serverRole: 'ID roli oznaczanej w każdym powiadomieniu',
         serverCraftingStyle: 'Styl powiadomień o wytwarzaniu',
         serverCraftingStyleSimple: 'Tylko tekst',
         serverCraftingStyleSmallIcon: 'Mała ikona przedmiotu',
         serverCraftingStyleImageCard: 'Pełna karta graficzna',
         serverCraftingStyleHelp:
-            'Małe ikony pochodzą z zainstalowanej paczki ikon. Gdy ikona jest niedostępna lub renderowanie pełnej karty się nie powiedzie, wysyłane jest powiadomienie tekstowe.',
+            'Małe ikony wymagają paczki ikon. Jeśli obraz jest niedostępny, powiadomienie jest wysyłane jako tekst.',
         serverNtfy: 'ntfy',
         serverNtfyHelp:
             'Pusty host lub temat wyłącza powiadomienia ntfy. Dla tematów bez uwierzytelniania wyczyść użytkownika i usuń zapisane hasło.',
@@ -125,31 +125,31 @@ export const serverSettingsTranslations = {
         serverNtfyPassword: 'Hasło',
         serverResourceHistory: 'Historia zasobów',
         serverHistoryHelp:
-            'Każda sieć wybiera wartości w tych granicach. Limit rekordów może skrócić retencję. Czyszczenie działa w tle.',
+            'Każda sieć wybiera ustawienia w tych granicach. Limit rekordów może skrócić zapisaną historię.',
         serverStockInterval: 'Interwał próbkowania stanu (sekundy)',
         serverFlowInterval: 'Interwał zapisu przepływu (sekundy)',
-        serverRetention: 'Retencja (dni)',
+        serverRetention: 'Okres historii (dni)',
         serverBoundmin: 'Minimum',
         serverBounddefaultValue: 'Domyślnie',
         serverBoundmax: 'Maksimum',
         serverBoundsInvalid: 'Minimum nie może przekraczać wartości domyślnej, a wartość domyślna maksimum.',
         serverRecordCap: 'Maksymalna liczba rekordów na sieć',
         serverRecordCapHelp:
-            'Przybliżona liczba rekordów przepływu: dni × 86400 × aktywne zasoby ÷ interwał przepływu w sekundach. Dodaj rekordy stanu i pokrycia. Obniżenie limitu może usunąć starszą historię.',
+            'Szacowana liczba rekordów przepływu: dni × 86400 × aktywne zasoby ÷ interwał przepływu w sekundach. Do limitu wliczają się też próbki stanu i pozostałe wpisy historii. Obniżenie limitu może usunąć starszą historię.',
         serverCraftingHistory: 'Historia craftingu',
         serverCraftingHistoryHelp:
             'Zakończone i anulowane zadania. Limit usuwa najstarsze zadania w całości i może skrócić retencję.',
         serverJobCap: 'Maksymalna liczba zadań na sieć',
-        serverAdvanced: 'Obserwacja na żywo i pojemność',
+        serverAdvanced: 'Aktualizacje na żywo i limity',
         serverAdvancedHelp:
-            'Limity sterują kosztem obserwacji i kolejkami w tle. Przepełnienie kolejki zapisuje lukę w historii.',
-        serverActiveInterval: 'Minimalny interwał obserwacji na żywo (ms)',
-        serverReconciliation: 'Interwał pełnego odczytu magazynu (sekundy)',
+            'Limity aktualizacji na żywo i oczekujących zapisów historii. Przepełnienie kolejki może spowodować braki w historii.',
+        serverActiveInterval: 'Minimalny interwał aktualizacji na żywo (ms)',
+        serverReconciliation: 'Interwał pełnego odświeżania magazynu (sekundy)',
         serverResourceCap: 'Maksymalna liczba śledzonych zasobów na sieć',
         serverResourceCapHelp: 'Niższy limit ogranicza nowe zasoby. Zasoby już objęte śledzeniem zostają zachowane.',
         serverQueueCap: 'Maksymalna liczba rekordów w kolejce',
         serverQueueCapHelp:
-            'Niższy limit ogranicza nowe wpisy do kolejki. Już przyjęte dane historii czekają na przetworzenie.',
+            'Ogranicza liczbę rekordów historii oczekujących na zapis. Obniżenie limitu nie usuwa już oczekujących rekordów.',
         serverSave: 'Zapisz i zastosuj',
         serverReload: 'Wczytaj ponownie z serwera',
         serverDiscardReload: 'Odrzuć zmiany i wczytaj ponownie',
@@ -158,6 +158,6 @@ export const serverSettingsTranslations = {
         serverConflict:
             'Konfiguracja na serwerze uległa zmianie. Twoje zmiany zostały zachowane. Wczytaj aktualne ustawienia przed kolejnym zapisem.',
         serverSaveUnconfirmed:
-            'Nie udało się potwierdzić zapisu. Twoje zmiany zostały zachowane. Wczytaj konfigurację serwera, aby sprawdzić, co zostało zastosowane.'
+            'Nie udało się potwierdzić zapisu. Twoje zmiany zostały zachowane; wczytaj ustawienia, aby sprawdzić, czy zostały zapisane.'
     }
 };

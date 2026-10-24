@@ -9,28 +9,28 @@ const messages = {
         builtin: 'Built-in',
         server: 'Server',
         apply: 'Apply',
-        safe: 'Safe mode is active. Custom themes have not been started.',
+        safe: 'Safe mode is on. Only the built-in theme is available.',
         failure: 'Could not complete this operation.',
         active: 'Active theme',
         loading: 'Working…',
         loadingTheme: 'Loading theme…',
-        recover: 'Open default UI in safe mode',
+        recover: 'Open built-in theme in safe mode',
         exitSafe: 'Exit safe mode'
     },
     pl: {
         title: 'Motywy',
         close: 'Zamknij',
         selection: 'Wybierz motyw',
-        serverDefault: 'Używaj domyślnego motywu serwera',
+        serverDefault: 'Domyślny motyw serwera',
         builtin: 'Wbudowany',
         server: 'Serwerowy',
         apply: 'Zastosuj',
-        safe: 'Tryb awaryjny jest aktywny. Nie uruchomiono własnych motywów.',
+        safe: 'Tryb awaryjny jest włączony. Dostępny jest tylko wbudowany motyw.',
         failure: 'Nie udało się wykonać operacji.',
         active: 'Aktywny motyw',
         loading: 'Przetwarzanie…',
         loadingTheme: 'Ładowanie motywu…',
-        recover: 'Otwórz domyślny UI w trybie awaryjnym',
+        recover: 'Otwórz wbudowany motyw w trybie awaryjnym',
         exitSafe: 'Wyjdź z trybu awaryjnego'
     }
 };
