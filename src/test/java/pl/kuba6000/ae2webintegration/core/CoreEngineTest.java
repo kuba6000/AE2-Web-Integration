@@ -132,10 +132,9 @@ class CoreEngineTest {
     void reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy() {
         CoreEngine.init(new TestPlatform(configRoot, false));
         try (ConfigTestFixture config = new ConfigTestFixture(configRoot)) {
-            config.write("general.port", ConfigTestFixture.unusedLoopbackPort());
             config.write("general.check_for_updates", false);
             Config.reload();
-            CoreEngine.onServerStarted();
+            HttpServerTestFixture.startWorld(config);
             TestGridFixtures.TestGrid live = TestGridFixtures.grid(89503);
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(live);
             assertNotNull(key);

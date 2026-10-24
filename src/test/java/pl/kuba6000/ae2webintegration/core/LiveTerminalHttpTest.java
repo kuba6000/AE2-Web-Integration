@@ -8,7 +8,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -47,14 +46,11 @@ class LiveTerminalHttpTest {
         ScheduledExecutorService game = Executors.newSingleThreadScheduledExecutor();
         List<Socket> streams = new ArrayList<>();
         CoreEngine.init(new Platform(root));
-        try (ServerSocket port = new ServerSocket(0)) {
-            Config.INSTANCE.general.port = port.getLocalPort();
-        }
         Config.INSTANCE.general.allowNoPasswordOnLocalhost = true;
         Config.INSTANCE.general.checkForUpdates = false;
         Config.INSTANCE.resourceTracking.activeIntervalMillis = 50;
         try {
-            CoreEngine.onServerStarted();
+            int port = HttpServerTestFixture.startWorld();
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(
                 443325,
                 new ItemIdentityRequestTest.Resource("iron", 10, false));
@@ -65,7 +61,7 @@ class LiveTerminalHttpTest {
                 .get(3, TimeUnit.SECONDS);
             ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
             String path = "/api/grids/" + key + "/items";
-            String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + path;
+            String base = "http://127.0.0.1:" + port + path;
             String previousSubscription = null;
             for (int client = 0; client < 6; client++) {
                 JsonObject snapshot = json(base + "?live=true");
@@ -75,7 +71,7 @@ class LiveTerminalHttpTest {
                     previousSubscription = subscription;
                     assertEquals(400, renew(base, subscription, true));
                 }
-                Socket socket = new Socket("127.0.0.1", Config.INSTANCE.general.port);
+                Socket socket = new Socket("127.0.0.1", port);
                 streams.add(socket);
                 socket.setSoTimeout(3000);
                 socket.getOutputStream()
@@ -145,14 +141,11 @@ class LiveTerminalHttpTest {
         IAE previous = AE2Controller.AE2Interface;
         ScheduledExecutorService game = Executors.newSingleThreadScheduledExecutor();
         CoreEngine.init(new Platform(root));
-        try (ServerSocket port = new ServerSocket(0)) {
-            Config.INSTANCE.general.port = port.getLocalPort();
-        }
         Config.INSTANCE.general.allowNoPasswordOnLocalhost = true;
         Config.INSTANCE.general.checkForUpdates = false;
         Config.INSTANCE.resourceTracking.activeIntervalMillis = 50;
         try {
-            CoreEngine.onServerStarted();
+            int port = HttpServerTestFixture.startWorld();
             ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("iron", 10, false);
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(443324, iron);
             StableKey key = game.submit(() -> {
@@ -166,7 +159,7 @@ class LiveTerminalHttpTest {
             })
                 .get(3, TimeUnit.SECONDS);
             ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
-            String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + key + "/items";
+            String base = "http://127.0.0.1:" + port + "/api/grids/" + key + "/items";
             for (int i = 0; i < 6; i++) {
                 HttpURLConnection head = connection(base + "?live=true");
                 head.setRequestMethod("HEAD");

@@ -47,8 +47,6 @@ class ThemeDeliveryHttpTest {
         CoreEngine.onServerStopped();
         previousPlatform = AE2Controller.serverPlatform;
         config = new ConfigTestFixture(directory.toFile());
-        port = ConfigTestFixture.unusedLoopbackPort();
-        config.write("general.port", port);
         config.write("general.allow_no_password_on_localhost", true);
         config.write("general.check_for_updates", false);
         Config.reload();
@@ -100,7 +98,7 @@ class ThemeDeliveryHttpTest {
     @Test
     void installedThemeCanDeclareResourceTrackingView() throws Exception {
         install("tracking.zip", manifest("tracking").replace("\"items\"", "\"tracking\""), Collections.emptyMap());
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         JsonObject theme = catalog().getAsJsonArray("themes")
             .get(0)
             .getAsJsonObject();
@@ -118,7 +116,7 @@ class ThemeDeliveryHttpTest {
             manifest("list"),
             Collections.singletonMap("data.txt", "example".getBytes(StandardCharsets.UTF_8)));
         config.set("general.default_theme", "server:list");
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         JsonObject catalog = catalog();
         assertEquals(
             "server:list",
@@ -189,7 +187,7 @@ class ThemeDeliveryHttpTest {
         install("loose-json.zip", manifest("loose").replace("\"id\"", "id"), Collections.emptyMap());
         install("valid.zip", manifest("valid"), Collections.emptyMap());
         config.set("general.default_theme", "server:traversal");
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         JsonObject data = catalog();
         assertEquals(
             "builtin:default",
@@ -246,7 +244,7 @@ class ThemeDeliveryHttpTest {
             "directory-data.zip",
             manifest("directory-data"),
             Collections.singletonMap("assets/", new byte[] { 1 }));
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertEquals(
             0,
             catalog().getAsJsonArray("themes")

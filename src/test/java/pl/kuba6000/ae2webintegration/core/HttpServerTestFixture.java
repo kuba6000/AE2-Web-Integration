@@ -13,22 +13,35 @@ final class HttpServerTestFixture {
     private HttpServerTestFixture() {}
 
     static int start(ConfigTestFixture config) {
+        int port = start(AE2Controller::startHTTPServer);
+        config.set("general.port", port);
+        return port;
+    }
+
+    static int startWorld(ConfigTestFixture config) {
+        int port = startWorld();
+        config.set("general.port", port);
+        return port;
+    }
+
+    static int startWorld() {
+        return start(CoreEngine::onServerStarted);
+    }
+
+    private static int start(Runnable startup) {
         int configuredPort = Config.INSTANCE.general.port;
         // Only the test listener uses port zero; normal configuration validation remains unchanged.
         Config.INSTANCE.general.port = 0;
         try {
-            AE2Controller.startHTTPServer();
+            startup.run();
         } finally {
             Config.INSTANCE.general.port = configuredPort;
         }
         try {
             Field serverField = AE2Controller.class.getDeclaredField("server");
             serverField.setAccessible(true);
-            int port = ((HttpServer) serverField.get(null)).getAddress()
+            return ((HttpServer) serverField.get(null)).getAddress()
                 .getPort();
-            // Subsequent reloads and restarts use the port already owned by this listener.
-            config.set("general.port", port);
-            return port;
         } catch (ReflectiveOperationException failure) {
             throw new AssertionError("Cannot read the test HTTP listener address", failure);
         }

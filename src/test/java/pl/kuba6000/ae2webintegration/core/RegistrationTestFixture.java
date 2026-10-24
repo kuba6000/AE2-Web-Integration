@@ -29,8 +29,7 @@ final class RegistrationTestFixture implements AutoCloseable {
     RegistrationTestFixture() {
         AE2Controller.stopHTTPServer();
         AuthService.clearWorldState();
-        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
-        AE2Controller.startHTTPServer();
+        HttpServerTestFixture.start(config);
     }
 
     @SuppressWarnings("BusyWait") // Drive game ticks until the asynchronous request completes, bounded by a deadline.

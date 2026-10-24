@@ -10,7 +10,6 @@ import java.io.InputStream;
 import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -117,11 +116,7 @@ class IconDeliveryHttpTest {
     void setUp() throws Exception {
         CoreEngine.onServerStopped();
         previousPlatform = AE2Controller.serverPlatform;
-        try (ServerSocket socket = new ServerSocket(0)) {
-            port = socket.getLocalPort();
-        }
         config = new ConfigTestFixture(directory.toFile());
-        config.write("general.port", port);
         config.write("general.allow_no_password_on_localhost", true);
         config.write("general.check_for_updates", false);
         Config.reload();
@@ -194,7 +189,7 @@ class IconDeliveryHttpTest {
                 Files.move(writer.finish(), directory.resolve("ae2webintegration/icons.ae2wi-icons"));
             }
         }
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         if (scenario == 4) CoreEngine.getIconPack()
             .close();
         AtomicReference<String> contentType = new AtomicReference<>();
@@ -337,7 +332,7 @@ class IconDeliveryHttpTest {
 
     @Test
     void homeRecentFlowUsesDetachedTrackingWithoutInventoryOrGameDispatch() throws Exception {
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         AtomicBoolean permitted = new AtomicBoolean(true);
         Resource iron = new Resource("home-absent", 0, false);
         Grid storage = new Grid(88501);
@@ -510,7 +505,7 @@ class IconDeliveryHttpTest {
 
     @Test
     void playerPermissionRevocationRedactsPinsButOwnershipStillAllowsRemoval() throws Exception {
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         AtomicBoolean permitted = new AtomicBoolean(true);
         TestGrid grid = new TestGrid(88403, false, AEControllerState.CONTROLLER_ONLINE) {
 
@@ -600,7 +595,7 @@ class IconDeliveryHttpTest {
 
     @Test
     void resourcePinsUseDetachedMembershipAndRemainRemovableAfterGridRetirement() throws Exception {
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         TestGrid grid = new TestGrid(88401, false, AEControllerState.CONTROLLER_ONLINE);
         TestGrid other = new TestGrid(88402, false, AEControllerState.CONTROLLER_ONLINE);
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
@@ -730,7 +725,7 @@ class IconDeliveryHttpTest {
 
     @Test
     void retentionPatchAppliesToInactiveHistoryAndSurvivesRestart() throws Exception {
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         TestGrid grid = new TestGrid(81079, false, AEControllerState.CONTROLLER_ONLINE);
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
         StableKey item = TestGridFixtures.key(121);
@@ -775,7 +770,7 @@ class IconDeliveryHttpTest {
                 .getAsJsonArray("points")
                 .size() == 0);
         CoreEngine.onServerStopped();
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertEquals(gridKey, TestGridFixtures.resolvedKey(grid));
         assertTrue(
             json(connection(path + "/resource-history")).getAsJsonObject("data")
@@ -807,7 +802,7 @@ class IconDeliveryHttpTest {
         StableKey fallback = TestGridFixtures.key(122);
         StableKey missing = TestGridFixtures.key(123);
         if (installed) installPack(exact);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         TestGrid grid = new TestGrid(81078, false, AEControllerState.CONTROLLER_ONLINE) {
 
             @Override
@@ -970,7 +965,7 @@ class IconDeliveryHttpTest {
     @Test
     void installedPackPublishesAvailabilityAndAuthenticatedImmutablePages() throws Exception {
         installPack();
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         HttpURLConnection discovery = connection("/api/icon-pack");
         JsonObject data = json(discovery).getAsJsonObject("data");
         assertTrue(
@@ -1024,7 +1019,7 @@ class IconDeliveryHttpTest {
         Files.move(folder.resolve("icons.ae2wi-icons"), folder.resolve("AE2WebIntegration-icons-export.ae2wi-icons"));
         Files.write(folder.resolve("old.ae2wi-icons.bak"), new byte[] { 1 });
         Files.createDirectory(folder.resolve("folder.ae2wi-icons"));
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
 
         JsonObject data = json(connection("/api/icon-pack")).getAsJsonObject("data");
         assertTrue(
@@ -1043,7 +1038,7 @@ class IconDeliveryHttpTest {
         Path folder = directory.resolve("ae2webintegration");
         Path extra = folder.resolve("another-export.ae2wi-icons");
         Files.copy(folder.resolve("icons.ae2wi-icons"), extra);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
 
         JsonObject data = json(connection("/api/icon-pack")).getAsJsonObject("data");
         assertFalse(
@@ -1052,7 +1047,7 @@ class IconDeliveryHttpTest {
         assertEquals(200, connection("/assets/web/app/main.js").getResponseCode());
         CoreEngine.onServerStopped();
         Files.delete(extra);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertTrue(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1061,7 +1056,7 @@ class IconDeliveryHttpTest {
 
     @Test
     void absentInvalidAndMismatchedPacksLeaveNormalServerAvailableAcrossRestarts() throws Exception {
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertFalse(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1069,7 +1064,7 @@ class IconDeliveryHttpTest {
         CoreEngine.onServerStopped();
         Path installed = directory.resolve("ae2webintegration/icons.ae2wi-icons");
         Files.write(installed, new byte[] { 1, 2, 3 });
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         JsonObject invalid = json(connection("/api/icon-pack")).getAsJsonObject("data");
         assertFalse(
             invalid.get("available")
@@ -1081,7 +1076,7 @@ class IconDeliveryHttpTest {
         CoreEngine.onServerStopped();
         Files.delete(installed);
         installPack();
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertTrue(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1102,7 +1097,7 @@ class IconDeliveryHttpTest {
         malformed.disconnect();
         CoreEngine.onServerStopped();
         Files.delete(installed);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertFalse(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1148,7 +1143,7 @@ class IconDeliveryHttpTest {
                 return "other";
             }
         };
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         assertFalse(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1163,7 +1158,7 @@ class IconDeliveryHttpTest {
         StableKey exactKey = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey baseKey = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
         installPack(exactKey, baseKey);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         AtomicInteger normalized = new AtomicInteger();
         Resource exact = iconResource("exact", 12, exactKey, baseKey, normalized);
         Resource fallback = iconResource("worn", 7, TestGridFixtures.key(72), baseKey, normalized);
@@ -1253,7 +1248,7 @@ class IconDeliveryHttpTest {
         StableKey exact = TestGridFixtures.key(151);
         StableKey base = TestGridFixtures.key(152);
         installPack(exact, base);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         AtomicInteger normalizations = new AtomicInteger();
         IAEKey[] resources = { iconResource("exact", 12, exact, base, normalizations),
             iconResource("fallback", 12, TestGridFixtures.key(153), base, normalizations),
@@ -1459,7 +1454,7 @@ class IconDeliveryHttpTest {
         StableKey exactKey = TestGridFixtures.key(91);
         StableKey cpuKey = TestGridFixtures.key(92);
         installPack(baseKey);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         AtomicInteger normalizations = new AtomicInteger();
         AtomicBoolean busy = new AtomicBoolean(true);
         Resource resource = iconResource("worn", 7, exactKey, baseKey, normalizations);
@@ -1756,7 +1751,7 @@ class IconDeliveryHttpTest {
 
         CoreEngine.onServerStopped();
         Files.delete(directory.resolve("ae2webintegration/icons.ae2wi-icons"));
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         output.set(iconResource("product", 11, baseKey, baseKey, normalizations));
         int previousNormalizations = normalizations.get();
         JsonObject noPack = syncedJson(
@@ -1799,7 +1794,7 @@ class IconDeliveryHttpTest {
         StableKey exact = TestGridFixtures.key(101);
         StableKey base = TestGridFixtures.key(102);
         installPack(exact, base);
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld(config);
         TestGrid grid = TestGridFixtures.grid(103);
         AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
         TestGridFixtures.track(grid);

@@ -34,7 +34,6 @@ class CommandBootstrapTest {
     @BeforeEach
     void setUpPlayerLookup() {
         config = new ConfigTestFixture();
-        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }
@@ -47,6 +46,7 @@ class CommandBootstrapTest {
 
     @Test
     void testReloadHandler() {
+        HttpServerTestFixture.start(config);
         RecordingBuilder builder = new RecordingBuilder();
         CommandBootstrap.init(builder);
 
