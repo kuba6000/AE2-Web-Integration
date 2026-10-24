@@ -49,6 +49,17 @@ public class CommandContext implements ICommandContext {
     }
 
     @Override
+    public boolean isSingleplayerOwner() {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayer();
+        return player != null && source.getServer()
+            .isSingleplayer()
+            && source.getServer()
+                .isSingleplayerOwner(player.getGameProfile())
+            && player.connection.connection.isMemoryConnection();
+    }
+
+    @Override
     public boolean hasPermission(int level) {
         return context.getSource()
             .hasPermission(level);
