@@ -1,0 +1,29 @@
+name: Check release preparation
+
+on:
+  pull_request:
+    branches: ['1.21.1']
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/release-*.yml'
+      - '.github/workflows/check-release.yml'
+  push:
+    branches: ['1.21.1']
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/release-*.yml'
+      - '.github/workflows/check-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test release descriptions and artifact bundles
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_release_*.py'
