@@ -1,8 +1,10 @@
 
 plugins {
     id 'com.gtnewhorizons.gtnhconvention'
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
 apply from: 'icon-generator.gradle'
 
 apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'
