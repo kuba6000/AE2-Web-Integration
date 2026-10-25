@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 import java.util.IdentityHashMap;
 import java.util.Set;
 
+import net.minecraft.entity.player.EntityPlayer;
+
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -32,6 +34,7 @@ import appeng.me.cluster.implementations.CraftingCPUCluster;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -88,11 +91,14 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
                 }
             }
             if (cpu == null) return;
-            boolean isMachine = (requestingMachine != null || src.machine()
-                .isPresent()) && !src.player()
-                    .isPresent();
+            EntityPlayer player = src.player()
+                .orElse(null);
+            boolean isMachineRequest = (requestingMachine != null || src.machine()
+                .isPresent()) && player == null;
+            PlayerIdentity nativeRequester = player == null ? null
+                : new PlayerIdentity(player.getUniqueID(), player.getName());
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) cpu, (IAEGrid) grid, false, !isMachine);
+                .jobStarted((ICraftingCPUCluster) cpu, (IAEGrid) grid, false, isMachineRequest, nativeRequester);
         }
     }
 
