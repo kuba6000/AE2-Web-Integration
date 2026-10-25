@@ -72,6 +72,11 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     }
 
     @Override
+    public @Nullable String web$getRequesterName() {
+        return ((CraftingCPUCluster) (Object) this).getSourcePlayer();
+    }
+
+    @Override
     public long web$getAvailableStorage() {
         return ((CraftingCPUCluster) (Object) this).getAvailableStorage();
     }
