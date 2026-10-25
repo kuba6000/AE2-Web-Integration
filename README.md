@@ -7,23 +7,15 @@
 
 </div>
 
-An AE2 add-on that lets you access your terminal from a web browser, wherever you are! You can browse your
-network, submit crafting requests, view and cancel crafting jobs, track their progress, and even send updates
-through a Discord webhook.
+Access your Applied Energistics 2 networks from a desktop or mobile browser. Browse storage and crafting
+CPUs live, request crafts, explore resource history and build a personal dashboard with pinned resources.
+Public servers can give each player their own account and access to their networks.
 
-**Now works with multiple networks and on public servers, where every player can have their own account!**
+**Install the main mod on the server. It adds no items or blocks and requires no client installation.**
+An optional standalone client tool generates item icons from your modpack and resource packs.
 
-**THIS MOD SHOULD ONLY BE INSTALLED ON THE SERVER. IT ADDS NO ITEMS OR BLOCKS!**
-
-## Showcase on YouTube
-
-### Main mod
-
-[![Main mod showcase](https://img.youtube.com/vi/3uey6nuW09g/0.jpg)](https://www.youtube.com/watch?v=3uey6nuW09g)
-
-### Discord integration
-
-[![Discord integration showcase](https://img.youtube.com/vi/e4a86dBz7NY/0.jpg)](https://www.youtube.com/watch?v=e4a86dBz7NY)
+[Website](https://ae2web.kuba6000.pl/) · [Try the demo](https://ae2web.kuba6000.pl/demo/) ·
+[Installation guide](https://ae2web.kuba6000.pl/get-started) · [API documentation](https://ae2web.kuba6000.pl/docs/)
 
 ## How does it work?
 
@@ -32,19 +24,19 @@ exposes the API used by that panel.
 
 ### How does the web panel know which network to use?
 
-Because the mod is server-side only, it does not add another terminal or block for selecting a network.
+Networks must have a valid **ME Controller**, be loaded and finish starting before they
+appear in the web panel. Controllerless subnetworks are not available through the website.
 
-On modern Minecraft versions, networks are identified through Wireless Access Points and their owners. Every
-player who wants to access a network through the website must place their own Wireless Access Point on that
-network.
+On all supported versions, a player can gain web access through ownership of an ME Controller,
+Wireless Access Point or supported terminal connected to the network. Placing your own Wireless
+Access Point is one straightforward way to set up access.
 
-On older Minecraft versions, networks are identified through AE2 Security Terminals. Players need a biometric
-card in the Security Terminal with the required permissions. Wild biometric cards are ignored for security
-reasons.
+On GTNH 1.7.10 and AE2 UEL 1.12.2, a working Security Terminal provides another way: add the player's
+biometric card with all four permissions — **Build, Extract, Inject and Craft**. Unassigned biometric
+cards do not grant web access.
 
-The `Admin` web account can access every available network on the server: networks with at least one Wireless
-Access Point on modern versions, and networks with a Security Terminal on older versions. Protect the admin
-password accordingly!
+The `Admin` web account can access all available networks without a per-player access grant.
+Protect its password accordingly. Choose a network in the web panel to open its terminal.
 
 ## Current features
 
@@ -59,8 +51,8 @@ To show item icons in the web panel, generate an icon pack from your Minecraft c
 4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
 5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
    the filename can stay unchanged.
-6. Start the server. In the web panel settings, choose **Icons and names** or **Icons only**
-   under **Terminal display**.
+6. Start the server. A fresh browser shows **Icons and names** automatically when the pack is available.
+   Use **Web Settings → Terminal display** to change this to **Icons only** or **Names only**.
 
 The icons use the appearance of your loaded resource packs. You can cancel generation from the
 progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
@@ -70,14 +62,23 @@ Icons are optional; without an icon pack, the terminal displays item names.
 
 ### Terminal
 
-- Browse, sort, and filter the contents of AE2 networks
-- Monitor as many networks as you want
-- Public mode for servers with multiple independent players
-- Submit new crafting requests, with automatic or manual CPU selection
-- View the status of every crafting CPU
-- Cancel crafting jobs
-- Track active and completed crafting jobs
-- Send crafting updates through a Discord webhook
+- Browse, sort and filter multiple AE2 networks, with live storage and selected-CPU updates
+- Submit crafting requests with automatic or manual CPU selection, and cancel running jobs
+- View completed and cancelled crafting jobs after a server restart
+- Track resource stock, input and output with interactive history charts
+- Use responsive desktop and mobile layouts, light/dark/system appearance, and Monocraft or Lato fonts
+- Choose names, icons or both, with configurable columns and page sizes, including no pagination
+- Receive crafting notifications through Discord or ntfy
+
+### Pins and Home
+
+Pin a resource from its context menu or **Resource details**. **Pin in terminal** keeps it at the top
+of that network's terminal, above search and filters. **Pin on Home** adds a dashboard card with
+configurable charts and summaries, visible regardless of the currently selected network.
+
+Pins belong to your web account. Each player can keep their own terminal pins and Home layout;
+Home can show resources from several networks together. Pinned resources retain access to recorded
+history when they are no longer present in storage.
 
 ### Crafting plan images
 
@@ -86,7 +87,6 @@ After calculating a plan, choose **Export** at the bottom left of the plan in th
 download a single PNG. The export includes
 the full plan independently of the current search and works without an icon pack. Settings and the
 image proportions are remembered for the next export; very large images use a lower resolution to fit.
-At 1×, exported slots are 180 pixels wide with 32-pixel icons, independent of screen size.
 
 ### Web themes
 
@@ -100,13 +100,46 @@ use the built-in UI.
 
 ## Gallery
 
-<details>
-<summary>Gallery</summary>
+**Terminal with pinned resources and recent activity**
 
-<img width="2560" height="1440" alt="AE2 Web Integration terminal" src="https://github.com/user-attachments/assets/9363c6c4-26dd-46fe-a6c2-84111338e6b0" />
-<img width="737" height="70" alt="AE2 Web Integration status display" src="https://github.com/user-attachments/assets/2d95024e-25ca-415f-a63d-945f2c906302" />
-<img width="2560" height="1440" alt="AE2 Web Integration crafting view" src="https://github.com/user-attachments/assets/c880a117-75d3-4d53-9ebf-db67135a3275" />
-<img width="2560" height="1440" alt="AE2 Web Integration crafting job view" src="https://github.com/user-attachments/assets/2aeb72af-7abf-4cad-9a7a-1f66bd243594" />
+![Terminal with item icons, pinned resources and a flow tooltip](docs/images/gallery/terminal.webp)
+
+<details>
+<summary>Crafting, resource history, mobile view and notifications</summary>
+
+**Crafting plan and CPU selection**
+
+![Calculated crafting plan with CPU selection](docs/images/gallery/crafting-plan.webp)
+
+**Live CPU view**
+
+![Crafting CPU progress and resource states](docs/images/gallery/cpu.webp)
+
+**Resource history**
+
+![Resource history with stock, input, output and net flow](docs/images/gallery/tracking.webp)
+
+**Completed and cancelled crafts**
+
+![Saved crafting history](docs/images/gallery/history.webp)
+
+**Discord notification**
+
+![Discord notification with a crafting result card](docs/images/gallery/discord-notification.webp)
+
+**Mobile terminal**
+
+<img width="360" alt="Terminal with item icons and pagination on a phone" src="docs/images/gallery/mobile.webp" />
+
+</details>
+
+<details>
+<summary>Earlier video showcases</summary>
+
+These videos show an earlier interface. See the gallery and demo above for the current UI.
+
+- [Main mod showcase](https://www.youtube.com/watch?v=3uey6nuW09g)
+- [Discord integration showcase](https://www.youtube.com/watch?v=e4a86dBz7NY)
 
 </details>
 
@@ -188,6 +221,7 @@ the mod's website, assets and API through an existing web server.
 ## Requirements
 
 - A compatible AE2 installation for one of the supported Minecraft versions
+- A loaded ME network with a valid ME Controller
 - An available TCP port for the built-in web server
 - A firewall/NAT rule if you want to reach the panel from outside your local network
 
@@ -241,9 +275,10 @@ accepted input includes resources consumed by void storage. Select a resource in
 **Resource history** in its details to view measurements.
 
 Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
-to five minutes. Recent terminal summaries use five-second samples over
-two minutes independently of saved history. Charts show each measured interval's actual span and
-retain available partial counts when collection has gaps.
+to five minutes. Recent summaries show **two minutes of flow** and **one hour of stock changes**.
+Flow summaries use five-second intervals; stock summaries use the network's configured storage
+sampling interval. Charts show each measured interval's actual span and retain available partial
+counts when collection has gaps.
 
 Flow also records the number of accepted input and output operations. Recent summaries show an
 approximate rate per second when the measured interval is complete. One transfer of 64 items counts
@@ -261,18 +296,19 @@ shorten the selected retention and is not a byte limit. Expired data is hidden f
 physical cleanup runs during database initialization, writes and periodic background maintenance.
 Missing measurements are shown as gaps, not zero activity.
 
-With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
-require history tracking or increase the frequency of saved storage measurements. After a connection
-interruption or storage topology change, the terminal loads a fresh snapshot automatically.
+With **Automatic updates** enabled, the terminal and selected CPU view receive live changes over SSE.
+The CPU list refreshes periodically. Live viewing does not require resource history tracking or
+increase the frequency of saved storage measurements. After a connection interruption or storage
+topology change, the terminal loads a fresh snapshot automatically.
 
 ## Notification services integration
 
-**Integrations only works when public mode is disabled.**
+**Crafting notifications are available only when public mode is disabled.**
 
 Crafting completion notifications can be filtered with `minimum_crafting_duration_seconds` and
 `minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
 which keeps all crafting completion notifications enabled.
-Notifications are initialized ONLY for tracked grids
+Enable **Record crafting history** for each network that should send crafting notifications.
 
 Crafting updates include the requesting players when identified, using the authenticated account for
 orders placed through the web terminal. Administrator and localhost access have no player identity.
@@ -313,8 +349,8 @@ A few additional compatibility notes:
 
 Telemetry is enabled by default outside development environments. The mod sends a small HTTPS usage
 report ten minutes after server startup and approximately once per hour:
-**Hashed mod version**, Minecraft version, public-mode and singleplayer settings, and a random session ID
-that changes on server restart and at the first report of each new UTC day.
+a salted fingerprint of the installed mod JAR, Minecraft version, public-mode and singleplayer settings,
+and a random session ID that changes on server restart and at the first report of each new UTC day.
 No player identities, world or network contents are reported.
 See the [privacy policy](https://ae2web.kuba6000.pl/privacy) for data handling and retention.
 
