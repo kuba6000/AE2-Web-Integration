@@ -17,6 +17,8 @@ An optional standalone client tool generates item icons from your modpack and re
 [Website](https://ae2web.kuba6000.pl/) · [Try the demo](https://ae2web.kuba6000.pl/demo/) ·
 [Installation guide](https://ae2web.kuba6000.pl/get-started) · [API documentation](https://ae2web.kuba6000.pl/docs/)
 
+![Terminal with item icons, pinned resources and a flow tooltip](docs/images/gallery/terminal.webp)
+
 ## How does it work?
 
 The mod starts an HTTP server when the Minecraft server starts. This server hosts the built-in web panel and
@@ -99,10 +101,6 @@ If a theme prevents normal use, open the page with `?safe=1` before its `#` frag
 use the built-in UI.
 
 ## Gallery
-
-**Terminal with pinned resources and recent activity**
-
-![Terminal with item icons, pinned resources and a flow tooltip](docs/images/gallery/terminal.webp)
 
 <details>
 <summary>Crafting, resource history, mobile view and notifications</summary>
