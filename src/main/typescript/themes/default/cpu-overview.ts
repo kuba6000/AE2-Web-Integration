@@ -5,7 +5,13 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { cpuHref } from '../../app/router.js';
-import { renderCpuActions, renderCpuState, cpuOutcomeText, renderCpuSelectionMode } from './cpu-presentation.js';
+import {
+    renderCpuActions,
+    renderCpuState,
+    cpuOutcomeText,
+    renderCpuSelectionMode,
+    cpuRequesterText
+} from './cpu-presentation.js';
 import type { CpuTooltips } from './cpu-tooltips.js';
 
 export function createCpuOverview(application: ThemeApplication, tips: CpuTooltips) {
@@ -47,8 +53,9 @@ export function createCpuOverview(application: ThemeApplication, tips: CpuToolti
         const work = element('div', '', 'cpu-card-output');
         const outputLabel = element('p', '', 'cpu-card-label');
         const output = element('p', '', 'cpu-card-output-value');
+        const requesters = element('p', '', 'cpu-card-requesters');
         const icon = createResourceIcon();
-        work.append(outputLabel, output);
+        work.append(outputLabel, output, requesters);
         const metrics = element('dl', '', 'cpu-card-metrics');
         const fields = ['cpuCapacityLabel', 'cpuUsedStorageLabel', 'cpuCoprocessorsLabel'].map((label) => {
             const group = element('div');
@@ -73,6 +80,7 @@ export function createCpuOverview(application: ThemeApplication, tips: CpuToolti
             heading,
             badge,
             mode,
+            requesters,
             outputLabel,
             output,
             icon,
@@ -113,6 +121,8 @@ export function createCpuOverview(application: ThemeApplication, tips: CpuToolti
         } else {
             entry.output.textContent = t(cpu.isBusy ? 'cpuOutputUnknown' : 'cpuIdleMessage');
         }
+        entry.requesters.textContent = cpuRequesterText(cpu, locale);
+        entry.requesters.hidden = !entry.requesters.textContent;
         const values = [
             locale.bytes(cpu.availableStorage),
             cpu.usedStorage >= 0 ? locale.bytes(cpu.usedStorage) : t('cpuValueUnavailable'),

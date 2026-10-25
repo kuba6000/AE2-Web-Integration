@@ -35,6 +35,37 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 class StorageCaptureTest {
 
     @Test
+    void reloadedResourceLimitPreservesAcceptedFlowAndAllowsLaterAdmission() {
+        IAEGrid grid = grid();
+        try (StorageCapture capture = new StorageCapture(grid, 2)) {
+            capture.setStockNeeded(false);
+            IAEKey first = resource(new AtomicInteger());
+            IAEKey second = resource(new AtomicInteger());
+            capture.recordFlow(first, 3, 0);
+            capture.recordFlow(second, 5, 0);
+            capture.setMaximumResources(1);
+            capture.recordFlow(first, 2, 0);
+            StorageObservation observation = capture.flushFlow(10);
+            assertTrue(observation.flowComplete());
+            assertEquals(
+                10,
+                observation.flows()
+                    .stream()
+                    .mapToLong(StorageObservation.Flow::input)
+                    .sum());
+            capture.setMaximumResources(3);
+            capture.recordFlow(first, 1, 0);
+            capture.recordFlow(second, 1, 0);
+            capture.recordFlow(resource(new AtomicInteger()), 1, 0);
+            assertEquals(
+                3,
+                capture.flushFlow(20)
+                    .flows()
+                    .size());
+        }
+    }
+
+    @Test
     void metadataTriggeredStockChangeSurvivesZeroRowCleanup() {
         IAEGrid grid = grid();
         StorageCapture capture = new StorageCapture(grid, 1);

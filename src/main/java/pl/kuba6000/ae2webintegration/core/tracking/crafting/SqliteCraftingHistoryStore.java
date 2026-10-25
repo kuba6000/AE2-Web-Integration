@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
@@ -20,7 +21,9 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -41,7 +44,7 @@ public final class SqliteCraftingHistoryStore {
 
     @Desugar
     public record Summary(long id, @NotNull ResourceSnapshot finalOutput, long timeStarted, long timeDone,
-        boolean wasCancelled) {}
+        boolean wasCancelled, @NotNull List<CraftingRequester> requesters) {}
 
     @Desugar
     public record Page(@NotNull List<Summary> entries, @Nullable Long nextBefore) {}
@@ -67,6 +70,24 @@ public final class SqliteCraftingHistoryStore {
                 insert.setBoolean(4, job.wasCancelled());
                 insert.executeUpdate();
                 id = generatedId(insert);
+            }
+            try (PreparedStatement insert = db.prepareStatement(
+                """
+                    INSERT INTO crafting_requesters(job_id, ordinal, source, player_uuid, player_name) VALUES (?, ?, ?, ?, ?)
+                    """)) {
+                int position = 0;
+                for (CraftingRequester requester : job.requesters()) {
+                    insert.setLong(1, id);
+                    insert.setInt(2, position++);
+                    insert.setString(
+                        3,
+                        requester.source()
+                            .name());
+                    insert.setString(4, requester.player() == null ? null : requester.player().uuid.toString());
+                    insert.setString(5, requester.player() == null ? null : requester.player().name);
+                    insert.addBatch();
+                }
+                if (position > 0) insert.executeBatch();
             }
             Map<String, Long> providers = new HashMap<>();
             int ordinal = 0;
@@ -112,6 +133,18 @@ public final class SqliteCraftingHistoryStore {
 
     private static void validate(CompletedCrafting job) throws RejectedCraftingException {
         validate(job.finalOutput());
+        Set<UUID> players = new HashSet<>();
+        Set<CraftingRequester.Source> sources = new HashSet<>();
+        for (CraftingRequester requester : job.requesters()) {
+            PlayerIdentity player = requester.player();
+            if ((requester.source() == CraftingRequester.Source.PLAYER) != (player != null))
+                throw new RejectedCraftingException("Invalid requester identity");
+            if (player != null) {
+                if (!players.add(player.uuid)) throw new RejectedCraftingException("Duplicate requester UUID");
+                validateLength(player.name, 1048576, "requester name");
+            } else
+                if (!sources.add(requester.source())) throw new RejectedCraftingException("Duplicate requester source");
+        }
         Set<String> providers = new HashSet<>();
         for (CompletedCrafting.Provider provider : job.providers()) {
             validateLength(provider.name(), 1048576, "provider name");
@@ -282,12 +315,28 @@ public final class SqliteCraftingHistoryStore {
                             snapshot(rows),
                             rows.getLong("time_started"),
                             rows.getLong("time_done"),
-                            rows.getBoolean("cancelled")));
+                            rows.getBoolean("cancelled"),
+                            Collections.emptyList()));
                 }
             }
             Long next = entries.size() > limit ? entries.get(limit - 1)
                 .id() : null;
             if (next != null) entries.remove(entries.size() - 1);
+            List<Long> ids = new ArrayList<>();
+            for (Summary entry : entries) ids.add(entry.id());
+            Map<Long, List<CraftingRequester>> requesters = requesters(db, ids);
+            for (int index = 0; index < entries.size(); index++) {
+                Summary entry = entries.get(index);
+                entries.set(
+                    index,
+                    new Summary(
+                        entry.id(),
+                        entry.finalOutput(),
+                        entry.timeStarted(),
+                        entry.timeDone(),
+                        entry.wasCancelled(),
+                        requesters.getOrDefault(entry.id(), Collections.emptyList())));
+            }
             return new Page(entries, next);
         });
     }
@@ -308,10 +357,32 @@ public final class SqliteCraftingHistoryStore {
                         rows.getLong(2),
                         rows.getBoolean(3),
                         resources(db, id),
-                        providers(db, id));
+                        providers(db, id),
+                        requesters(db, Collections.singletonList(id)).getOrDefault(id, Collections.emptyList()));
                 }
             }
         });
+    }
+
+    private static Map<Long, List<CraftingRequester>> requesters(Connection db, List<Long> jobs) throws SQLException {
+        Map<Long, List<CraftingRequester>> result = new HashMap<>();
+        if (jobs.isEmpty()) return result;
+        String placeholders = String.join(",", Collections.nCopies(jobs.size(), "?"));
+        try (PreparedStatement query = db.prepareStatement(
+            "SELECT job_id, source, player_uuid, player_name FROM crafting_requesters WHERE job_id IN (" + placeholders
+                + ") ORDER BY job_id, ordinal")) {
+            for (int index = 0; index < jobs.size(); index++) query.setLong(index + 1, jobs.get(index));
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) result.computeIfAbsent(rows.getLong(1), ignored -> new ArrayList<>())
+                    .add(
+                        new CraftingRequester(
+                            CraftingRequester.Source.valueOf(rows.getString(2)),
+                            rows.getString(3) == null ? null
+                                : new PlayerIdentity(UUID.fromString(rows.getString(3)), rows.getString(4))));
+            }
+        }
+        result.replaceAll((id, identities) -> Collections.unmodifiableList(identities));
+        return result;
     }
 
     private static String descriptionsSql() {

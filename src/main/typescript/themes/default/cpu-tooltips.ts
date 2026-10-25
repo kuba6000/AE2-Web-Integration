@@ -5,7 +5,7 @@ import type { CpuResource } from '../../app/api-types.js';
 import { registryId } from '../../app/resource-helpers.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
-import { selectionModes } from './cpu-presentation.js';
+import { selectionModes, cpuRequesterText } from './cpu-presentation.js';
 
 type ResourceTarget = { item: CpuResource; button: HTMLButtonElement };
 export type CpuTooltips = ReturnType<typeof createCpuTooltips>;
@@ -143,6 +143,8 @@ export function createCpuTooltips(workspace: HTMLElement, hasSelectionMode: bool
                 );
             else product.textContent = t('cpuOutputUnknown');
             values.push(product);
+            const requesters = cpuRequesterText(current, locale);
+            if (requesters) values.push(element('span', requesters));
             if (current.hasTrackingInfo) {
                 if ('timeElapsed' in current)
                     values.push(element('span', `${t('cpuElapsedLabel')}: ${locale.duration(current.timeElapsed)}`));

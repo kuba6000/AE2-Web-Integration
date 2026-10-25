@@ -1,0 +1,508 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/terminal.js'));
+const { settings, readOnly } = require('./server-settings-fixture.cjs');
+
+test('telemetry preference is edited and saved through the revisioned server settings state', async (t) => {
+    const writes = [];
+    const terminal = await application(t, true, {
+        saveServerSettings: async (body) => {
+            writes.push(body);
+            return { revision: 'saved', settings: body.settings, readOnly: readOnly() };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.draft.telemetry.enabled, true);
+    terminal.serverSettings.edit('telemetry', 'enabled', false);
+    assert.equal(terminal.state.serverSettings.dirty, true);
+    assert.equal(terminal.state.serverSettings.current.telemetry.enabled, true);
+    await terminal.serverSettings.save();
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].settings.telemetry.enabled, false);
+    assert.equal(terminal.state.serverSettings.current.telemetry.enabled, false);
+    assert.equal(terminal.state.serverSettings.dirty, false);
+});
+
+test('disabled server settings prevent loading, edits and saves until reenabled and reloaded', async (t) => {
+    let enabled = false;
+    let writes = 0;
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            if (!enabled) throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+            return { revision: 'current', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: async () => {
+            writes++;
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.status, 'error');
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
+    terminal.serverSettings.removeSecret('discordWebhook');
+    await terminal.serverSettings.save();
+    assert.equal(writes, 0);
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    enabled = true;
+    await terminal.serverSettings.reload();
+    assert.notEqual(terminal.state.serverSettings.draft, null);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    assert.equal(terminal.state.serverSettings.dirty, true);
+});
+
+test('server disabling editing after form load clears drafts and blocks another save', async (t) => {
+    let writes = 0;
+    const terminal = await application(t, true, {
+        saveServerSettings: async () => {
+            writes++;
+            throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
+    assert.equal(terminal.state.serverSettings.uncertain, false);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+});
+
+test('disabled settings on reload remove previously loaded configuration and secret drafts', async (t) => {
+    let disabled = false;
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            if (disabled) throw Object.assign(new Error(), { status: 'SERVER_SETTINGS_DISABLED' });
+            return { revision: 'current', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: async () => assert.fail('Disabled settings must not be saved')
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.editSecret('ntfyPassword', 'discard-this-secret');
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    disabled = true;
+    await terminal.serverSettings.reload();
+    assert.equal(terminal.state.serverSettings.error, 'SERVER_SETTINGS_DISABLED');
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    await terminal.serverSettings.save();
+});
+
+test('secret replacement and removal are explicit, undoable and never echoed into confirmed settings', async (t) => {
+    const writes = [];
+    let metadata = { ...readOnly(), discordWebhookConfigured: true, ntfyPasswordConfigured: true };
+    const terminal = await application(t, true, {
+        serverSettings: async () => ({ revision: 'original', settings: settings(), readOnly: metadata }),
+        saveServerSettings: async (body) => {
+            writes.push(body);
+            if (body.secrets?.discordWebhook !== undefined)
+                metadata = { ...metadata, discordWebhookConfigured: body.secrets.discordWebhook !== '' };
+            if (body.secrets?.ntfyPassword !== undefined)
+                metadata = { ...metadata, ntfyPasswordConfigured: body.secrets.ntfyPassword !== '' };
+            return { revision: 'saved', settings: body.settings, readOnly: metadata };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.editSecret('discordWebhook', 'replacement-webhook');
+    assert.equal(terminal.state.serverSettings.dirty, true);
+    terminal.serverSettings.editSecret('discordWebhook', '');
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    terminal.serverSettings.removeSecret('ntfyPassword');
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, { ntfyPassword: '' });
+    terminal.serverSettings.resetSecret('ntfyPassword');
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    await terminal.serverSettings.save();
+    assert.equal('secrets' in writes[0], false);
+    assert.equal(terminal.state.serverSettings.readOnly.ntfyPasswordConfigured, true);
+    terminal.serverSettings.editSecret('discordWebhook', 'replacement-webhook');
+    terminal.serverSettings.removeSecret('ntfyPassword');
+    await terminal.serverSettings.save();
+    assert.deepEqual(writes[1].secrets, { discordWebhook: 'replacement-webhook', ntfyPassword: '' });
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.readOnly.discordWebhookConfigured, true);
+    assert.equal(terminal.state.serverSettings.readOnly.ntfyPasswordConfigured, false);
+    assert.equal('webhook' in terminal.state.serverSettings.current.discord, false);
+    assert.equal('password' in terminal.state.serverSettings.current.ntfy, false);
+    assert.equal(JSON.stringify(terminal.state.serverSettings).includes('replacement-webhook'), false);
+});
+
+test('file-only metadata stays separate from edits and saves, then clears when access is denied', async (t) => {
+    const metadata = { ...readOnly(), allowNoPasswordOnLocalhost: false };
+    let reject = false;
+    let submitted;
+    const terminal = await application(t, true, {
+        serverSettings: async () => ({ revision: 'first', settings: settings(), readOnly: metadata }),
+        saveServerSettings: async (body) => {
+            submitted = body;
+            if (reject) throw Object.assign(new Error(), { status: 'NO_PERMISSIONS' });
+            return {
+                ...body,
+                revision: 'second',
+                readOnly: { ...metadata, port: 2424, adminPasswordConfigured: false }
+            };
+        }
+    });
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.deepEqual(terminal.state.serverSettings.readOnly, metadata);
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    assert.deepEqual(terminal.state.serverSettings.readOnly, metadata);
+    await terminal.serverSettings.save();
+    assert.deepEqual(Object.keys(submitted).sort(), ['revision', 'settings']);
+    for (const field of [
+        'port',
+        'allowServerSettingsEditing',
+        'password',
+        'publicMode',
+        'allowNoPasswordOnLocalhost',
+        'adminPasswordConfigured',
+        'trustedProxies',
+        'maxRequestsBeforeLoggedInPerMinute'
+    ])
+        assert.equal(field in submitted.settings.general, false);
+    assert.equal(terminal.state.serverSettings.readOnly.port, 2424);
+    assert.equal(terminal.state.serverSettings.readOnly.adminPasswordConfigured, false);
+    reject = true;
+    terminal.serverSettings.edit('general', 'checkForUpdates', true);
+    await terminal.serverSettings.save();
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+});
+async function application(t, isAdmin, overrides = {}) {
+    const before = global.document;
+    global.document = new EventTarget();
+    const { createTerminal } = await import(moduleUrl);
+    const terminal = createTerminal(
+        {
+            grids: async () => [],
+            iconPack: async () => ({ available: false, packId: null }),
+            resourcePins: async () => ({ data: [], icons: null }),
+            serverSettings: async () => ({ revision: 'first', settings: settings(), readOnly: readOnly() }),
+            ...overrides
+        },
+        {
+            values: { autoRefresh: false },
+            set(name, value) {
+                this.values[name] = value;
+            }
+        },
+        { enabled() {}, dispose() {} },
+        {},
+        isAdmin
+    );
+    t.after(() => {
+        terminal.dispose();
+        global.document = before;
+    });
+    return terminal;
+}
+
+test('player cannot load or mutate server configuration through a direct route', async (t) => {
+    let requests = 0;
+    const terminal = await application(t, false, {
+        serverSettings: async () => {
+            requests++;
+        },
+        saveServerSettings: async () => {
+            requests++;
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.error, 'NO_PERMISSIONS');
+    await terminal.serverSettings.reload();
+    await terminal.serverSettings.save();
+    assert.equal(requests, 0);
+    assert.equal(terminal.state.serverSettings.draft, null);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+});
+
+test('admin saves an edited full configuration with its revision and preserves drafts on unrelated updates', async (t) => {
+    let reads = 0;
+    let submitted;
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            reads++;
+            return { revision: 'original', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: async (body) => {
+            submitted = body;
+            return {
+                revision: 'saved',
+                settings: body.settings,
+                readOnly: { ...readOnly(), ntfyPasswordConfigured: true }
+            };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    terminal.serverSettings.editSecret('ntfyPassword', 'notification-secret');
+    terminal.preference('language', 'pl');
+    await terminal.refresh();
+    terminal.route({ view: 'about', gridKey: null });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    assert.equal(reads, 1);
+    assert.equal(terminal.state.serverSettings.draft.general.checkForUpdates, false);
+    assert.equal(terminal.state.serverSettings.current.general.checkForUpdates, true);
+    await terminal.serverSettings.save();
+    assert.equal(submitted.revision, 'original');
+    assert.equal(submitted.secrets.ntfyPassword, 'notification-secret');
+    assert.equal('password' in submitted.settings.general, false);
+    assert.equal('port' in submitted.settings.general, false);
+    assert.equal('readOnly' in submitted, false);
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.equal(terminal.state.serverSettings.saved, true);
+    assert.equal(terminal.state.serverSettings.current.general.checkForUpdates, false);
+});
+
+test('configuration conflict retains edits until explicit reload and uses the new revision afterwards', async (t) => {
+    let revision = 'old';
+    let writes = 0;
+    const terminal = await application(t, true, {
+        serverSettings: async () => ({ revision, settings: settings(), readOnly: readOnly() }),
+        saveServerSettings: async (body) => {
+            writes++;
+            if (body.revision !== revision) throw Object.assign(new Error(), { status: 'CONFIG_CHANGED' });
+            return { revision: body.revision, settings: body.settings, readOnly: readOnly() };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    revision = 'after-reload';
+    terminal.serverSettings.removeSecret('discordWebhook');
+    await terminal.serverSettings.save();
+    assert.equal(terminal.state.serverSettings.error, 'CONFIG_CHANGED');
+    assert.equal(terminal.state.serverSettings.draft.general.checkForUpdates, false);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, { discordWebhook: '' });
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+    await terminal.serverSettings.reload();
+    assert.equal(terminal.state.serverSettings.dirty, false);
+    assert.equal(terminal.state.serverSettings.draft.general.checkForUpdates, true);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 2);
+    assert.equal(terminal.state.serverSettings.saved, true);
+});
+
+test('uncertain saves keep drafts and cannot be repeated before checking server state', async (t) => {
+    let writes = 0;
+    const terminal = await application(t, true, {
+        saveServerSettings: async () => {
+            writes++;
+            throw Object.assign(new Error(), { status: 'NETWORK_ERROR' });
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.edit('resourceHistory', 'historyRetentionDays', { min: 1, defaultValue: 8, max: 15 });
+    terminal.serverSettings.editSecret('ntfyPassword', 'new-secret');
+    await terminal.serverSettings.save();
+    assert.equal(terminal.state.serverSettings.uncertain, true);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, { ntfyPassword: 'new-secret' });
+    assert.equal(terminal.state.serverSettings.draft.resourceHistory.historyRetentionDays.defaultValue, 8);
+    await terminal.serverSettings.save();
+    assert.equal(writes, 1);
+    await terminal.serverSettings.reload();
+    assert.equal(terminal.state.serverSettings.uncertain, false);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.dirty, false);
+});
+
+test('a denied save clears configuration credentials and a failed load can be retried', async (t) => {
+    let failRead = true;
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            if (failRead) throw Object.assign(new Error(), { status: 'NETWORK_ERROR' });
+            return { revision: 'first', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: async () => {
+            throw Object.assign(new Error(), { status: 'NO_PERMISSIONS' });
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    assert.equal(terminal.state.serverSettings.status, 'error');
+    failRead = false;
+    await terminal.serverSettings.reload();
+    terminal.serverSettings.editSecret('ntfyPassword', 'secret');
+    await terminal.serverSettings.save();
+    assert.equal(terminal.state.serverSettings.error, 'NO_PERMISSIONS');
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+    assert.equal(terminal.state.serverSettings.draft, null);
+});
+
+test('navigation and disposal discard obsolete reads, including transports that complete after abort', async (t) => {
+    const reads = [];
+    const terminal = await application(t, true, {
+        serverSettings: (signal) =>
+            new Promise((resolve) => {
+                reads.push({ signal, resolve });
+            })
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    terminal.route({ view: 'about', gridKey: null });
+    assert.equal(reads[0].signal.aborted, true);
+    terminal.route({ view: 'server-settings', gridKey: null });
+    const pending = terminal.refresh();
+    reads[1].resolve({
+        revision: 'new',
+        settings: { ...settings(), discord: { roleId: 'new' } },
+        readOnly: readOnly()
+    });
+    await pending;
+    reads[0].resolve({
+        revision: 'old',
+        settings: { ...settings(), discord: { roleId: 'old' } },
+        readOnly: readOnly()
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.serverSettings.draft.discord.roleId, 'new');
+    terminal.serverSettings.editSecret('discordWebhook', 'discard-on-disposal');
+    const reload = terminal.serverSettings.reload();
+    terminal.dispose();
+    reads[2].resolve({ revision: 'disposed', settings: settings(), readOnly: readOnly() });
+    await reload;
+    assert.equal(reads[2].signal.aborted, true);
+    assert.equal(terminal.state.serverSettings.current, null);
+    assert.equal(terminal.state.serverSettings.readOnly, null);
+    assert.deepEqual(terminal.state.serverSettings.secretChanges, {});
+});
+
+test('saving is single-flight and cannot race an explicit reload', async (t) => {
+    let write;
+    let reads = 0;
+    const writes = [];
+    const terminal = await application(t, true, {
+        serverSettings: async () => {
+            reads++;
+            return { revision: 'one', settings: settings(), readOnly: readOnly() };
+        },
+        saveServerSettings: (body) => {
+            writes.push(body);
+            return new Promise((resolve) => {
+                write = resolve;
+            });
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    const pending = terminal.serverSettings.save();
+    await terminal.serverSettings.save();
+    await terminal.serverSettings.reload();
+    terminal.serverSettings.edit('general', 'checkForUpdates', true);
+    assert.equal(writes.length, 1);
+    assert.equal(reads, 1);
+    assert.equal(terminal.state.serverSettings.draft.general.checkForUpdates, false);
+    terminal.route({ view: 'about', gridKey: null });
+    write({ revision: 'two', settings: writes[0].settings, readOnly: readOnly() });
+    await pending;
+    terminal.route({ view: 'server-settings', gridKey: null });
+    assert.equal(terminal.state.serverSettings.saved, true);
+    assert.equal(reads, 1);
+});
+
+test('an explicit discard reload blocks saving the outgoing draft while the new revision loads', async (t) => {
+    let loading = false;
+    let resolveRead;
+    let writes = 0;
+    const terminal = await application(t, true, {
+        serverSettings: () =>
+            loading
+                ? new Promise((resolve) => {
+                      resolveRead = resolve;
+                  })
+                : Promise.resolve({ revision: 'old', settings: settings(), readOnly: readOnly() }),
+        saveServerSettings: async (body) => {
+            writes++;
+            return { revision: body.revision, settings: body.settings, readOnly: readOnly() };
+        }
+    });
+    terminal.route({ view: 'server-settings', gridKey: null });
+    await terminal.refresh();
+    terminal.serverSettings.edit('general', 'checkForUpdates', false);
+    loading = true;
+    const reload = terminal.serverSettings.reload();
+    await terminal.serverSettings.save();
+    resolveRead({ revision: 'new', settings: settings(), readOnly: readOnly() });
+    await reload;
+    assert.equal(writes, 0);
+    assert.equal(terminal.state.serverSettings.draft.general.checkForUpdates, true);
+});
+
+test('HTTP server settings transport sends revisioned JSON with CSRF header and retains conflict status', async (t) => {
+    const http = require('node:http');
+    const requests = [];
+    let failure = 'CONFIG_CHANGED';
+    const server = http.createServer(async (request, response) => {
+        let body = '';
+        for await (const chunk of request) body += chunk;
+        requests.push({ method: request.method, url: request.url, headers: request.headers, body });
+        response.setHeader('content-type', 'application/json');
+        if (request.method === 'GET')
+            response.end(
+                JSON.stringify({
+                    status: 'OK',
+                    data: { revision: 'config-revision', settings: settings(), readOnly: readOnly() }
+                })
+            );
+        else {
+            response.statusCode = failure === 'CONFIG_CHANGED' ? 409 : 403;
+            response.end(JSON.stringify({ status: failure, data: null }));
+        }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const apiUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/api.js'));
+    const { createApi } = await import(apiUrl);
+    const api = createApi(new URL(`http://127.0.0.1:${server.address().port}/panel/`), () =>
+        assert.fail('Unexpected authentication redirect')
+    );
+    const result = await api.serverSettings();
+    const update = {
+        revision: result.revision,
+        settings: result.settings,
+        secrets: { discordWebhook: 'new-webhook', ntfyPassword: '' }
+    };
+    await assert.rejects(api.saveServerSettings(update), (error) => error.status === 'CONFIG_CHANGED');
+    assert.equal(requests[0].url, '/panel/api/server/settings');
+    assert.equal(requests[1].method, 'POST');
+    assert.equal(requests[1].headers['x-ae2-request'], 'true');
+    assert.deepEqual(JSON.parse(requests[1].body), update);
+    assert.deepEqual(result.readOnly, readOnly());
+    assert.equal('secrets' in result, false);
+    assert.equal('webhook' in result.settings.discord, false);
+    assert.equal('password' in result.settings.ntfy, false);
+    failure = 'SERVER_SETTINGS_DISABLED';
+    await assert.rejects(api.saveServerSettings(update), (error) => error.status === 'SERVER_SETTINGS_DISABLED');
+});

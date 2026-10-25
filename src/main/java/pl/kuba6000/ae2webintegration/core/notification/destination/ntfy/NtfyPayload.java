@@ -8,6 +8,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
 
 public class NtfyPayload implements INotificationPayload {
@@ -35,8 +36,16 @@ public class NtfyPayload implements INotificationPayload {
     final String description;
     final Priority priority;
     final List<String> tags;
+    private final String topic;
+    private final String fullDomain;
 
     public NtfyPayload(String title, String description, Priority priority, List<String> tags) {
+        this(title, description, priority, tags, Config.INSTANCE);
+    }
+
+    NtfyPayload(String title, String description, Priority priority, List<String> tags, ConfigSettings settings) {
+        this.topic = settings.ntfy.topic;
+        this.fullDomain = settings.notifications.fullDomain;
         this.title = title;
         this.description = description;
         this.priority = priority;
@@ -53,8 +62,6 @@ public class NtfyPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String topic = Config.INSTANCE.ntfy.topic;
-
         JsonObject json = new JsonObject();
         json.addProperty("topic", topic);
         json.addProperty("message", this.description);
@@ -65,8 +72,8 @@ public class NtfyPayload implements INotificationPayload {
         json.add("tags", tagsArray);
 
         json.addProperty("priority", this.priority.getValue());
-        if (!Config.INSTANCE.notifications.fullDomain.isEmpty()) {
-            json.addProperty("click", Config.INSTANCE.notifications.fullDomain);
+        if (!fullDomain.isEmpty()) {
+            json.addProperty("click", fullDomain);
         }
 
         return json;

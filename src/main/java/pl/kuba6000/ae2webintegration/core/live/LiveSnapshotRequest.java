@@ -4,6 +4,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -15,7 +16,7 @@ public abstract class LiveSnapshotRequest extends ISyncedRequest {
     /** Reserve a live subscription together with the returned snapshot. */
     @QueryParam("live")
     protected boolean live;
-    /** Replace this login's previous subscription, including another grid or topic, with this live snapshot. */
+    /** Subscription token to close when creating this live snapshot. Must belong to the same login session. */
     @QueryParam("replace")
     protected @Nullable String replace;
     protected @Nullable String subscription;
@@ -29,8 +30,8 @@ public abstract class LiveSnapshotRequest extends ISyncedRequest {
         if (!context.isLifecycleUnchanged()) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
         if (subscription == null) return response;
         ApiStatus failure = null;
-        if (context.getSession() == null || !context.getSession()
-            .isValid(System.currentTimeMillis())) failure = ApiStatus.UNAUTHORIZED;
+        if (context.getSession() == null || !AuthService.isValid(context.getSession(), System.currentTimeMillis()))
+            failure = ApiStatus.UNAUTHORIZED;
         else if (CoreEngine.GRID_IDENTITIES.getGrid(gridKey) != grid) failure = ApiStatus.GRID_NOT_FOUND;
         else if (!GridAccess.allows(grid, context.getPrincipal())) failure = ApiStatus.NO_PERMISSIONS;
         if (failure == null) return response;

@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,8 +27,8 @@ public final class StorageTrackingService implements AutoCloseable {
 
     private final IStorageHistoryStore store;
     private final Map<StableKey, State> states = new ConcurrentHashMap<>();
-    private final Semaphore capacity;
-    private final int maxQueuedRows;
+    private final AtomicLong queuedRows = new AtomicLong();
+    private volatile int maxQueuedRows;
     private final ThreadPoolExecutor worker;
     private volatile boolean closed;
 
@@ -37,18 +36,11 @@ public final class StorageTrackingService implements AutoCloseable {
         if (maxQueuedRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
         this.store = store;
         this.maxQueuedRows = maxQueuedRows;
-        capacity = new Semaphore(maxQueuedRows);
-        worker = new ThreadPoolExecutor(
-            1,
-            1,
-            0,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(Math.min(maxQueuedRows, 1024)),
-            task -> {
-                Thread thread = new Thread(task, "AE2Web-StorageHistory");
-                thread.setDaemon(true);
-                return thread;
-            }) {
+        worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1024), task -> {
+            Thread thread = new Thread(task, "AE2Web-StorageHistory");
+            thread.setDaemon(true);
+            return thread;
+        }) {
 
             @Override
             protected void terminated() {
@@ -60,6 +52,12 @@ public final class StorageTrackingService implements AutoCloseable {
             }
         };
         worker.prestartCoreThread();
+    }
+
+    /** Lower limits reject new work until accepted batches drain; the writer and queued work are retained. */
+    public void setMaximumQueuedRows(int maximumRows) {
+        if (maximumRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
+        maxQueuedRows = maximumRows;
     }
 
     public void open(@NotNull StableKey gridKey, long generation) {
@@ -82,7 +80,8 @@ public final class StorageTrackingService implements AutoCloseable {
                 .size()
             + observation.flows()
                 .size();
-        if (cost > maxQueuedRows || !capacity.tryAcquire((int) cost)) {
+        if (queuedRows.addAndGet(cost) > maxQueuedRows) {
+            queuedRows.addAndGet(-cost);
             invalidate(gridKey, generation);
             return false;
         }
@@ -102,12 +101,12 @@ public final class StorageTrackingService implements AutoCloseable {
                     }
                     invalidate(gridKey, generation);
                 } finally {
-                    capacity.release((int) cost);
+                    queuedRows.addAndGet(-cost);
                 }
             });
             return true;
         } catch (RejectedExecutionException rejected) {
-            capacity.release((int) cost);
+            queuedRows.addAndGet(-cost);
             invalidate(gridKey, generation);
             return false;
         }

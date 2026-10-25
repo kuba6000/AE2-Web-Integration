@@ -20,6 +20,12 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
 
     String web$getName();
 
+    /** Native current-job requester name, or null when unavailable. Server thread only. */
+    @Nullable
+    default String web$getRequesterName() {
+        return null;
+    }
+
     long web$getAvailableStorage();
 
     long web$getUsedStorage();

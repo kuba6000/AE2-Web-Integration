@@ -52,6 +52,36 @@ Network `settings.current` contains confirmed values and `settings.draft` contai
 and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
 Use those limits for controls and validation; pass only editable fields to `settings.edit`.
 
+Server configuration is available at `#/server-settings` only for `context.user.isAdmin`.
+Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
+an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
+without automatic polling. Edits survive navigation within the application; they are not stored in
+the browser. The administrator password, web port, player-account access and password-free localhost
+access, trusted proxies and the unauthenticated request limit cannot be edited here.
+
+`state.serverSettings.readOnly` contains confirmed metadata: `port`, `publicMode`,
+`allowNoPasswordOnLocalhost`, `trustedProxies`, `maxRequestsBeforeLoggedInPerMinute`, `adminPasswordConfigured`, `discordWebhookConfigured` and
+`ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
+Secret values and lengths are never returned; the configured flags only indicate whether a value is
+set. Keep this metadata outside the editable draft. The HTTP write contract is
+`{revision, settings, secrets?}`; `readOnly` is response-only. Values and metadata describe the active
+configuration in memory. The opaque revision changes after each successful configuration load, reload
+or web save. Manual file edits alone do not change the active values or revision.
+
+Notification credentials are write-only. Use `serverSettings.editSecret(name, value)` for a replacement,
+`removeSecret(name)` for explicit deletion, and `resetSecret(name)` to undo a pending credential change.
+Names are `discordWebhook` and `ntfyPassword`. An empty replacement input cancels its pending change;
+it never deletes the stored secret. `state.serverSettings.secretChanges` contains only pending edits:
+an absent key means keep the stored value, and an empty string means explicit removal. Saving submits
+these changes separately and clears their values on success. Successful reload, denial and disposal
+also clear them; an unconfirmed save retains them until explicitly reconciled. Never persist these
+values in browser storage or log them.
+
+Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
+`serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh
+preserves a dirty draft. A `CONFIG_CHANGED` conflict or an uncertain save retains edits and requires
+an explicit reload before another save. Render these states visibly; do not retry mutations automatically.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |
@@ -114,7 +144,7 @@ Available through `context.helpers`:
 Resource filtering options are `search`, `language`, `filter` (`all`, `stored`, `craftable`),
 `showItems` and `showFluids`. Ordering options are `language`, `sort` (`name`, `quantity`, `id`) and
 `sortOrder` (`ascending`, `descending`). Plan options use `search`, `language`, `sort`
-(`name`, `quantity`, `steps`) and `sortOrder`.
+(`name`, `quantity`, `steps`) and `sortOrder`. Set `groupByState: false` to sort a plan without state groups.
 
 Array helpers accept readonly inputs, return new arrays and preserve resource object references and
 additional theme fields. They do not mutate application state and can be used independently.
@@ -143,6 +173,37 @@ cleanup. The paint callback receives the target element and `IconSprite | null`;
 coordinates and image URL, while the theme chooses CSS/layout and its missing-icon appearance.
 Do not persist temporary blob URLs. Explicit `dispose()` permits early release; mount cleanup also
 releases observers. Call `displayIcons(false)` if your theme never renders resource icons.
+
+For canvas rendering, `application.icons.resolve(references, metadata, signal)` loads drawable atlas
+crops. The returned `icons` map uses the supplied reference objects as keys; unavailable or invalid
+icons are omitted. Each value supplies `image`, `x`, `y`, `width` and `height` for `drawImage`.
+Decoded images contain only the requested sprite crops, rather than retaining whole atlas pages.
+Call the result's `dispose()` after drawing. Its images remain valid independently of normal icon
+cache eviction; theme disposal also releases them. Aborting rejects the pending resolution.
+
+## Crafting plan PNG export
+
+`application.exportPlan(request, signal)` downloads one PNG and returns its actual `PlanExportLayout`.
+Pass the loaded plan, icon metadata, `PlanExportSettings`, grid choice, language, translated title and
+metric labels, a quantity formatter, and `PlanExportStyle` (rectangular cell geometry, font/spacing
+metrics, palette, state tints and bevel colours).
+The theme owns the controls and appearance. The export ignores the plan view's search and uses the
+request's ordering and optional missing-only filter. It does not submit or modify the crafting plan.
+An abort signal cancels the operation; unmounting the theme also cancels it.
+
+`context.helpers` supplies `defaultPlanExportSettings`, `readPlanExportSettings(get)`,
+`planExportLayout(count, settings, grid, geometry)`, `planExportRatio(width, height)`, `planExportFits(layout)` and
+`smallerPlanExportLayout(layout, geometry)` for controls and size previews. Geometry supplies unscaled
+cell width, cell height and header height. Layout is `null` for an
+empty selection or invalid grid dimensions. Use `readPlanExportSettings(key => context.settings.get(key))`
+to validate persisted `planExport.*` values independently. Store the chosen ratio, not row/column counts,
+to reuse it with differently sized plans.
+
+Exports have a 64-megapixel allocation budget and a 16384-pixel side limit. Smaller browser limits are
+probed at runtime. If needed, the whole grid is scaled down while the chosen rows and columns stay
+fixed; the returned layout reports the resulting resolution. Cells touch and unused final-row cells
+are framed like the rest of the grid. Missing icons are optional. Catch failures and display a
+translated error in the theme.
 
 ## Theme selection and package assets
 

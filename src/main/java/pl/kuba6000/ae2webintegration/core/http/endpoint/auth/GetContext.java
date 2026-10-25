@@ -25,10 +25,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
 /**
- * Returns public application metadata and the current authenticated display identity.
+ * Get application context.
  * <p>
- * Authentication is optional. Valid session credentials or trusted localhost access supply the user;
- * absent, invalid or expired credentials return a null user. This response contains no session token.
+ * Returns server information and the current user. Authentication is optional; absent, invalid or expired
+ * credentials return a null user unless trusted localhost access is enabled.
  *
  * @response 200 {@link Response} Current application metadata and optional user.
  * @response 400 {@link ErrorResponse} Invalid request body.
@@ -50,10 +50,10 @@ import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 public final class GetContext extends IAsyncRequest {
 
     /**
-     * Display information only; credentials and account identifiers are never included.
+     * Current user's display information.
      *
-     * @param username authenticated display name, including Admin or localhost for those principals
-     * @param isAdmin  whether the authenticated principal has administrator access to all grids
+     * @param username display name, including Admin or localhost for those accounts
+     * @param isAdmin  whether the user has administrator access to all networks
      */
     @Desugar
     public record User(@NotNull String username, boolean isAdmin) {}
@@ -71,14 +71,14 @@ public final class GetContext extends IAsyncRequest {
         boolean skipped) {}
 
     /**
-     * Application metadata used to initialize the browser interface.
+     * Server information and available features.
      *
      * @param publicMode      whether individual player web accounts are enabled
-     * @param modVersion      native mod version, or null before the platform initializes the core
+     * @param modVersion      installed mod version, or null if unavailable
      * @param isOutdated      whether update checking is enabled and a newer mod release is currently known
      * @param availableUpdate recommendation for authenticated administrators, or null when unavailable or disabled
-     * @param user            authenticated display identity, or null without valid session or trusted localhost access
-     * @param capabilities    native feature support for authenticated users; empty for anonymous requests. Keys include
+     * @param user            current user, or null when unauthenticated
+     * @param capabilities    supported features; empty for anonymous requests. Keys include
      *                        craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
      *                        and craftingPlanSteps (per-resource crafting step counts).
      * @keyExample capabilities craftingLightMode

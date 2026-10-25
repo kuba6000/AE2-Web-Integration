@@ -204,6 +204,21 @@ header {
 .plan-start-controls {
     display: flex;
 }
+.plan-export-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: auto;
+}
+.plan-export-button .theme-icon {
+    width: 18px;
+    height: 18px;
+}
+@media (width <= 600px) {
+    .plan-export-label {
+        display: none;
+    }
+}
 .plan-start-controls > button + button {
     margin-left: -2px;
     padding-inline: 10px;
@@ -307,6 +322,13 @@ header {
     font-size: 11px;
     color: var(--muted);
 }
+.cpu-card-requesters {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
 .cpu-card-output-value {
     display: flex;
     align-items: baseline;
@@ -402,11 +424,13 @@ header {
 .resource-grid.plan-four-metrics {
     --slot-height: 120px;
 }
-#workspace[data-resource-display='icons'] .resource-grid.cpu-items {
+#workspace[data-resource-display='icons'] .resource-grid.cpu-items,
+.plan-export-probe[data-resource-display='icons'] .resource-grid.cpu-items {
     --slot-height: 80px;
 }
 #workspace[data-resource-display='icons'] .resource-grid.cpu-items-tracked,
-#workspace[data-resource-display='icons'] .resource-grid.plan-four-metrics {
+#workspace[data-resource-display='icons'] .resource-grid.plan-four-metrics,
+.plan-export-probe[data-resource-display='icons'] .resource-grid.plan-four-metrics {
     --slot-height: 100px;
 }
 #workspace[data-resource-display='icons'] .cpu-item > strong {
@@ -2781,6 +2805,143 @@ code {
     line-height: 1.7;
 }
 
+.server-settings-view .hint,
+.server-settings-view [role='status'] {
+    font-size: 11px;
+    line-height: 1.7;
+}
+.server-settings-form {
+    display: grid;
+    gap: 24px;
+    min-width: 0;
+}
+.server-settings-group {
+    min-width: 0;
+    border-top: 2px solid var(--slot-edge-dark);
+    padding-top: 12px;
+}
+.server-settings-group h3 {
+    font-size: 14px;
+    margin: 4px 0 14px;
+}
+.server-settings-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: 16px 20px;
+}
+.server-setting {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 8px;
+    min-width: 0;
+}
+.server-setting-label {
+    display: flex;
+    align-items: start;
+    gap: 6px;
+    min-width: 0;
+}
+.server-setting label,
+.server-settings-range label {
+    font-size: 12px;
+    line-height: 1.6;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.server-setting-value {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    min-width: 0;
+}
+.server-setting input:not([type='checkbox']),
+.server-setting select,
+.server-settings-range input {
+    width: 100%;
+    min-width: 0;
+}
+.server-setting input[type='checkbox'] {
+    margin: 0;
+}
+.server-setting-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    height: 20px;
+    cursor: help;
+    opacity: 0.65;
+    filter: grayscale(1);
+}
+.server-setting-help:hover,
+.server-setting-help:focus-visible {
+    opacity: 1;
+}
+.server-setting-help .info-icon {
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+}
+.server-setting-file-only {
+    cursor: help;
+}
+.server-setting-file-only label {
+    color: var(--muted);
+}
+.server-setting-file-only input {
+    pointer-events: none;
+    opacity: 0.6;
+}
+.server-setting-file-only:focus-visible {
+    outline: 1px dashed var(--muted);
+    outline-offset: 4px;
+}
+.server-secret-label {
+    align-items: start;
+    justify-content: space-between;
+}
+.server-secret-action {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    font-size: 10px;
+}
+.server-secret-notice {
+    display: block;
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--muted);
+}
+.server-settings-range {
+    grid-column: 1 / -1;
+    grid-row: span 2;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+.server-settings-range legend {
+    font-size: 12px;
+    margin-bottom: 12px;
+}
+.server-settings-range > div {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.server-settings-range label {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    gap: 8px;
+    font-size: 10px;
+}
+.server-settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 20px;
+}
+
 .info-notices {
     min-height: 0;
     max-height: 17dvh;
@@ -3696,4 +3857,56 @@ button.toast:hover {
     flex: 0 0 18px;
     width: 18px;
     height: 18px;
+}
+
+/* Export geometry stays the same at every viewport size. */
+.plan-export-probe .resource-grid {
+    grid-template-columns: 240px;
+}
+.plan-export-probe.cpu-icons-enabled .cpu-item {
+    --resource-icon-size: 32px;
+
+    padding-left: 52px;
+}
+.plan-export-probe .item strong,
+.plan-export-probe .item.cpu-item .quantity {
+    font-size: 12px;
+}
+.plan-export-dialog {
+    width: min(760px, calc(100vw - 24px));
+    height: fit-content;
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    box-sizing: border-box;
+}
+.plan-export-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.plan-export-fields fieldset {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--border);
+}
+.plan-export-fields label:not(.checkbox) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(70px, 1fr);
+    gap: 8px;
+    align-items: center;
+}
+.plan-export-fields input,
+.plan-export-fields select {
+    min-width: 0;
+    max-width: 100%;
+}
+.plan-export-readout {
+    overflow-wrap: anywhere;
+}
+@media (width <= 560px) {
+    .plan-export-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }

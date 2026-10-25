@@ -3,11 +3,10 @@ package pl.kuba6000.ae2webintegration.core.api;
 import com.github.bsideup.jabel.Desugar;
 
 /**
- * Native calculation choices for one request. Light mode trades pattern features for faster calculation;
- * ignore missing permits a job to wait for ingredients that arrive later.
+ * Optional crafting calculation modes. Check the server capabilities before enabling either option.
  *
- * @param lightMode     use the native light calculator
- * @param ignoreMissing allow the native job to wait for ingredients arriving later
+ * @param lightMode     use Lite mode for faster calculation with limited pattern features
+ * @param ignoreMissing allow the job to wait for ingredients arriving later
  * @example lightMode false
  * @example ignoreMissing false
  */

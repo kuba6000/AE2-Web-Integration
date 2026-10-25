@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -52,7 +52,7 @@ class StableKeyGsonTest {
     void typedDtoFieldRoundTripsWithoutExposingIdentityInternals() {
         StableKey key = StableKey.parse(TOKEN);
         String json = "{\"key\":\"" + TOKEN + "\"}";
-        assertEquals(JsonParser.parseString(json), gson.toJsonTree(new KeyDto(key)));
+        assertEquals(gson.fromJson(json, JsonObject.class), gson.toJsonTree(new KeyDto(key)));
         assertEquals(
             key,
             gson.fromJson(json, KeyDto.class)
@@ -66,19 +66,19 @@ class StableKeyGsonTest {
         Map<StableKey, String> entries = Collections.singletonMap(key, "entry");
         String json = "{\"" + TOKEN + "\":\"entry\"}";
 
-        assertEquals(JsonParser.parseString(json), gson.toJsonTree(entries, type));
+        assertEquals(gson.fromJson(json, JsonObject.class), gson.toJsonTree(entries, type));
         assertEquals(entries, gson.fromJson(json, type));
         assertThrows(JsonParseException.class, () -> gson.fromJson("{\"bad\":\"entry\"}", type));
         // Existing maps still use ordinary Gson object-key behavior, not complex-key arrays.
         Map<KeyDto, String> unrelated = Collections.singletonMap(new KeyDto(key), "entry");
-        assertEquals(JsonParser.parseString("{\"existing-key\":\"entry\"}"), gson.toJsonTree(unrelated));
+        assertEquals(gson.fromJson("{\"existing-key\":\"entry\"}", JsonObject.class), gson.toJsonTree(unrelated));
     }
 
     @Test
     void nullableKeysRemainNullInScalarsAndFields() {
         assertEquals("null", gson.toJson(null, StableKey.class));
         assertNull(gson.fromJson("null", StableKey.class));
-        assertEquals(JsonParser.parseString("{\"key\":null}"), gson.toJsonTree(new KeyDto(null)));
+        assertEquals(gson.fromJson("{\"key\":null}", JsonObject.class), gson.toJsonTree(new KeyDto(null)));
         assertNull(
             gson.fromJson("{\"key\":null}", KeyDto.class)
                 .key());

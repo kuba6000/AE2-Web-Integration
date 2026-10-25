@@ -29,14 +29,23 @@ final class RegistrationTestFixture implements AutoCloseable {
     RegistrationTestFixture() {
         AE2Controller.stopHTTPServer();
         AuthService.clearWorldState();
-        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
-        AE2Controller.startHTTPServer();
+        HttpServerTestFixture.start(config);
     }
 
     @SuppressWarnings("BusyWait") // Drive game ticks until the asynchronous request completes, bounded by a deadline.
     String begin(PlayerIdentity player, String password) throws Exception {
         IServerPlatform previousPlatform = AE2Controller.serverPlatform;
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {

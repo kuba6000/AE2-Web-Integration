@@ -18,8 +18,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 
 /**
- * Lists installed server themes without executing their code. Asset URLs use /themes/{id}/{path}.
- * The default is qualified as builtin:default or server:{id}; missing defaults fall back to builtin.
+ * List themes.
+ * <p>
+ * Returns installed server themes and the default selection. Theme assets are available at /themes/{id}/{path}.
+ * The default is builtin:default or server:{id}; an unavailable default falls back to builtin:default.
  *
  * @response 200 {@link Response} Installed packages and the effective server default.
  * @response 400 {@link ErrorResponse} Invalid request body.

@@ -1,4 +1,5 @@
 import { createPins, type PinsState } from './pins.js';
+import { createServerSettings, type ServerSettingsState } from './server-settings.js';
 import type { Route } from './router.js';
 import type {
     Grid,
@@ -18,6 +19,7 @@ import type { HistoryState } from './history.js';
 import type { SettingsState } from './settings.js';
 import type { Api, ApiFailure } from './api.js';
 import { createCrafting } from './crafting.js';
+import { createPlanExporter } from './plan-export.js';
 import { createCpuMonitor } from './cpus.js';
 import { createHistory } from './history.js';
 import { createResourceHistory, type ResourceHistoryState } from './resource-history.js';
@@ -57,6 +59,7 @@ export type TerminalState = TerminalData & {
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
+    serverSettings: ServerSettingsState;
     pins: PinsState;
 };
 
@@ -65,7 +68,8 @@ export function createTerminal(
     api: Api,
     preferences: ReturnType<typeof createPreferences>,
     icons: ReturnType<typeof createIconLoader>,
-    capabilities: ApplicationContext['capabilities']
+    capabilities: ApplicationContext['capabilities'],
+    isAdmin = false
 ) {
     const notifications = createNotifications();
     let iconsEnabled = false;
@@ -145,6 +149,7 @@ export function createTerminal(
         notifications.publish
     );
 
+    const serverSettings = createServerSettings(api, notify, isAdmin);
     const state: TerminalState = {
         get refreshingView() {
             return refreshingGrids !== null;
@@ -173,7 +178,8 @@ export function createTerminal(
         resourceHistory: resourceHistory.state,
         recent: null,
         pins: pins.state,
-        settings: settings.state
+        settings: settings.state,
+        serverSettings: serverSettings.state
     };
 
     const live = createLiveStream<StoredResource, StoredResourceUpdate, TerminalDelta>({
@@ -365,7 +371,7 @@ export function createTerminal(
     }
     function schedule() {
         clearTimeout(timer);
-        if (disposed) return;
+        if (disposed || state.route.view === 'server-settings') return;
         if (crafting.pending) timer = setTimeout(() => crafting.refresh(), 1000);
         else if (state.preferences.autoRefresh) timer = setTimeout(() => refresh({ automatic: true }), 5000);
     }
@@ -397,6 +403,10 @@ export function createTerminal(
     }
     async function refresh({ reloadDetail = false, automatic = false } = {}): Promise<void> {
         if (disposed) return;
+        if (state.route.view === 'server-settings') {
+            if (!automatic) await serverSettings.refresh();
+            if (disposed) return;
+        }
         if (automatic && state.route.view === 'home') {
             clearTimeout(timer);
             await pins.refresh(true);
@@ -497,8 +507,10 @@ export function createTerminal(
         cpus,
         history,
         settings,
+        serverSettings,
         pins,
         resourceHistory,
+        exportPlan: createPlanExporter(icons),
         icons,
         displayIcons(enabled: boolean) {
             if (iconsEnabled === enabled) return;
@@ -551,6 +563,7 @@ export function createTerminal(
             cpus.route(route);
             history.route(route);
             settings.route(route);
+            serverSettings.route(route);
             notify();
             if (needsDiscovery) void refresh();
             else {
@@ -600,6 +613,7 @@ export function createTerminal(
             history.dispose();
             resourceHistory.dispose();
             settings.dispose();
+            serverSettings.dispose();
             pins.dispose();
             icons.dispose();
             listeners.clear();

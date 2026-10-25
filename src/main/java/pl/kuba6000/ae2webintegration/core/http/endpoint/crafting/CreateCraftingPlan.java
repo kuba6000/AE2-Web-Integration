@@ -30,29 +30,28 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
- * Starts calculating a crafting plan.
+ * Create crafting plan.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @response 202 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields or an unsupported enabled calculation option. INVALID_QUANTITY: quantity must be positive.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid. CSRF_REJECTED: cookie or
+ * <p>
+ * Starts a calculation. Use the returned {@code jobId} to check the plan, then submit it to start crafting.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 202 {@link Response} Calculation accepted; use jobId to check the plan.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request or unsupported calculation option.
+ *           INVALID_QUANTITY: quantity must be positive.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
  *           configured-local mutations require X-AE2-Request: true.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND, ITEM_IDENTITY_UNKNOWN or ITEM_NOT_FOUND: the grid or
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND, ITEM_IDENTITY_UNKNOWN or ITEM_NOT_FOUND: the network or
  *           craftable resource does not exist.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
- * @response 409 {@link ErrorResponse} AMBIGUOUS_ITEM_KEY: the request conflicts with current state.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
+ * @response 409 {@link ErrorResponse} AMBIGUOUS_ITEM_KEY: the key matches more than one resource.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -69,8 +68,6 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 public final class CreateCraftingPlan extends ISyncedRequest {
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
      * @param data   identifier of the accepted calculation; use it to poll, submit or delete the plan
      * @example status OK
@@ -81,7 +78,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
     /**
      * Accepted crafting calculation.
      * 
-     * @param jobId identifier local to this grid and server runtime, used to poll, submit or delete the plan
+     * @param jobId plan identifier for this network; valid until the plan is removed or the server restarts
      * @example jobId 7
      */
     @Desugar
@@ -92,11 +89,12 @@ public final class CreateCraftingPlan extends ISyncedRequest {
      *
      * @param itemKey       stable resource identity returned by the item listing
      * @param quantity      positive number of resource units to craft
-     * @param lightMode     use the native light calculator, disabling some pattern features for faster calculation;
+     * @param lightMode     use Lite crafting mode for faster calculation with limited pattern support;
      *                      omitted means false and true requires the craftingLightMode capability
-     * @param ignoreMissing allow the native job to wait for ingredients arriving later; omitted means false
+     * @param ignoreMissing allow crafting to wait for missing ingredients; omitted means false
      *                      and true requires the craftingIgnoreMissing capability
-     * @param autoStart     recorded client intent only; omitted means false and never starts server execution
+     * @param autoStart     client preference to start after calculation; defaults to false. The client must still
+     *                      submit the plan
      * @example autoStart false
      * @example itemKey AAAAAAAAAAAAAAAAAAAAAA
      * @example quantity 64
@@ -108,7 +106,8 @@ public final class CreateCraftingPlan extends ISyncedRequest {
         @OptionalInput boolean ignoreMissing, @OptionalInput boolean autoStart) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public boolean init(RequestContext context) {

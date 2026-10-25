@@ -26,25 +26,20 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
- * Lists the ME grids accessible to the current user.
+ * List networks.
  *
  * <p>
- * Includes CPU counts, tracking settings and the blocks granting each player's access.
- * Only currently usable grids are listed. An empty list is a successful response.
+ * Returns accessible ME networks with CPU counts, tracking status and access information.
+ * Unavailable networks are excluded.
  *
- * @response 200 {@link Response} Accessible grid summaries.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 200 {@link Response} Accessible network summaries.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
@@ -57,25 +52,26 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 public final class GetGrids extends ISyncedRequest {
 
     /**
-     * The list of currently accessible ME grids.
+     * Accessible ME networks.
      *
      * @param status {@code OK} for a successful request
-     * @param data   grid summaries; an empty list when no usable grid is accessible
+     * @param data   network summaries; an empty list when no network is accessible
      * @example status OK
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<GridInfo> data) implements IResponseBody {}
 
     /**
-     * Current state and access information for a grid.
+     * Network summary.
      *
-     * @param key               persistent grid identifier
+     * @param key               persistent network identifier
      * @param name              custom network name; empty when unnamed
-     * @param cpuCount          number of crafting CPUs in the grid
+     * @param cpuCount          number of crafting CPUs in the network
      * @param owner             representative owner's username, or {@code N/A} when no owner is known
      * @param isOwned           true for player-authorized access; false for administrator or trusted-local access
-     * @param isTrackingEnabled whether crafting tracking is enabled for this grid
-     * @param accessSources     players with explicit grid access, keyed by UUID, and the sources granting that access;
+     * @param isTrackingEnabled whether crafting tracking is enabled for this network
+     * @param accessSources     players with explicit network access, keyed by UUID, and the sources granting that
+     *                          access;
      *                          excludes administrator and trusted-local bypass access
      * @example key AAAAAAAAAAAAAAAAAAAAAA
      * @example name Factory

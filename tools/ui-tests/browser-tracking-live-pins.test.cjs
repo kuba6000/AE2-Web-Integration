@@ -673,7 +673,7 @@ test('live additions append and removed resources remain inert zero slots until 
         true,
         'A removed resource cannot retain a stale craft action'
     );
-    assert.equal(await page.getByRole('menuitem', { name: 'View tracking', exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole('menuitem', { name: 'View resource history', exact: true }).isEnabled(), true);
     await page.keyboard.press('Escape');
     const historyReads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
     await bravo.click();
@@ -2128,6 +2128,8 @@ test('live CPU detail applies absolute updates, new and removed resources and un
 
 test('a live CPU header section replaces the CPU state and keeps its resources', async (t) => {
     const { page, options, resources, send } = await openLiveCpu(t);
+    // Elapsed time advances even while paused; hold it steady while checking the incoming header.
+    await page.clock.setFixedTime(Date.now());
     await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
     const header = { ...options.cpuDetails['cpu-a'], isPaused: true, timeElapsed: 20000, items: null };
     send(2, { cpu: header });

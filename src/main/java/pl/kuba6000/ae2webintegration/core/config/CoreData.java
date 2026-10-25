@@ -20,6 +20,7 @@ import com.google.gson.Gson;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
@@ -88,13 +89,19 @@ public class CoreData {
     public static final class Account {
 
         private final PlayerIdentity identity;
+        private final String credential;
 
-        private Account(UUID uuid, String username) {
+        private Account(UUID uuid, String username, String credential) {
             this.identity = new PlayerIdentity(uuid, username);
+            this.credential = credential;
         }
 
         public PlayerIdentity getIdentity() {
             return identity;
+        }
+
+        public @NotNull String getCredentialVersion() {
+            return credential;
         }
 
     }
@@ -113,26 +120,29 @@ public class CoreData {
         if (username == null || !normalizedName.equals(normalizeUsername(username))) {
             return null;
         }
-        return new Account(playerUuid, username);
+        String credential = data.passwords.get(playerUuid);
+        return credential == null ? null : new Account(playerUuid, username, credential);
     }
 
     public static boolean verifyPassword(Account account, String password) {
-        return account != null && verifyPassword(account.identity.uuid, password);
+        return account != null && verifyAccountPassword(account, password);
     }
 
-    private static boolean verifyPassword(UUID playerUuid, String password) {
-        // One lookup, not containsKey-then-get: clearing a password is a remove, so the entry can vanish
-        // between the two and hand null to the validator.
-        String stored = instance.passwords.get(playerUuid);
-        if (stored == null) {
-            return false;
-        }
+    private static boolean verifyAccountPassword(Account account, String password) {
+        String stored = account.credential;
+        if (!stored.equals(instance.passwords.get(account.identity.uuid))) return false;
         try {
-            return PasswordHelper.validatePassword(password, stored);
+            return PasswordHelper.validatePassword(password, stored)
+                && stored.equals(instance.passwords.get(account.identity.uuid));
         } catch (Exception e) {
-            LOG.error("Password verification failed for player UUID: {}", playerUuid, e);
+            LOG.error("Password verification failed for player UUID: {}", account.identity.uuid, e);
             return false;
         }
+    }
+
+    /** Internal credential version used to revoke sessions without repeating password hashing. */
+    public static @Nullable String getCredentialVersion(@NotNull UUID playerUuid) {
+        return instance.passwords.get(playerUuid);
     }
 
     /**
@@ -157,11 +167,13 @@ public class CoreData {
         UUID playerUuid = player.uuid;
         if (passwordHash == null || passwordHash.isEmpty()) {
             instance.passwords.remove(playerUuid);
+            AuthService.invalidatePlayer(playerUuid);
             saveChanges();
             return true;
         }
 
         instance.passwords.put(playerUuid, passwordHash);
+        AuthService.invalidatePlayer(playerUuid);
         instance.recordUsername(playerUuid, player.name);
         saveChanges();
         return true;

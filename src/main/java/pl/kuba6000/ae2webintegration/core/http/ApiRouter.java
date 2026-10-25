@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core.http;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
-import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.net.HttpURLConnection;
 import java.net.URLDecoder;
@@ -17,9 +16,11 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonNull;
@@ -35,7 +36,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
-import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
 import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
@@ -47,7 +48,8 @@ public final class ApiRouter implements HttpHandler {
     private static final int MAX_BODY_BYTES = 8 * 1024;
 
     @Desugar
-    private record Route(Endpoint endpoint, Constructor<? extends IRequest> factory, String[] segments) {}
+    private record Route(HttpMethod method, String path, Authentication authentication,
+        @Nullable Supplier<? extends IRequest> factory, String[] segments) {}
 
     private final List<Route> routes = new ArrayList<>();
     private final Function<HttpExchange, RequestContext> authenticate;
@@ -62,43 +64,34 @@ public final class ApiRouter implements HttpHandler {
     }
 
     public void register(Class<? extends IRequest> type) {
-        Endpoint endpoint = type.getAnnotation(Endpoint.class);
-        if (endpoint == null) throw new IllegalArgumentException("Missing endpoint declaration: " + type.getName());
         if (!ISyncedRequest.class.isAssignableFrom(type) && !IAsyncRequest.class.isAssignableFrom(type)) {
             throw new IllegalArgumentException("Endpoint must declare an execution thread: " + type.getName());
         }
-        String signature = endpoint.path()
-            .replaceAll("\\{[^/{}]+}", "{}");
+        HttpBinding binding = RequestInputs.find(type);
+        if (binding == null) throw new IllegalArgumentException("Missing endpoint declaration: " + type.getName());
+        Supplier<? extends IRequest> factory = binding.factory();
+        if (factory == null) throw new IllegalStateException("Missing request factory: " + type.getName());
+        addRoute(binding.method(), binding.path(), binding.authentication(), factory);
+    }
+
+    private void addRoute(HttpMethod method, String path, Authentication authentication,
+        @Nullable Supplier<? extends IRequest> factory) {
+        String signature = path.replaceAll("\\{[^/{}]+}", "{}");
         for (Route route : routes) {
-            if (route.endpoint()
-                .method() == endpoint.method() && route.endpoint()
-                    .path()
-                    .replaceAll("\\{[^/{}]+}", "{}")
-                    .equals(signature)) {
-                throw new IllegalArgumentException("Duplicate route: " + endpoint.method() + " " + endpoint.path());
+            if (route.method() == method && route.path()
+                .replaceAll("\\{[^/{}]+}", "{}")
+                .equals(signature)) {
+                throw new IllegalArgumentException("Duplicate route: " + method + " " + path);
             }
         }
-        try {
-            routes.add(
-                new Route(
-                    endpoint,
-                    type.getConstructor(),
-                    endpoint.path()
-                        .split("/", -1)));
-        } catch (NoSuchMethodException exception) {
-            throw new IllegalArgumentException("Endpoint requires public constructor", exception);
-        }
+        routes.add(new Route(method, path, authentication, factory, path.split("/", -1)));
     }
 
     /** Icon bytes use the same routing and authentication boundary, without JSON request completion. */
     public void registerIconPages() {
-        Endpoint endpoint = GetIconPage.class.getAnnotation(Endpoint.class);
-        routes.add(
-            new Route(
-                endpoint,
-                null,
-                endpoint.path()
-                    .split("/", -1)));
+        HttpBinding binding = RequestInputs.find(GetIconPage.class);
+        if (binding == null) throw new IllegalStateException("Missing icon-page binding");
+        addRoute(binding.method(), binding.path(), binding.authentication(), null);
     }
 
     @Override
@@ -119,8 +112,7 @@ public final class ApiRouter implements HttpHandler {
         List<String> allowed = new ArrayList<>();
         for (Route route : routes) {
             if (!matches(route.segments(), path)) continue;
-            String declaredMethod = route.endpoint()
-                .method()
+            String declaredMethod = route.method()
                 .name();
             allowed.add(declaredMethod);
             if (declaredMethod.equals("GET")) allowed.add("HEAD");
@@ -152,8 +144,7 @@ public final class ApiRouter implements HttpHandler {
                 .send(exchange);
             return;
         }
-        Authentication authentication = selected.endpoint()
-            .authentication();
+        Authentication authentication = selected.authentication();
         RequestContext credentials = authentication == Authentication.NONE ? null : authenticate.apply(exchange);
         if (credentials == null && authentication == Authentication.REQUIRED) {
             ApiResponse.error(ApiStatus.UNAUTHORIZED)
@@ -193,7 +184,7 @@ public final class ApiRouter implements HttpHandler {
                 return;
             }
             IRequest request = selected.factory()
-                .newInstance();
+                .get();
             if (request.init(context)) {
                 if (request instanceof ISyncedRequest synced) dispatch.accept(synced);
                 else((IAsyncRequest) request).handle();
@@ -203,7 +194,7 @@ public final class ApiRouter implements HttpHandler {
                 : request.getResponse();
         } catch (InvalidInput exception) {
             response = ApiResponse.error(exception.error);
-        } catch (ReflectiveOperationException | RuntimeException exception) {
+        } catch (RuntimeException exception) {
             LOG.error("API request failed", exception);
             response = ApiResponse.error(ApiStatus.INTERNAL_ERROR);
         }

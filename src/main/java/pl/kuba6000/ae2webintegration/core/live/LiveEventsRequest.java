@@ -15,12 +15,13 @@ import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 /** Opens the event stream of a subscription reserved with a live snapshot; subclasses name their topic. */
 public abstract class LiveEventsRequest extends IAsyncRequest {
 
-    /** Single-use token returned with the initial snapshot. Bound to the login session, view and icon mode. */
+    /** Single-use token from the live snapshot. Use the same login session, resource view and icon setting. */
     @QueryParam("subscription")
-    private @Nullable String subscription;
-    /** Include icon references when new or changed resource definitions are sent. */
+    @Nullable
+    String subscription;
+    /** Include icon references with resource definitions. Must match the snapshot's icons parameter. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
     private @Nullable LiveStreams streams;
 
     protected abstract @NotNull LiveTopic.Key topicKey();

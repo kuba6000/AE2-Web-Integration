@@ -22,7 +22,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 
 /**
- * Streams an immutable atlas page after normal authentication. If-None-Match accepts a digest ETag.
+ * Get icon atlas page.
+ * <p>
+ * Returns a PNG atlas page. Send its ETag in If-None-Match to receive 304 when unchanged.
+ * Authentication is required, including for conditional requests.
  * 
  * @pathParam packId Lowercase SHA-256 identifier of the active pack.
  * @pathParam pageDigest Lowercase SHA-256 digest of the PNG bytes.
@@ -57,10 +60,12 @@ public final class GetIconPage {
     private static final int STREAM_BUFFER_BYTES = 8 * 1024;
 
     @PathParam("packId")
-    private @NotNull String packId;
+    @NotNull
+    String packId;
 
     @PathParam("pageDigest")
-    private @NotNull String pageDigest;
+    @NotNull
+    String pageDigest;
 
     private GetIconPage() {}
 

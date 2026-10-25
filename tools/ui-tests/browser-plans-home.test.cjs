@@ -64,11 +64,13 @@ test('plan recalculation preserves the order and lite mode, supports autostart a
     await page.waitForURL(/\/plans\/10$/);
     await more.click();
     options.fault = { operation: 'delete', status: 'TIMEOUT' };
+    const failedMutation = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'DELETE' && new URL(response.url()).pathname.endsWith('/crafting-plans/10')
+    );
     await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /outcome.*unknown/i })
-        .waitFor();
+    await settleResponse(page, (await failedMutation).request());
+    await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     assert.ok(await more.isDisabled());
     assert.ok(await start.isDisabled());
     const count = options.requests.filter((entry) => entry.method !== 'GET').length;
@@ -127,11 +129,13 @@ test('ignore-missing recalculation keeps original options first and never retrie
     await more.click();
     assert.equal(await menu.getByRole('menuitem').first().innerText(), 'Recalculate ignoring missing');
     options.fault = { operation: 'create', status: 'TIMEOUT' };
+    const failedMutation = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/crafting-plans')
+    );
     await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /calculation.*unknown/i })
-        .waitFor();
+    await settleResponse(page, (await failedMutation).request());
+    await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     assert.ok(await more.isDisabled());
     const count = options.requests.filter((entry) => entry.method !== 'GET').length;
     await poll(page);
@@ -333,13 +337,13 @@ test('pending submission resolves after route reentry and older CPU reads cannot
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
         await completeSubmit(status);
         await page
-            .getByRole('status')
-            .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
+            .locator(`#plan-panel [role="status"]${status === 'OK' ? '' : '.api-error'}`)
+            .filter({ hasText: status === 'OK' ? /submitted/i : /\S/ })
             .waitFor();
         await poll(page);
         await page
-            .getByRole('status')
-            .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
+            .locator(`#plan-panel [role="status"]${status === 'OK' ? '' : '.api-error'}`)
+            .filter({ hasText: status === 'OK' ? /submitted/i : /\S/ })
             .waitFor();
     }
     await page.unroute('**/submit');
@@ -363,6 +367,52 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
+for (const initialScheme of ['light', 'dark']) {
+    test(`login initializes from ${initialScheme} system mode once and remembers its own toggle`, async (t) => {
+        const { page, options, base } = await fixture(t, '/ae2');
+        options.loggedOut = true;
+        await page.emulateMedia({ colorScheme: initialScheme });
+        await page.goto(base);
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        const other = initialScheme === 'light' ? 'dark' : 'light';
+        const toggle = (target) => page.getByRole('button', { name: `Switch to ${target} mode`, exact: true });
+        assert.equal(await toggle(other).count(), 1);
+        const panelColor = () => page.getByRole('main').evaluate((node) => getComputedStyle(node).backgroundColor);
+        const initialColor = await panelColor();
+        await page.emulateMedia({ colorScheme: other });
+        assert.equal(await panelColor(), initialColor, 'system changes do not override the initial choice');
+        await page.reload();
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        assert.equal(await panelColor(), initialColor, 'the initial choice survives reloading');
+        await toggle(other).click();
+        const changedColor = await panelColor();
+        assert.notEqual(changedColor, initialColor);
+        await page.reload();
+        await page.getByLabel('Username', { exact: true }).waitFor();
+        assert.equal(await panelColor(), changedColor);
+        assert.equal(await toggle(initialScheme).count(), 1);
+        await toggle(initialScheme).click();
+        assert.equal(await panelColor(), initialColor, 'the same button toggles back');
+        await page.getByRole('button', { name: 'Register', exact: true }).click();
+        await page.getByLabel('Username (in-game)', { exact: true }).waitFor();
+        assert.equal(await panelColor(), initialColor);
+        await page.setViewportSize({ width: 320, height: 640 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (initialScheme === 'dark' && process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-dark-mobile.png'),
+                fullPage: true
+            });
+            await page.getByRole('button', { name: 'Log in', exact: true }).first().click();
+            await page.setViewportSize({ width: 1280, height: 900 });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-dark-desktop.png'),
+                fullPage: true
+            });
+        }
+    });
+}
 test('mobile login shows one usable form at a time and submits the existing registration fields', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.loggedOut = true;
@@ -1543,10 +1593,7 @@ test('CPU overview panels keep long names and uncertain controls reachable in da
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await card.getByRole('button', { name: /(?:Pause|Wstrzymaj).*cpu-a/ }).click();
     await settleResponse(page, (await refreshed).request());
-    await card
-        .getByRole('status')
-        .filter({ hasText: /unknown|nieznany/ })
-        .waitFor({ state: 'visible' });
+    await card.locator('[role="status"].api-error').filter({ hasText: /\S/ }).waitFor({ state: 'visible' });
     for (const button of await card.getByRole('button').all()) assert.equal(await button.isDisabled(), true);
     const after = await card.evaluate((node) => ({ height: node.clientHeight, content: node.scrollHeight }));
     assert.ok(after.content <= after.height + 1, 'an uncertainty notice expands the panel without clipping');

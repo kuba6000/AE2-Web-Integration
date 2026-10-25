@@ -49,6 +49,22 @@ class CoreEngineTest {
     File configRoot;
 
     @Test
+    void optionalTelemetryStartupFailureDoesNotCloseWorldServices() {
+        CoreEngine.init(new TestPlatform(configRoot, false, true));
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        try {
+            assertDoesNotThrow(CoreEngine::onServerStarted);
+            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertNotNull(CoreEngine.getResourcePins());
+            assertNotNull(CoreEngine.getStorageTracking());
+            assertNotNull(CoreEngine.getLiveStreams());
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
+
+    @Test
     void failedIdentityImportAbortsStartupWithoutPublishingServicesAndCanRetry() throws Exception {
         TestPlatform platform = new TestPlatform(configRoot, false);
         CoreEngine.init(platform);
@@ -132,10 +148,9 @@ class CoreEngineTest {
     void reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy() {
         CoreEngine.init(new TestPlatform(configRoot, false));
         try (ConfigTestFixture config = new ConfigTestFixture(configRoot)) {
-            config.write("general.port", ConfigTestFixture.unusedLoopbackPort());
             config.write("general.check_for_updates", false);
             Config.reload();
-            CoreEngine.onServerStarted();
+            HttpServerTestFixture.startWorld(config);
             TestGridFixtures.TestGrid live = TestGridFixtures.grid(89503);
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(live);
             assertNotNull(key);
@@ -459,7 +474,23 @@ class CoreEngineTest {
     }
 
     @Desugar
-    private record TestPlatform(File configDirectory, boolean unreadableLegacyConfig) implements IServerPlatform {
+    private record TestPlatform(File configDirectory, boolean unreadableLegacyConfig, boolean telemetryFailure)
+        implements IServerPlatform {
+
+        TestPlatform(File configDirectory, boolean unreadableLegacyConfig) {
+            this(configDirectory, unreadableLegacyConfig, false);
+        }
+
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            if (telemetryFailure) throw new IllegalStateException("Telemetry metadata unavailable");
+            return false;
+        }
 
         @Override
         public @NotNull String getModVersion() {

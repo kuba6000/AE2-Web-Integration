@@ -32,7 +32,7 @@ if (project == rootProject) {
         encoding 'UTF-8'
 
         java {
-            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java'
+            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java', 'tools/http-bindings/src/**/*.java'
 
             def orderFile = project.file('spotless/spotless.importorder')
             def formatFile = project.file('spotless/spotless.eclipseformat.xml')
@@ -140,6 +140,53 @@ test {
     useJUnitPlatform()
 }
 
+sourceSets {
+    bindingProcessor {
+        java.srcDir 'tools/http-bindings/src/main/java'
+        resources.srcDir 'tools/http-bindings/src/main/resources'
+    }
+    bindingProcessorTest {
+        java.srcDir 'tools/http-bindings/src/test/java'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.bindingProcessor.output
+    }
+}
+dependencies {
+    bindingProcessorImplementation 'com.palantir.javapoet:javapoet:0.22.0'
+    annotationProcessor sourceSets.bindingProcessor.output
+    testAnnotationProcessor sourceSets.bindingProcessor.output
+    bindingProcessorTestRuntimeOnly 'org.jetbrains:annotations:26.0.2'
+}
+configurations.annotationProcessor.extendsFrom configurations.bindingProcessorImplementation, configurations.bindingProcessorRuntimeOnly
+configurations.testAnnotationProcessor.extendsFrom configurations.bindingProcessorImplementation, configurations.bindingProcessorRuntimeOnly
+configurations.bindingProcessorTestImplementation.extendsFrom configurations.testImplementation
+configurations.bindingProcessorTestRuntimeOnly.extendsFrom configurations.testRuntimeOnly, configurations.bindingProcessorImplementation, configurations.bindingProcessorRuntimeOnly
+tasks.register('testBindingProcessor', Test) {
+    testClassesDirs = sourceSets.bindingProcessorTest.output.classesDirs
+    classpath = sourceSets.bindingProcessorTest.runtimeClasspath
+    useJUnitPlatform()
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.named('check') { dependsOn tasks.named('testBindingProcessor') }
+pluginManager.withPlugin('idea') {
+    idea.module {
+        // The legacy `idea` export does not automatically include custom source sets or AP outputs.
+        // These are IDE roots only: generated sources must not become javac's initial input files.
+        def generatedBindings = layout.buildDirectory.dir('generated/sources/annotationProcessor/java/main').get().asFile
+        def generatedTestBindings = layout.buildDirectory.dir('generated/sources/annotationProcessor/java/test').get().asFile
+        sourceDirs += generatedBindings
+        generatedSourceDirs += generatedBindings
+        generatedSourceDirs += generatedTestBindings
+        testSources.from(generatedTestBindings)
+        sourceDirs += sourceSets.bindingProcessor.java.srcDirs
+        resourceDirs += sourceSets.bindingProcessor.resources.srcDirs
+        testSources.from(sourceSets.bindingProcessorTest.java.srcDirs)
+        scopes.COMPILE.plus += [configurations.bindingProcessorCompileClasspath]
+        scopes.TEST.plus += [configurations.bindingProcessorTestCompileClasspath, configurations.bindingProcessorTestRuntimeClasspath]
+    }
+}
+
 // Exercise the real HTTP boundary with the Gson versions supplied by legacy Minecraft.
 ['224': '2.2.4', '280': '2.8.0'].each { suffix, gsonVersion ->
     def legacyRuntime = configurations.create("gson${suffix}TestRuntime") {
@@ -156,6 +203,12 @@ test {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*ServerSettingsHttpTest'
+            includeTestsMatching '*GSONUtilsTest'
+            includeTestsMatching '*StableKeyGsonTest'
+            includeTestsMatching '*AuthSessionTest'
+            includeTestsMatching '*SessionStoreTest'
+            includeTestsMatching '*CoreDataTest'
             includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
             includeTestsMatching '*IconPackTest'
@@ -169,6 +222,7 @@ test {
             includeTestsMatching '*DimensionalCoordsTest'
             includeTestsMatching '*GridAccessSourceTest'
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'
+            includeTestsMatching '*AE2JobTrackerLifecycleTest'
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'
@@ -178,6 +232,8 @@ test {
             includeTestsMatching '*LiveTerminalHttpTest'
             includeTestsMatching '*StorageTrackingServiceTest'
             includeTestsMatching '*CoreEngineTest'
+            includeTestsMatching '*TelemetryTest'
+            includeTestsMatching '*JarProofTest'
         }
         shouldRunAfter tasks.named('test')
     }
@@ -200,8 +256,10 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*ConfigFileTest'
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
+        includeTestsMatching '*CommandBootstrapTest'
         includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
         includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*ServerSettingsHttpTest'
         includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')
@@ -261,6 +319,11 @@ tasks.withType(JavaCompile).configureEach {
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
 }
+tasks.named('compileBindingProcessorTestJava', JavaCompile) { options.release = 17 }
+tasks.named('compileBindingProcessorJava', JavaCompile) { options.release = 17 }
+tasks.named('compileTestJava', JavaCompile) {
+    options.compilerArgs += '-Abindings.catalog=pl.kuba6000.ae2webintegration.core.binding.GeneratedTestBindings'
+}
 
 // Client tools share the canonical key implementation without bundling the server or web assets.
 def iconPackJar = tasks.register('iconPackJar', Jar) {
@@ -305,7 +368,7 @@ if (project == rootProject) {
     tasks.register('generateApiDocs', Exec) {
         group = 'documentation'
         description = 'Generate OpenAPI from the HTTP endpoint declarations and Javadoc.'
-        dependsOn buildApiDoclet
+        dependsOn buildApiDoclet, tasks.named('compileJava')
         notCompatibleWithConfigurationCache('The doclet is built independently before its classpath is resolved.')
         inputs.files(sourceSets.main.allJava, sourceSets.main.compileClasspath, docletFiles)
         inputs.property('apiDocumentationVersion', apiDocumentationVersion)
@@ -318,7 +381,7 @@ if (project == rootProject) {
             options.encoding = 'UTF-8'
             options.doclet = 'pl.kuba6000.ae2webintegration.doclet.OpenApiDoclet'
             options.docletpath = docletFiles.files.toList()
-            options.classpath = sourceSets.main.compileClasspath.files.toList()
+            options.classpath = (sourceSets.main.compileClasspath + sourceSets.main.output.classesDirs).files.toList()
             options.sourceNames = sourceSets.main.allJava.files.collect { it.absolutePath }.sort()
             options.addStringOption('-output', apiDocumentation.get().asFile.absolutePath)
             options.addStringOption('-api-version', apiDocumentationVersion)

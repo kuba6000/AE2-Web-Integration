@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light" />
+        <meta name="color-scheme" content="light dark" />
         <style>
             html {
                 background: #262830;
@@ -18,6 +18,13 @@
     <body>
         <main class="login-card">
             <header>
+                <div class="appearance-control">
+                    <button id="appearance" type="button" data-appearance="light" aria-label="Switch to dark mode">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#sun" />
+                        </svg>
+                    </button>
+                </div>
                 <div class="brand">
                     <svg class="login-icon brand-mark" aria-hidden="true" focusable="false">
                         <use href="./assets/web/login-icons.svg#brand" />
@@ -39,7 +46,7 @@
                         ><span>Log in</span>
                     </button>
                     <button id="registerSwitch" type="button" aria-pressed="false">
-                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <svg class="login-icon registration-icon" aria-hidden="true" focusable="false">
                             <use href="./assets/web/login-icons.svg#register" /></svg
                         ><span>Register</span>
                     </button>
@@ -119,7 +126,7 @@
                         Use a password unique to this server. Its administrator controls this service.
                     </p>
                     <button class="primary" type="submit">
-                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <svg class="login-icon registration-icon" aria-hidden="true" focusable="false">
                             <use href="./assets/web/login-icons.svg#register" /></svg
                         ><span>Continue</span>
                     </button>

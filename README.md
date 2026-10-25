@@ -79,6 +79,15 @@ Icons are optional; without an icon pack, the terminal displays item names.
 - Track active and completed crafting jobs
 - Send crafting updates through a Discord webhook
 
+### Crafting plan images
+
+After calculating a plan, choose **Export** at the bottom left of the plan in the default theme
+(the image icon on mobile). Choose the grid layout, tile contents, ordering and background, then
+download a single PNG. The export includes
+the full plan independently of the current search and works without an icon pack. Settings and the
+image proportions are remembered for the next export; very large images use a lower resolution to fit.
+At 1×, exported slots are 180 pixels wide with 32-pixel icons, independent of screen size.
+
 ### Web themes
 
 Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
@@ -109,8 +118,11 @@ In public mode, every player can create their own web account and access the AE2
 use. Registration starts on the website and must be confirmed in game with the command shown by the web panel.
 The player must be online to register.
 
-Player passwords are stored as salted PBKDF2-HMAC-SHA1 hashes. A normal session is valid for one hour, or seven
-days when **Remember me** is selected.
+Player passwords are stored as salted PBKDF2-HMAC-SHA1 hashes. Sessions expire after one hour without activity
+and can be extended by use for up to twelve hours from login. **Remember me** survives server restarts,
+expires after seven days without activity and can be extended for up to sixty days from login. Watching a
+live terminal or CPU counts as activity. Changing the password revokes existing sessions.
+Each account can keep twenty remembered sessions; another remembered login signs out the oldest one.
 
 ### Public mode disabled
 
@@ -200,6 +212,18 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+Administrators and trusted localhost users can edit the active configuration in **Server settings**.
+**Save and apply** writes `config.toml` and applies the changes without restarting the web server.
+The listener port, administrator password, public mode, password-free localhost access, trusted proxies
+and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
+Manual file edits take effect after reloading the configuration or restarting the server.
+Set `general.allow_server_settings_editing = false` in `config.toml` and reload to disable reading and
+editing server settings through the web, including for administrators and trusted localhost users.
+The tab then shows a disabled notice instead of the settings. Access is enabled by default; the switch
+can only be changed in the file.
+Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
+to keep them, or explicitly replace or clear them.
+
 Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
 **Include machine-requested crafting** there to also track jobs started by machines on that network.
 The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
@@ -250,13 +274,17 @@ Crafting completion notifications can be filtered with `minimum_crafting_duratio
 which keeps all crafting completion notifications enabled.
 Notifications are initialized ONLY for tracked grids
 
+Crafting updates include the requesting players when identified, using the authenticated account for
+orders placed through the web terminal. Administrator and localhost access have no player identity.
+
 #### Discord Integration
 
-Create a Discord webhook and set its URL as `discord_webhook` in the AE2 Web Integration config. You can also
-set `discord_role_id` if a role should be pinged on errors.
+Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
+`discord.role_id` configures an optional role mention.
 
-
-<img width="467" height="224" alt="AE2 Web Integration Discord message" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
+Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
+Set `discord.crafting_style` to `IMAGE_CARD` (default) for the full card, `SMALL_ICON` for a text embed with an item thumbnail, or `SIMPLE` for text only.
+Install an icon pack to supply item images. `SMALL_ICON` sends text only when no usable icon is available; `IMAGE_CARD` falls back to text if rendering fails.
 
 #### NTFY Integration
 
@@ -280,6 +308,22 @@ A few additional compatibility notes:
   [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
 - The 1.20.1 and 1.21.1 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
+
+## Telemetry
+
+Telemetry is enabled by default outside development environments. The mod sends a small HTTPS usage
+report ten minutes after server startup and approximately once per hour:
+**Hashed mod version**, Minecraft version, public-mode and singleplayer settings, and a random session ID
+that changes on server restart and at the first report of each new UTC day.
+No player identities, world or network contents are reported.
+See the [privacy policy](https://ae2web.kuba6000.pl/privacy) for data handling and retention.
+
+We’d appreciate you keeping it enabled to help guide development.
+
+Disable reporting in **Server settings**, with `enabled = false` under `[telemetry]` in
+`config/ae2webintegration/config.toml` followed by a config reload, or with
+`/ae2webintegration telemetry off`. Use `on` to re-enable or `status` to inspect the setting.
+The singleplayer owner can use these commands without cheats; on a dedicated server they require permission level 4.
 
 ## Development
 

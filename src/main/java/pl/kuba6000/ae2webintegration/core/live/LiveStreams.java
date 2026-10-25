@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -195,7 +196,7 @@ public final class LiveStreams implements AutoCloseable {
         LiveSubscription subscription = session.subscription;
         if (subscription.end != null) return;
         if (!session.context.isLifecycleUnchanged()) subscription.end = "invalidate";
-        else if (!subscription.session.isValid(System.currentTimeMillis())) subscription.end = "revoked";
+        else if (!AuthService.isValid(subscription.session, System.currentTimeMillis())) subscription.end = "revoked";
         else {
             IAEGrid grid = identities.getGrid(
                 subscription.topic.key()
@@ -206,7 +207,7 @@ public final class LiveStreams implements AutoCloseable {
     }
 
     private void finish(Session session) {
-        session.cancelTask();
+        if (!session.beginClosing()) return;
         try {
             session.context.getExchange()
                 .close();
@@ -273,6 +274,7 @@ public final class LiveStreams implements AutoCloseable {
         private @Nullable FutureTask<Void> task;
         private long started;
         private boolean writing;
+        private boolean closing;
 
         private synchronized @Nullable FutureTask<Void> prepareTask(Runnable write) {
             if (task != null || finished) return null;
@@ -300,15 +302,19 @@ public final class LiveStreams implements AutoCloseable {
             writing = false;
         }
 
-        private void cancelTask() {
+        private boolean beginClosing() {
             FutureTask<Void> pending;
             synchronized (this) {
+                // Reset, maintenance and the writer may finish together; only one owns exchange cleanup.
+                if (closing) return false;
+                closing = true;
                 finished = true;
                 // Fence a writer that already started before this session failed authorization or timed out.
                 if (subscription.end == null) subscription.end = "invalidate";
                 pending = task;
             }
             if (pending != null) pending.cancel(true);
+            return true;
         }
 
         private Session(RequestContext context, LiveSubscription subscription, @Nullable IconPack pack) {

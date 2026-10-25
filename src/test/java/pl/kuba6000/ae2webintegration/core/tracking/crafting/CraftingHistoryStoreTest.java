@@ -17,12 +17,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -42,6 +45,196 @@ class CraftingHistoryStoreTest {
     Path directory;
 
     @Test
+    void requestersRemainOrderedJobSnapshotsAcrossReopenAndHistoryPages() throws Exception {
+        StableKey grid = StableKey.random();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        long now = System.currentTimeMillis();
+        CompletedCrafting base = simpleJob(now, 1);
+        CompletedCrafting original = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.player(new PlayerIdentity(first, "Alex")),
+                CraftingRequester.player(new PlayerIdentity(second, "Alex")),
+                CraftingRequester.automation(),
+                CraftingRequester.web()));
+        CompletedCrafting renamed = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Collections.singletonList(CraftingRequester.player(new PlayerIdentity(first, "AlexRenamed"))));
+        long originalId;
+        long renamedId;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            originalId = store.append(grid, original);
+            renamedId = store.append(grid, renamed);
+        }
+        ConfigSettings.CraftingHistory cappedPolicy = new ConfigSettings.CraftingHistory();
+        cappedPolicy.historyMaxJobsPerGrid = 1;
+        try (WorldDatabase database = new WorldDatabase(
+            directory.resolve("world"),
+            new ConfigSettings.ResourceHistory(),
+            cappedPolicy)) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            CompletedCrafting read = store.read(grid, originalId);
+            assertNotNull(read);
+            assertEquals(
+                CraftingRequester.automation(),
+                read.requesters()
+                    .get(2));
+            assertEquals(
+                CraftingRequester.web(),
+                read.requesters()
+                    .get(3));
+            assertEquals(
+                4,
+                read.requesters()
+                    .size());
+            assertEquals(
+                first,
+                read.requesters()
+                    .get(0)
+                    .player().uuid);
+            assertEquals(
+                second,
+                read.requesters()
+                    .get(1)
+                    .player().uuid);
+            assertEquals(
+                "Alex",
+                read.requesters()
+                    .get(0)
+                    .player().name);
+            assertThrows(
+                UnsupportedOperationException.class,
+                () -> read.requesters()
+                    .clear());
+            SqliteCraftingHistoryStore.Page firstPage = store.list(grid, null, 1);
+            assertEquals(
+                renamedId,
+                firstPage.entries()
+                    .get(0)
+                    .id());
+            assertEquals(
+                "AlexRenamed",
+                firstPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(0)
+                    .player().name);
+            SqliteCraftingHistoryStore.Page olderPage = store.list(grid, firstPage.nextBefore(), 1);
+            assertEquals(
+                originalId,
+                olderPage.entries()
+                    .get(0)
+                    .id());
+            assertEquals(
+                "Alex",
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(0)
+                    .player().name);
+            assertEquals(
+                second,
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(1)
+                    .player().uuid);
+            assertEquals(
+                CraftingRequester.automation(),
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(2));
+            assertEquals(
+                CraftingRequester.web(),
+                olderPage.entries()
+                    .get(0)
+                    .requesters()
+                    .get(3));
+            store.maintain();
+            assertNull(store.read(grid, originalId));
+            assertEquals(
+                "AlexRenamed",
+                store.read(grid, renamedId)
+                    .requesters()
+                    .get(0)
+                    .player().name);
+        }
+    }
+
+    @Test
+    void duplicateRequesterIdentitiesAreRejectedWithoutPublishingPartialJobs() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        CompletedCrafting base = simpleJob(now, 1);
+        UUID player = UUID.randomUUID();
+        CompletedCrafting duplicate = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.player(new PlayerIdentity(player, "Alex")),
+                CraftingRequester.player(new PlayerIdentity(player, "AlexRenamed"))));
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            assertThrows(RejectedCraftingException.class, () -> store.append(grid, duplicate));
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+            assertTrue(store.append(grid, base) > 0);
+        }
+    }
+
+    @Test
+    void invalidAndRepeatedNonPlayerSourcesAreRejectedWithoutPublishingJobs() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        List<List<CraftingRequester>> invalid = Arrays.asList(
+            Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation()),
+            Arrays.asList(CraftingRequester.web(), CraftingRequester.web()),
+            Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null)),
+            Collections.singletonList(
+                new CraftingRequester(CraftingRequester.Source.WEB, new PlayerIdentity(UUID.randomUUID(), "Alex"))));
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            for (List<CraftingRequester> requesters : invalid) {
+                CompletedCrafting job = new CompletedCrafting(
+                    base.finalOutput(),
+                    base.timeStarted(),
+                    base.timeDone(),
+                    false,
+                    base.resources(),
+                    base.providers(),
+                    requesters);
+                assertThrows(RejectedCraftingException.class, () -> store.append(grid, job));
+            }
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+        }
+    }
+
+    @Test
     void persistedOrderingPositionsAndResourceQuantitiesCannotBeNegative() throws Exception {
         StableKey grid = StableKey.random();
         long now = System.currentTimeMillis();
@@ -57,7 +250,8 @@ class CraftingHistoryStoreTest {
                     10,
                     Collections.singletonList(new CompletedCrafting.Interval(now - 10, now)),
                     Collections.singletonList("Machines"))),
-            base.providers());
+            base.providers(),
+            Collections.emptyList());
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
@@ -96,7 +290,8 @@ class CraftingHistoryStoreTest {
                         new DimensionalCoords("overworld", 1, 2, 3),
                         new DimensionalCoords("overworld", 4, 5, 6)),
                     reversed),
-                new CompletedCrafting.Provider("Machines ", Collections.emptyList(), reversed)));
+                new CompletedCrafting.Provider("Machines ", Collections.emptyList(), reversed)),
+            Collections.emptyList());
         long id;
         try (WorldDatabase database = database()) {
             register(database, grid);
@@ -225,7 +420,8 @@ class CraftingHistoryStoreTest {
             good.timeDone(),
             false,
             good.resources(),
-            good.providers());
+            good.providers(),
+            Collections.emptyList());
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
@@ -263,7 +459,8 @@ class CraftingHistoryStoreTest {
                 new CompletedCrafting.Provider(
                     "工場 🛠️ ",
                     Collections.singletonList(new DimensionalCoords("test:świat/世界", 1, 2, 3)),
-                    Collections.singletonList(new CompletedCrafting.Interval(now - 800, now - 300)))));
+                    Collections.singletonList(new CompletedCrafting.Interval(now - 800, now - 300)))),
+            Collections.emptyList());
         long id;
         try (WorldDatabase database = database()) {
             register(database, grid);
@@ -305,7 +502,8 @@ class CraftingHistoryStoreTest {
             good.timeDone(),
             false,
             good.resources(),
-            good.providers());
+            good.providers(),
+            Collections.emptyList());
         try (WorldDatabase database = database()) {
             register(database, firstGrid);
             register(database, secondGrid, 1);
@@ -348,7 +546,8 @@ class CraftingHistoryStoreTest {
                         good.timeDone(),
                         false,
                         good.resources(),
-                        good.providers()));
+                        good.providers(),
+                        Collections.emptyList()));
             }
         }
         for (List<String> links : Arrays
@@ -361,7 +560,8 @@ class CraftingHistoryStoreTest {
                     false,
                     Collections.singletonList(
                         new CompletedCrafting.Resource(good.finalOutput(), 0, Collections.emptyList(), links)),
-                    good.providers()));
+                    good.providers(),
+                    Collections.emptyList()));
         }
         for (List<CompletedCrafting.Provider> providers : Arrays.asList(
             Arrays.asList(
@@ -383,7 +583,8 @@ class CraftingHistoryStoreTest {
                     good.timeDone(),
                     false,
                     good.resources(),
-                    providers));
+                    providers,
+                    Collections.emptyList()));
         }
         rejected.add(
             new CompletedCrafting(
@@ -400,7 +601,8 @@ class CraftingHistoryStoreTest {
                         0,
                         Collections.emptyList(),
                         Collections.emptyList())),
-                good.providers()));
+                good.providers(),
+                Collections.emptyList()));
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
@@ -463,7 +665,8 @@ class CraftingHistoryStoreTest {
                 job.timeDone(),
                 false,
                 job.resources(),
-                job.providers());
+                job.providers(),
+                Collections.emptyList());
             IOException rejection = assertThrows(IOException.class, () -> store.append(grid, invalid));
             assertNull(rejection.getCause(), "Malformed payload must be rejected before flushing grid identities");
             assertTrue(service.enqueue(grid, invalid));
@@ -504,7 +707,8 @@ class CraftingHistoryStoreTest {
             good.timeDone(),
             false,
             good.resources(),
-            good.providers());
+            good.providers(),
+            Collections.emptyList());
         try (WorldDatabase database = database()) {
             register(database, grid);
             List<Runnable> scheduled = new ArrayList<>();
@@ -538,6 +742,7 @@ class CraftingHistoryStoreTest {
             now - 10,
             now,
             false,
+            Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList());
         try (WorldDatabase database = database()) {
@@ -676,6 +881,7 @@ class CraftingHistoryStoreTest {
                         10,
                         Collections.emptyList(),
                         Collections.singletonList("Missing provider"))),
+                Collections.emptyList(),
                 Collections.emptyList());
             assertThrows(IOException.class, () -> store.append(grid, invalid));
             assertTrue(
@@ -706,6 +912,7 @@ class CraftingHistoryStoreTest {
             now - 1000,
             now,
             false,
+            Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList());
         ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
@@ -794,7 +1001,8 @@ class CraftingHistoryStoreTest {
                 new CompletedCrafting.Provider(
                     "Machines",
                     Collections.singletonList(new DimensionalCoords("overworld", x, 2, 3)),
-                    Collections.singletonList(new CompletedCrafting.Interval(now - 80, now - 20)))));
+                    Collections.singletonList(new CompletedCrafting.Interval(now - 80, now - 20)))),
+            Collections.emptyList());
     }
 
     private WorldDatabase database() {

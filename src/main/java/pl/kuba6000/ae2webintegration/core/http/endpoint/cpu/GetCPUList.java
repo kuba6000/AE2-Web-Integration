@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
 import java.net.HttpURLConnection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +14,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -30,24 +33,22 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
- * Lists the crafting CPUs on a grid.
+ * List CPUs.
  *
- * @pathParam gridKey Persistent grid identifier.
+ * <p>
+ * Returns crafting CPUs in the network, including idle CPUs.
+ *
+ * @pathParam gridKey Persistent network identifier.
  * @response 200 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: the grid does not exist or is unavailable.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found or unavailable.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -61,15 +62,13 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus")
 public final class GetCPUList extends ISyncedRequest {
 
-    /** Include product icon references and atlas metadata; omitted means false. */
+    /** Include product icons and atlas metadata; defaults to false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
-     * @param data   CPU summaries keyed by stable CPU identifier; empty when the grid has no crafting CPUs
+     * @param data   CPU summaries keyed by stable CPU identifier; empty when the network has no crafting CPUs
      * @param icons  atlas metadata for product references; null when not requested or no pack is available
      * @example status OK
      * @keyExample data AQEBAQEBAQEBAQEBAQEBAQ
@@ -94,17 +93,17 @@ public final class GetCPUList extends ISyncedRequest {
          */
         public boolean isBusy;
         /**
-         * Whether this CPU currently admits player requests before output and storage checks. Busy CPUs may
-         * admit compatible merges on supported platforms; submission rechecks live native state.
+         * Whether this CPU can accept player jobs, including compatible job merges where supported.
+         * A true value does not guarantee the requested job will fit or be accepted.
          */
         public boolean acceptsPlayerJobs;
-        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+        /** Automatic CPU selection policy; null when unavailable. Does not determine submission permissions. */
         public @Nullable CpuSelectionMode selectionMode;
         /** Whether this CPU supports pausing the scheduling of its current job. */
         public boolean supportsPause;
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
-        /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
+        /** Requested output; null when idle or unavailable. */
         public @Nullable ResourceStack finalOutput;
         /**
          * Total CPU crafting storage in bytes.
@@ -130,6 +129,10 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean hasTrackingInfo = false;
+        /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+        public @NotNull List<CraftingRequester> requesters = Collections.emptyList();
+        /** Requester name from AE2 when no tracked requesters are available; null when unavailable. */
+        public @Nullable String nativeRequesterName;
         /**
          * Crafting start time in Unix epoch milliseconds; zero when unavailable.
          *
@@ -168,8 +171,10 @@ public final class GetCPUList extends ISyncedRequest {
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;
                     cpuInfo.timeStarted = trackingInfo.timeStarted;
+                    cpuInfo.requesters = trackingInfo.getRequesters();
                 }
             }
+            cpuInfo.nativeRequesterName = CpuReader.nativeRequesterName(cluster, cpuInfo.isBusy, cpuInfo.requesters);
             cpuList.put(entry.getKey(), cpuInfo);
         }
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));

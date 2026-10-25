@@ -18,7 +18,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 
 /**
- * Reports whether the server has a compatible icon pack installed. The manifest remains server-side.
+ * Get icon pack availability.
  * 
  * @response 200 {@link Response} Current availability.
  * @response 400 {@link ErrorResponse} Invalid request body.
@@ -40,6 +40,12 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 @Endpoint(method = HttpMethod.GET, path = "/api/icon-pack")
 public final class GetIconPack extends IAsyncRequest {
 
+    /**
+     * @param available whether a compatible icon pack is installed
+     * @param packId    installed pack identifier, or null when unavailable
+     * @param width     icon width in pixels, or zero when unavailable
+     * @param height    icon height in pixels, or zero when unavailable
+     */
     @Desugar
     public record Availability(boolean available, @Nullable String packId, int width, int height) {}
 

@@ -18,6 +18,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -241,7 +242,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             }
         };
         TestGridFixtures.track(grid);
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         info.timeStarted = System.currentTimeMillis() + (clockMovedBack ? 60_000 : -60_000);
         // One already measured stage of a still-active job; its duration may legitimately be zero.

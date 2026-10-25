@@ -13,8 +13,16 @@ public class DiscordPayload implements INotificationPayload {
     final String title;
     final String description;
     final int color;
+    private boolean includeImage;
+    private boolean thumbnail;
+    private final String roleId;
 
     public DiscordPayload(String title, String description, int color) {
+        this(title, description, color, Config.INSTANCE.discord.roleId);
+    }
+
+    DiscordPayload(String title, String description, int color, String roleId) {
+        this.roleId = roleId;
         this.title = title;
         this.description = description;
         this.color = color;
@@ -24,22 +32,44 @@ public class DiscordPayload implements INotificationPayload {
         this(title, description, COLOR_TURQUOISE);
     }
 
+    void includeImage(boolean thumbnail) {
+        includeImage = true;
+        this.thumbnail = thumbnail;
+    }
+
     @Override
     public JsonObject serializePayload() {
-        String roleID = Config.INSTANCE.discord.roleId;
-
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");
-        json.addProperty("content", !roleID.isEmpty() ? "<@&" + roleID + ">" : "");
+        json.addProperty("content", !roleId.isEmpty() ? "<@&" + roleId + ">" : "");
         JsonArray embeds = new JsonArray();
         JsonObject embed = new JsonObject();
-        embed.addProperty("title", this.title);
-        embed.addProperty("description", this.description);
+        embed.addProperty("title", limit(this.title, 256));
+        embed.addProperty("description", limit(this.description, 4096));
         embed.addProperty("color", this.color);
+        if (includeImage) {
+            JsonObject image = new JsonObject();
+            image.addProperty("url", "attachment://crafting.png");
+            embed.add(thumbnail ? "thumbnail" : "image", image);
+        }
         embeds.add(embed);
         json.add("embeds", embeds);
-        json.add("attachments", new JsonArray());
+        JsonArray attachments = new JsonArray();
+        if (includeImage) {
+            JsonObject attachment = new JsonObject();
+            attachment.addProperty("id", 0);
+            attachment.addProperty("filename", "crafting.png");
+            attachments.add(attachment);
+        }
+        json.add("attachments", attachments);
 
         return json;
+    }
+
+    private static String limit(String value, int maximum) {
+        if (value.length() <= maximum) return value;
+        int end = maximum - 1;
+        if (Character.isHighSurrogate(value.charAt(end - 1))) end--;
+        return value.substring(0, end) + "…";
     }
 }

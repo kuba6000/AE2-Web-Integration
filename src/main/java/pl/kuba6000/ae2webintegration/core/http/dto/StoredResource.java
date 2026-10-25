@@ -8,12 +8,12 @@ import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** A stored or craftable resource with its currently available web identity. */
+/** A resource available in network storage or through crafting. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public final class StoredResource extends ResourceStack {
 
     /**
-     * Whether the resource is craftable on this grid.
+     * Whether the resource can be crafted in this network.
      *
      * @example true
      */

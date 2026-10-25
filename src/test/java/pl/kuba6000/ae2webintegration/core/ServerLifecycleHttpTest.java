@@ -17,16 +17,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
@@ -59,6 +60,7 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -79,6 +81,16 @@ class ServerLifecycleHttpTest {
     private record Response(int status, String body) {}
 
     private static final class BlockingPlayerLookup implements IServerPlatform {
+
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
 
         @Override
         public @NotNull String getModVersion() {
@@ -202,13 +214,11 @@ class ServerLifecycleHttpTest {
     private int port;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         CoreEngine.onServerStopped();
         previousServerPlatform = AE2Controller.serverPlatform;
 
-        port = unusedLoopbackPort();
         config = new ConfigTestFixture(tempDirectory);
-        config.write("general.port", port);
         config.write("general.password", "lifecycle-password");
         config.write("general.allow_no_password_on_localhost", false);
         config.write("general.public_mode", false);
@@ -222,6 +232,193 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = previousServerPlatform;
         config.close();
         worlds.close();
+    }
+
+    @Test
+    void rememberedLoginLimitRevokesOldestWithoutAffectingOtherAccountsOrOrdinarySessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            String ordinary = login();
+            String playerToken = rememberedLogin("SessionPlayer", "player-password", ordinary);
+            String oldest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            TestGridFixtures.TestExchange retainedRequest = new TestGridFixtures.TestExchange(null);
+            retainedRequest.getRequestHeaders()
+                .set("Authorization", "Bearer " + oldest);
+            AE2Controller.RequestContext retainedContext = AuthService.authenticate(retainedRequest);
+            assertNotNull(retainedContext);
+            AuthSession retained = retainedContext.getSession();
+            assertNotNull(retained);
+            for (int i = 0; i < 19; i++) rememberedLogin("admin", "lifecycle-password", ordinary);
+            String laterOrdinary = login();
+            assertTrue(retained.isValid(System.currentTimeMillis()));
+            assertEquals(200, get("/api/themes", oldest).status());
+            String newest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            assertFalse(
+                retained.isValid(System.currentTimeMillis()),
+                "live subscriptions must see eviction immediately");
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", ordinary).status());
+            assertEquals(200, get("/api/themes", laterOrdinary).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+            try (Reader reader = Files.newBufferedReader(
+                Config.getConfigFile("sessions.json")
+                    .toPath(),
+                StandardCharsets.UTF_8)) {
+                assertEquals(
+                    21,
+                    new Gson().fromJson(reader, JsonObject.class)
+                        .getAsJsonArray("sessions")
+                        .size());
+            }
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void concurrentRememberedLoginsKeepOnlyTwentyUsableTokensAfterRestart() throws Exception {
+        startApi();
+        String ordinary = login();
+        ExecutorService clients = Executors.newFixedThreadPool(6);
+        List<String> tokens = new ArrayList<>();
+        try {
+            List<Future<String>> logins = new ArrayList<>();
+            for (int i = 0; i < 24; i++)
+                logins.add(clients.submit(() -> rememberedLogin("admin", "lifecycle-password", ordinary)));
+            for (Future<String> login : logins) tokens.add(login.get(30, TimeUnit.SECONDS));
+        } finally {
+            clients.shutdownNow();
+        }
+        int live = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) live++;
+        assertEquals(20, live);
+        try (Reader reader = Files.newBufferedReader(
+            Config.getConfigFile("sessions.json")
+                .toPath(),
+            StandardCharsets.UTF_8)) {
+            assertEquals(
+                20,
+                new Gson().fromJson(reader, JsonObject.class)
+                    .getAsJsonArray("sessions")
+                    .size());
+        }
+        CoreEngine.onServerStopped();
+        startApi();
+        int restored = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) restored++;
+        assertEquals(20, restored);
+    }
+
+    @Test
+    void rememberedLoginSurvivesWorldRestartAndLogoutDoesNot() throws Exception {
+        startApi();
+        String temporary = login();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String remembered = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", temporary).status());
+        assertEquals(200, get("/api/themes", remembered).status());
+        assertEquals(200, read(jsonPost("/api/auth/logout", remembered, "")).status());
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", remembered).status());
+    }
+
+    @Test
+    void adminCredentialChangeWhileStoppedRejectsPersistedToken() throws Exception {
+        startApi();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String token = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        config.set("general.password", "new-password");
+        startApi();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void browserCookieRetentionMatchesRememberMeWithoutChangingMountScope() throws Exception {
+        startApi();
+        HttpURLConnection ordinary = browserForm("/", "username=admin&password=lifecycle-password");
+        assertEquals(302, read(ordinary).status());
+        assertFalse(
+            ordinary.getHeaderField("Set-Cookie")
+                .contains("Max-Age"));
+        HttpURLConnection remembered = browserForm("/", "username=admin&password=lifecycle-password&remember=on");
+        assertEquals(302, read(remembered).status());
+        String cookie = remembered.getHeaderField("Set-Cookie");
+        assertTrue(cookie.contains("Max-Age=5184000"));
+        assertFalse(cookie.contains("Path="));
+    }
+
+    @Test
+    void credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword() throws Exception {
+        startApi();
+        String token = login();
+        config.set("general.password", "changed-password");
+        AuthService.reloadHttpSettings();
+        config.set("general.password", "lifecycle-password");
+        AuthService.reloadHttpSettings();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void playerPasswordAndPublicModeChangesRevokeRememberedSessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            Response response = read(
+                jsonPost(
+                    "/api/auth/login",
+                    null,
+                    "{\"username\":\"SessionPlayer\",\"password\":\"player-password\",\"rememberMe\":true}"));
+            String token = new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("token")
+                .getAsString();
+            assertEquals(200, get("/api/themes", token).status());
+            CoreData.setPassword(player, "");
+            assertEquals(401, get("/api/themes", token).status());
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            String second = login("SessionPlayer", "player-password");
+            config.set("general.public_mode", false);
+            AuthService.reloadHttpSettings();
+            config.set("general.public_mode", true);
+            AuthService.reloadHttpSettings();
+            assertEquals(401, get("/api/themes", second).status());
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", token).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
     }
 
     @Test
@@ -559,6 +756,16 @@ class ServerLifecycleHttpTest {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return version;
             }
@@ -762,7 +969,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.AE2Interface = processInterface;
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
         assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
@@ -775,7 +982,7 @@ class ServerLifecycleHttpTest {
 
         assertSame(processInterface, AE2Controller.AE2Interface);
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
 
         Response secondWorld = get("/api/grids", token);
         assertEquals(
@@ -799,7 +1006,7 @@ class ServerLifecycleHttpTest {
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"Player\",\"password\":\"test-password\"}");
@@ -840,6 +1047,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -881,7 +1098,7 @@ class ServerLifecycleHttpTest {
             }
         };
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"Player\",\"password\":\"test-password\"}");
@@ -899,7 +1116,7 @@ class ServerLifecycleHttpTest {
     @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         fillServerThreadQueue();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
@@ -915,7 +1132,7 @@ class ServerLifecycleHttpTest {
     @Test
     void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login();
         fillServerThreadQueue();
 
@@ -934,6 +1151,16 @@ class ServerLifecycleHttpTest {
     void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {
@@ -978,7 +1205,7 @@ class ServerLifecycleHttpTest {
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"MissingPlayer\",\"password\":\"test-password\"}");
@@ -1018,6 +1245,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1060,7 +1297,7 @@ class ServerLifecycleHttpTest {
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
         try {
@@ -1108,7 +1345,7 @@ class ServerLifecycleHttpTest {
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/login",
             "{\"username\":\"Player\",\"password\":\"player-password\"}");
@@ -1160,7 +1397,7 @@ class ServerLifecycleHttpTest {
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login("canonicalplayer", "player-password");
         Response response = get("/api/context", token);
 
@@ -1251,6 +1488,16 @@ class ServerLifecycleHttpTest {
     void registrationReturnsAnAcceptedTokenWithoutInstallingACookie() throws Exception {
         UUID player = UUID.fromString("12121212-3434-5656-7878-909090909090");
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {
@@ -1531,7 +1778,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void loginBodyReadInPreviousListenerCannotPublishIntoRestartedServer() throws Exception {
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         CountDownLatch readingBody = new CountDownLatch(1);
         CountDownLatch releaseBody = new CountDownLatch(1);
         PostExchange exchange = new PostExchange(
@@ -1564,7 +1811,7 @@ class ServerLifecycleHttpTest {
             assertTrue(readingBody.await(2, TimeUnit.SECONDS));
             CoreEngine.onServerStopping();
             CoreEngine.onServerStopped();
-            AE2Controller.startHTTPServer();
+            startHttpServer();
             releaseBody.countDown();
             oldRequest.get(3, TimeUnit.SECONDS);
             assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
@@ -1592,11 +1839,24 @@ class ServerLifecycleHttpTest {
     private void startApi() throws IOException {
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
     }
 
     private String login() throws IOException {
         return login("admin", "lifecycle-password");
+    }
+
+    private String rememberedLogin(String username, String password, String authenticatedToken) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("username", username);
+        body.addProperty("password", password);
+        body.addProperty("rememberMe", true);
+        Response response = read(jsonPost("/api/auth/login", authenticatedToken, body.toString()));
+        assertEquals(200, response.status());
+        return new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
     }
 
     private static void fillServerThreadQueue() {
@@ -1707,9 +1967,11 @@ class ServerLifecycleHttpTest {
         }
     }
 
-    private static int unusedLoopbackPort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            return socket.getLocalPort();
+    private void startHttpServer() {
+        if (port == 0) {
+            port = HttpServerTestFixture.start(config);
+        } else {
+            AE2Controller.startHTTPServer();
         }
     }
 }

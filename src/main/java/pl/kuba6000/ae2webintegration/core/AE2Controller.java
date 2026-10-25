@@ -58,6 +58,8 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePin;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.server.GetServerSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.server.PostServerSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.themes.GetThemes;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -249,6 +251,8 @@ public class AE2Controller {
                 api.register(GetItems.class);
                 api.register(GetItemEvents.class);
                 api.register(RenewItemEvents.class);
+                api.register(GetServerSettings.class);
+                api.register(PostServerSettings.class);
                 api.register(GetGridSettings.class);
                 api.register(PatchGridSettings.class);
                 api.register(CreateCraftingPlan.class);

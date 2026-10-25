@@ -23,23 +23,22 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
- * Creates a web session from account credentials.
+ * Log in.
  * <p>
- * The returned token can be used as a Bearer credential. This API does not set browser cookies.
+ * Use the returned token as a Bearer credential; this endpoint does not set cookies.
+ * Sessions expire after one idle hour or twelve hours from login. With rememberMe, sessions survive restarts
+ * and expire after seven idle days or sixty days from login. Authenticated requests, including live subscription
+ * renewals, reset the idle timeout.
  * 
  * @response 200 {@link Response} Session created.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input.
  * @response 401 {@link ErrorResponse} INVALID_USER or INVALID_PASSWORD.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
- * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
- * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
- *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: session publication was interrupted by server shutdown.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: server stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"INVALID_PASSWORD","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
@@ -55,14 +54,14 @@ public final class Login extends IAsyncRequest {
     /** Account credentials and the requested session lifetime. */
     @Body
     @NotNull
-    private Input input;
+    Input input;
 
     /**
      * Login credentials.
      * 
      * @param username   account name, or Admin
      * @param password   account password
-     * @param rememberMe keep the session for seven days instead of one hour; omitted means false
+     * @param rememberMe persist the session across restarts and use the seven-day idle window; omitted means false
      * @example username ExamplePlayer
      * @example password example-password
      * @example rememberMe false
@@ -73,10 +72,9 @@ public final class Login extends IAsyncRequest {
     /**
      * Session credentials and display information.
      *
-     * @param token      opaque session credential for the {@code Authorization: Bearer} header; valid for one hour,
-     *                   or seven days when {@code rememberMe} was requested
+     * @param token      opaque session credential for the {@code Authorization: Bearer} header
      * @param username   authenticated account's display name; {@code Admin} for administrator sessions
-     * @param isAdmin    whether this session has administrator access to all grids
+     * @param isAdmin    whether this session has administrator access to all networks
      * @param isOutdated whether update checking is enabled and a newer mod release is currently known
      * @example token exampleSessionTokenForDocumentationOnly
      * @example username ExamplePlayer

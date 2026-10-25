@@ -51,14 +51,12 @@ class UpdateSkipHttpTest {
         CoreEngine.onServerStopped();
         CoreDataTestFixture.reset();
         config = new ConfigTestFixture(directory);
-        port = ConfigTestFixture.unusedLoopbackPort();
-        config.write("general.port", port);
         config.write("general.password", "test-password");
         config.write("general.allow_no_password_on_localhost", false);
         config.write("general.check_for_updates", true);
         Config.reload();
         AE2Controller.AE2Interface = TestGridFixtures.ae();
-        AE2Controller.startHTTPServer();
+        port = HttpServerTestFixture.start(config);
         JsonObject login = request(
             "POST",
             "/api/auth/login",

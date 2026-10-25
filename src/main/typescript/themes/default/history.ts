@@ -234,6 +234,27 @@ export function createHistoryView(root: HTMLElement, application: Terminal, bind
                 pair.append(element('dt', label), element('dd', value));
                 stats.append(pair);
             }
+            if (snapshot.requesters.length) {
+                const pair = element('div');
+                pair.append(
+                    element('dt', t('craftingRequestersLabel')),
+                    element(
+                        'dd',
+                        snapshot.requesters
+                            .map((requester) =>
+                                requester.source === 'PLAYER'
+                                    ? requester.player.name
+                                    : t(
+                                          requester.source === 'WEB'
+                                              ? 'craftingRequesterWeb'
+                                              : 'craftingRequesterAutomation'
+                                      )
+                            )
+                            .join(', ')
+                    )
+                );
+                stats.append(pair);
+            }
             const productId = registryId(snapshot.finalOutput);
             if (productId) product.append(element('code', productId));
             summary.append(product, outcome, stats);

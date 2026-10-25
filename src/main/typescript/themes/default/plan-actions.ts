@@ -1,13 +1,31 @@
-import type { ThemeState, ThemeApplication } from '../../app/theme-api.js';
+import type { ThemeState, ThemeApplication, ThemeSettings } from '../../app/theme-api.js';
+import { createPlanExportDialog } from './plan-export-dialog.js';
 import type { Translator } from '../../app/i18n.js';
 import { element } from './dom.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
+import { imageIcon } from './icons/hackernoon/image.js';
 
 export function createPlanActions(
     application: ThemeApplication,
     workspace: HTMLElement,
-    tooltip: Pick<TooltipBindings, 'hide'>
+    tooltip: Pick<TooltipBindings, 'hide' | 'bind'>,
+    settings: ThemeSettings,
+    beforeDialog: (source: HTMLElement) => HTMLElement
 ) {
+    const exporter = createPlanExportDialog(application, settings, beforeDialog);
+    const exportButton = element('button');
+    exportButton.type = 'button';
+    exportButton.className = 'plan-export-button';
+    exportButton.innerHTML = imageIcon;
+    exportButton.setAttribute('aria-haspopup', 'dialog');
+    const exportLabel = element('span', '', 'plan-export-label');
+    exportButton.append(exportLabel);
+    tooltip.bind(exportButton, () => [element('span', exportButton.getAttribute('aria-label') || '')]);
+    let exportLocale: Translator;
+    exportButton.addEventListener('click', () => {
+        tooltip.hide();
+        exporter.open(exportButton, exportLocale);
+    });
     const start = element('button');
     start.type = 'button';
     start.addEventListener('click', () => application.crafting.submit());
@@ -80,14 +98,19 @@ export function createPlanActions(
     remove.addEventListener('click', () => application.crafting.remove());
     const actions = element('div');
     actions.className = 'plan-actions';
-    actions.append(startControls, remove);
+    actions.append(exportButton, startControls, remove);
 
     return {
         element: actions,
         close() {
+            exporter.close();
             menu.hidePopover();
         },
         render(state: ThemeState['crafting'], locale: Translator) {
+            exportLocale = locale;
+            exportLabel.textContent = locale.t('exportAction');
+            exportButton.setAttribute('aria-label', locale.t('exportPlan'));
+            exportButton.disabled = state.status !== 'ready' || !state.plan?.plan?.length;
             const t = locale.common;
             start.textContent = t('startCrafting');
             start.disabled = state.status !== 'ready' || !!state.mutation || !!state.uncertain || !state.selectedCpu;
@@ -115,6 +138,7 @@ export function createPlanActions(
             remove.disabled = !!state.mutation || !!state.uncertain;
         },
         dispose() {
+            exporter.dispose();
             menu.remove();
             actions.remove();
         }

@@ -39,8 +39,9 @@ class CommandProcessorTest {
     @BeforeEach
     void setUp() {
         registrations = new RegistrationTestFixture();
+        int port = Config.INSTANCE.general.port;
         config = new ConfigTestFixture();
-        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
+        config.set("general.port", port);
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }

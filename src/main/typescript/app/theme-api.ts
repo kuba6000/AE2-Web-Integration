@@ -5,6 +5,15 @@ import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
 import type { ResourceHistoryState } from './resource-history.js';
 import type { SettingsState } from './settings.js';
+import type { ServerSettingsState, createServerSettings } from './server-settings.js';
+export type {
+    ServerConfiguration,
+    ServerSettingsReadOnly,
+    ServerSettingsUpdate,
+    ServerSecretName,
+    ServerSecretChanges,
+    ServerSettingsResponse
+} from './server-settings.js';
 import type {
     StoredResource,
     Grid,
@@ -18,7 +27,9 @@ import type {
 import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
 import type { Route } from './router.js';
-import type { IconSprite, IconTarget } from './icons.js';
+import type { IconSprite, IconTarget, ResolvedIcons } from './icons.js';
+import type { PlanExportRequest } from './plan-export.js';
+import type { PlanExportLayout } from './plan-export-layout.js';
 import type { JsonValue } from './storage.js';
 import type { Dictionaries, Translator } from './i18n.js';
 import type * as resourceHelpers from './resource-helpers.js';
@@ -54,6 +65,7 @@ export type ThemeState = ReadonlyData<{
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
+    serverSettings: ServerSettingsState;
     pins: PinsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
@@ -67,6 +79,7 @@ export type IconView = {
     dispose(): void;
 };
 export type ThemeApplication = {
+    exportPlan(request: PlanExportRequest, signal: AbortSignal): Promise<PlanExportLayout>;
     readonly notifications: {
         subscribe(listener: (items: readonly ReadonlyData<Notification>[]) => void): () => void;
         dismiss(id: number): void;
@@ -110,7 +123,16 @@ export type ThemeApplication = {
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]): void;
         save(): Promise<void>;
     };
+    readonly serverSettings: Pick<
+        ReturnType<typeof createServerSettings>,
+        'edit' | 'editSecret' | 'removeSecret' | 'resetSecret' | 'save' | 'reload'
+    >;
     readonly icons: {
+        resolve(
+            references: readonly import('./api-types.js').IconReference[],
+            metadata: ThemeState['itemIcons'],
+            signal: AbortSignal
+        ): Promise<ResolvedIcons>;
         observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void): IconView;
     };
 };
@@ -151,3 +173,6 @@ export type ThemeDefinition = {
 };
 export type { Route, Preferences, IconSprite, IconTarget, JsonValue, Dictionaries, Translator };
 export type * from './api-types.js';
+export type { PlanExportRequest, PlanExportStyle } from './plan-export.js';
+export type { PlanExportSettings, PlanExportLayout, PlanExportGrid, PlanExportGeometry } from './plan-export-layout.js';
+export type { DrawableIcon, ResolvedIcons } from './icons.js';

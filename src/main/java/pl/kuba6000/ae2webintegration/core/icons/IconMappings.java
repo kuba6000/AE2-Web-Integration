@@ -13,22 +13,38 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-/**
- * One response's compact page table, built by its owner from an immutable pack snapshot. After construction,
- * ownership may pass to a serialization thread; no further resolve calls or page mutations are allowed.
- */
+/** Icon atlas pages referenced by resources in this response. */
 public final class IconMappings {
 
+    // Build from one immutable pack snapshot; do not mutate after handing off for serialization.
+    /** Icon pack identifier used in atlas page URLs. */
     public final @NotNull String packId;
+    /** Width of each resource icon in pixels. */
     public final int width = IconPack.CONTENT_SIZE;
+    /** Height of each resource icon in pixels. */
     public final int height = IconPack.CONTENT_SIZE;
+    /** Atlas pages, indexed by each resource's icon reference. */
     public final @NotNull List<Page> pages = new ArrayList<>();
     private final transient IconPack pack;
     private final transient Map<String, Integer> pageIndexes = new HashMap<>();
 
+    /**
+     * An atlas image.
+     *
+     * @param digest page identifier used in the atlas page URL
+     * @param width  image width in pixels
+     * @param height image height in pixels
+     */
     @Desugar
     public record Page(@NotNull String digest, int width, int height) {}
 
+    /**
+     * Location of an icon within an atlas image.
+     *
+     * @param page zero-based index in this response's pages array
+     * @param x    left edge in pixels
+     * @param y    top edge in pixels
+     */
     @Desugar
     public record Reference(int page, int x, int y) {}
 

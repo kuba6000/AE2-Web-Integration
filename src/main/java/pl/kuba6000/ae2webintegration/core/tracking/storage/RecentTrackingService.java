@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -25,8 +24,8 @@ public final class RecentTrackingService implements AutoCloseable {
     private final TerminalRegistry terminals;
     private final Map<StableKey, State> states = new ConcurrentHashMap<>();
     private final ArrayBlockingQueue<Command> commands;
-    private final Semaphore capacity;
-    private final int maximumRows;
+    private final AtomicLong queuedRows = new AtomicLong();
+    private volatile int maximumRows;
     private final Thread worker;
     private final AtomicBoolean resetsPending = new AtomicBoolean();
     private volatile boolean closed;
@@ -35,11 +34,17 @@ public final class RecentTrackingService implements AutoCloseable {
         if (maximumRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
         this.terminals = terminals;
         this.maximumRows = maximumRows;
-        capacity = new Semaphore(maximumRows);
-        commands = new ArrayBlockingQueue<>(Math.min(maximumRows, 1024));
+        commands = new ArrayBlockingQueue<>(1024);
         worker = new Thread(this::run, "AE2Web-RecentTracking");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    /** Preserves accepted commands and cached measurements; lower limits govern subsequent admission. */
+    public void applyLimits(int maximumRows, int maximumResources) {
+        if (maximumRows < 1 || maximumResources < 1) throw new IllegalArgumentException("Limits must be positive");
+        this.maximumRows = maximumRows;
+        for (State state : states.values()) state.maximumResources = maximumResources;
     }
 
     public void open(@NotNull StableKey key, long generation, boolean stock, boolean flow, int maximumResources,
@@ -86,7 +91,10 @@ public final class RecentTrackingService implements AutoCloseable {
 
     private boolean offer(StableKey key, State state, @Nullable StorageObservation observation, boolean stock,
         boolean flow, long now, int cost) {
-        if (!capacity.tryAcquire(cost)) return false;
+        if (queuedRows.addAndGet(cost) > maximumRows) {
+            queuedRows.addAndGet(-cost);
+            return false;
+        }
         Command command = new Command(
             key,
             state,
@@ -98,7 +106,7 @@ public final class RecentTrackingService implements AutoCloseable {
             now,
             cost);
         if (commands.offer(command)) return true;
-        capacity.release(cost);
+        queuedRows.addAndGet(-cost);
         return false;
     }
 
@@ -131,7 +139,7 @@ public final class RecentTrackingService implements AutoCloseable {
                     try {
                         apply(command);
                     } finally {
-                        capacity.release(command.cost());
+                        queuedRows.addAndGet(-command.cost());
                     }
                 }
                 // A rejected command may be the last activity on its network. Reset even without another sample.
@@ -158,6 +166,7 @@ public final class RecentTrackingService implements AutoCloseable {
             state.flow,
             state.maximumResources,
             state.startedAt);
+        state.activity.setMaximumResources(state.maximumResources);
         try {
             if (command.observation() == null) state.activity.advance(command.now());
             else state.activity.observe(command.observation(), command.stock(), command.flow());
@@ -216,7 +225,7 @@ public final class RecentTrackingService implements AutoCloseable {
         private final long generation;
         private final boolean stock;
         private final boolean flow;
-        private final int maximumResources;
+        private volatile int maximumResources;
         private final long startedAt;
         private final AtomicLong lossEpoch = new AtomicLong();
         private volatile long lostAt;
