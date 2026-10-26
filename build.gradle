@@ -9,6 +9,7 @@ plugins {
     alias libs.plugins.spotless
     alias libs.plugins.lombok
     id 'com.palantir.git-version' version '4.0.0' apply false // 0.13.0 is the last jvm8 supporting version
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
 group = maven_group
@@ -125,3 +126,4 @@ lombok {
 }
 
 apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'
