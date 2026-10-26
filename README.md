@@ -11,7 +11,8 @@ Access your Applied Energistics 2 networks from a desktop or mobile browser. Bro
 CPUs live, request crafts, explore resource history and build a personal dashboard with pinned resources.
 Public servers can give each player their own account and access to their networks.
 
-**Install the main mod on the server. It adds no items or blocks and requires no client installation.**
+**Works on dedicated servers and in single-player worlds. Multiplayer clients do not need the mod.**
+It adds no items or blocks.
 An optional standalone client tool generates item icons from your modpack and resource packs.
 
 **[Visit the website](https://ae2web.kuba6000.pl/) · [Try the live demo](https://ae2web.kuba6000.pl/demo/)**
@@ -232,8 +233,8 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 
 1. Download the latest JAR for your Minecraft version from the
    [Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
-2. Drop the mod into the server's `mods` folder. On multiplayer, it only belongs on the server. It also works in
-   a single-player instance, although that is not its main use case.
+2. Drop the mod into the server's `mods` folder, or your Minecraft instance's `mods` folder for single-player.
+   In multiplayer, only the server needs the mod.
 3. Start the server once to generate the config.
 4. Open `config/ae2webintegration/config.toml`. Configure the port, admin
    password, public mode, and other settings as needed.
