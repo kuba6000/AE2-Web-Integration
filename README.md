@@ -15,7 +15,7 @@ Public servers can give each player their own account and access to their networ
 It adds no items or blocks.
 An optional standalone client tool generates item icons from your modpack and resource packs.
 
-**[🌐 Visit the website](https://ae2web.kuba6000.pl/) · [▶️ Try the live demo](https://ae2web.kuba6000.pl/demo/)**
+**[🌐 Official website](https://ae2web.kuba6000.pl/) · [▶️ Try the live demo](https://ae2web.kuba6000.pl/demo/)**
 
 [📖 Installation guide](https://ae2web.kuba6000.pl/get-started) · [🔧 API documentation](https://ae2web.kuba6000.pl/docs/)
 
