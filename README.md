@@ -17,7 +17,7 @@ An optional standalone client tool generates item icons from your modpack and re
 [Website](https://ae2web.kuba6000.pl/) · [Try the demo](https://ae2web.kuba6000.pl/demo/) ·
 [Installation guide](https://ae2web.kuba6000.pl/get-started) · [API documentation](https://ae2web.kuba6000.pl/docs/)
 
-![Terminal with item icons, pinned resources and a flow tooltip](docs/images/gallery/terminal.webp)
+![Terminal with item icons, pinned resources and a flow tooltip](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/terminal.webp)
 
 ## How does it work?
 
@@ -107,27 +107,27 @@ use the built-in UI.
 
 **Crafting plan and CPU selection**
 
-![Calculated crafting plan with CPU selection](docs/images/gallery/crafting-plan.webp)
+![Calculated crafting plan with CPU selection](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/crafting-plan.webp)
 
 **Live CPU view**
 
-![Crafting CPU progress and resource states](docs/images/gallery/cpu.webp)
+![Crafting CPU progress and resource states](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/cpu.webp)
 
 **Resource history**
 
-![Resource history with stock, input, output and net flow](docs/images/gallery/tracking.webp)
+![Resource history with stock, input, output and net flow](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/tracking.webp)
 
 **Completed and cancelled crafts**
 
-![Saved crafting history](docs/images/gallery/history.webp)
+![Saved crafting history](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/history.webp)
 
 **Discord notification**
 
-![Discord notification with a crafting result card](docs/images/gallery/discord-notification.webp)
+![Discord notification with a crafting result card](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/discord-notification.webp)
 
 **Mobile terminal**
 
-<img width="360" alt="Terminal with item icons and pagination on a phone" src="docs/images/gallery/mobile.webp" />
+<img width="360" alt="Terminal with item icons and pagination on a phone" src="https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/mobile.webp" />
 
 </details>
 
@@ -213,7 +213,7 @@ location / {
 
 ### Hosting through another web server
 
-The [`tools/php-proxy`](tools/php-proxy) directory contains a PHP reverse proxy that serves
+The [`tools/php-proxy`](https://github.com/kuba6000/AE2-Web-Integration/tree/core/tools/php-proxy) directory contains a PHP reverse proxy that serves
 the mod's website, assets and API through an existing web server.
 
 ## Requirements
@@ -399,7 +399,7 @@ Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `P
 the JDK required by the branch. Gradle installs the locked frontend dependencies, compiles TypeScript,
 and packages the JavaScript output. Node.js and npm are not required to run the finished mod.
 
-See [frontend development](tools/ui-tests/README.md) for frontend commands and browser tests.
+See [frontend development](https://github.com/kuba6000/AE2-Web-Integration/blob/core/tools/ui-tests/README.md) for frontend commands and browser tests.
 
 ### API and custom themes
 
@@ -407,9 +407,9 @@ The web API is available under `/api/` on your Minecraft server. See the
 [API documentation](https://ae2web.kuba6000.pl/docs/); send requests to your own server, not the
 documentation host.
 
-- [OpenAPI generator](tools/openapi-doclet/README.md) — generate the API specification from endpoint
+- [OpenAPI generator](https://github.com/kuba6000/AE2-Web-Integration/blob/core/tools/openapi-doclet/README.md) — generate the API specification from endpoint
   annotations and Javadocs.
-- [Theme author guide](docs/themes/README.md) — theme contracts, development tools and the example project.
+- [Theme author guide](https://github.com/kuba6000/AE2-Web-Integration/blob/core/docs/themes/README.md) — theme contracts, development tools and the example project.
 
 ## License
 
@@ -418,8 +418,8 @@ Bundled third-party assets retain their own licenses:
 
 | Component | Author / source | License |
 | --- | --- | --- |
-| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](https://github.com/kuba6000/AE2-Web-Integration/blob/core/LICENSE) |
 | Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
-| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
-| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
-| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
+| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
+| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
