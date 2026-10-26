@@ -14,7 +14,8 @@ Public servers can give each player their own account and access to their networ
 **Install the main mod on the server. It adds no items or blocks and requires no client installation.**
 An optional standalone client tool generates item icons from your modpack and resource packs.
 
-[Website](https://ae2web.kuba6000.pl/) · [Try the demo](https://ae2web.kuba6000.pl/demo/) ·
+**[Visit the website](https://ae2web.kuba6000.pl/) · [Try the live demo](https://ae2web.kuba6000.pl/demo/)**
+
 [Installation guide](https://ae2web.kuba6000.pl/get-started) · [API documentation](https://ae2web.kuba6000.pl/docs/)
 
 ![Terminal with item icons, pinned resources and a flow tooltip](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/terminal.webp)
@@ -91,6 +92,8 @@ the full plan independently of the current search and works without an icon pack
 image proportions are remembered for the next export; very large images use a lower resolution to fit.
 
 ### Web themes
+
+The mod currently includes one built-in theme. More themes are planned.
 
 Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
 ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.default_theme` in
