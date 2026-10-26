@@ -120,8 +120,7 @@ These videos show an earlier interface. See the gallery and demo above for the c
 
 The mod hosts its web panel and API on an HTTP server that starts with your Minecraft server or single-player world.
 
-1. Download the latest JAR for your Minecraft version from the
-   [Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
+1. Download the file for your Minecraft version and mod loader from this project's downloads.
 2. Drop the mod into the server's `mods` folder, or your Minecraft instance's `mods` folder for single-player.
    In multiplayer, only the server needs the mod.
 3. Start the server or open a single-player world once to generate the config.
