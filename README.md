@@ -13,7 +13,7 @@ Public servers can give each player their own account and access to their networ
 
 **Works on dedicated servers and in single-player worlds. Multiplayer clients do not need the mod.**
 It adds no items or blocks.
-An optional standalone client tool generates item icons from your modpack and resource packs.
+An optional client-side mod generates item icons from your modpack and resource packs.
 
 **[🌐 Official website](https://ae2web.kuba6000.pl/) · [▶️ Try the live demo](https://ae2web.kuba6000.pl/demo/)**
 
@@ -21,48 +21,7 @@ An optional standalone client tool generates item icons from your modpack and re
 
 ![Terminal with item icons, pinned resources and a flow tooltip](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/terminal.webp)
 
-## How does it work?
-
-The mod starts an HTTP server when the Minecraft server starts. This server hosts the built-in web panel and
-exposes the API used by that panel.
-
-### How does the web panel know which network to use?
-
-Networks must have a valid **ME Controller**, be loaded and finish starting before they
-appear in the web panel. Controllerless subnetworks are not available through the website.
-
-On all supported versions, a player can gain web access through ownership of an ME Controller,
-Wireless Access Point or supported terminal connected to the network. Placing your own Wireless
-Access Point is one straightforward way to set up access.
-
-On GTNH 1.7.10 and AE2 UEL 1.12.2, a working Security Terminal provides another way: add the player's
-biometric card with all four permissions — **Build, Extract, Inject and Craft**. Unassigned biometric
-cards do not grant web access.
-
-The `Admin` web account can access all available networks without a per-player access grant.
-Protect its password accordingly. Choose a network in the web panel to open its terminal.
-
 ## Current features
-
-### Optional item icons
-
-To show item icons in the web panel, generate an icon pack from your Minecraft client:
-
-1. Install the `ae2webintegration-icon-generator-*.jar` for your Minecraft version and mod loader
-   in your client's `mods` folder. Use the same modpack as the server.
-2. Start the game with the resource packs you want to use for the icons, then enter a world.
-3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
-4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
-5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
-   the filename can stay unchanged.
-6. Start the server. A fresh browser shows **Icons and names** automatically when the pack is available.
-   Use **Web Settings → Terminal display** to change this to **Icons only** or **Names only**.
-
-The icons use the appearance of your loaded resource packs. You can cancel generation from the
-progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
-Keep only one `.ae2wi-icons` file in that folder. If several are present, the server logs their names
-and disables icons until the conflict is resolved and the server is restarted.
-Icons are optional; without an icon pack, the terminal displays item names.
 
 ### Terminal
 
@@ -72,7 +31,7 @@ Icons are optional; without an icon pack, the terminal displays item names.
 - Track resource stock, input and output with interactive history charts
 - Use responsive desktop and mobile layouts, light/dark/system appearance, and Monocraft or Lato fonts
 - Choose names, icons or both, with configurable columns and page sizes, including no pagination
-- Receive crafting notifications through Discord or ntfy
+- Receive crafting notifications through Discord or ntfy when public mode is disabled
 
 ### Pins and Home
 
@@ -92,17 +51,29 @@ download a single PNG. The export includes
 the full plan independently of the current search and works without an icon pack. Settings and the
 image proportions are remembered for the next export; very large images use a lower resolution to fit.
 
-### Web themes
+## Compatibility
 
-The mod currently includes one built-in theme. More themes are planned.
+The mod currently supports Minecraft 1.21.1 (NeoForge), 1.20.1 (Forge), 1.12.2 (Forge), and 1.7.10 (Forge/GTNH).
+Builds for different versions are not interchangeable.
 
-Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
-ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.default_theme` in
-`config/ae2webintegration/config.toml` to `server:<theme id>` to make it the server default, or
-`builtin:default` for the built-in UI. Users can follow that default or keep their own browser choice.
+A few additional compatibility notes:
 
-If a theme prevents normal use, open the page with `?safe=1` before its `#` fragment to
-use the built-in UI.
+- The 1.7.10 build targets the GTNH forks of
+  [AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial) and
+  [AE2FC](https://github.com/GTNewHorizons/AE2FluidCraft-Rework).
+- The 1.12.2 build targets [AE2 UEL](https://github.com/AE2-UEL/Applied-Energistics-2) and
+  [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
+- The 1.20.1 and 1.21.1 builds include optional
+  [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
+
+## Requirements
+
+- A compatible AE2 installation for one of the supported Minecraft versions
+- A loaded ME network with a valid ME Controller
+- An available TCP port for the built-in web server
+- A firewall/NAT rule if you want to reach the panel from outside your local network
+
+By default, the panel is available at `http://your-server-ip-or-domain:2324/`. The port is configurable.
 
 ## Gallery
 
@@ -144,6 +115,163 @@ These videos show an earlier interface. See the gallery and demo above for the c
 - [Discord integration showcase](https://www.youtube.com/watch?v=e4a86dBz7NY)
 
 </details>
+
+## How to use
+
+The mod hosts its web panel and API on an HTTP server that starts with your Minecraft server or single-player world.
+
+1. Download the latest JAR for your Minecraft version from the
+   [Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
+2. Drop the mod into the server's `mods` folder, or your Minecraft instance's `mods` folder for single-player.
+   In multiplayer, only the server needs the mod.
+3. Start the server or open a single-player world once to generate the config.
+4. Open `config/ae2webintegration/config.toml`. Configure the port, admin
+   password, public mode, and other settings as needed.
+5. **Disable public mode if you are playing alone.**
+6. Reload the config with `/ae2webintegration reload`, or restart the server or single-player world.
+7. Allow the configured port through your firewall and router as needed, or route access through a reverse
+   proxy.
+8. Visit `http://your-server-ip-or-domain:configured-port/` and log in with the `Admin` account and the password
+   from the config.
+
+In public mode, a player can create an account from the login page. After choosing a password, the page displays
+an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
+
+### Access to networks
+
+Networks must have a valid **ME Controller**, be loaded and finish starting before they
+appear in the web panel. Controllerless subnetworks are not available through the website.
+
+On all supported versions, a player can gain web access through ownership of an ME Controller,
+Wireless Access Point or supported terminal connected to the network. Placing your own Wireless
+Access Point is one straightforward way to set up access.
+
+On GTNH 1.7.10 and AE2 UEL 1.12.2, a working Security Terminal provides another way: add the player's
+biometric card with all four permissions — **Build, Extract, Inject and Craft**. Unassigned biometric
+cards do not grant web access.
+
+The `Admin` web account can access all available networks without a per-player access grant.
+Protect its password accordingly. Choose a network in the web panel to open its terminal.
+
+## Optional item icons
+
+To show item icons in the web panel, generate an icon pack from your Minecraft client:
+
+1. Install the `ae2webintegration-icon-generator-*.jar` for your Minecraft version and mod loader
+   in your client's `mods` folder. Use the same modpack as the server.
+2. Start the game with the resource packs you want to use for the icons, then enter a world.
+3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
+4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
+5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
+   the filename can stay unchanged.
+6. Start the server. A fresh browser shows **Icons and names** automatically when the pack is available.
+   Use **Web Settings → Terminal display** to change this to **Icons only** or **Names only**.
+
+The icons use the appearance of your loaded resource packs. You can cancel generation from the
+progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
+Keep only one `.ae2wi-icons` file in that folder. If several are present, the server logs their names
+and disables icons until the conflict is resolved and the server is restarted.
+Icons are optional; without an icon pack, the terminal displays item names.
+
+## Web themes
+
+The mod currently includes one built-in theme. More themes are planned.
+
+Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
+ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.default_theme` in
+`config/ae2webintegration/config.toml` to `server:<theme id>` to make it the server default, or
+`builtin:default` for the built-in UI. Users can follow that default or keep their own browser choice.
+
+If a theme prevents normal use, open the page with `?safe=1` before its `#` fragment to
+use the built-in UI.
+
+## Crafting history
+
+Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
+**Include machine-requested crafting** there to also track jobs started by machines on that network.
+The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
+
+Completed and cancelled jobs are saved with the world and remain available after a server restart.
+Choose crafting history retention in the network settings. The default is 7 days, with a limit of
+1,000 jobs per network. Administrators can change the retention bounds and job limit in `crafting_history`.
+
+## Resource history
+
+Network settings have independent switches for input/output history and periodic storage quantities.
+Choose each network's storage sampling interval, input/output interval and history retention there,
+within the server's allowed ranges. Input/output recording alone does not scan the inventory;
+accepted input includes resources consumed by void storage. Select a resource in the terminal and open
+**Resource history** in its details to view measurements.
+
+Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
+to five minutes. Recent summaries show **two minutes of flow** and **one hour of stock changes**.
+Flow summaries use five-second intervals; stock summaries use the network's configured storage
+sampling interval. Charts show each measured interval's actual span and retain available partial
+counts when collection has gaps.
+
+Flow also records the number of accepted input and output operations. Recent summaries show an
+approximate rate per second when the measured interval is complete. One transfer of 64 items counts
+as one operation; these counts describe network transfers, not individual machine recipes.
+
+History is stored in an embedded SQLite database at `ae2webintegration/grids.sqlite` in the world directory.
+No database installation is needed. Server startup fails if the database cannot be initialized.
+The defaults retain up to 7 days and 250,000 records per network;
+the oldest records are removed when either limit is reached. One older stock measurement per resource
+may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
+values, plus the record cap, under `resource_history` in `config.toml` and apply them with `/ae2webintegration reload`
+or a server restart.
+Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
+shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;
+physical cleanup runs during database initialization, writes and periodic background maintenance.
+Missing measurements are shown as gaps, not zero activity.
+
+With **Automatic updates** enabled, the terminal and selected CPU view receive live changes over SSE.
+The CPU list refreshes periodically. Live viewing does not require resource history tracking or
+increase the frequency of saved storage measurements. After a connection interruption or storage
+topology change, the terminal loads a fresh snapshot automatically.
+
+## Notification services integration
+
+**Crafting notifications are available only when public mode is disabled.**
+
+Crafting completion notifications can be filtered with `minimum_crafting_duration_seconds` and
+`minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
+which keeps all crafting completion notifications enabled.
+Enable **Record crafting history** for each network that should send crafting notifications.
+
+Crafting updates include the requesting players when identified, using the authenticated account for
+orders placed through the web terminal. Administrator and localhost access have no player identity.
+
+### Discord
+
+Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
+`discord.role_id` configures an optional role mention.
+
+Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
+Set `discord.crafting_style` to `IMAGE_CARD` (default) for the full card, `SMALL_ICON` for a text embed with an item thumbnail, or `SIMPLE` for text only.
+Install an icon pack to supply item images. `SMALL_ICON` sends text only when no usable icon is available; `IMAGE_CARD` falls back to text if rendering fails.
+
+### ntfy
+
+[ntfy](https://ntfy.sh/) sends the same crafting updates as a phone or desktop notification. Set `ntfy.host` to [ntfy.sh](https://ntfy.sh/) or to your own server, and set `ntfy.topic` to a topic you subscribed to in the app. A host without `http://` or `https://` is sent over HTTPS.
+
+Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private topic needs both. Setting only one of them turns ntfy off.
+
+`notifications.full_domain` is optional. When it is set, opening the notification goes to that address.
+
+## Server settings
+
+Administrators and trusted localhost users can edit the active configuration in **Server settings**.
+**Save and apply** writes `config.toml` and applies the changes without restarting the web server.
+The listener port, administrator password, public mode, password-free localhost access, trusted proxies
+and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
+Manual file edits take effect after reloading the configuration or restarting the server.
+Set `general.allow_server_settings_editing = false` in `config.toml` and reload to disable reading and
+editing server settings through the web, including for administrators and trusted localhost users.
+The tab then shows a disabled notice instead of the settings. Access is enabled by default; the switch
+can only be changed in the file.
+Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
+to keep them, or explicitly replace or clear them.
 
 ## Security
 
@@ -219,133 +347,6 @@ location / {
 
 The [`tools/php-proxy`](https://github.com/kuba6000/AE2-Web-Integration/tree/core/tools/php-proxy) directory contains a PHP reverse proxy that serves
 the mod's website, assets and API through an existing web server.
-
-## Requirements
-
-- A compatible AE2 installation for one of the supported Minecraft versions
-- A loaded ME network with a valid ME Controller
-- An available TCP port for the built-in web server
-- A firewall/NAT rule if you want to reach the panel from outside your local network
-
-By default, the panel is available at `http://your-server-ip-or-domain:2324/`. The port is configurable.
-
-## How to use
-
-1. Download the latest JAR for your Minecraft version from the
-   [Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
-2. Drop the mod into the server's `mods` folder, or your Minecraft instance's `mods` folder for single-player.
-   In multiplayer, only the server needs the mod.
-3. Start the server once to generate the config.
-4. Open `config/ae2webintegration/config.toml`. Configure the port, admin
-   password, public mode, and other settings as needed.
-5. **Disable public mode if you are playing alone.**
-6. Reload the config with `/ae2webintegration reload`, or restart the server.
-7. Allow the configured port through your firewall and router as needed, or route access through a reverse
-   proxy.
-8. Visit `http://your-server-ip-or-domain:configured-port/` and log in with the `Admin` account and the password
-   from the config.
-
-In public mode, a player can create an account from the login page. After choosing a password, the page displays
-an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
-
-Administrators and trusted localhost users can edit the active configuration in **Server settings**.
-**Save and apply** writes `config.toml` and applies the changes without restarting the web server.
-The listener port, administrator password, public mode, password-free localhost access, trusted proxies
-and unauthenticated request limit are read-only in the panel; change them directly in the configuration file.
-Manual file edits take effect after reloading the configuration or restarting the server.
-Set `general.allow_server_settings_editing = false` in `config.toml` and reload to disable reading and
-editing server settings through the web, including for administrators and trusted localhost users.
-The tab then shows a disabled notice instead of the settings. Access is enabled by default; the switch
-can only be changed in the file.
-Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
-to keep them, or explicitly replace or clear them.
-
-Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
-**Include machine-requested crafting** there to also track jobs started by machines on that network.
-The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
-
-Completed and cancelled jobs are saved with the world and remain available after a server restart.
-Choose crafting history retention in the network settings. The default is 7 days, with a limit of
-1,000 jobs per network. Administrators can change the retention bounds and job limit in `crafting_history`.
-
-### Resource history
-
-Network settings have independent switches for input/output history and periodic storage quantities.
-Choose each network's storage sampling interval, input/output interval and history retention there,
-within the server's allowed ranges. Input/output recording alone does not scan the inventory;
-accepted input includes resources consumed by void storage. Select a resource in the terminal and open
-**Resource history** in its details to view measurements.
-
-Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
-to five minutes. Recent summaries show **two minutes of flow** and **one hour of stock changes**.
-Flow summaries use five-second intervals; stock summaries use the network's configured storage
-sampling interval. Charts show each measured interval's actual span and retain available partial
-counts when collection has gaps.
-
-Flow also records the number of accepted input and output operations. Recent summaries show an
-approximate rate per second when the measured interval is complete. One transfer of 64 items counts
-as one operation; these counts describe network transfers, not individual machine recipes.
-
-History is stored in an embedded SQLite database at `ae2webintegration/grids.sqlite` in the world directory.
-No database installation is needed. Server startup fails if the database cannot be initialized.
-The defaults retain up to 7 days and 250,000 records per network;
-the oldest records are removed when either limit is reached. One older stock measurement per resource
-may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
-values, plus the record cap, under `resource_history` in `config.toml` and apply them with `/ae2webintegration reload`
-or a server restart.
-Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
-shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;
-physical cleanup runs during database initialization, writes and periodic background maintenance.
-Missing measurements are shown as gaps, not zero activity.
-
-With **Automatic updates** enabled, the terminal and selected CPU view receive live changes over SSE.
-The CPU list refreshes periodically. Live viewing does not require resource history tracking or
-increase the frequency of saved storage measurements. After a connection interruption or storage
-topology change, the terminal loads a fresh snapshot automatically.
-
-## Notification services integration
-
-**Crafting notifications are available only when public mode is disabled.**
-
-Crafting completion notifications can be filtered with `minimum_crafting_duration_seconds` and
-`minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
-which keeps all crafting completion notifications enabled.
-Enable **Record crafting history** for each network that should send crafting notifications.
-
-Crafting updates include the requesting players when identified, using the authenticated account for
-orders placed through the web terminal. Administrator and localhost access have no player identity.
-
-#### Discord Integration
-
-Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Integration config.
-`discord.role_id` configures an optional role mention.
-
-Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
-Set `discord.crafting_style` to `IMAGE_CARD` (default) for the full card, `SMALL_ICON` for a text embed with an item thumbnail, or `SIMPLE` for text only.
-Install an icon pack to supply item images. `SMALL_ICON` sends text only when no usable icon is available; `IMAGE_CARD` falls back to text if rendering fails.
-
-#### NTFY Integration
-
-[ntfy](https://ntfy.sh/) sends the same crafting updates as a phone or desktop notification. Set `ntfy.host` to [ntfy.sh](https://ntfy.sh/) or to your own server, and set `ntfy.topic` to a topic you subscribed to in the app. A host without `http://` or `https://` is sent over HTTPS.
-
-Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private topic needs both. Setting only one of them turns ntfy off.
-
-`notifications.full_domain` is optional. When it is set, opening the notification goes to that address.
-
-## Compatibility
-
-The mod currently supports Minecraft 1.21.1 (NeoForge), 1.20.1 (Forge), 1.12.2 (Forge), and 1.7.10 (Forge/GTNH).
-Builds for different versions are not interchangeable.
-
-A few additional compatibility notes:
-
-- The 1.7.10 build targets the GTNH forks of
-  [AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial) and
-  [AE2FC](https://github.com/GTNewHorizons/AE2FluidCraft-Rework).
-- The 1.12.2 build targets [AE2 UEL](https://github.com/AE2-UEL/Applied-Energistics-2) and
-  [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
-- The 1.20.1 and 1.21.1 builds include optional
-  [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
 
 ## Telemetry
 
