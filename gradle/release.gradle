@@ -213,7 +213,6 @@ publishingOptions.curseforge {
     projectId.set(curseforgeProjectId)
     accessToken.set(dryRun ? providers.provider { '' } : curseforgeToken.orElse(''))
     minecraftVersions.set([target.minecraft])
-    javaVersions.set([JavaVersion.toVersion(target.java)])
     client.set(false)
     server.set(true)
     target.curseforge.each { requires(it) }
