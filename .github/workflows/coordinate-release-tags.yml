@@ -1,0 +1,85 @@
+name: Coordinate release tags
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: core-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'kuba6000/AE2-Web-Integration'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      enabled: ${{ steps.credentials.outputs.enabled }}
+    steps:
+      - name: Check release bot configuration
+        id: credentials
+        env:
+          CORE_PIN_BOT_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+        run: |
+          if [[ -z "${CORE_PIN_BOT_TOKEN//[[:space:]]/}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping native release tags: CORE_PIN_BOT_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.credentials.outputs.enabled == 'true'
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+      - name: Freeze the four release commits
+        if: steps.credentials.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: |
+          core_sha="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          python3 .github/scripts/coordinate_release.py prepare \
+            --repository "$GITHUB_REPOSITORY" --source-tag "$SOURCE_TAG" \
+            --core-sha "$core_sha" --plan release-plan.json
+          cat release-plan.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.credentials.outputs.enabled == 'true'
+        with:
+          name: core-release-plan
+          path: release-plan.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: prepare
+    if: needs.prepare.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: core-release-plan
+          path: release-plan
+      - name: Create native release tags separately
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CORE_PIN_BOT_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: |
+          core_sha="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          python3 .github/scripts/coordinate_release.py publish \
+            --repository "$GITHUB_REPOSITORY" --source-tag "$SOURCE_TAG" \
+            --core-sha "$core_sha" --plan release-plan/release-plan.json
