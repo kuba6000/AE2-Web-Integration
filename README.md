@@ -127,7 +127,8 @@ The mod hosts its web panel and API on an HTTP server that starts with your Mine
 3. Start the server or open a single-player world once to generate the config.
 4. Open `config/ae2webintegration/config.toml`. Configure the port, admin
    password, public mode, and other settings as needed.
-5. **Disable public mode if you are playing alone.**
+5. **For single-player or a private server where everyone shares the Admin account, disable public mode.
+   Keep it enabled if players need separate accounts and access to their own networks.**
 6. Reload the config with `/ae2webintegration reload`, or restart the server or single-player world.
 7. Allow the configured port through your firewall and router as needed, or route access through a reverse
    proxy.
