@@ -431,3 +431,11 @@ Bundled third-party assets retain their own licenses:
 | Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
+
+### Third-Party Game Assets
+
+Screenshots and the interactive demo may display item icons and textures from Minecraft, Applied Energistics 2, GT New Horizons (GTNH), and other third-party mods.
+
+These assets remain the property of their respective rights holders and are subject to their original licenses. They are used to demonstrate AE2 Web Integration's interface and icon support and are not covered by the project's LGPL-3.0-or-later license.
+
+AE2 Web Integration is an unofficial third-party project and is not affiliated with or endorsed by Mojang, Microsoft, the GTNH team, or the respective mod authors.
