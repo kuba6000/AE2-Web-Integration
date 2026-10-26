@@ -13,7 +13,8 @@ Public servers can give each player their own account and access to their networ
 
 **Works on dedicated servers and in single-player worlds. Multiplayer clients do not need the mod.**
 It adds no items or blocks.
-An optional client-side mod generates item icons from your modpack and resource packs.
+The optional **Icon Generator** client-side mod (`ae2webintegration-icon-generator-*.jar`)
+generates item icons from your modpack and resource packs.
 
 **[🌐 Official website](https://ae2web.kuba6000.pl/) · [▶️ Try the live demo](https://ae2web.kuba6000.pl/demo/)**
 
@@ -120,7 +121,8 @@ These videos show an earlier interface. See the gallery and demo above for the c
 
 The mod hosts its web panel and API on an HTTP server that starts with your Minecraft server or single-player world.
 
-1. Download the file for your Minecraft version and mod loader from this project's downloads.
+1. Download the main mod JAR for your Minecraft version and mod loader from this project's downloads.
+   The separate file with `icon-generator` in its name is the optional client-side icon generator.
 2. Drop the mod into the server's `mods` folder, or your Minecraft instance's `mods` folder for single-player.
    In multiplayer, only the server needs the mod.
 3. Start the server or open a single-player world once to generate the config.
@@ -157,8 +159,9 @@ Protect its password accordingly. Choose a network in the web panel to open its 
 
 To show item icons in the web panel, generate an icon pack from your Minecraft client:
 
-1. Install the `ae2webintegration-icon-generator-*.jar` for your Minecraft version and mod loader
-   in your client's `mods` folder. Use the same modpack as the server.
+1. Download the **Icon Generator** file (`ae2webintegration-icon-generator-*.jar`) for your Minecraft
+   version and mod loader from this project's downloads. Place it in your client's `mods` folder.
+   Use the same modpack as the server.
 2. Start the game with the resource packs you want to use for the icons, then enter a world.
 3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
 4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
