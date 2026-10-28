@@ -218,22 +218,13 @@ public final class IconPack implements Closeable {
         JsonObject modValues = environment.getAsJsonObject("mods");
         for (Map.Entry<String, JsonElement> entry : modValues.entrySet())
             mods.put(entry.getKey(), PackFormat.text(modValues, entry.getKey()));
-        List<String> resources = new ArrayList<>();
-        for (JsonElement value : environment.getAsJsonArray("resourcePacks")) {
-            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive()
-                .isString()) throw new IOException("Invalid resource provenance");
-            String fingerprint = value.getAsString();
-            PackFormat.digest(fingerprint);
-            resources.add(fingerprint);
-        }
         return new Metadata(
             PackFormat.text(root, "minecraftVersion"),
             PackFormat.text(root, "loader"),
             PackFormat.text(root, "compatibilityVersion"),
             PackFormat.text(root, "generatorVersion"),
             PackFormat.text(root, "generatedAt"),
-            mods,
-            resources);
+            mods);
     }
 
     private static byte @NotNull [] bytes(@NotNull ZipFile zip, @NotNull String name, int maximum) throws IOException {
@@ -321,19 +312,14 @@ public final class IconPack implements Closeable {
         if (readers == 0) zip.close();
     }
 
-    /** Native platform compatibility requirements, independent of a generated pack's provenance. */
-    @Desugar
-    public record Target(@NotNull String minecraftVersion, @NotNull String loader,
-        @NotNull String compatibilityVersion) {}
-
+    /** Immutable compatibility and provenance metadata for a generated pack. */
     @Desugar
     public record Metadata(@NotNull String minecraftVersion, @NotNull String loader,
         @NotNull String compatibilityVersion, @NotNull String generatorVersion, @NotNull String generatedAt,
-        @NotNull Map<String, String> mods, @NotNull List<String> resourcePacks) {
+        @NotNull Map<String, String> mods) {
 
         public Metadata {
             mods = Collections.unmodifiableMap(new TreeMap<>(mods));
-            resourcePacks = Collections.unmodifiableList(new ArrayList<>(resourcePacks));
         }
     }
 

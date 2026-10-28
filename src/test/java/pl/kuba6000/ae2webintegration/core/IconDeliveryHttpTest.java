@@ -188,8 +188,7 @@ class IconDeliveryHttpTest {
                 "test-identity",
                 "test",
                 "today",
-                Collections.emptyMap(),
-                Collections.emptyList());
+                Collections.emptyMap());
             try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
                 int[] pixels = new int[4096];
                 Arrays.fill(pixels, 0xff1234ab);
@@ -2038,8 +2037,7 @@ class IconDeliveryHttpTest {
             "test-identity",
             "test",
             "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+            Collections.emptyMap());
         try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff405060);
