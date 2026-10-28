@@ -29,3 +29,6 @@ type = "required"
 versionRange = "[19.2.4,)"
 ordering = "AFTER"
 side = "CLIENT"
+
+[[mixins]]
+config = "mixins.ae2webicons.json"
