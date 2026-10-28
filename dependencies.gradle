@@ -7,36 +7,14 @@ dependencies {
             prefer '3.53.4.0'
         }
     }
-    additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.53.4.0'
 
     // Core submodule (pure Java — no NeoForge/MC/AE2 references)
     implementation project(':core')
-    // MC 1.21.1 dev runs load only this mod's classes dir; core must be on the run classpath
-    additionalRuntimeClasspath project(':core')
 
     // AE2
     implementation(neoforge.ae2)
-    compileOnly(neoforge.ae2wtlib)
-
-    // AE addons for compatibility //
+    // Optional compatibility mixins compile against the target addon API.
     compileOnly(neoforge.advancedae)
-
-    // Standard runtime mods //
-    localRuntime(neoforge.jade)
-    localRuntime(neoforge.spark)
-    localRuntime(neoforge.modernfix)
-
-
-    // Runtime Recipe Viewers //
-    localRuntime(neoforge.emi)
-
-    // Client-only runtime mods //
-    clientLocalRuntime(neoforge.embeddium)
-    //modClientLocalRuntime(forge.oculus)
-
-    // runtime test mods //
-    //localRuntime(neoforge.advancedae)
-    //localRuntime(neoforge.geckolib)
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

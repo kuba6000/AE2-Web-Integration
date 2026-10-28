@@ -12,11 +12,6 @@ neoForge {
     // Specify Forge version
     version = libs.versions.neo.get()
 
-    parchment {
-        minecraftVersion = libs.versions.minecraft.get()
-        mappingsVersion = libs.versions.parchment.get()
-    }
-
     // This line is optional. Access Transformers are automatically detected
     accessTransformers = project.files('src/main/resources/META-INF/accesstransformer.cfg')
 
@@ -58,7 +53,7 @@ neoForge {
             systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
         }
 
-        // Client with GTM + Jade, EMI, AE2
+        // Client with the required runtime dependencies
         cleanClient {
             client()
             ideName = "Clean Client"
@@ -88,7 +83,7 @@ neoForge {
         }
 
         data {
-            data()
+            clientData()
             ideName = "Data Generation"
 
             gameDirectory.set(file('run/data'))

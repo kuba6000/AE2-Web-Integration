@@ -1,5 +1,3 @@
-modLoader = "javafml"
-loaderVersion = "[2,)"
 issueTrackerURL = "${mod_issue_tracker}"
 license = "${mod_license}"
 
@@ -18,5 +16,15 @@ config = "mixins.ae2webintegration.json"
 
 [[dependencies.ae2webintegration]]
 modId = "ae2"
-mandatory = true
-versionRange = "[19.2.4,)"
+type = "required"
+versionRange = "[26.1.13-beta,26.2)"
+
+[[dependencies.ae2webintegration]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.1.2]"
+
+[[dependencies.ae2webintegration]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.1.2.124,26.1.3)"

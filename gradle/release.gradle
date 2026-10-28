@@ -1,5 +1,5 @@
 def target = [
-    minecraft: '1.21.1', loader: 'neoforge', java: 21, archiveTask: 'shadowJar',
+    minecraft: '26.1.2', loader: 'neoforge', java: 25, archiveTask: 'shadowJar',
     generatorTask: 'iconGeneratorJar',
     modrinth: ['ae2'], curseforge: ['applied-energistics-2'], external: []
 ]

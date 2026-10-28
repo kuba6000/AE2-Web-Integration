@@ -1,7 +1,6 @@
 [versions]
-minecraft = "1.21.1"
-neo = "21.1.203"
-parchment = "2024.11.17"
+minecraft = "26.1.2"
+neo = "26.1.2.124"
 jetbrains-annotations = "26.0.1"
 
 [libraries]
