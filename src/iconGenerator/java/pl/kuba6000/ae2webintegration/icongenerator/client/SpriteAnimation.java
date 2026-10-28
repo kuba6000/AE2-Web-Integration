@@ -19,7 +19,6 @@ import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.ClientHooks;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -44,7 +43,6 @@ final class SpriteAnimation implements IIconAnimation {
 
         STATIC("staticAnimationCandidates"),
         CUSTOM_RENDERER("sampledCustomAnimationPlans"),
-        MODIFIED_ATLAS("unsupportedAtlasAnimations"),
         SPRITE_IMPLEMENTATION("unsupportedSpriteAnimations"),
         SCRATCH_LIMIT("unsupportedAnimationScratch");
 
@@ -101,14 +99,6 @@ final class SpriteAnimation implements IIconAnimation {
                 .toList();
             if (sprites.isEmpty()) {
                 renderer.animationSelection(Selection.STATIC);
-                return null;
-            }
-            // Shader companion atlases are not owned by vanilla SpriteContents uploads.
-            if (ModList.get()
-                .isLoaded("oculus")
-                || ModList.get()
-                    .isLoaded("iris")) {
-                renderer.animationSelection(Selection.MODIFIED_ATLAS);
                 return null;
             }
             long scratchBytes = 0;
