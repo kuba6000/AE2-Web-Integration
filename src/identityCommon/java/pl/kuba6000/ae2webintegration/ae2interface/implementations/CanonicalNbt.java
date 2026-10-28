@@ -46,7 +46,7 @@ final class CanonicalNbt {
             return true;
         }
         // AE's missing-content codec overlays preserved original fields, including unknown ones.
-        Set<String> names = new TreeSet<>(original.getAllKeys());
+        Set<String> names = new TreeSet<>(original.keySet());
         names.add("#t");
         names.add("id");
         if (components != null) names.add("components");
@@ -56,7 +56,7 @@ final class CanonicalNbt {
             Tag override = original.get(name);
             if (override != null) {
                 StableKey.writeText(sink, name);
-                // Native AE conversion normalizes numeric lists to arrays; RegistryOps delegates this to NbtOps.
+                // Match the native AE codec's conversion of preserved missing-content fields.
                 if (!writer.writeTag(NbtOps.INSTANCE.convertTo(NbtOps.INSTANCE, override), sink, 1)) return false;
             } else if (components != null && name.equals("components")) {
                 StableKey.writeText(sink, name);
@@ -89,25 +89,25 @@ final class CanonicalNbt {
             case Tag.TAG_END:
                 throw new IllegalArgumentException("Unexpected NBT end tag");
             case Tag.TAG_BYTE:
-                sink.putByte(((NumericTag) tag).getAsByte());
+                sink.putByte(((NumericTag) tag).byteValue());
                 break;
             case Tag.TAG_SHORT:
-                sink.putShort(Short.reverseBytes(((NumericTag) tag).getAsShort()));
+                sink.putShort(Short.reverseBytes(((NumericTag) tag).shortValue()));
                 break;
             case Tag.TAG_INT:
-                writeInt(sink, ((NumericTag) tag).getAsInt());
+                writeInt(sink, ((NumericTag) tag).intValue());
                 break;
             case Tag.TAG_LONG:
-                writeLong(sink, ((NumericTag) tag).getAsLong());
+                writeLong(sink, ((NumericTag) tag).longValue());
                 break;
             case Tag.TAG_FLOAT:
-                writeInt(sink, Float.floatToIntBits(((NumericTag) tag).getAsFloat()));
+                writeInt(sink, Float.floatToIntBits(((NumericTag) tag).floatValue()));
                 break;
             case Tag.TAG_DOUBLE:
-                writeLong(sink, Double.doubleToLongBits(((NumericTag) tag).getAsDouble()));
+                writeLong(sink, Double.doubleToLongBits(((NumericTag) tag).doubleValue()));
                 break;
             case Tag.TAG_STRING:
-                StableKey.writeText(sink, tag.getAsString());
+                StableKey.writeText(sink, ((StringTag) tag).value());
                 break;
             case Tag.TAG_BYTE_ARRAY:
                 byte[] bytes = ((ByteArrayTag) tag).getAsByteArray();
@@ -127,14 +127,14 @@ final class CanonicalNbt {
             case Tag.TAG_LIST:
                 ListTag list = (ListTag) tag;
                 checkChildren(list.size());
-                sink.putByte(list.isEmpty() ? Tag.TAG_END : list.getElementType());
+                // Native lists may mix tag types; encode each element with its own type.
                 writeInt(sink, list.size());
-                for (Tag element : list) if (!writePayload(element, sink, depth + 1)) return false;
+                for (Tag element : list) if (!writeTag(element, sink, depth + 1)) return false;
                 break;
             case Tag.TAG_COMPOUND:
                 CompoundTag compound = (CompoundTag) tag;
                 checkChildren(compound.size());
-                List<String> names = new ArrayList<>(compound.getAllKeys());
+                List<String> names = new ArrayList<>(compound.keySet());
                 Collections.sort(names);
                 writeInt(sink, names.size());
                 for (String name : names) {

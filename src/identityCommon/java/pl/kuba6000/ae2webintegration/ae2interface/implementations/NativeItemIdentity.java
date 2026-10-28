@@ -51,7 +51,7 @@ public final class NativeItemIdentity {
                     .getComponentsPatch()))
                 return null;
         }
-        CompoundTag tag = key.toTagGeneric(registries);
+        Tag tag = encodeTag(key, registries);
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
         return StableKey.createOptional(sink -> {
             StableKey.writeText(sink, kind(key));
@@ -80,7 +80,7 @@ public final class NativeItemIdentity {
                 .toString(),
             stack.getComponentsPatch(),
             registries,
-            original == null ? null : original.getUnsafe());
+            original == null ? null : original.copyTag());
     }
 
     /** Encodes the native fluid directly without creating an AE key or copying its stack. */
@@ -118,17 +118,21 @@ public final class NativeItemIdentity {
         // Built-in AE keys retain immutable identity under AE2's read-only tag/stack contract.
         if (key instanceof AEItemKey || key instanceof AEFluidKey) return key;
         HolderLookup.Provider registries = registries();
-        return decodeCopy(key, key.toTagGeneric(registries), registries);
+        return decodeCopy(key, encodeTag(key, registries), registries);
     }
 
-    private static @NotNull AEKey decodeCopy(@NotNull AEKey key, @NotNull CompoundTag tag,
+    private static @NotNull AEKey decodeCopy(@NotNull AEKey key, @NotNull Tag tag,
         @NotNull HolderLookup.Provider registries) {
-        AEKey copy = key.getType()
-            .loadKeyFromTag(registries, tag);
-        if (copy == null) {
-            throw new UnsupportedOperationException("Native identity could not be decoded");
-        }
-        return copy;
+        return key.getType()
+            .codec()
+            .codec()
+            .parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
+            .getOrThrow();
+    }
+
+    private static @NotNull Tag encodeTag(@NotNull AEKey key, @NotNull HolderLookup.Provider registries) {
+        return AEKey.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), key)
+            .getOrThrow();
     }
 
     private static boolean isPersistent(@NotNull DataComponentPatch patch) {
