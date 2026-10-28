@@ -33,7 +33,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
-/** Native registries and creative display/search entries, optionally unioned with a completed EMI index. */
+/** Native registries and creative display/search entries, optionally unioned with a completed EMI index and recipes. */
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
@@ -57,6 +57,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int nativeCandidates;
     private int creativeCandidates;
     private int emiCandidates;
+    private boolean readingEmiRecipes;
     private int fluidCandidates;
     private int skippedEmpty;
     private int skippedDisabled;
@@ -161,6 +162,10 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             fluidCandidates++;
             return new IconCandidate(context, new FluidStack(fluid, 1));
         }
+        if (emi != null && !emi.recipesDone()) {
+            readingEmiRecipes = true;
+            return emi.nextRecipe();
+        }
         done = true;
         return null;
     }
@@ -186,7 +191,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     @Override
     @NotNull
     public String context() {
-        return context;
+        return readingEmiRecipes && emi != null ? emi.recipeContext() : context;
     }
 
     @Override
@@ -196,6 +201,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         counts.put("nativeCandidates", (long) nativeCandidates);
         counts.put("creativeCandidates", (long) creativeCandidates);
         counts.put("emiCandidates", (long) emiCandidates);
+        counts.put("emiRecipesVisited", emi == null ? 0L : (long) emi.recipesVisited());
+        counts.put("emiRecipeCandidates", emi == null ? 0L : emi.recipeCandidates());
         counts.put("fluidCandidates", (long) fluidCandidates);
         counts.put("skippedEmpty", (long) skippedEmpty);
         counts.put("skippedFeatureDisabled", (long) skippedDisabled);
@@ -206,7 +213,9 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     @Override
     public @NotNull List<String> sources() {
         String emiSource = useEmi ? "emi" : emiUnavailable ? "emi-unavailable" : "emi-absent";
-        return Arrays.asList("native", "creative", emiSource, "fluids");
+        List<String> sources = new ArrayList<>(Arrays.asList("native", "creative", emiSource, "fluids"));
+        if (useEmi) sources.add("emi-recipes");
+        return sources;
     }
 
     @Override
