@@ -7,6 +7,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
+import pl.kuba6000.ae2webintegration.ae2interface.platform.NativePermissions;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.UpdateNotifier;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -28,11 +29,11 @@ public class FMLEventHandler {
         PlayerIdentity identity = new PlayerIdentity(
             serverPlayer.getUUID(),
             serverPlayer.getGameProfile()
-                .getName());
+                .name());
         CoreEngine.onPlayerSeen(identity);
         UpdateNotifier.onPlayerLoggedIn(
             new PlayerMessenger(),
             identity,
-            serverPlayer.hasPermissions(CommandBootstrap.ADMIN_PERMISSION_LEVEL));
+            NativePermissions.hasLevel(serverPlayer.permissions(), CommandBootstrap.ADMIN_PERMISSION_LEVEL));
     }
 }

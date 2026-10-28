@@ -67,7 +67,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 
-        if (FMLLoader.getLoadingModList()
+        if (FMLLoader.getCurrent()
+            .getLoadingModList()
             .getModFileById("advanced_ae") != null) {
             LOG.info("AdvancedAE detected !, applying mixins for AdvancedAE");
             mixins.addAll(

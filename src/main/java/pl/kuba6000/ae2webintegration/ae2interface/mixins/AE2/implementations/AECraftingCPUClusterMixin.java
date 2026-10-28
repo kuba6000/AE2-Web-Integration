@@ -65,7 +65,7 @@ public class AECraftingCPUClusterMixin implements IPausableCraftingCPU, ICraftin
                     sink,
                     cluster.getLevel()
                         .dimension()
-                        .location()
+                        .identifier()
                         .toString());
                 sink.putInt(position.getX())
                     .putInt(position.getY())

@@ -57,7 +57,8 @@ public class Platform implements IServerPlatform {
 
     @Override
     public @Nullable Path getModFile() {
-        if (!FMLLoader.isProduction()) return null;
+        if (!FMLLoader.getCurrent()
+            .isProduction()) return null;
         return ModList.get()
             .getModFileById(AE2WebIntegration.MODID)
             .getFile()

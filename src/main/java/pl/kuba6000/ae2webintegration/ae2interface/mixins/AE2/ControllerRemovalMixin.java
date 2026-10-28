@@ -25,7 +25,7 @@ public class ControllerRemovalMixin {
             CoreEngine.GRID_IDENTITIES.controllerRemoved(
                 new DimensionalCoords(
                     level.dimension()
-                        .location()
+                        .identifier()
                         .toString(),
                     position.getX(),
                     position.getY(),

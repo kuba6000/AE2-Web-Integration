@@ -65,7 +65,7 @@ public class AdvCraftingCPUMixin implements IPausableCraftingCPU, ICraftingCPUNa
                         sink,
                         cluster.getLevel()
                             .dimension()
-                            .location()
+                            .identifier()
                             .toString());
                     sink.putInt(position.getX())
                         .putInt(position.getY())

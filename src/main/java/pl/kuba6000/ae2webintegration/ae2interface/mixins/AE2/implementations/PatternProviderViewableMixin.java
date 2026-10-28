@@ -60,7 +60,7 @@ public interface PatternProviderViewableMixin extends IPatternProviderViewable {
         }
         return new DimensionalCoords(
             level.dimension()
-                .location()
+                .identifier()
                 .toString(),
             pos.getX(),
             pos.getY(),

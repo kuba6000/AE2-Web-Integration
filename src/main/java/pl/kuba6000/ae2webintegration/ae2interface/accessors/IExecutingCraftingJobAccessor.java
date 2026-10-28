@@ -4,7 +4,7 @@ import java.util.UUID;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.server.players.NameAndId;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,11 +29,11 @@ public interface IExecutingCraftingJobAccessor {
         ServerPlayer player = server.getPlayerList()
             .getPlayer(uuid);
         if (player != null) return player.getGameProfile()
-            .getName();
-        GameProfileCache cache = server.getProfileCache();
-        return cache == null ? null
-            : cache.get(uuid)
-                .map(profile -> profile.getName())
-                .orElse(null);
+            .name();
+        return server.services()
+            .nameToIdCache()
+            .get(uuid)
+            .map(NameAndId::name)
+            .orElse(null);
     }
 }

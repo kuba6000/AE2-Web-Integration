@@ -5,6 +5,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import pl.kuba6000.ae2webintegration.ae2interface.platform.NativePermissions;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
@@ -47,7 +48,7 @@ public class CommandContext implements ICommandContext {
         return player != null ? new PlayerIdentity(
             player.getUUID(),
             player.getGameProfile()
-                .getName())
+                .name())
             : null;
     }
 
@@ -58,15 +59,17 @@ public class CommandContext implements ICommandContext {
         return player != null && source.getServer()
             .isSingleplayer()
             && source.getServer()
-                .isSingleplayerOwner(player.getGameProfile())
+                .isSingleplayerOwner(player.nameAndId())
             && player.connection.getConnection()
                 .isMemoryConnection();
     }
 
     @Override
     public boolean hasPermission(int level) {
-        return context.getSource()
-            .hasPermission(level);
+        return NativePermissions.hasLevel(
+            context.getSource()
+                .permissions(),
+            level);
     }
 
     @Override

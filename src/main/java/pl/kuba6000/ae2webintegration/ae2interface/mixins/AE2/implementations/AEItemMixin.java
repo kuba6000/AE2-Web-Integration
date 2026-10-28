@@ -1,7 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,7 +48,7 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Shadow
-    public ResourceLocation getId() {
+    public Identifier getId() {
         throw new UnsupportedOperationException("Mixin failed to apply");
     }
 

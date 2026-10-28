@@ -13,7 +13,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.server.players.NameAndId;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
@@ -100,7 +100,7 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
                         new DimensionalCoords(
                             node.getLevel()
                                 .dimension()
-                                .location()
+                                .identifier()
                                 .toString(),
                             position.getX(),
                             position.getY(),
@@ -169,7 +169,7 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
             new DimensionalCoords(
                 node.getLevel()
                     .dimension()
-                    .location()
+                    .identifier()
                     .toString(),
                 position.getX(),
                 position.getY(),
@@ -193,7 +193,7 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
             Comparator.comparing(
                 (IGridNode node) -> node.getLevel()
                     .dimension()
-                    .location()
+                    .identifier()
                     .toString())
                 .thenComparingInt(
                     node -> ((ControllerBlockEntity) node.getOwner()).getBlockPos()
@@ -214,12 +214,12 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
     @Unique
     private static @Nullable PlayerIdentity web$profile(@Nullable UUID uuid) {
         if (uuid == null) return null;
-        GameProfileCache profileCache = ServerLifecycleHooks.getCurrentServer()
-            .getProfileCache();
-        GameProfile profile = profileCache == null ? null
-            : profileCache.get(uuid)
-                .orElse(null);
-        return new PlayerIdentity(uuid, profile == null ? uuid.toString() : profile.getName());
+        NameAndId profile = ServerLifecycleHooks.getCurrentServer()
+            .services()
+            .nameToIdCache()
+            .get(uuid)
+            .orElse(null);
+        return new PlayerIdentity(uuid, profile == null ? uuid.toString() : profile.name());
     }
 
     @Override

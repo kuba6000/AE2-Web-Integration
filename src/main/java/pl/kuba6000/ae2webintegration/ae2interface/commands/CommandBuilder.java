@@ -13,6 +13,7 @@ import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 
+import pl.kuba6000.ae2webintegration.ae2interface.platform.NativePermissions;
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 
@@ -109,7 +110,7 @@ public class CommandBuilder implements ICommandBuilder {
     /** Builds a Brigadier {@link LiteralArgumentBuilder} from a data node. */
     private static LiteralArgumentBuilder<CommandSourceStack> buildLiteral(CommandNode node) {
         LiteralArgumentBuilder<CommandSourceStack> lit = Commands.literal(node.name)
-            .requires(s -> s.hasPermission(node.permission));
+            .requires(s -> NativePermissions.hasLevel(s.permissions(), node.permission));
 
         if (node.handler != null) {
             lit.executes(ctx -> {
