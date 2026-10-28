@@ -59,82 +59,82 @@ final class JeiRecipeIngredients implements IIngredients {
     }
 
     @Override
-    public <T> void setInput(IIngredientType<T> type, T value) {
+    public <T> void setInput(@NotNull IIngredientType<T> type, @NotNull T value) {
         setInputs(type, Collections.singletonList(value));
     }
 
     @Override
-    public <T> void setInputs(IIngredientType<T> type, List<T> values) {
+    public <T> void setInputs(@NotNull IIngredientType<T> type, @NotNull List<T> values) {
         setInputLists(type, slots(values));
     }
 
     @Override
-    public <T> void setInputLists(IIngredientType<T> type, List<List<T>> values) {
+    public <T> void setInputLists(@NotNull IIngredientType<T> type, @NotNull List<List<T>> values) {
         set(inputs, type, values);
     }
 
     @Override
-    public <T> void setOutput(IIngredientType<T> type, T value) {
+    public <T> void setOutput(@NotNull IIngredientType<T> type, @NotNull T value) {
         setOutputs(type, Collections.singletonList(value));
     }
 
     @Override
-    public <T> void setOutputs(IIngredientType<T> type, List<T> values) {
+    public <T> void setOutputs(@NotNull IIngredientType<T> type, @NotNull List<T> values) {
         setOutputLists(type, slots(values));
     }
 
     @Override
-    public <T> void setOutputLists(IIngredientType<T> type, List<List<T>> values) {
+    public <T> void setOutputLists(@NotNull IIngredientType<T> type, @NotNull List<List<T>> values) {
         set(outputs, type, values);
     }
 
     @Override
-    public <T> List<List<T>> getInputs(IIngredientType<T> type) {
+    public <T> @NotNull List<List<T>> getInputs(@NotNull IIngredientType<T> type) {
         return get(inputs, type);
     }
 
     @Override
-    public <T> List<List<T>> getOutputs(IIngredientType<T> type) {
+    public <T> @NotNull List<List<T>> getOutputs(@NotNull IIngredientType<T> type) {
         return get(outputs, type);
     }
 
     @Override
-    public <T> void setInput(Class<? extends T> type, T value) {
+    public <T> void setInput(@NotNull Class<? extends T> type, @NotNull T value) {
         setInput(registry.getIngredientType(type), value);
     }
 
     @Override
-    public <T> void setInputs(Class<? extends T> type, List<T> values) {
+    public <T> void setInputs(@NotNull Class<? extends T> type, @NotNull List<T> values) {
         setInputs(registry.getIngredientType(type), values);
     }
 
     @Override
-    public <T> void setInputLists(Class<? extends T> type, List<List<T>> values) {
+    public <T> void setInputLists(@NotNull Class<? extends T> type, @NotNull List<List<T>> values) {
         setInputLists(registry.getIngredientType(type), values);
     }
 
     @Override
-    public <T> void setOutput(Class<? extends T> type, T value) {
+    public <T> void setOutput(@NotNull Class<? extends T> type, @NotNull T value) {
         setOutput(registry.getIngredientType(type), value);
     }
 
     @Override
-    public <T> void setOutputs(Class<? extends T> type, List<T> values) {
+    public <T> void setOutputs(@NotNull Class<? extends T> type, @NotNull List<T> values) {
         setOutputs(registry.getIngredientType(type), values);
     }
 
     @Override
-    public <T> void setOutputLists(Class<? extends T> type, List<List<T>> values) {
+    public <T> void setOutputLists(@NotNull Class<? extends T> type, @NotNull List<List<T>> values) {
         setOutputLists(registry.getIngredientType(type), values);
     }
 
     @Override
-    public <T> List<List<T>> getInputs(Class<? extends T> type) {
+    public <T> @NotNull List<List<T>> getInputs(@NotNull Class<? extends T> type) {
         return getInputs(registry.getIngredientType(type));
     }
 
     @Override
-    public <T> List<List<T>> getOutputs(Class<? extends T> type) {
+    public <T> @NotNull List<List<T>> getOutputs(@NotNull Class<? extends T> type) {
         return getOutputs(registry.getIngredientType(type));
     }
 }

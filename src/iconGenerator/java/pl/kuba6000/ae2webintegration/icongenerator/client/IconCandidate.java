@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.icongenerator.client;
 import java.util.List;
 import java.util.Objects;
 
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fluids.Fluid;
@@ -36,7 +37,11 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
     static @Nullable IconCandidate recipeItem(@NotNull String context, @NotNull ItemStack source) {
         if (source == ItemStack.EMPTY || source.getItemDamage() == OreDictionary.WILDCARD_VALUE) return null;
         if (source.getCount() > 0) return item(context, source);
-        ItemCandidate candidate = new ItemCandidate(context, source, true);
+        Item raw = source.getItemRaw();
+        if (raw == null) return null;
+        Item actualItem = raw.delegate.get();
+        if (actualItem == null) return null;
+        ItemCandidate candidate = new ItemCandidate(context, source, actualItem);
         return candidate.stack.isEmpty() ? null : candidate;
     }
 
@@ -64,10 +69,10 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         private final @Nullable StableKey key;
 
         private ItemCandidate(@NotNull String context, @NotNull ItemStack source) {
-            this(context, source, false);
+            this(context, source, null);
         }
 
-        private ItemCandidate(@NotNull String context, @NotNull ItemStack source, boolean nonconsumable) {
+        private ItemCandidate(@NotNull String context, @NotNull ItemStack source, @Nullable Item nonconsumable) {
             super(context);
             // Forge exposes all capabilities only through its native item codec. Snapshot before
             // copy invokes capability deserialization, which a mod may use to normalize state.
@@ -77,19 +82,23 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
             NBTTagCompound sourceTag = source.getTagCompound();
             tag = sourceTag == null ? null : sourceTag.copy();
             metadata = source.getItemDamage();
-            // Zero count masks the public item getter as AIR. Capture identity data above before
-            // normalizing an owned copy to recover its real item, including original ForgeCaps.
             ItemStack definition = source;
-            if (nonconsumable) {
-                definition = source.copy();
-                definition.setCount(1);
+            if (nonconsumable != null) {
+                // Forge redirects raw item reads in copy/codec to getItem(), which masks zero
+                // counts as AIR. Only its raw getter can recover the item without mutating source.
+                definition = new ItemStack(
+                    nonconsumable,
+                    1,
+                    metadata,
+                    capabilities == null ? null : capabilities.copy());
+                definition.setTagCompound(tag == null ? null : tag.copy());
             }
             key = LegacyItemIdentity.encode(definition.getItem(), metadata, tag, capabilities);
             sourceMaxDamage = !definition.getItem()
                 .getHasSubtypes() && definition.getItem()
                     .isDamageable() ? definition.getItem()
                         .getMaxDamage(definition) : 0;
-            stack = nonconsumable ? definition : source.copy();
+            stack = nonconsumable != null ? definition : source.copy();
             stack.setCount(1);
         }
 

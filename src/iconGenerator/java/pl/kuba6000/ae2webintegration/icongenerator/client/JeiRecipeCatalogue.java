@@ -24,7 +24,7 @@ final class JeiRecipeCatalogue {
 
     private final IRecipeRegistry registry;
     private final IIngredientRegistry ingredients;
-    private List<IRecipeCategory> categories = Collections.emptyList();
+    private List<IRecipeCategory<?>> categories = Collections.emptyList();
     private boolean initialized;
     private int categoryIndex;
     private @Nullable IRecipeCategory<?> category;
@@ -65,7 +65,8 @@ final class JeiRecipeCatalogue {
     IconCandidate next() {
         if (!initialized) {
             initialized = true;
-            categories = new ArrayList<>(registry.getRecipeCategories());
+            categories = new ArrayList<>();
+            for (IRecipeCategory<?> value : registry.getRecipeCategories()) categories.add(value);
             return null;
         }
         if (alternativeIndex < alternatives.size()) {
