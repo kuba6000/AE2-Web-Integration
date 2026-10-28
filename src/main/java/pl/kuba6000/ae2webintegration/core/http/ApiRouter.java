@@ -39,7 +39,6 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
-import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
 
 /** Complete method/path dispatch with bounded JSON input and explicit request execution threads. */
 public final class ApiRouter implements HttpHandler {
@@ -190,8 +189,7 @@ public final class ApiRouter implements HttpHandler {
                 else((IAsyncRequest) request).handle();
             }
             if (request instanceof LiveEventsRequest events && events.startStream()) return;
-            response = request instanceof LiveSnapshotRequest snapshot ? snapshot.finishResponse()
-                : request.getResponse();
+            response = request instanceof ISyncedRequest synced ? synced.finishResponse() : request.getResponse();
         } catch (InvalidInput exception) {
             response = ApiResponse.error(exception.error);
         } catch (RuntimeException exception) {

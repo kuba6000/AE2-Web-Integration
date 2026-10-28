@@ -3,11 +3,14 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import pl.kuba6000.ae2webintegration.core.IServerThreadTask;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -21,6 +24,16 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     protected List<GridAccess.View> grids = Collections.emptyList();
     protected IAEGrid grid = null;
     protected GridData gridData = null;
+
+    /** Waits for the native stage or an already final denial/failure. */
+    public final void awaitServerStage(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
+        awaitServerReadiness(timeout, unit);
+    }
+
+    /** Runs on the HTTP worker after bounded native dispatch. Ordinary requests are already complete. */
+    public ApiResponse finishResponse() {
+        return getResponse();
+    }
 
     protected void handle(IAEGrid grid) {}
 

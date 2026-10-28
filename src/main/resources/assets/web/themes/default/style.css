@@ -3910,3 +3910,147 @@ button.toast:hover {
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+.plan-tree {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+.plan-tree[hidden] {
+    display: none;
+}
+.tree-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.tree-controls button {
+    min-width: 40px;
+}
+.tree-message,
+.tree-caveat {
+    margin: 0;
+    font-size: 12px;
+}
+.tree-message:empty {
+    display: none;
+}
+.tree-viewport {
+    overflow: auto;
+    min-height: 220px;
+    flex: 1;
+    position: relative;
+    border: 1px solid currentcolor;
+}
+.tree-space {
+    position: relative;
+}
+.tree-content {
+    position: absolute;
+    transform-origin: top left;
+}
+.tree-row {
+    position: absolute;
+    width: 240px;
+    min-height: 88px;
+}
+.tree-card {
+    height: 108px;
+    overflow: hidden;
+    width: 100%;
+    min-height: 84px;
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    text-align: left;
+    gap: 4px;
+    padding: 8px;
+}
+.tree-card strong {
+    grid-column: 2;
+    grid-row: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-line-clamp: 2;
+}
+.tree-card .resource-icon {
+    grid-column: 1;
+    grid-row: 2;
+}
+.tree-marker {
+    grid-column: 1;
+    grid-row: 1;
+}
+.tree-details {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+    -webkit-line-clamp: 3;
+}
+.tree-card[data-reference='true'] {
+    border-style: dashed;
+}
+.tree-more {
+    font-size: 11px;
+    margin-top: 2px;
+}
+.tree-lines {
+    position: absolute;
+    pointer-events: none;
+    overflow: visible;
+}
+.tree-lines path {
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1;
+    opacity: 0.5;
+}
+@media (width <= 700px) {
+    .tree-space,
+    .tree-content {
+        width: 100% !important;
+        height: auto !important;
+        position: relative;
+        transform: none !important;
+    }
+    .tree-row {
+        position: relative;
+        left: auto !important;
+        top: auto !important;
+        width: auto;
+        margin: 8px 4px 8px var(--tree-indent);
+    }
+    .tree-lines {
+        display: none;
+    }
+    .tree-controls button:nth-child(-n + 4) {
+        display: none;
+    }
+}
+
+.plan-export-button[hidden] {
+    display: none;
+}
+
+.tree-card strong,
+.tree-details {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+@media (width <= 700px) {
+    .tree-row {
+        width: auto !important;
+    }
+    .tree-card {
+        height: auto;
+        min-height: 84px;
+    }
+    .tree-card strong,
+    .tree-details {
+        display: block;
+    }
+}

@@ -1,3 +1,4 @@
+import type { TreePage, TreeQuery } from './crafting-tree.js';
 import type { ThemeManifest } from './theme-manifest.js';
 import type { ServerSettingsResponse, ServerSettingsUpdate } from './server-settings.js';
 import type {
@@ -62,6 +63,12 @@ export type EventHandlers<Delta> = {
 };
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    planTree(
+        grid: string,
+        plan: string | number,
+        query: TreeQuery,
+        signal?: AbortSignal
+    ): Promise<ResourceResponse<TreePage>>;
     serverSettings(signal?: AbortSignal): Promise<ServerSettingsResponse>;
     saveServerSettings(body: ServerSettingsUpdate): Promise<ServerSettingsResponse>;
     resourcePins(signal?: AbortSignal, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
@@ -396,6 +403,13 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
+        planTree: (gridKey, planId, query, signal) => {
+            const parameters = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+            return read(
+                `api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${encodeURIComponent(String(planId))}/tree?${parameters}`,
+                { signal }
+            );
+        },
         cpus: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/cpus${icons ? '?icons=true' : ''}`, { signal }),
         cpu: (gridKey, cpuKey, signal, icons = false, live = false) =>

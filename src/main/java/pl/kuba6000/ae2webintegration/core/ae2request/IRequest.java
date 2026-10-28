@@ -41,6 +41,30 @@ public abstract class IRequest {
 
     private static final ApiResponse PENDING_RESULT = ApiResponse.error(ApiStatus.TIMEOUT);
     private final CompletableFuture<ResponseResult> completion = new CompletableFuture<>();
+    private final CompletableFuture<Void> serverStage = completion.thenApply(response -> null);
+
+    /** Signals completed detached capture without publishing a final HTTP response. */
+    protected final void readyForWorker() {
+        serverStage.complete(null);
+    }
+
+    protected final boolean isResponseComplete() {
+        return completion.isDone();
+    }
+
+    protected final void awaitServerReadiness(long timeout, TimeUnit unit)
+        throws InterruptedException, TimeoutException {
+        try {
+            serverStage.get(timeout, unit);
+        } catch (ExecutionException failure) {
+            throw new IllegalStateException("Server stage failed", failure.getCause());
+        }
+    }
+
+    /** Publish JSON already encoded on the HTTP worker, after its final access/lifecycle check. */
+    protected final void respondPrepared(@NotNull ApiResponse response) {
+        completion.complete(new ResponseResult(response));
+    }
 
     private static final class ResponseResult {
 

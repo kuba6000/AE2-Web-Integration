@@ -108,6 +108,8 @@ export function createPlanActions(
         },
         render(state: ThemeState['crafting'], locale: Translator) {
             exportLocale = locale;
+            exportButton.hidden = state.tree.visible;
+            if (state.tree.visible) exporter.close();
             exportLabel.textContent = locale.t('exportAction');
             exportButton.setAttribute('aria-label', locale.t('exportPlan'));
             exportButton.disabled = state.status !== 'ready' || !state.plan?.plan?.length;

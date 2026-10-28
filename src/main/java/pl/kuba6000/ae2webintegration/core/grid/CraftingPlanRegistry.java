@@ -1,7 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.grid;
 
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -12,6 +15,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
@@ -29,6 +34,8 @@ public final class CraftingPlanRegistry {
         public final @NotNull ResourceSnapshot finalOutput;
         public final @NotNull CraftingOptions options;
         public final boolean autoStart;
+        private volatile boolean retained = true;
+        private @Nullable TreePreparation tree;
         private final AtomicLong lastCompletedAccessNanos = new AtomicLong(NOT_COMPLETED_OBSERVED);
 
         private Entry(@NotNull Future<IAECraftingJob> plan, @NotNull ResourceSnapshot finalOutput,
@@ -39,6 +46,71 @@ public final class CraftingPlanRegistry {
             this.autoStart = autoStart;
         }
 
+        public boolean isRetained() {
+            return retained;
+        }
+
+        public synchronized @Nullable TreePreparation tree() {
+            return tree;
+        }
+
+        /** Server-thread only; native traversal runs outside lifecycle/publication locks. */
+        public @Nullable TreePreparation captureTree(int maxEntries, int maxCharacters)
+            throws InterruptedException, ExecutionException {
+            TreePreparation preparation;
+            synchronized (this) {
+                if (!retained || !plan.isDone()) return null;
+                if (tree != null) return tree;
+                preparation = new TreePreparation();
+                tree = preparation;
+            }
+            try {
+                CraftingRecipeCapture captured = plan.get()
+                    .web$captureRecipes(maxEntries, maxCharacters);
+                preparation.capture.complete(captured);
+            } catch (InterruptedException | ExecutionException | RuntimeException | Error failure) {
+                preparation.capture.completeExceptionally(failure);
+                throw failure;
+            }
+            return preparation;
+        }
+
+        private synchronized void retire() {
+            retained = false;
+            tree = null;
+        }
+
+    }
+
+    /** One detached capture and normalized graph shared by viewers of the exact retained entry. */
+    public static final class TreePreparation {
+
+        private final String id = UUID.randomUUID()
+            .toString();
+        private final CompletableFuture<CraftingRecipeCapture> capture = new CompletableFuture<>();
+        private @Nullable CraftingDependencyGraph graph;
+
+        public @NotNull String id() {
+            return id;
+        }
+
+        public boolean isCaptured() {
+            return capture.isDone();
+        }
+
+        /** HTTP-worker only, after capture completion. Null is a stable unsupported capability. */
+        public synchronized @Nullable CraftingDependencyGraph graph() {
+            if (!capture.isDone()) throw new IllegalStateException("Capture is still pending");
+            if (graph == null) {
+                CraftingRecipeCapture captured = capture.getNow(null);
+                if (captured != null) graph = CraftingDependencyGraph.from(captured);
+            }
+            return graph;
+        }
+    }
+
+    private static void retire(@Nullable Entry entry) {
+        if (entry != null) entry.retire();
     }
 
     private final LongSupplier nanoClock;
@@ -52,8 +124,8 @@ public final class CraftingPlanRegistry {
     public int add(@NotNull Future<IAECraftingJob> plan, @NotNull ResourceSnapshot finalOutput,
         @NotNull CraftingOptions options, boolean autoStart) {
         int id = nextId.getAndIncrement();
-        plans.put(id, new Entry(plan, finalOutput, options, autoStart));
-        plans.remove(id - MAX_PLANS);
+        retire(plans.put(id, new Entry(plan, finalOutput, options, autoStart)));
+        retire(plans.remove(id - MAX_PLANS));
         return id;
     }
 
@@ -73,16 +145,18 @@ public final class CraftingPlanRegistry {
         if (entry == null) {
             return false;
         }
+        entry.retire();
         entry.plan.cancel(true);
         return true;
     }
 
     public void remove(int id) {
-        plans.remove(id);
+        retire(plans.remove(id));
     }
 
     public void clearForServerStop() {
         for (Entry entry : plans.values()) {
+            entry.retire();
             if (!entry.plan.isDone()) {
                 entry.plan.cancel(true);
             }
@@ -105,7 +179,7 @@ public final class CraftingPlanRegistry {
             if (lastAccess == NOT_COMPLETED_OBSERVED) {
                 entry.lastCompletedAccessNanos.compareAndSet(NOT_COMPLETED_OBSERVED, nowNanos);
             } else if (nowNanos - lastAccess >= RETENTION_NANOS) {
-                plans.remove(planEntry.getKey(), entry);
+                if (plans.remove(planEntry.getKey(), entry)) entry.retire();
             }
         }
     }

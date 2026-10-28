@@ -86,6 +86,12 @@ export function mountTheme(
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {
+            showTree: crafting.showTree,
+            windowTree: crafting.windowTree,
+            focusTree: crafting.focusTree,
+            toggleTree: crafting.toggleTree,
+            moreTree: crafting.moreTree,
+            retryTree: crafting.retryTree,
             search: crafting.search,
             sort: crafting.sort,
             reverse: crafting.reverse,

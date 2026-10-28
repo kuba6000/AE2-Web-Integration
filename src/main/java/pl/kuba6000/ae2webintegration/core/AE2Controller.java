@@ -46,6 +46,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.RenewCpuEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlanTree;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
@@ -257,6 +258,7 @@ public class AE2Controller {
                 api.register(PatchGridSettings.class);
                 api.register(CreateCraftingPlan.class);
                 api.register(GetCraftingPlan.class);
+                api.register(GetCraftingPlanTree.class);
                 api.register(SubmitCraftingPlan.class);
                 api.register(DeleteCraftingPlan.class);
                 api.register(GetTrackingHistory.class);
@@ -405,7 +407,7 @@ public class AE2Controller {
             return true;
         }
         try {
-            request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            request.awaitServerStage(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             requests.remove(request);
             request.failIfPending(ApiStatus.TIMEOUT);

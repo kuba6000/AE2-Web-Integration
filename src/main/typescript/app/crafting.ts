@@ -1,3 +1,5 @@
+import { createCraftingTree } from './crafting-tree.js';
+import type { TreeState } from './crafting-tree.js';
 import type { Plan, CpuInfo, StoredResource, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
@@ -16,6 +18,7 @@ export type PlanMetadata = {
 export type Mutation = 'create' | 'submit' | 'delete';
 export type PlanSort = Preferences['planSort'];
 export type CraftingState = {
+    tree: TreeState;
     search: string;
     sort: PlanSort;
     descending: boolean;
@@ -41,7 +44,9 @@ export function createCrafting(
     preferences: ReturnType<typeof createPreferences>,
     notify: Notify
 ) {
+    const tree = createCraftingTree(api, changed, iconsEnabled);
     const state: CraftingState = {
+        tree: tree.state,
         search: '',
         sort: preferences.values.planSort,
         descending: preferences.values.planSortOrder === 'descending',
@@ -157,6 +162,7 @@ export function createCrafting(
             state.cpuIcons = null;
             state.selectedCpu = '';
             if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
+                tree.reset(null, null);
                 state.plan = null;
                 state.icons = null;
                 state.metadata = null;
@@ -177,6 +183,7 @@ export function createCrafting(
         reading = false;
 
         activePlan = null;
+        tree.reset(null, null);
         const key = identity();
         autoStart = input.automatic;
         outcomes.set(key, { mutation: 'create' });
@@ -230,7 +237,14 @@ export function createCrafting(
     }
     const actions = {
         state,
+        showTree: tree.show,
+        windowTree: tree.moveWindow,
+        focusTree: tree.focus,
+        toggleTree: tree.toggle,
+        moreTree: tree.more,
+        retryTree: tree.retry,
         invalidateIcons() {
+            tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
             iconRevision++;
             state.icons = null;
             state.cpuIcons = null;
@@ -261,6 +275,7 @@ export function createCrafting(
             request?.abort();
             reading = false;
             route = next;
+            tree.reset(next.view === 'plan' ? next.gridKey : null, next.view === 'plan' ? next.planId : null);
             activePlan = next.view === 'plan' ? { gridKey: next.gridKey, planId: next.planId } : null;
             autoStart = false;
             selectedOnce = false;
@@ -289,6 +304,7 @@ export function createCrafting(
         },
         refresh,
         block(error: string | null) {
+            tree.reset(null, null);
             generation++;
             request?.abort();
             reading = false;
@@ -354,6 +370,7 @@ export function createCrafting(
             request?.abort();
             reading = false;
             if (activePlan) {
+                tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
                 outcomes.set(key, { mutation: 'delete' });
                 state.mutation = 'delete';
                 state.error = null;
@@ -392,6 +409,7 @@ export function createCrafting(
             const version = ++generation;
             request?.abort();
             reading = false;
+            tree.reset(activePlan.gridKey, activePlan.planId);
             outcomes.set(key, { mutation: 'submit' });
             const output = state.metadata;
             state.mutation = 'submit';
@@ -472,6 +490,7 @@ export function createCrafting(
                 return;
             const version = ++generation;
             const key = identity();
+            tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
             outcomes.set(key, { mutation: 'delete' });
             request?.abort();
             reading = false;
@@ -513,6 +532,7 @@ export function createCrafting(
             }
         },
         dispose() {
+            tree.dispose();
             generation++;
             request?.abort();
             outcomes.clear();

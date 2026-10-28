@@ -102,6 +102,12 @@ export type ThemeApplication = {
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
     readonly crafting: {
+        windowTree(direction: number): void;
+        focusTree(key: string | null): void;
+        showTree(visible: boolean): Promise<void>;
+        toggleTree(key: string): Promise<void>;
+        moreTree(key: string): Promise<void>;
+        retryTree(): Promise<void>;
         search(value: string): void;
         sort(value: Preferences['planSort']): void;
         reverse(): void;

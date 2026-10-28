@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
@@ -56,10 +57,35 @@ class RequestCompletionTest {
                 .isJsonNull());
     }
 
+    @Test
+    void serverReadinessDoesNotPublishOrReplaceAFinalResponse() throws Exception {
+        TestRequest request = new TestRequest();
+        request.captured();
+        request.awaitServerStage(1, TimeUnit.SECONDS);
+        assertThrows(TimeoutException.class, () -> request.awaitCompletion(0, TimeUnit.SECONDS));
+        request.failIfPending(ApiStatus.TIMEOUT);
+        request.respond("late page");
+        assertEquals(
+            ApiStatus.TIMEOUT.httpStatus(),
+            request.getResponse()
+                .httpStatus());
+        TestRequest rejected = new TestRequest();
+        rejected.failIfPending(ApiStatus.SERVER_BUSY);
+        rejected.awaitServerStage(1, TimeUnit.SECONDS);
+        assertEquals(
+            ApiStatus.SERVER_BUSY.httpStatus(),
+            rejected.finishResponse()
+                .httpStatus());
+    }
+
     private static final class TestRequest extends ISyncedRequest {
 
         @Override
         public void handle() {}
+
+        void captured() {
+            readyForWorker();
+        }
 
         void reject(Object data) {
             deny(ApiStatus.BAD_PARAM, data);
