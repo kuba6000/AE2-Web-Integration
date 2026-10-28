@@ -633,7 +633,7 @@ public final class IconPackWriter implements Closeable {
         }
 
         @Override
-        public void write(byte[] bytes, int offset, int length) throws IOException {
+        public void write(byte @NotNull [] bytes, int offset, int length) throws IOException {
             if (exceeded || length > PackFormat.MAX_ARCHIVE - written) {
                 exceeded = true;
                 return;
