@@ -68,8 +68,9 @@ public record CraftingRecipeCapture(@Nullable Amount result, boolean simulated,
     @Desugar
     public record Candidate(int ingredientId, int resourceId, long amount) {}
 
+    /** Primary designation is true/false when known, or null when the native plan does not retain it. */
     @Desugar
-    public record Output(int recipeId, int resourceId, long amount, boolean primary) {}
+    public record Output(int recipeId, int resourceId, long amount, @Nullable Boolean primary) {}
 
     @Desugar
     public record Summary(@NotNull SummaryKind kind, int resourceId, long amount) {}
@@ -173,7 +174,7 @@ public record CraftingRecipeCapture(@Nullable Amount result, boolean simulated,
             return true;
         }
 
-        public boolean addOutput(int recipeId, int resourceId, long amount, boolean primary) {
+        public boolean addOutput(int recipeId, int resourceId, long amount, @Nullable Boolean primary) {
             requireOpen(recipeId);
             resources.get(resourceId);
             if (!admit()) return false;

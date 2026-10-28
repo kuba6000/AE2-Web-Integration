@@ -229,6 +229,36 @@ class CraftingRecipeCaptureTest {
         assertThrows(IllegalArgumentException.class, () -> new CraftingRecipeCapture.Builder(10, -1));
     }
 
+    @Test
+    void unknownPrimaryDesignationRemainsDistinctFromKnownPrimaryAndSecondary() {
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(20, 100);
+        int item = capture.addResource(() -> resource("item"));
+        int recipe = capture.addRecipe(1);
+        capture.addOutput(recipe, item, 1, null);
+        capture.addOutput(recipe, item, 1, false);
+        capture.addOutput(recipe, item, 1, true);
+        capture.finishRecipe(recipe);
+        CraftingRecipeCapture result = capture.build();
+        assertNull(
+            result.outputs()
+                .get(0)
+                .primary());
+        assertEquals(
+            Boolean.FALSE,
+            result.outputs()
+                .get(1)
+                .primary());
+        assertEquals(
+            Boolean.TRUE,
+            result.outputs()
+                .get(2)
+                .primary());
+        assertTrue(
+            result.recipes()
+                .get(0)
+                .complete());
+    }
+
     private static ResourceDescriptor resource(String name) {
         return new ResourceDescriptor(null, null, 0, 0, name, ResourceType.ITEM, null, null);
     }
