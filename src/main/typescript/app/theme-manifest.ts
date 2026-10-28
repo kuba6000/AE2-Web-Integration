@@ -36,13 +36,13 @@ export function validateThemePath(name: string): string {
 /** Validates manifest data without evaluating any package JavaScript or CSS. */
 export function validateThemeManifest(value: unknown): ThemeManifest {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('Theme manifest must be an object.');
+        throw new Error('The theme configuration is invalid.');
     }
     const input = value as Record<string, unknown>;
     function text(field: string, max: number): string {
         const content = input[field];
         if (typeof content !== 'string' || !content.trim() || content.length > max) {
-            throw new Error(`Invalid theme manifest field: ${field}.`);
+            throw new Error(`The theme has an invalid ${field} setting.`);
         }
         return content;
     }
@@ -59,7 +59,7 @@ export function validateThemeManifest(value: unknown): ThemeManifest {
     const entry = validateThemePath(text('entry', 240));
     if (!entry.endsWith('.js')) throw new Error('Theme entry must be a JavaScript file.');
     if (!Array.isArray(input.styles) || input.styles.length > 512) {
-        throw new Error('Theme styles must be an array.');
+        throw new Error('The theme’s stylesheet list is invalid.');
     }
     const styles = input.styles.map((style: unknown) => {
         if (typeof style !== 'string' || !style.endsWith('.css')) throw new Error('Invalid theme stylesheet.');

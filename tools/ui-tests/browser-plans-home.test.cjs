@@ -64,11 +64,13 @@ test('plan recalculation preserves the order and lite mode, supports autostart a
     await page.waitForURL(/\/plans\/10$/);
     await more.click();
     options.fault = { operation: 'delete', status: 'TIMEOUT' };
+    const failedMutation = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'DELETE' && new URL(response.url()).pathname.endsWith('/crafting-plans/10')
+    );
     await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /outcome.*unknown/i })
-        .waitFor();
+    await settleResponse(page, (await failedMutation).request());
+    await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     assert.ok(await more.isDisabled());
     assert.ok(await start.isDisabled());
     const count = options.requests.filter((entry) => entry.method !== 'GET').length;
@@ -127,11 +129,13 @@ test('ignore-missing recalculation keeps original options first and never retrie
     await more.click();
     assert.equal(await menu.getByRole('menuitem').first().innerText(), 'Recalculate ignoring missing');
     options.fault = { operation: 'create', status: 'TIMEOUT' };
+    const failedMutation = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/crafting-plans')
+    );
     await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /calculation.*unknown/i })
-        .waitFor();
+    await settleResponse(page, (await failedMutation).request());
+    await page.locator('#plan-panel [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
     assert.ok(await more.isDisabled());
     const count = options.requests.filter((entry) => entry.method !== 'GET').length;
     await poll(page);
@@ -333,13 +337,13 @@ test('pending submission resolves after route reentry and older CPU reads cannot
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
         await completeSubmit(status);
         await page
-            .getByRole('status')
-            .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
+            .locator(`#plan-panel [role="status"]${status === 'OK' ? '' : '.api-error'}`)
+            .filter({ hasText: status === 'OK' ? /submitted/i : /\S/ })
             .waitFor();
         await poll(page);
         await page
-            .getByRole('status')
-            .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
+            .locator(`#plan-panel [role="status"]${status === 'OK' ? '' : '.api-error'}`)
+            .filter({ hasText: status === 'OK' ? /submitted/i : /\S/ })
             .waitFor();
     }
     await page.unroute('**/submit');
@@ -1589,10 +1593,7 @@ test('CPU overview panels keep long names and uncertain controls reachable in da
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await card.getByRole('button', { name: /(?:Pause|Wstrzymaj).*cpu-a/ }).click();
     await settleResponse(page, (await refreshed).request());
-    await card
-        .getByRole('status')
-        .filter({ hasText: /unknown|nieznany/ })
-        .waitFor({ state: 'visible' });
+    await card.locator('[role="status"].api-error').filter({ hasText: /\S/ }).waitFor({ state: 'visible' });
     for (const button of await card.getByRole('button').all()) assert.equal(await button.isDisabled(), true);
     const after = await card.evaluate((node) => ({ height: node.clientHeight, content: node.scrollHeight }));
     assert.ok(after.content <= after.height + 1, 'an uncertainty notice expands the panel without clipping');

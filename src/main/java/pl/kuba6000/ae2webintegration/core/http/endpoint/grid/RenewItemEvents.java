@@ -18,16 +18,19 @@ import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 
 /**
- * Acknowledges an attached terminal stream and renews its lease for 90 seconds.
- * Clients acknowledge heartbeat events about every 30 seconds while viewing the stream.
- * Tokens remain bound to their original login session and grid; expiry requires a fresh live snapshot.
+ * Renew resource stream.
  *
- * @pathParam gridKey Persistent grid identifier.
+ * <p>
+ * Acknowledge heartbeat events about every 30 seconds to keep an open stream active for another
+ * 90 seconds. Use its subscription token and original login session for the same network.
+ * An expired subscription requires a new live snapshot.
+ *
+ * @pathParam gridKey Persistent network identifier.
  * @response 200 {@link Response} Stream lease renewed.
  * @response 400 {@link ErrorResponse} Invalid, unopened, expired or foreign subscription.
  * @response 401 {@link ErrorResponse} Authentication required.
- * @response 403 {@link ErrorResponse} Grid permission denied or required CSRF header missing.
- * @response 404 {@link ErrorResponse} Grid not found.
+ * @response 403 {@link ErrorResponse} Network access denied or required CSRF header missing.
+ * @response 404 {@link ErrorResponse} Network not found.
  * @response 405 {@link ErrorResponse} Method not allowed.
  * @response 413 {@link ErrorResponse} Request body too large.
  * @response 415 {@link ErrorResponse} Unsupported request body content type.
@@ -38,12 +41,19 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/items/events")
 public final class RenewItemEvents extends IAsyncRequest {
 
+    /**
+     * Stream renewal result.
+     *
+     * @param status {@code OK} for a successful renewal
+     * @param data   always {@code null}
+     */
     @Desugar
     public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
-    /** Token belonging to the attached stream being acknowledged. */
+    /** Required subscription token of the open stream. */
     @QueryParam("subscription")
-    private @Nullable String subscription;
+    @Nullable
+    String subscription;
 
     @Override
     public void handle() {

@@ -7,7 +7,7 @@ import { createCpuOverview } from './cpu-overview.js';
 import { createCpuSelector } from './cpu-selector.js';
 import { createCpuResources } from './cpu-resources.js';
 import { createCpuTooltips } from './cpu-tooltips.js';
-import { renderCpuState, renderCpuActions, cpuOutcomeText } from './cpu-presentation.js';
+import { renderCpuState, renderCpuActions, cpuOutcomeText, cpuRequesterText } from './cpu-presentation.js';
 
 export function createCpuView(
     root: HTMLElement,
@@ -49,7 +49,8 @@ export function createCpuView(
     const outputIcon = createResourceIcon();
     const timing = element('p', '', 'cpu-detail-note');
     const tracking = element('p', '', 'cpu-detail-note');
-    work.append(panelState, output, timing, tracking);
+    const requesters = element('p', '', 'cpu-detail-note');
+    work.append(panelState, output, requesters, timing, tracking);
     const actions = element('div');
     const footer = element('div', '', 'cpu-footer');
     footer.append(work, actions, status);
@@ -108,6 +109,8 @@ export function createCpuView(
                 );
             } else output.textContent = t('cpuOutputUnknown');
         } else if (detail) output.textContent = t('cpuIdleMessage');
+        requesters.textContent = detail ? cpuRequesterText(detail, locale) : '';
+        requesters.hidden = !requesters.textContent;
         renderElapsed(state, locale);
         tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
         tracking.hidden = !tracking.textContent;

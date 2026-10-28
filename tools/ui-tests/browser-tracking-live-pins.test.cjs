@@ -673,7 +673,7 @@ test('live additions append and removed resources remain inert zero slots until 
         true,
         'A removed resource cannot retain a stale craft action'
     );
-    assert.equal(await page.getByRole('menuitem', { name: 'View tracking', exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole('menuitem', { name: 'View resource history', exact: true }).isEnabled(), true);
     await page.keyboard.press('Escape');
     const historyReads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
     await bravo.click();

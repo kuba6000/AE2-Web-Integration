@@ -1,9 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public interface IServerPlatform {
 
@@ -18,6 +20,13 @@ public interface IServerPlatform {
 
     /** Root of the active server save, available after server startup. */
     File getWorldDirectory();
+
+    /** Whether the active server is integrated; read on its server thread after startup. */
+    boolean isSingleplayer();
+
+    /** Loaded native mod JAR location, or null in the loader development environment. No file I/O. */
+    @Nullable
+    Path getModFile();
 
     @NotNull
     String getModVersion();

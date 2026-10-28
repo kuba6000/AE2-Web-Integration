@@ -4,8 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,14 +57,6 @@ public final class ConfigTestFixture implements AutoCloseable {
     public void writeRaw(String toml) {
         try {
             Files.write(file, toml.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    public static int unusedLoopbackPort() {
-        try (ServerSocket socket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) {
-            return socket.getLocalPort();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

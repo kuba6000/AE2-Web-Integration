@@ -34,7 +34,6 @@ class CommandBootstrapTest {
     @BeforeEach
     void setUpPlayerLookup() {
         config = new ConfigTestFixture();
-        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }
@@ -47,6 +46,7 @@ class CommandBootstrapTest {
 
     @Test
     void testReloadHandler() {
+        HttpServerTestFixture.start(config);
         RecordingBuilder builder = new RecordingBuilder();
         CommandBootstrap.init(builder);
 
@@ -133,6 +133,51 @@ class CommandBootstrapTest {
         assertNotNull(ctx.lastError, "should have sent error for console sender");
     }
 
+    @Test
+    void telemetryAllowsSingleplayerOwnerWithoutCheatsAndPersistsTheChoice() {
+        RecordingBuilder builder = new RecordingBuilder();
+        CommandBootstrap.init(builder);
+        assertEquals(0, builder.telemetryPermission);
+        RecordingContext ctx = new RecordingContext();
+        ctx.singleplayerOwner = true;
+        ctx.args = new String[] { "telemetry", "off" };
+        builder.telemetryHandler.accept(ctx);
+        assertNull(ctx.lastError);
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        Config.reload();
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+        ctx.args[1] = "on";
+        builder.telemetryHandler.accept(ctx);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+    }
+
+    @Test
+    void telemetryRejectsGuestsAndInvalidArgumentsWithoutChangingTheSetting() {
+        RecordingBuilder builder = new RecordingBuilder();
+        CommandBootstrap.init(builder);
+        RecordingContext ctx = new RecordingContext();
+        ctx.args = new String[] { "telemetry", "off" };
+        builder.telemetryHandler.accept(ctx);
+        assertNotNull(ctx.lastError);
+        assertEquals(4, ctx.lastPermissionCheck);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        ctx.hasPermissionResult = true;
+        ctx.lastError = null;
+        ctx.args = new String[] { "telemetry", "invalid" };
+        builder.telemetryHandler.accept(ctx);
+        assertNotNull(ctx.lastError);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        ctx.lastError = null;
+        ctx.args = new String[] { "telemetry", "status" };
+        builder.telemetryHandler.accept(ctx);
+        assertNull(ctx.lastError);
+        assertNotNull(ctx.lastMessage);
+        assertTrue(Config.INSTANCE.telemetry.enabled);
+        ctx.args[1] = "off";
+        builder.telemetryHandler.accept(ctx);
+        assertFalse(Config.INSTANCE.telemetry.enabled);
+    }
+
     // --- Recording ICommandBuilder stub ---
 
     private static class RecordingBuilder implements ICommandBuilder {
@@ -141,6 +186,9 @@ class CommandBootstrapTest {
         final RecordingBuilder parent;
         Consumer<ICommandContext> reloadHandler;
         Consumer<ICommandContext> authHandler;
+        Consumer<ICommandContext> telemetryHandler;
+        String command;
+        int telemetryPermission = -1;
 
         /** Root constructor. */
         RecordingBuilder() {
@@ -156,20 +204,26 @@ class CommandBootstrapTest {
 
         @Override
         public ICommandBuilder literal(String name, int permission) {
-            return new RecordingBuilder(this);
+            RecordingBuilder child = new RecordingBuilder(this);
+            child.command = name;
+            if (name.equals("telemetry")) root.telemetryPermission = permission;
+            return child;
         }
 
         @Override
         public ICommandBuilder argument(String name) {
-            return new RecordingBuilder(this);
+            RecordingBuilder child = new RecordingBuilder(this);
+            child.command = command;
+            return child;
         }
 
         @Override
         public ICommandBuilder executes(Consumer<ICommandContext> handler) {
-            if (root.reloadHandler == null) {
-                root.reloadHandler = handler;
-            } else {
-                root.authHandler = handler;
+            switch (command) {
+                case "reload" -> root.reloadHandler = handler;
+                case "auth" -> root.authHandler = handler;
+                case "telemetry" -> root.telemetryHandler = handler;
+                default -> throw new IllegalStateException(command);
             }
             return parent != null ? parent : this;
         }
@@ -208,6 +262,8 @@ class CommandBootstrapTest {
         int lastPermissionCheck = -1;
         boolean hasPermissionResult = false;
         String lastError;
+        String lastMessage;
+        boolean singleplayerOwner;
         PlayerIdentity playerIdentity;
 
         @Override
@@ -227,7 +283,13 @@ class CommandBootstrapTest {
         }
 
         @Override
-        public void sendMessage(String text) {}
+        public void sendMessage(String text) {
+            lastMessage = text;
+        }
+
+        public boolean isSingleplayerOwner() {
+            return singleplayerOwner;
+        }
 
         @Override
         public void sendError(String text) {

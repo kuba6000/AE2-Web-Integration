@@ -14,9 +14,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
-import java.net.ServerSocket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -36,6 +36,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -60,6 +61,7 @@ class CpuLiveHttpTest {
     private final CpuFixtures.Grid grid = new CpuFixtures.Grid(9301, cpu);
     private final ScheduledExecutorService game = Executors.newSingleThreadScheduledExecutor();
     private IAE previousAe;
+    private int port;
     private String base;
     private StableKey gridKey;
 
@@ -67,13 +69,10 @@ class CpuLiveHttpTest {
     void startEngine() throws Exception {
         previousAe = AE2Controller.AE2Interface;
         CoreEngine.init(new Platform(root));
-        try (ServerSocket port = new ServerSocket(0)) {
-            Config.INSTANCE.general.port = port.getLocalPort();
-        }
         Config.INSTANCE.general.allowNoPasswordOnLocalhost = true;
         Config.INSTANCE.general.checkForUpdates = false;
         Config.INSTANCE.resourceTracking.activeIntervalMillis = 50;
-        CoreEngine.onServerStarted();
+        port = HttpServerTestFixture.startWorld();
         cpu.busy = true;
         cpu.output = gear;
         cpu.set(iron, 4, 2, 1)
@@ -83,7 +82,7 @@ class CpuLiveHttpTest {
             return TestGridFixtures.resolvedKey(grid);
         });
         game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
-        base = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + gridKey + "/cpus/" + cpu.key;
+        base = "http://127.0.0.1:" + port + "/api/grids/" + gridKey + "/cpus/" + cpu.key;
     }
 
     @AfterEach
@@ -103,6 +102,114 @@ class CpuLiveHttpTest {
     private void onGame(Runnable task) throws Exception {
         game.submit(task)
             .get(3, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void nativeRequesterFallbackRoundTripsThroughListAndDetailAndYieldsToTrackedSources() throws Exception {
+        String listUrl = "http://127.0.0.1:" + port + "/api/grids/" + gridKey + "/cpus";
+        onGame(() -> { cpu.nativeRequesterName = "Native crafter"; });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertEquals(
+                "Native crafter",
+                data.get("nativeRequesterName")
+                    .getAsString());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+        onGame(() -> TestGridFixtures.track(grid));
+        for (CraftingRequester requester : Arrays.asList(
+            CraftingRequester.player(TestGridFixtures.playerIdentity(7)),
+            CraftingRequester.web(),
+            CraftingRequester.automation())) {
+            onGame(() -> AE2JobTracker.addJob(cpu, grid, false, requester));
+            for (JsonObject data : Arrays.asList(
+                json(listUrl).getAsJsonObject("data")
+                    .getAsJsonObject(cpu.key.toString()),
+                json(base).getAsJsonObject("data"))) {
+                assertTrue(
+                    data.get("nativeRequesterName")
+                        .isJsonNull());
+                assertEquals(
+                    requester.source()
+                        .name(),
+                    data.getAsJsonArray("requesters")
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("source")
+                        .getAsString());
+            }
+        }
+        onGame(() -> { cpu.busy = false; });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertTrue(
+                data.get("nativeRequesterName")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+        onGame(() -> {
+            AE2JobTracker.clearActiveJobs();
+            cpu.busy = true;
+            cpu.nativeRequesterName = null;
+        });
+        for (JsonObject data : Arrays.asList(
+            json(listUrl).getAsJsonObject("data")
+                .getAsJsonObject(cpu.key.toString()),
+            json(base).getAsJsonObject("data"))) {
+            assertTrue(
+                data.get("nativeRequesterName")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                data.getAsJsonArray("requesters")
+                    .size());
+        }
+    }
+
+    @Test
+    void nativeRequesterNameChangesReachAnExistingSseViewer() throws Exception {
+        onGame(() -> { cpu.nativeRequesterName = "First crafter"; });
+        JsonObject live = json(base + "?live=true");
+        assertEquals(
+            "First crafter",
+            live.getAsJsonObject("data")
+                .get("nativeRequesterName")
+                .getAsString());
+        String token = live.get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        stream.setReadTimeout(3000);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            onGame(() -> {
+                cpu.nativeRequesterName = "Second crafter";
+                AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
+            });
+            CpuFixtures.Event event = CpuFixtures.readEvent(input);
+            assertEquals("delta", event.name());
+            assertEquals(
+                "Second crafter",
+                event.data()
+                    .getAsJsonObject("cpu")
+                    .get("nativeRequesterName")
+                    .getAsString());
+        } finally {
+            stream.disconnect();
+        }
     }
 
     @ParameterizedTest
@@ -130,8 +237,8 @@ class CpuLiveHttpTest {
                     case "complete" -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
                     case "cancel" -> AEMixinCallbacks.INSTANCE.jobCancelled(grid, cpu);
                     case "replace" -> AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
-                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true);
-                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true);
+                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, null);
+                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
                     default -> throw new AssertionError(boundary);
                 }
             });
@@ -152,7 +259,7 @@ class CpuLiveHttpTest {
 
     @Test
     void aListOnlyOutputRemainsActionableUntilItsJobEnds() throws Exception {
-        String cpus = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + gridKey + "/cpus";
+        String cpus = "http://127.0.0.1:" + port + "/api/grids/" + gridKey + "/cpus";
         json(cpus);
         WeakReference<IAEKey> identity = onGame(
             () -> new WeakReference<>(AE2Controller.itemIdentities.resolve(gear.key())));
@@ -253,7 +360,7 @@ class CpuLiveHttpTest {
     void inventoryNotificationUpdatesStoredCountsWithoutAdvancingCraftingMeasurements() throws Exception {
         onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false);
+            AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             cpu.waiting.amounts.put(iron, 5L);
             AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
         });
@@ -387,7 +494,7 @@ class CpuLiveHttpTest {
     void restoredStateInvalidatesTheViewWithoutChangingJobMeasurements() throws Exception {
         AE2JobTracker.JobTrackingInfo measured = onGame(() -> {
             TestGridFixtures.track(grid);
-            AE2JobTracker.addJob(cpu, grid, false);
+            AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
             return AE2JobTracker.findActiveJob(cpu);
         });
         assertNotNull(measured);
@@ -507,10 +614,10 @@ class CpuLiveHttpTest {
                 onGame(() -> {
                     switch (hook) {
                         case "started":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, false, null);
                             break;
                         case "merged":
-                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true);
+                            AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, false, null);
                             break;
                         case "completed":
                             AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
@@ -542,7 +649,7 @@ class CpuLiveHttpTest {
             AE2Controller.AE2Interface = new CpuFixtures.Ae(grid, forbidden);
             return TestGridFixtures.resolvedKey(forbidden);
         });
-        String host = "http://127.0.0.1:" + Config.INSTANCE.general.port;
+        String host = "http://127.0.0.1:" + port;
         HttpURLConnection login = connection(host + "/api/auth/login");
         login.setRequestMethod("POST");
         login.setRequestProperty("Content-Type", "application/json");
@@ -600,7 +707,7 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         assertEquals(401, status(base + "?live=true&replace=" + token, "GET", true, "Bearer invalid"));
-        String missing = "http://127.0.0.1:" + Config.INSTANCE.general.port
+        String missing = "http://127.0.0.1:" + port
             + "/api/grids/"
             + gridKey
             + "/cpus/"
@@ -628,7 +735,7 @@ class CpuLiveHttpTest {
         assertNotNull(replacement.get("subscription"));
         assertEquals(400, status(base + "/events?subscription=" + first, "POST", true, null));
         assertEquals(400, status(base + "?live=true&replace=short", "GET", false, null));
-        String missing = "http://127.0.0.1:" + Config.INSTANCE.general.port
+        String missing = "http://127.0.0.1:" + port
             + "/api/grids/"
             + gridKey
             + "/cpus/"
@@ -697,6 +804,16 @@ class CpuLiveHttpTest {
 
     @Desugar
     private record Platform(File root) implements IServerPlatform {
+
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {

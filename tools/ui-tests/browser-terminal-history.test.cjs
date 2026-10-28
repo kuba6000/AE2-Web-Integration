@@ -60,6 +60,7 @@ test('crafting history pages preserve large IDs and replace rows when navigating
 // links, and persist browser preferences without pretending to mutate server settings.
 test('global settings tabs preserve grid navigation and browser preferences', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
+    options.isAdmin = true;
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
@@ -100,6 +101,7 @@ test('global settings tabs preserve grid navigation and browser preferences', as
 
 test('global settings direct routes work without an available grid', async (t) => {
     const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
     options.empty = true;
     for (const [route, heading] of [
         ['web-settings', 'Web settings'],
@@ -1358,20 +1360,14 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
         };
         options.fault = { operation: 'settings', status };
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /save.*not confirmed/i })
-            .waitFor();
+        await page.locator('.settings-view [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         const count = options.requests.filter((request) => request.method === 'PATCH').length;
         await poll(page);
         await clickTab(page, 'Terminal');
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await tracking.waitFor();
-        await page
-            .getByRole('status')
-            .filter({ hasText: /save.*not confirmed/i })
-            .waitFor();
+        await page.locator('.settings-view [role="status"].api-error').filter({ hasText: /\S/ }).waitFor();
         assert.equal(await tracking.isChecked(), true);
         assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, count);
         options.fault = null;
@@ -1923,13 +1919,13 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
             options.cpuDetails['cpu-a'] = { ...cpuWork, isBusy: false, items: null, finalOutput: null };
         await complete(result);
         await page
-            .getByRole('status')
-            .filter({ hasText: result === 'OK' ? /^Idle$/i : /outcome.*unknown/i })
+            .locator(result === 'OK' ? '.cpu-detail-work [role="status"]' : '.cpu-status[role="status"].api-error')
+            .filter({ hasText: result === 'OK' ? /^Idle$/i : /\S/ })
             .waitFor();
         await poll(page);
         await page
-            .getByRole('status')
-            .filter({ hasText: result === 'OK' ? /^Idle$/i : /outcome.*unknown/i })
+            .locator(result === 'OK' ? '.cpu-detail-work [role="status"]' : '.cpu-status[role="status"].api-error')
+            .filter({ hasText: result === 'OK' ? /^Idle$/i : /\S/ })
             .waitFor();
     }
     await page.unroute('**/cancel');

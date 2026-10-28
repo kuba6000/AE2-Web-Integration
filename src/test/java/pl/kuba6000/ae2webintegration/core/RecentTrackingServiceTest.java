@@ -27,6 +27,69 @@ class RecentTrackingServiceTest extends GridTestScope {
     private final StableKey iron = TestGridFixtures.key(92);
 
     @Test
+    void loweringRecentResourceCapRetainsExistingMeasurements() throws Exception {
+        StableKey other = TestGridFixtures.key(93);
+        TerminalRegistry terminals = terminal(1);
+        try (RecentTrackingService service = new RecentTrackingService(terminals, 100)) {
+            service.open(grid, 1, false, true, 2, 1000);
+            StorageObservation both = new StorageObservation(
+                6000,
+                false,
+                true,
+                false,
+                Collections.emptyList(),
+                java.util.Arrays.asList(
+                    new StorageObservation.Flow(iron, 17, 0, 1, 0),
+                    new StorageObservation.Flow(other, 5, 0, 1, 0)),
+                Collections.emptyMap(),
+                Collections.emptyList());
+            assertTrue(service.submit(grid, 1, both, false, true));
+            assertEquals(
+                2,
+                awaitSnapshot(service, 6000).resources()
+                    .size());
+            service.applyLimits(100, 1);
+            assertTrue(service.submit(grid, 1, flow(11000, 3), false, true));
+            Summary kept = awaitSnapshot(service, 11000);
+            assertEquals(
+                "20",
+                kept.resources()
+                    .get(iron)
+                    .input());
+            assertEquals(
+                "5",
+                kept.resources()
+                    .get(other)
+                    .input());
+            assertTrue(kept.flowComplete());
+        }
+    }
+
+    @Test
+    void reloadedCapacityKeepsRecentMeasurementsAndChangesAdmission() throws Exception {
+        TerminalRegistry terminals = terminal(1);
+        try (RecentTrackingService service = new RecentTrackingService(terminals, 1)) {
+            service.open(grid, 1, false, true, 10, 1000);
+            service.applyLimits(4, 1);
+            assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
+            assertEquals(
+                "17",
+                awaitSnapshot(service, 6000).resources()
+                    .get(iron)
+                    .input());
+            service.applyLimits(1, 10);
+            assertFalse(service.submit(grid, 1, flow(11000, 99), false, true));
+            service.applyLimits(4, 10);
+            assertTrue(service.submit(grid, 1, flow(16000, 3), false, true));
+            assertEquals(
+                "3",
+                awaitSnapshot(service, 16000).resources()
+                    .get(iron)
+                    .input());
+        }
+    }
+
+    @Test
     void recentOperationsRemainExactBeyondLongRangeAndResetWithTheirBuckets() {
         RecentResourceActivity recent = new RecentResourceActivity(false, true, 10, 1000);
         for (long at : new long[] { 6000, 11000 }) {

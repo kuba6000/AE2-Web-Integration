@@ -191,6 +191,16 @@ class CoreDataTest {
     private record TestPlatform(File configDirectory) implements IServerPlatform {
 
         @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
+
+        @Override
         public @NotNull String getModVersion() {
             return "test-version";
         }

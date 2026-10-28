@@ -49,6 +49,8 @@ public final class GetGrids {
 | `@responseExample <status> <JSON>` | Complete example overriding the generated response example. |
 | `@responseMedia <status> <media-type>` | Raw response body, such as `image/png`, without a Java DTO or JSON example. |
 | `@responseHeader <status> <name> <description>` | Response header with a string value, such as ETag or Cache-Control. |
+| `@event <name> {@link Type} <description>` | SSE event with a JSON payload described by an existing DTO. Omit the type for an empty `{}` control payload. Requires a `text/event-stream` response. |
+| `@eventExample <name> <JSON>` | Complete event data example overriding the generated example, validated against the event's payload schema. |
 | `@PathParam("name")` and `@pathParam name Description.` | Path field binding and its endpoint Javadoc description. |
 | `@QueryParam("name")` on a supported scalar field | Optional query parameter: `boolean`, `int`, `long`, `Integer`, `Long`, `String`, or `StableKey`. Boolean flags default to false; document other defaults in field Javadoc. |
 | `@Body` | Field whose DTO describes the required JSON request body. |
@@ -72,6 +74,11 @@ Use `@responseExample` when a response needs a specific complete example, such a
 
 Binary responses use an ordinary `@response` without a linked type, plus
 `@responseMedia 200 image/png`. A `304` response has no body and can declare cache headers.
+
+SSE endpoints declare each event with `@event`. Payload types may be private nested records;
+their field Javadocs, nullability and examples are reused. The generated operation includes readable
+event field tables and an `x-sse-events` map containing each event's description and payload schema.
+The response remains a string with named examples in SSE wire format (`event:` and `data:` lines).
 
 ## Supported schemas
 

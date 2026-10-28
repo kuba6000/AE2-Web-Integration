@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -15,7 +16,12 @@ public interface IAEMixinCallbacks {
         return AEMixinCallbacks.INSTANCE;
     }
 
-    void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer);
+    /**
+     * An accepted submission or merge. The adapter's machine classification controls machine tracking independently
+     * of the optional native player. Core resolves web attribution; adapters need no web context.
+     */
+    void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isMachineRequest,
+        @Nullable PlayerIdentity nativeRequester);
 
     void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, @NotNull IAEKey diff);
 

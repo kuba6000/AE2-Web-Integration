@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -68,7 +69,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         int planId = gridData
             .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
-        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
         try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
             PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");
@@ -82,6 +83,16 @@ class CoreEngineLifecycleTest extends GridTestScope {
             IAE processInterface = TestGridFixtures.ae(grid);
             AE2Controller.AE2Interface = processInterface;
             IServerPlatform processPlatform = new IServerPlatform() {
+
+                @Override
+                public java.nio.file.Path getModFile() {
+                    return null;
+                }
+
+                @Override
+                public boolean isSingleplayer() {
+                    return false;
+                }
 
                 @Override
                 public @NotNull String getModVersion() {

@@ -6,9 +6,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.gson.JsonObject;
 
@@ -19,6 +22,17 @@ public class WebhookHelper {
     private static final int WEBHOOK_TIMEOUT_MILLIS = 10_000;
 
     public static void sendPayload(String webhookUrl, String username, String password, INotificationPayload payload) {
+        send(webhookUrl, username, password, payload, null);
+    }
+
+    /** Discord PNG attachment. Other notification payloads retain ordinary JSON delivery. */
+    public static void sendPng(@NotNull String webhookUrl, @NotNull INotificationPayload payload,
+        byte @NotNull [] png) {
+        send(webhookUrl, "", "", payload, png);
+    }
+
+    private static void send(@Nullable String webhookUrl, @NotNull String username, @NotNull String password,
+        @Nullable INotificationPayload payload, byte @Nullable [] png) {
         if (webhookUrl == null) return;
         if (payload == null) return;
         JsonObject json = payload.serializePayload();
@@ -37,15 +51,32 @@ public class WebhookHelper {
                 String authHeaderValue = "Basic " + new String(encodedAuth);
                 connection.setRequestProperty("Authorization", authHeaderValue);
             }
-            connection.addRequestProperty("Content-Type", "application/json");
+            String boundary = "AE2Web" + UUID.randomUUID();
+            connection.addRequestProperty(
+                "Content-Type",
+                png == null ? "application/json" : "multipart/form-data; boundary=" + boundary);
             connection.addRequestProperty("User-Agent", "AE2-Web-Integration");
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
 
             try (OutputStream stream = connection.getOutputStream()) {
+                if (png != null) {
+                    stream.write(
+                        ("--" + boundary
+                            + "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n")
+                            .getBytes(StandardCharsets.UTF_8));
+                }
                 stream.write(
                     json.toString()
                         .getBytes(StandardCharsets.UTF_8));
+                if (png != null) {
+                    stream.write(
+                        ("\r\n--" + boundary
+                            + "\r\nContent-Disposition: form-data; name=\"files[0]\"; filename=\"crafting.png\"\r\nContent-Type: image/png\r\n\r\n")
+                            .getBytes(StandardCharsets.UTF_8));
+                    stream.write(png);
+                    stream.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+                }
             }
 
             int code;

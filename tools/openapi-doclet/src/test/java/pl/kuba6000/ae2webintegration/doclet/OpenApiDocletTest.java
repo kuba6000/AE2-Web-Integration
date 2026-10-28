@@ -9,8 +9,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.tools.DocumentationTool;
 import javax.tools.StandardJavaFileManager;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -34,6 +37,239 @@ class OpenApiDocletTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void documentsTypedSseEventsWithNestedFieldsAndWireExamples() throws Exception {
+        List<Path> sources = fixture("""
+            /** Open live stream.
+             * @response 200 Live events.
+             * @responseMedia 200 text/event-stream
+             * @event delta {@link fixture.Payloads.Delta} Apply changed quantities.
+             * @event resync Fetch a new {@code snapshot} before reconnecting.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/live")
+            public class Grids {}
+            class Payloads {
+                /** @param updates changed resources
+                 * @param unkeyed replacement list, or null when unchanged
+                 * @example unkeyed null
+                 */
+                private record Delta(java.util.Map<StableKey, Amount> updates,
+                    java.util.@org.jetbrains.annotations.Nullable List<String> unkeyed) {}
+                /** @param quantity current stored quantity
+                 * @example quantity 64
+                 */
+                private record Amount(long quantity) {}
+            }
+            """);
+        Path output = directory.resolve("sse.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject document = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject();
+        JsonObject operation = document.getAsJsonObject("paths")
+            .getAsJsonObject("/api/live")
+            .getAsJsonObject("get");
+        JsonObject events = operation.getAsJsonObject("x-sse-events");
+        JsonObject definitions = document.getAsJsonObject("components")
+            .getAsJsonObject("schemas");
+        String deltaRef = events.getAsJsonObject("delta")
+            .getAsJsonObject("schema")
+            .get("$ref")
+            .getAsString();
+        JsonObject delta = definitions.getAsJsonObject(deltaRef.substring(deltaRef.lastIndexOf('/') + 1));
+        assertTrue(
+            delta.getAsJsonArray("required")
+                .contains(JsonParser.parseString("\"unkeyed\"")));
+        assertEquals(
+            "null",
+            delta.getAsJsonObject("properties")
+                .getAsJsonObject("unkeyed")
+                .getAsJsonArray("anyOf")
+                .get(1)
+                .getAsJsonObject()
+                .get("type")
+                .getAsString());
+        assertTrue(
+            delta.getAsJsonObject("properties")
+                .getAsJsonObject("updates")
+                .getAsJsonObject("additionalProperties")
+                .has("$ref"));
+        JsonObject control = events.getAsJsonObject("resync")
+            .getAsJsonObject("schema");
+        assertTrue(
+            events.getAsJsonObject("resync")
+                .get("description")
+                .getAsString()
+                .matches("(?s).*\\s`snapshot`\\s.*"));
+        assertEquals(
+            "object",
+            control.get("type")
+                .getAsString());
+        assertFalse(
+            control.get("additionalProperties")
+                .getAsBoolean());
+        String description = operation.get("description")
+            .getAsString();
+        for (String field : List.of("updates", "unkeyed", "quantity"))
+            assertTrue(description.contains("`" + field + "`"));
+        JsonObject media = operation.getAsJsonObject("responses")
+            .getAsJsonObject("200")
+            .getAsJsonObject("content")
+            .getAsJsonObject("text/event-stream");
+        assertEquals(
+            "string",
+            media.getAsJsonObject("schema")
+                .get("type")
+                .getAsString());
+        JsonObject examples = media.getAsJsonObject("examples");
+        assertEquals(
+            "event: resync\ndata: {}\n\n",
+            examples.getAsJsonObject("resync")
+                .get("value")
+                .getAsString());
+        String wire = examples.getAsJsonObject("delta")
+            .get("value")
+            .getAsString();
+        assertTrue(wire.startsWith("event: delta\ndata: "));
+        assertTrue(wire.endsWith("\n\n"));
+        JsonObject payload = JsonParser.parseString(
+            wire.substring(wire.indexOf("data: ") + 6)
+                .strip())
+            .getAsJsonObject();
+        assertTrue(
+            payload.get("unkeyed")
+                .isJsonNull());
+        assertEquals(
+            64,
+            payload.getAsJsonObject("updates")
+                .asMap()
+                .values()
+                .iterator()
+                .next()
+                .getAsJsonObject()
+                .get("quantity")
+                .getAsInt());
+        assertTrue(
+            new OpenAPIV3Parser().readContents(Files.readString(output), null, null)
+                .getMessages()
+                .isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "@eventExample missing {}",
+            "@eventExample delta {\"quantity\":1}\n * @eventExample delta {\"quantity\":2}",
+            "@eventExample delta {\"quantity\":\"invalid\"}", "@eventExample delta {broken" })
+    void rejectsInvalidEventExamples(String declaration) throws Exception {
+        List<Path> sources = fixture("""
+            /** Open stream.
+             * @response 200 Events.
+             * @responseMedia 200 text/event-stream
+             * @event delta {@link Payload} Changed quantity.
+             * %s
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/live")
+            public class Grids { private record Payload(long quantity) {} }
+            """.formatted(declaration));
+        Result result = generate(sources, directory.resolve("invalid-event-example.json"));
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .contains("@eventExample"),
+            result.diagnostics());
+    }
+
+    @Test
+    void usesValidatedEventExamplesAndKeepsDeclarationOrder() throws Exception {
+        List<Path> sources = fixture("""
+            /** Open stream.
+             * @response 200 Events.
+             * @responseMedia 200 text/event-stream
+             * @event ready {@link Payload} Initial state.
+             * @event delta {@link Payload} Changed state.
+             * @event reset Fetch a snapshot.
+             * @eventExample delta {"quantity":96}
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/live")
+            public class Grids { private record Payload(long quantity) {} }
+            """);
+        Path output = directory.resolve("event-examples.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject operation = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("paths")
+            .getAsJsonObject("/api/live")
+            .getAsJsonObject("get");
+        assertEquals(
+            List.of("ready", "delta", "reset"),
+            new ArrayList<>(
+                operation.getAsJsonObject("x-sse-events")
+                    .keySet()));
+        JsonObject examples = operation.getAsJsonObject("responses")
+            .getAsJsonObject("200")
+            .getAsJsonObject("content")
+            .getAsJsonObject("text/event-stream")
+            .getAsJsonObject("examples");
+        assertEquals(
+            "event: delta\ndata: {\"quantity\":96}\n\n",
+            examples.getAsJsonObject("delta")
+                .get("value")
+                .getAsString());
+        assertEquals(
+            "event: reset\ndata: {}\n\n",
+            examples.getAsJsonObject("reset")
+                .get("value")
+                .getAsString());
+        assertTrue(
+            examples.getAsJsonObject("ready")
+                .get("value")
+                .getAsString()
+                .startsWith("event: ready\ndata: {"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "@event delta {@link String} A scalar is not a payload DTO.",
+            "@event delta {@link Missing} Unresolved payload.", "@event delta {@link Payload}",
+            "@event delta Description before {@link Payload}", "@event delta First.\n * @event delta Duplicate.",
+            "@event 123 Invalid name." })
+    void rejectsInvalidEventDeclarations(String declaration) throws Exception {
+        List<Path> sources = fixture("""
+            /** Open stream.
+             * @response 200 Events.
+             * @responseMedia 200 text/event-stream
+             * %s
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/live")
+            public class Grids { private record Payload(long quantity) {} }
+            """.formatted(declaration));
+        Result result = generate(sources, directory.resolve("invalid-event.json"));
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .contains("@event"),
+            result.diagnostics());
+    }
+
+    @Test
+    void rejectsEventsWithoutAnSseResponse() throws Exception {
+        List<Path> sources = fixture("""
+            /** Get payload.
+             * @response 200 {@link Payload} Payload.
+             * @event delta {@link Payload} Changed payload.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/live")
+            public class Grids { private record Payload(long quantity) {} }
+            """);
+        Result result = generate(sources, directory.resolve("non-stream-events.json"));
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .contains("text/event-stream"),
+            result.diagnostics());
+    }
 
     @Test
     void nullableSelectionPolicyDocumentsUnknownSeparatelyFromAllSources() throws Exception {
@@ -385,7 +621,8 @@ class OpenApiDocletTest {
     @Test
     void groupsOperationsByEndpointPackageWithOrderedTagDescriptions() throws Exception {
         List<Path> sources = fixture("public class Grids {}");
-        for (String category : List.of("auth", "tracking", "crafting", "cpu", "grid", "icons")) {
+        for (String category : List
+            .of("auth", "tracking", "crafting", "cpu", "grid", "icons", "pins", "server", "themes", "updates")) {
             String className = Character.toUpperCase(category.charAt(0)) + category.substring(1);
             String packageName = "pl.kuba6000.ae2webintegration.core.http.endpoint." + category;
             sources.add(source(packageName.replace('.', '/') + "/" + className + ".java", """
@@ -404,27 +641,28 @@ class OpenApiDocletTest {
         assertTrue(result.success(), result.diagnostics());
         JsonObject document = JsonParser.parseString(Files.readString(output))
             .getAsJsonObject();
-        List<String> names = List.of("Grids", "CPUs", "Icons", "Crafting plans", "History", "Authentication");
-        List<String> packages = List.of("grid", "cpu", "icons", "crafting", "tracking", "auth");
+        List<String> packages = List
+            .of("grid", "cpu", "icons", "crafting", "tracking", "auth", "pins", "server", "themes", "updates");
         assertNotNull(document.getAsJsonArray("tags"));
         assertEquals(
-            names.size(),
+            packages.size(),
             document.getAsJsonArray("tags")
                 .size());
-        for (int index = 0; index < names.size(); index++) {
+        Set<String> names = new HashSet<>();
+        for (int index = 0; index < packages.size(); index++) {
             JsonObject tag = document.getAsJsonArray("tags")
                 .get(index)
                 .getAsJsonObject();
-            assertEquals(
-                names.get(index),
-                tag.get("name")
-                    .getAsString());
+            String name = tag.get("name")
+                .getAsString();
+            assertFalse(name.isBlank());
+            assertTrue(names.add(name), "Each category needs a distinct name");
             assertFalse(
                 tag.get("description")
                     .getAsString()
                     .isBlank());
             assertEquals(
-                JsonParser.parseString("[\"" + names.get(index) + "\"]"),
+                JsonParser.parseString("[\"" + name + "\"]"),
                 document.getAsJsonObject("paths")
                     .getAsJsonObject("/api/" + packages.get(index))
                     .getAsJsonObject("get")
@@ -1415,6 +1653,123 @@ class OpenApiDocletTest {
                 .isEmpty(),
             parsed.getMessages()
                 .toString());
+    }
+
+    @Test
+    void serverSettingsProjectionFiltersOnlyTheWebViewAndRetainsTypedInputs() throws Exception {
+        List<Path> sources = fixture("""
+            /** Edits settings.
+             * @response 200 {@link Response} Settings.
+             */
+            @Endpoint(method = HttpMethod.POST, path = "/api/server/settings")
+            public class Grids {
+                @Body private Input input;
+                public record Input(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings) {}
+                public record Response(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings,
+                    pl.kuba6000.ae2webintegration.core.config.ConfigSettings raw) {}
+            }
+            """);
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/WebSetting.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+            public @interface WebSetting {
+                Access value();
+                enum Access { FILE_ONLY, SECRET }
+            }
+            """));
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/ConfigSettings.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            public final class ConfigSettings {
+                public General general;
+                public Notifications notifications;
+                public static final class General {
+                    @WebSetting(WebSetting.Access.FILE_ONLY) public String password;
+                    @WebSetting(WebSetting.Access.FILE_ONLY) public int port;
+                    public boolean newSwitch;
+                }
+                public static final class Notifications {
+                    @WebSetting(WebSetting.Access.SECRET) public String secret;
+                    public int amount;
+                }
+            }
+            """));
+        sources.add(source("pl/kuba6000/ae2webintegration/core/config/EditableServerSettings.java", """
+            package pl.kuba6000.ae2webintegration.core.config;
+            public final class EditableServerSettings {
+                private ConfigSettings config;
+            }
+            """));
+        Path output = directory.resolve("web-settings.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject document = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject();
+        JsonObject operation = document.getAsJsonObject("paths")
+            .getAsJsonObject("/api/server/settings")
+            .getAsJsonObject("post");
+        JsonObject response = dereference(
+            document,
+            operation.getAsJsonObject("responses")
+                .getAsJsonObject("200")
+                .getAsJsonObject("content")
+                .getAsJsonObject("application/json")
+                .getAsJsonObject("schema"));
+        JsonObject input = dereference(
+            document,
+            operation.getAsJsonObject("requestBody")
+                .getAsJsonObject("content")
+                .getAsJsonObject("application/json")
+                .getAsJsonObject("schema"));
+        for (JsonObject envelope : List.of(input, response)) {
+            JsonObject settings = dereference(
+                document,
+                envelope.getAsJsonObject("properties")
+                    .getAsJsonObject("settings"));
+            assertNotNull(
+                settings.getAsJsonObject("properties")
+                    .get("general"),
+                "Web settings must expose the projected config shape");
+            JsonObject general = dereference(
+                document,
+                settings.getAsJsonObject("properties")
+                    .getAsJsonObject("general"));
+            assertEquals(
+                Set.of("newSwitch"),
+                general.getAsJsonObject("properties")
+                    .keySet());
+            assertEquals(
+                "boolean",
+                general.getAsJsonObject("properties")
+                    .getAsJsonObject("newSwitch")
+                    .get("type")
+                    .getAsString());
+            JsonObject notifications = dereference(
+                document,
+                settings.getAsJsonObject("properties")
+                    .getAsJsonObject("notifications"));
+            assertEquals(
+                Set.of("amount"),
+                notifications.getAsJsonObject("properties")
+                    .keySet());
+            assertEquals(
+                "integer",
+                notifications.getAsJsonObject("properties")
+                    .getAsJsonObject("amount")
+                    .get("type")
+                    .getAsString());
+        }
+        JsonObject raw = dereference(
+            document,
+            response.getAsJsonObject("properties")
+                .getAsJsonObject("raw"));
+        JsonObject general = dereference(
+            document,
+            raw.getAsJsonObject("properties")
+                .getAsJsonObject("general"));
+        assertEquals(
+            Set.of("newSwitch", "password", "port"),
+            general.getAsJsonObject("properties")
+                .keySet());
     }
 
     private static JsonObject dereference(JsonObject document, JsonObject schema) {

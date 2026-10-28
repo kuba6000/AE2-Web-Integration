@@ -92,7 +92,10 @@ test('a theme that never finishes loading still offers navigation to safe mode',
     await importing;
     assert.equal(await page.getByRole('button', { name: 'Themes', exact: true }).count(), 0);
     await page.clock.fastForward(1500);
-    await page.getByRole('link', { name: 'Open default UI in safe mode' }).click();
+    await page
+        .locator('.recovery-notice')
+        .getByRole('link', { name: /safe mode/i })
+        .click();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('safe'), '1');
     assert.equal(options.requests.filter((r) => r.path === '/themes/waiting/theme.js').length, 1);
@@ -615,11 +618,14 @@ test('autostart failures open the plan without repeating mutations or losing the
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
         assert.match(page.url(), /\/plans\/7$/);
         if (failure === 'FAIL') await page.getByText('<CPU became unavailable>', { exact: true }).waitFor();
-        if (failure === 'TIMEOUT')
-            await page
-                .getByRole('status')
-                .filter({ hasText: /outcome.*unknown/i })
-                .waitFor();
+        if (failure === 'TIMEOUT') {
+            const notice = page.locator('#plan-panel [role="status"].api-error');
+            await notice.waitFor();
+            assert.ok((await notice.innerText()).trim());
+            const actions = page.locator('.plan-actions');
+            assert.equal(await actions.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
+            assert.equal(await actions.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
+        }
         if (failure === 'TIMEOUT' || failure === 'FAIL') {
             const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
             await notifications.waitFor();

@@ -8,11 +8,12 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 
 /**
- * Lists this account's resource pins. Unavailable grids expose only pin management fields. Home recent flow comes from
- * detached tracking RAM,
- * including resources absent from storage; missing cache is null and never starts native observation.
+ * List resource pins.
+ * <p>
+ * Returns the current account's pins. Pins for unavailable networks retain their placement and display settings,
+ * but hide network and resource details.
  * 
- * @response 200 {@link Response} Current owner pins and optional response-local icons.
+ * @response 200 {@link Response} Account pins and requested icon mappings.
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/resource-pins")
 public final class GetResourcePins extends ResourcePinRequest {

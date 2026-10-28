@@ -19,23 +19,30 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
- * Enables one resource pin placement without changing its other placement or display preferences.
+ * Add resource pin.
+ * <p>
+ * Pins a resource to the terminal or Home for the current account. Adding an existing placement leaves the pin
+ * unchanged. Other placements and display preferences are preserved.
  * 
- * @pathParam gridKey Accessible grid identifier.
- * @response 200 {@link Response} Current owner pins after idempotent creation.
+ * @pathParam gridKey Network identifier.
+ * @response 200 {@link Response} Updated account pins.
  * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: invalid placement or input.
- * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} ITEM_NOT_FOUND: no authoritative
- *           grid-specific description is available; refresh the terminal before retrying.
+ * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} ITEM_NOT_FOUND: resource not found in
+ *           this network's records; refresh the terminal before retrying.
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/resource-pins")
 public final class PostResourcePin extends ResourcePinRequest {
 
-    /** @param placement terminal or home; the other placement remains unchanged. */
+    /**
+     * @param itemKey   resource identifier
+     * @param placement {@code terminal} or {@code home}
+     */
     @Desugar
     public record Input(@NotNull StableKey itemKey, @NotNull String placement) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public void handle() {

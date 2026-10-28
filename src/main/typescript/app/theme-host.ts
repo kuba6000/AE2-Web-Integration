@@ -100,6 +100,14 @@ export function mountTheme(
         history: { next: application.history.next, previous: application.history.previous },
         cpus: { cancel: cpus.cancel, pause: cpus.pause },
         settings: { edit: settings.edit, save: settings.save },
+        serverSettings: {
+            edit: application.serverSettings.edit,
+            editSecret: application.serverSettings.editSecret,
+            removeSecret: application.serverSettings.removeSecret,
+            resetSecret: application.serverSettings.resetSecret,
+            save: application.serverSettings.save,
+            reload: application.serverSettings.reload
+        },
         icons: {
             animate: application.icons.animate,
             async resolve(references, metadata, signal) {

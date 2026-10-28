@@ -121,7 +121,7 @@ export function createThemeManager(
             if (disposed || token !== generation) throw new Error('Theme activation cancelled.');
             const module: { default?: ThemeDefinition } = await import(assets.url(choice.entry));
             if (!module.default || typeof module.default.mount !== 'function' || module.default.id !== choice.id)
-                throw new Error('Theme entry must export its declared theme definition.');
+                throw new Error('This theme could not be started. Choose another theme.');
             const definition: ThemeDefinition = {
                 ...choice,
                 mount(root, application, context) {
@@ -143,7 +143,7 @@ export function createThemeManager(
         if (!line || choice.source === 'builtin') return null;
         return choice.supportedModVersion === `${line[1]}.${line[2]}.x`
             ? null
-            : `This theme declares support for ${choice.supportedModVersion}; the server uses ${modVersion}. Some views may be unavailable.`;
+            : `This theme supports version ${choice.supportedModVersion}; the server uses ${modVersion}. Some views may be unavailable.`;
     }
     async function apply(key: string | null, persist: boolean) {
         if (disposed) return;
@@ -170,7 +170,7 @@ export function createThemeManager(
             if (persist) {
                 state.selected = key;
                 if (!settings.set('selected', key))
-                    state.error = 'Theme selected for this session; browser storage could not save it.';
+                    state.error = 'Theme applied, but your browser could not save this choice.';
             }
         } catch (error) {
             if (disposed || token !== generation) return;

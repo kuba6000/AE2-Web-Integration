@@ -18,24 +18,20 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
- * Begins account registration for an online player.
+ * Register an account.
  * <p>
- * Finish registration in Minecraft using the returned token and the auth command.
+ * The player must be online. Confirm registration in Minecraft with {@code /ae2webintegration auth <token>},
+ * then log in to obtain a session.
  * 
  * @response 202 {@link Response} Confirmation token issued; registration is still pending.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields. INVALID_PASSWORD: registration password could not be accepted.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input; INVALID_PASSWORD: password not accepted.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
  * @response 409 {@link ErrorResponse} Player not online.
- * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
- * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
- *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
  * @responseExample 409 {"status":"NOT_ONLINE","data":null}
@@ -51,7 +47,7 @@ public final class Register extends IAsyncRequest {
     /** Credentials for the account being registered by an online Minecraft player. */
     @Body
     @NotNull
-    private Input input;
+    Input input;
 
     /**
      * Requested account credentials.
@@ -67,8 +63,7 @@ public final class Register extends IAsyncRequest {
     /**
      * Pending registration to confirm from the requested player's Minecraft account.
      *
-     * @param token confirmation value for {@code /ae2webintegration auth <token>}; this is not a Bearer session
-     *              token, and completing registration does not log the web client in
+     * @param token confirmation value for {@code /ae2webintegration auth <token>}; not a session credential
      * @example token exampleConfirmationTokenForDocumentationOnly
      */
     @Desugar

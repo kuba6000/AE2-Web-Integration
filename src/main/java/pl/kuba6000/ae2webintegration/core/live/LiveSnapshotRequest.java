@@ -16,7 +16,7 @@ public abstract class LiveSnapshotRequest extends ISyncedRequest {
     /** Reserve a live subscription together with the returned snapshot. */
     @QueryParam("live")
     protected boolean live;
-    /** Replace this login's previous subscription, including another grid or topic, with this live snapshot. */
+    /** Subscription token to close when creating this live snapshot. Must belong to the same login session. */
     @QueryParam("replace")
     protected @Nullable String replace;
     protected @Nullable String subscription;

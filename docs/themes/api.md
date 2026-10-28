@@ -52,6 +52,36 @@ Network `settings.current` contains confirmed values and `settings.draft` contai
 and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
 Use those limits for controls and validation; pass only editable fields to `settings.edit`.
 
+Server configuration is available at `#/server-settings` only for `context.user.isAdmin`.
+Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
+an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
+without automatic polling. Edits survive navigation within the application; they are not stored in
+the browser. The administrator password, web port, player-account access and password-free localhost
+access, trusted proxies and the unauthenticated request limit cannot be edited here.
+
+`state.serverSettings.readOnly` contains confirmed metadata: `port`, `publicMode`,
+`allowNoPasswordOnLocalhost`, `trustedProxies`, `maxRequestsBeforeLoggedInPerMinute`, `adminPasswordConfigured`, `discordWebhookConfigured` and
+`ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
+Secret values and lengths are never returned; the configured flags only indicate whether a value is
+set. Keep this metadata outside the editable draft. The HTTP write contract is
+`{revision, settings, secrets?}`; `readOnly` is response-only. Values and metadata describe the active
+configuration in memory. The opaque revision changes after each successful configuration load, reload
+or web save. Manual file edits alone do not change the active values or revision.
+
+Notification credentials are write-only. Use `serverSettings.editSecret(name, value)` for a replacement,
+`removeSecret(name)` for explicit deletion, and `resetSecret(name)` to undo a pending credential change.
+Names are `discordWebhook` and `ntfyPassword`. An empty replacement input cancels its pending change;
+it never deletes the stored secret. `state.serverSettings.secretChanges` contains only pending edits:
+an absent key means keep the stored value, and an empty string means explicit removal. Saving submits
+these changes separately and clears their values on success. Successful reload, denial and disposal
+also clear them; an unconfirmed save retains them until explicitly reconciled. Never persist these
+values in browser storage or log them.
+
+Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
+`serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh
+preserves a dirty draft. A `CONFIG_CHANGED` conflict or an uncertain save retains edits and requires
+an explicit reload before another save. Render these states visibly; do not retry mutations automatically.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |

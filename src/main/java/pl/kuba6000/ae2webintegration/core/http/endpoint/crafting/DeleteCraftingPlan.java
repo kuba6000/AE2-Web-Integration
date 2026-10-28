@@ -18,28 +18,26 @@ import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 
 /**
- * Cancels and removes a crafting plan.
+ * Delete crafting plan.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @pathParam planId Runtime crafting-plan identifier.
- * @response 200 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid. CSRF_REJECTED: cookie or
+ * <p>
+ * Cancels any pending calculation and removes the plan. To stop an active job, cancel its CPU instead.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @pathParam planId Plan identifier returned as jobId when creating the plan.
+ * @response 200 {@link Response} Plan removed.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
  *           configured-local mutations require X-AE2-Request: true.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND or INVALID_ID: the grid or plan does not exist.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND or INVALID_ID: network or plan not found.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: the game-thread request could not
- *           complete.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -55,8 +53,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 public final class DeleteCraftingPlan extends ISyncedRequest {
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
      * @param data   always {@code null} after the plan is cancelled and removed
      * @example status OK
@@ -66,7 +62,7 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     @PathParam("planId")
-    private int jobId;
+    int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {

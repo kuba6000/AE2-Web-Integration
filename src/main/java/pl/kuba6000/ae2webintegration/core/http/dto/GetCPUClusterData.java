@@ -1,14 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 
+/** Current job and capabilities of a crafting CPU. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class GetCPUClusterData {
 
@@ -21,6 +24,8 @@ public class GetCPUClusterData {
         finalOutput = header.finalOutput() == null ? null : new ResourceStack(header.finalOutput(), mappings);
         hasTrackingInfo = header.hasTrackingInfo();
         timeStarted = header.timeStarted();
+        requesters = header.requesters();
+        nativeRequesterName = header.nativeRequesterName();
         timeElapsed = header.timeElapsed(at);
     }
 
@@ -36,13 +41,13 @@ public class GetCPUClusterData {
      * @example true
      */
     public final boolean isBusy;
-    /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+    /** Automatic CPU selection policy; null when unsupported or unknown. Does not restrict manual submission. */
     public final @Nullable CpuSelectionMode selectionMode;
     /** Whether this CPU supports pausing the scheduling of its current job. */
     public final boolean supportsPause;
     /** Whether the active job is paused; false for idle or unsupported CPUs. */
     public final boolean isPaused;
-    /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
+    /** Final crafting output; null when the CPU is idle or its output is unavailable. */
     public final @Nullable ResourceStack finalOutput;
     /** Resource details for current work; null when the CPU is idle. */
     public @Nullable ArrayList<CpuResource> items;
@@ -64,4 +69,8 @@ public class GetCPUClusterData {
      * @example 10000
      */
     public final long timeElapsed;
+    /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+    public final @NotNull List<CraftingRequester> requesters;
+    /** Native requester name for a busy CPU without tracked requesters; null when unavailable. */
+    public final @Nullable String nativeRequesterName;
 }

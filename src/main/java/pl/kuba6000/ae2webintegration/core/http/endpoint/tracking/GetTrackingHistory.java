@@ -13,6 +13,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -26,23 +27,23 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryServi
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
 
 /**
- * Lists crafting history entries.
+ * List crafting history.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @response 200 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: the grid does not exist.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * <p>
+ * Returns completed and cancelled jobs, newest first. Pass {@code nextBefore} as {@code before}
+ * to request the next page.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 200 {@link Response} Crafting history page.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the world history service is unavailable.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: history is unavailable.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -56,24 +57,21 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistor
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history")
 public final class GetTrackingHistory extends IAsyncRequest {
 
-    /** Include product icon references and atlas metadata; omitted means false. */
+    /** Include product icons and atlas metadata; defaults to false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /** Maximum number of entries, from 1 to 100; defaults to 50. */
     @QueryParam("limit")
-    private int limit = 50;
+    int limit = 50;
 
-    /** Exclusive decimal job ID cursor from the preceding page. */
+    /** Pagination cursor: use nextBefore from the preceding response; omit for the newest entries. */
     @QueryParam("before")
-    private String before;
+    String before;
 
     /**
-     * Successful operation result.
-     * 
      * @param status     {@code OK} for a successful request
-     * @param data       history entries ordered by durable completion ID, newest first; empty when no history has been
-     *                   recorded
+     * @param data       completed and cancelled jobs, newest first; empty when no entries match
      * @param icons      atlas metadata for product references; null when not requested or no pack is available
      * @param nextBefore exclusive decimal ID cursor for the next page, or null when this is the last page
      * @example status OK
@@ -88,8 +86,9 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @param timeStarted  crafting start time in Unix epoch milliseconds
      * @param timeDone     completion time in Unix epoch milliseconds
      * @param wasCancelled whether the crafting work was cancelled
-     * @param finalOutput  detached snapshot of the final crafting output
-     * @param id           durable decimal history entry identifier
+     * @param finalOutput  requested output of the job
+     * @param requesters   player, automation and web requesters, in submission order; empty when unavailable
+     * @param id           history entry ID, as a decimal string
      * @example timeStarted 1700000000000
      * @example timeDone 1700000010000
      * @example wasCancelled false
@@ -97,7 +96,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
      */
     @Desugar
     public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
-        @NotNull ResourceStack finalOutput, @NotNull String id) {}
+        @NotNull ResourceStack finalOutput, @NotNull String id, @NotNull List<CraftingRequester> requesters) {}
 
     @Override
     public void handle() {
@@ -136,7 +135,8 @@ public final class GetTrackingHistory extends IAsyncRequest {
                         entry.timeDone(),
                         entry.wasCancelled(),
                         new ResourceStack(entry.finalOutput(), mappings),
-                        Long.toString(entry.id())));
+                        Long.toString(entry.id()),
+                        entry.requesters()));
             }
             respondDetached(
                 HttpURLConnection.HTTP_OK,

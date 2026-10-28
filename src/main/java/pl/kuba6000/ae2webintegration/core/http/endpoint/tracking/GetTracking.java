@@ -25,24 +25,20 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 /**
- * Reads a crafting history entry.
+ * Get crafting history entry.
  *
- * @pathParam gridKey Persistent grid identifier.
- * @pathParam entryId Durable decimal history entry identifier.
- * @response 200 {@link Response} Successful response.
- * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields.
- * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
- *           WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid.
- * @response 404 {@link ErrorResponse} GRID_NOT_FOUND or TRACKING_NOT_FOUND: the requested resource does not exist.
- * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
- *           supported methods.
+ * @pathParam gridKey Persistent network identifier.
+ * @pathParam entryId History entry ID from the crafting history list.
+ * @response 200 {@link Response} Completed or cancelled job details.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND or TRACKING_NOT_FOUND: network or history entry not found.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
- * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
- *           failure.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the world history service is unavailable.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: history is unavailable.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -56,13 +52,11 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryServi
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history/{entryId}")
 public final class GetTracking extends IAsyncRequest {
 
-    /** Include product and resource icon references and atlas metadata; omitted means false. */
+    /** Include product and resource icons and atlas metadata; defaults to false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /**
-     * Successful operation result.
-     * 
      * @param status {@code OK} for a successful request
      * @param data   completed or cancelled crafting measurements for the selected history entry
      * @param icons  atlas metadata for product and resource references; null when not requested or no pack is available
@@ -73,7 +67,7 @@ public final class GetTracking extends IAsyncRequest {
         implements IResponseBody {}
 
     @PathParam("entryId")
-    private String id;
+    String id;
 
     @Override
     public void handle() {

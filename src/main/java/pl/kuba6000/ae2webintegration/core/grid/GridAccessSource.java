@@ -9,7 +9,7 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 /**
- * A block or part granting a specific player access to the grid.
+ * A block or part granting a player access to the network.
  *
  * @param player   player receiving access
  * @param kind     identifier of the type of block or part granting access

@@ -8,12 +8,12 @@ import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** Shared resource identity, metadata and response-local icon contract. */
+/** Resource identity, display information and optional icon. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class ResourceDescription {
 
     /**
-     * Native resource category for item and fluid filtering.
+     * Resource category, such as an item or fluid.
      *
      * @example ITEM
      */
@@ -41,7 +41,7 @@ public class ResourceDescription {
     public final @NotNull String displayName;
 
     /**
-     * Stable resource key, or null when an identity could not be captured.
+     * Stable resource key, or null when a stable identity is unavailable.
      *
      * @example AAAAAAAAAAAAAAAAAAAAAA
      */

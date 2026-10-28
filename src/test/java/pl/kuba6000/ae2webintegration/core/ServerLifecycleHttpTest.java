@@ -21,9 +21,7 @@ import java.io.Reader;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -83,6 +81,16 @@ class ServerLifecycleHttpTest {
     private record Response(int status, String body) {}
 
     private static final class BlockingPlayerLookup implements IServerPlatform {
+
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
 
         @Override
         public @NotNull String getModVersion() {
@@ -206,13 +214,11 @@ class ServerLifecycleHttpTest {
     private int port;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         CoreEngine.onServerStopped();
         previousServerPlatform = AE2Controller.serverPlatform;
 
-        port = unusedLoopbackPort();
         config = new ConfigTestFixture(tempDirectory);
-        config.write("general.port", port);
         config.write("general.password", "lifecycle-password");
         config.write("general.allow_no_password_on_localhost", false);
         config.write("general.public_mode", false);
@@ -750,6 +756,16 @@ class ServerLifecycleHttpTest {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return version;
             }
@@ -953,7 +969,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.AE2Interface = processInterface;
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
         assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
@@ -966,7 +982,7 @@ class ServerLifecycleHttpTest {
 
         assertSame(processInterface, AE2Controller.AE2Interface);
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
 
         Response secondWorld = get("/api/grids", token);
         assertEquals(
@@ -990,7 +1006,7 @@ class ServerLifecycleHttpTest {
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"Player\",\"password\":\"test-password\"}");
@@ -1031,6 +1047,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1072,7 +1098,7 @@ class ServerLifecycleHttpTest {
             }
         };
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"Player\",\"password\":\"test-password\"}");
@@ -1090,7 +1116,7 @@ class ServerLifecycleHttpTest {
     @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         fillServerThreadQueue();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
@@ -1106,7 +1132,7 @@ class ServerLifecycleHttpTest {
     @Test
     void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login();
         fillServerThreadQueue();
 
@@ -1125,6 +1151,16 @@ class ServerLifecycleHttpTest {
     void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {
@@ -1169,7 +1205,7 @@ class ServerLifecycleHttpTest {
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/register",
             "{\"username\":\"MissingPlayer\",\"password\":\"test-password\"}");
@@ -1209,6 +1245,16 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
             public @NotNull String getModVersion() {
                 return "test-version";
             }
@@ -1251,7 +1297,7 @@ class ServerLifecycleHttpTest {
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
         try {
@@ -1299,7 +1345,7 @@ class ServerLifecycleHttpTest {
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         PostExchange exchange = new PostExchange(
             "/api/auth/login",
             "{\"username\":\"Player\",\"password\":\"player-password\"}");
@@ -1351,7 +1397,7 @@ class ServerLifecycleHttpTest {
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         String token = login("canonicalplayer", "player-password");
         Response response = get("/api/context", token);
 
@@ -1442,6 +1488,16 @@ class ServerLifecycleHttpTest {
     void registrationReturnsAnAcceptedTokenWithoutInstallingACookie() throws Exception {
         UUID player = UUID.fromString("12121212-3434-5656-7878-909090909090");
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
 
             @Override
             public @NotNull String getModVersion() {
@@ -1722,7 +1778,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void loginBodyReadInPreviousListenerCannotPublishIntoRestartedServer() throws Exception {
-        AE2Controller.startHTTPServer();
+        startHttpServer();
         CountDownLatch readingBody = new CountDownLatch(1);
         CountDownLatch releaseBody = new CountDownLatch(1);
         PostExchange exchange = new PostExchange(
@@ -1755,7 +1811,7 @@ class ServerLifecycleHttpTest {
             assertTrue(readingBody.await(2, TimeUnit.SECONDS));
             CoreEngine.onServerStopping();
             CoreEngine.onServerStopped();
-            AE2Controller.startHTTPServer();
+            startHttpServer();
             releaseBody.countDown();
             oldRequest.get(3, TimeUnit.SECONDS);
             assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
@@ -1783,7 +1839,7 @@ class ServerLifecycleHttpTest {
     private void startApi() throws IOException {
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         worlds.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
+        startHttpServer();
     }
 
     private String login() throws IOException {
@@ -1911,9 +1967,11 @@ class ServerLifecycleHttpTest {
         }
     }
 
-    private static int unusedLoopbackPort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            return socket.getLocalPort();
+    private void startHttpServer() {
+        if (port == 0) {
+            port = HttpServerTestFixture.start(config);
+        } else {
+            AE2Controller.startHTTPServer();
         }
     }
 }

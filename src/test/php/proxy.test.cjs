@@ -39,11 +39,7 @@ async function fixture(t) {
         $_SERVER['SCRIPT_NAME'] = $mount . '/index.php';
         require __DIR__ . $mount . '/index.php';
     `);
-    const reservation = http.createServer();
-    await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
-    const port = reservation.address().port;
-    await new Promise(resolve => reservation.close(resolve));
-    const child = spawn(php, ['-S', `127.0.0.1:${port}`, '-t', directory, router], {
+    const child = spawn(php, ['-S', '127.0.0.1:0', '-t', directory, router], {
         windowsHide: true, stdio: ['ignore', 'ignore', 'pipe']
     });
     t.after(async () => {
@@ -53,10 +49,19 @@ async function fixture(t) {
             await stopped;
         }
     });
-    await new Promise((resolve, reject) => {
+    const port = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('PHP server did not start')), 10000);
+        let output = '';
+        let started = false;
         child.stderr.on('data', data => {
-            if (String(data).includes('Development Server')) { clearTimeout(timer); resolve(); }
+            if (started) return;
+            output += String(data);
+            const match = output.match(/Development Server \(http:\/\/127\.0\.0\.1:(\d+)\) started/);
+            if (match) {
+                started = true;
+                clearTimeout(timer);
+                resolve(Number(match[1]));
+            }
         });
         child.once('error', error => { clearTimeout(timer); reject(error); });
     });

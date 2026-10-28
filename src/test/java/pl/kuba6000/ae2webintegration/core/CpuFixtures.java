@@ -178,6 +178,7 @@ final class CpuFixtures {
         final Map<IAEKey, long[]> work = new LinkedHashMap<>();
         final StackList waiting = new StackList();
         boolean busy;
+        String nativeRequesterName;
         boolean valid = true;
         @Nullable
         Resource output;
@@ -206,6 +207,11 @@ final class CpuFixtures {
             return valid && grid instanceof Grid current && current.cpus.contains(this);
         }
 
+        public String web$getRequesterName() {
+            return nativeRequesterName;
+        }
+
+        @Override
         public String web$getName() {
             return "cpu";
         }

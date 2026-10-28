@@ -17,6 +17,9 @@ public interface ICommandContext {
     /** Whether the sender has the given permission level. */
     boolean hasPermission(int level);
 
+    /** True only for the local owner of an integrated server, never a LAN guest or console. */
+    boolean isSingleplayerOwner();
+
     /** Sends a success/info message to the sender (interface adds green coloring). */
     void sendMessage(String text);
 
