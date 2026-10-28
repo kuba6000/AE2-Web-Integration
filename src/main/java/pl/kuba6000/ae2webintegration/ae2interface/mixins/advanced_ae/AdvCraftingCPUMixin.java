@@ -88,6 +88,16 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     }
 
     @Override
+    public @Nullable String web$getRequesterName() {
+        AdvCraftingCPU cpu = (AdvCraftingCPU) (Object) this;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) cpu.craftingLogic).web$getJob();
+        return job == null ? null
+            : job.web$getRequesterName(
+                cluster.getLevel()
+                    .getServer());
+    }
+
+    @Override
     public long web$getAvailableStorage() {
         return ((ICraftingCPU) this).getAvailableStorage();
     }
