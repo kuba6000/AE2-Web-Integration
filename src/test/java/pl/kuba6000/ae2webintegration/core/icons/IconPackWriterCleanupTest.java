@@ -39,8 +39,7 @@ class IconPackWriterCleanupTest {
             "legacy-v1",
             "test",
             "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+            Collections.emptyMap());
         StableKey key = StableKey.create(sink -> sink.putInt(1));
         try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
             writer.add(key, new int[4096]);

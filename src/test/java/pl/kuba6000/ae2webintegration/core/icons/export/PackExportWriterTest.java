@@ -10,11 +10,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -42,7 +40,7 @@ class PackExportWriterTest {
             delegate.run();
         })) {
             StableKey key = StableKey.create(sink -> sink.putInt(1));
-            PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+            PackExportWriter writer = new PackExportWriter(directory, metadata());
             awaitReady(writer);
             writer.write(
                 new ArrayList<>(Collections.singletonList(new PackExportWriter.Capture(key, new int[4096]))),
@@ -72,7 +70,7 @@ class PackExportWriterTest {
     @Test
     void animationDrawFailureSuppressesDeferredSamplesAlreadySubmittedAndArrivingLater() throws Exception {
         StableKey key = StableKey.create(sink -> sink.putInt(3));
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
         awaitReady(writer);
         writer.write(
             new ArrayList<>(Collections.singletonList(new PackExportWriter.Capture(key, new int[4096]))),
@@ -111,7 +109,7 @@ class PackExportWriterTest {
     void animationCapacityKeepsStaticFallbackAndDoesNotDisableOtherResources() throws Exception {
         StableKey limited = StableKey.create(sink -> sink.putInt(1));
         StableKey healthy = StableKey.create(sink -> sink.putInt(2));
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
         awaitReady(writer);
         writer.write(
             new ArrayList<>(
@@ -177,7 +175,7 @@ class PackExportWriterTest {
             await(release);
             delegate.run();
         })) {
-            PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+            PackExportWriter writer = new PackExportWriter(directory, metadata());
             try {
                 awaitReady(writer);
                 // More pages than the encoder allowance: the producer must eventually stop admission.
@@ -218,7 +216,7 @@ class PackExportWriterTest {
             await(release);
             delegate.run();
         })) {
-            PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+            PackExportWriter writer = new PackExportWriter(directory, metadata());
             awaitReady(writer);
             writer.write(captures(0), Collections.emptyList());
             writer.finish(new HashMap<>(), Collections.emptyList());
@@ -252,68 +250,57 @@ class PackExportWriterTest {
     }
 
     @Test
-    void cancellationDuringMetadataInitializationWaitsForTheWorkerAndClosesAdmission() throws Exception {
-        CountDownLatch started = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        Thread producer = Thread.currentThread();
-        AtomicReference<Thread> initializer = new AtomicReference<>();
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> {
-            initializer.set(Thread.currentThread());
-            started.countDown();
-            await(release);
-            assertTrue(canceled.getAsBoolean());
-            throw new CancellationException();
-        });
-        try {
-            await(started);
-            assertNotSame(producer, initializer.get());
-            assertFalse(writer.ready());
-            assertTrue(writer.cancel());
-            assertTrue(writer.cancel());
-            assertFalse(writer.ready());
-            assertFalse(writer.finished());
-            assertThrows(IllegalStateException.class, writer::close);
-            assertThrows(
-                IllegalStateException.class,
-                () -> writer.write(Collections.emptyList(), Collections.emptyList()));
-            assertThrows(IllegalStateException.class, () -> writer.finish(new HashMap<>(), Collections.emptyList()));
-        } finally {
-            release.countDown();
-            writer.cancel();
-            awaitFinished(writer);
-            writer.close();
-        }
+    void immediateCancellationClosesAdmissionAndSettlesCleanup() throws Exception {
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
+        assertTrue(writer.cancel());
+        assertTrue(writer.cancel());
+        assertFalse(writer.ready());
+        assertThrows(IllegalStateException.class, () -> writer.write(Collections.emptyList(), Collections.emptyList()));
+        assertThrows(IllegalStateException.class, () -> writer.finish(new HashMap<>(), Collections.emptyList()));
+        awaitFinished(writer);
+        writer.close();
         assertNull(writer.completedPath());
         assertEmptyDirectory();
     }
 
     @Test
     void initializationFailureRetainsItsCauseThroughCleanup() throws Exception {
-        IOException problem = new IOException("Cannot read detached resource pack");
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> { throw problem; });
-        assertSame(problem, assertThrows(ExecutionException.class, () -> awaitReady(writer)).getCause());
+        Path blocked = Files.write(directory.resolve("blocked"), new byte[] { 1 });
+        PackExportWriter writer = new PackExportWriter(blocked, metadata());
+        Throwable problem = assertThrows(ExecutionException.class, () -> awaitReady(writer)).getCause();
+        assertInstanceOf(IOException.class, problem);
         writer.cancel();
         assertSame(problem, assertThrows(ExecutionException.class, () -> awaitFinished(writer)).getCause());
         writer.close();
         assertNull(writer.completedPath());
-        assertEmptyDirectory();
+        assertArrayEquals(new byte[] { 1 }, Files.readAllBytes(blocked));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
-    void fatalInitializationFailureIsNotDowngraded(boolean threadDeath) throws Exception {
-        Error fatal = threadDeath ? new ThreadDeath() : new OutOfMemoryError("Controlled fatal initialization");
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> { throw fatal; });
-        assertSame(fatal, assertThrows(ExecutionException.class, () -> awaitReady(writer)).getCause());
-        writer.cancel();
-        assertSame(fatal, assertThrows(ExecutionException.class, () -> awaitFinished(writer)).getCause());
-        writer.close();
-        assertEmptyDirectory();
+    void fatalEncodingFailureRetainsItsCauseThroughCleanup(boolean threadDeath) throws Exception {
+        Error fatal = threadDeath ? new ThreadDeath() : new OutOfMemoryError("Controlled fatal encoding");
+        try (ControlledPng ignored = new ControlledPng((image, delegate) -> { throw fatal; })) {
+            PackExportWriter writer = new PackExportWriter(directory, metadata());
+            awaitReady(writer);
+            writer.write(
+                new ArrayList<>(
+                    Collections.singletonList(
+                        new PackExportWriter.Capture(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]))),
+                Collections.emptyList());
+            writer.finish(new HashMap<>(), Collections.emptyList());
+            Throwable cause = assertThrows(ExecutionException.class, () -> awaitFinished(writer)).getCause();
+            while (cause.getCause() != null) cause = cause.getCause();
+            assertSame(fatal, cause);
+            writer.close();
+            assertNull(writer.completedPath());
+            assertEmptyDirectory();
+        }
     }
 
     @Test
     void invalidCaptureFailsTheExportAndSettlesCleanup() throws Exception {
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
         awaitReady(writer);
         writer.write(
             new ArrayList<>(
@@ -353,7 +340,7 @@ class PackExportWriterTest {
 
     @Test
     void terminalRequestsCloseAdmissionAndActiveCloseIsInvalid() throws Exception {
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
         try {
             awaitReady(writer);
             assertThrows(IllegalStateException.class, writer::close);
@@ -374,45 +361,8 @@ class PackExportWriterTest {
     }
 
     @Test
-    void resourcePackPriorityOrderSurvivesWorkerInitializationAndPublication() throws Exception {
-        Path low = Files.write(directory.resolve("low.zip"), new byte[] { 1 });
-        Path high = Files.write(directory.resolve("high.zip"), new byte[] { 2 });
-        List<String> expected = Arrays.asList(
-            ResourcePackFingerprint.hash(low, () -> false)
-                .toString(),
-            ResourcePackFingerprint.hash(high, () -> false)
-                .toString());
-        PackExportWriter writer = new PackExportWriter(
-            directory,
-            canceled -> new IconPack.Metadata(
-                "test",
-                "loader",
-                "identity",
-                "generator",
-                "today",
-                Collections.emptyMap(),
-                Arrays.asList(
-                    ResourcePackFingerprint.hash(low, canceled)
-                        .toString(),
-                    ResourcePackFingerprint.hash(high, canceled)
-                        .toString())));
-        awaitReady(writer);
-        writer.finish(new HashMap<>(), Collections.emptyList());
-        awaitFinished(writer);
-        writer.close();
-        Path completed = writer.completedPath();
-        assertNotNull(completed, "Finished export must publish a pack");
-        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity")) {
-            assertEquals(
-                expected,
-                pack.metadata()
-                    .resourcePacks());
-        }
-    }
-
-    @Test
     void submittedBatchesArePublishedBeforeCompletion() throws Exception {
-        PackExportWriter writer = new PackExportWriter(directory, canceled -> metadata());
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
         awaitReady(writer);
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         writer.write(
@@ -430,14 +380,7 @@ class PackExportWriterTest {
     }
 
     private static IconPack.Metadata metadata() {
-        return new IconPack.Metadata(
-            "test",
-            "loader",
-            "identity",
-            "generator",
-            "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+        return new IconPack.Metadata("test", "loader", "identity", "generator", "today", Collections.emptyMap());
     }
 
     private static void awaitReady(PackExportWriter writer) throws Exception {

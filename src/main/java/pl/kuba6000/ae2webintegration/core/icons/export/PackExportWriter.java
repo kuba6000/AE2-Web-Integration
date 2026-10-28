@@ -21,6 +21,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -64,14 +65,11 @@ public final class PackExportWriter {
     private boolean probingSamples = true;
     private volatile @Nullable Set<StableKey> sampledStaticKeys;
 
-    /** Takes ownership of the detached metadata source and invokes it once on the assembly worker. */
-    public PackExportWriter(@NotNull Path root, @NotNull IMetadataSource environment) {
+    /** Creates the archive asynchronously from detached immutable metadata. */
+    public PackExportWriter(@NotNull Path root, @NotNull IconPack.Metadata environment) {
         try {
             submit(() -> {
-                writer = new IconPackWriter(
-                    root,
-                    environment.create(() -> publication.get() == Publication.CANCELED),
-                    PAGE_SIZE);
+                writer = new IconPackWriter(root, environment, PAGE_SIZE);
                 initialized = true;
                 return null;
             });

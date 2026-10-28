@@ -20,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Failure;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -51,19 +52,19 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private boolean canceling;
     private String status = "Preparing full icon export";
 
-    /** Takes ownership of the native source/capture backend and the detached metadata source. */
-    public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
+    /** Takes ownership of the native source/capture backend and the detached immutable metadata. */
+    public IconExportSession(@NotNull Path root, @NotNull IconPack.Metadata environment,
         @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer) {
         this(root, environment, catalogue, renderer, false);
     }
 
-    public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
+    public IconExportSession(@NotNull Path root, @NotNull IconPack.Metadata environment,
         @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer, boolean animated) {
         this(root, environment, catalogue, renderer, animated, System::nanoTime);
     }
 
     /** The same monotonic clock controls pass scheduling and native draw-submission timestamps. */
-    public IconExportSession(@NotNull Path root, @NotNull IMetadataSource environment,
+    public IconExportSession(@NotNull Path root, @NotNull IconPack.Metadata environment,
         @NotNull IIconSource<C> catalogue, @NotNull IIconCapture<C> renderer, boolean animated,
         @NotNull LongSupplier clock) {
         this.catalogue = catalogue;

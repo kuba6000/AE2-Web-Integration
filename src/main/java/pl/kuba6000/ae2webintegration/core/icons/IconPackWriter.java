@@ -715,7 +715,8 @@ public final class IconPackWriter implements Closeable {
         root.put("contentHeight", PackFormat.ICON_SIZE);
         Map<String, Object> environment = new TreeMap<>();
         environment.put("mods", metadata.mods());
-        environment.put("resourcePacks", metadata.resourcePacks());
+        // Released format-2 readers require this array, even though input fingerprints are no longer collected.
+        environment.put("resourcePacks", new String[0]);
         root.put("environment", environment);
         root.put("entries", mapping);
         List<Map<String, Object>> pageRecords = new ArrayList<>();

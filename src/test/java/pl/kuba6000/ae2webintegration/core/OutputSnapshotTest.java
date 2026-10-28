@@ -163,8 +163,7 @@ class OutputSnapshotTest extends GridTestScope {
             "test",
             "test",
             "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+            Collections.emptyMap());
         Path archive;
         try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
             int[] pixels = new int[4096];

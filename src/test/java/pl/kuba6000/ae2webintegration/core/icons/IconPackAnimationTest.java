@@ -58,14 +58,7 @@ class IconPackAnimationTest {
         Path output;
         try (IconPackWriter writer = new IconPackWriter(
             directory,
-            new IconPack.Metadata(
-                "1.7.10",
-                "forge",
-                "1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                Collections.emptyList()),
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
             staticPageSize)) {
             writer.add(KEY, pixels(0xff000000));
             for (int index = 0; index < 256; index++)
@@ -272,14 +265,7 @@ class IconPackAnimationTest {
         Path output;
         try (IconPackWriter writer = new IconPackWriter(
             directory,
-            new IconPack.Metadata(
-                "1.7.10",
-                "forge",
-                "1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                Collections.emptyList()),
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
             512)) {
             writer.add(KEY, pixels(0xff112233));
             writer.sealStatic();
@@ -645,14 +631,7 @@ class IconPackAnimationTest {
     private IconPackWriter writer() throws Exception {
         return new IconPackWriter(
             directory,
-            new IconPack.Metadata(
-                "1.7.10",
-                "forge",
-                "1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                Collections.emptyList()),
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
             64);
     }
 

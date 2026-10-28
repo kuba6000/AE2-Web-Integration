@@ -61,14 +61,7 @@ class SpriteTimelineTest {
         Path output;
         try (IconPackWriter writer = new IconPackWriter(
             directory,
-            new IconPack.Metadata(
-                "test",
-                "loader",
-                "1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                Collections.emptyList()),
+            new IconPack.Metadata("test", "loader", "1", "test", "today", Collections.emptyMap()),
             64)) {
             writer.add(KEY, pixels(0xffabcdef));
             for (SpriteTimeline.Frame frame : timeline.frames())

@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -35,11 +34,7 @@ class IconExportSessionTest {
         Candidate healthy = new Candidate(2);
         Source source = new Source(unsupported, healthy);
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         assertEquals(1, renderer.rendered, "Absent identity must never enter the native renderer");
         try (IconPack pack = openPack()) {
@@ -55,11 +50,7 @@ class IconExportSessionTest {
         exact.base = baseline;
         Source source = new Source(exact, new Candidate(1));
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         try (IconPack pack = openPack()) {
             assertNotNull(pack.find(key(exact.encodedIdentity)));
@@ -80,11 +71,7 @@ class IconExportSessionTest {
         Candidate healthy = new Candidate(4);
         Source source = new Source(badIdentity, badBaseline, badDraw, healthy);
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         try (IconPack pack = openPack()) {
             assertNull(pack.find(key(1)));
@@ -101,11 +88,7 @@ class IconExportSessionTest {
         collision.encodedIdentity = 1;
         Source source = new Source(new Candidate(1), collision);
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         assertEmptyDirectory();
         assertTrue(renderer.closed);
@@ -116,11 +99,7 @@ class IconExportSessionTest {
         Source source = new Source(new Candidate(1));
         Renderer renderer = new Renderer(source);
         renderer.invalidateSource = true;
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         assertEmptyDirectory();
         assertTrue(renderer.closed);
@@ -131,11 +110,7 @@ class IconExportSessionTest {
         Source source = new Source(new Candidate(1));
         source.discoveryFailure = new SourceChanged();
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         assertEmptyDirectory();
     }
@@ -145,11 +120,7 @@ class IconExportSessionTest {
         Source source = new Source(new Candidate(1));
         Renderer renderer = new Renderer(source);
         renderer.readbackFailure = new IllegalStateException("Readback is unavailable");
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         assertEmptyDirectory();
         assertTrue(renderer.closed);
@@ -163,11 +134,7 @@ class IconExportSessionTest {
         broken.drawFailure = fatal;
         Source source = new Source(broken);
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         try {
             assertSame(fatal, assertThrows(fatal.getClass(), () -> awaitFinished(session)));
         } finally {
@@ -178,34 +145,15 @@ class IconExportSessionTest {
     }
 
     @Test
-    void cancellationWaitsForMetadataCleanupAndPreventsPublication() throws Exception {
-        CountDownLatch entered = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
+    void immediateCancellationReleasesNativeResourcesAndPreventsPublication() throws Exception {
         Source source = new Source(new Candidate(1));
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(directory, canceled -> {
-            entered.countDown();
-            try {
-                if (!release.await(10, TimeUnit.SECONDS)) throw new IOException("Controlled metadata worker timed out");
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread()
-                    .interrupt();
-                throw new IOException(interrupted);
-            }
-            if (canceled.getAsBoolean()) throw new CancellationException();
-            return metadata();
-        }, source, renderer);
-        try {
-            assertTrue(entered.await(10, TimeUnit.SECONDS));
-            session.cancel("User canceled");
-            session.cancel("Repeated request");
-            assertTrue(renderer.closed);
-            assertFalse(session.tick());
-        } finally {
-            release.countDown();
-            session.cancel("Test cleanup");
-            awaitFinished(session);
-        }
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
+        session.cancel("User canceled");
+        session.cancel("Repeated request");
+        awaitFinished(session);
+        assertTrue(renderer.closed);
+        assertEquals(0, renderer.rendered);
         assertEmptyDirectory();
     }
 
@@ -213,12 +161,12 @@ class IconExportSessionTest {
     void asynchronousInitializationFailureSettlesAndReleasesNativeResources() throws Exception {
         Source source = new Source(new Candidate(1));
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(directory, canceled -> {
-            throw new IOException("Missing resource pack");
-        }, source, renderer);
+        Path blocked = Files.write(directory.resolve("blocked"), new byte[] { 1 });
+        IconExportSession<Candidate> session = new IconExportSession<>(blocked, metadata(), source, renderer);
         awaitFinished(session);
         assertTrue(renderer.closed);
-        assertEmptyDirectory();
+        assertEquals(0, renderer.rendered);
+        assertArrayEquals(new byte[] { 1 }, Files.readAllBytes(blocked));
     }
 
     @Test
@@ -226,11 +174,7 @@ class IconExportSessionTest {
         Source source = new Source(new Candidate(1));
         source.available = false;
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (!source.waitingReported) {
             assertFalse(session.tick());
@@ -250,11 +194,7 @@ class IconExportSessionTest {
         for (int index = 0; index < candidates.length; index++) candidates[index] = new Candidate(index);
         Source source = new Source(candidates);
         Renderer renderer = new Renderer(source);
-        IconExportSession<Candidate> session = new IconExportSession<>(
-            directory,
-            canceled -> metadata(),
-            source,
-            renderer);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
         session.cancel("Late cancellation");
         assertTrue(session.tick());
@@ -282,11 +222,7 @@ class IconExportSessionTest {
             }
             delegate.run();
         })) {
-            IconExportSession<Candidate> session = new IconExportSession<>(
-                directory,
-                canceled -> metadata(),
-                source,
-                renderer);
+            IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
             try {
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
                 while (encoding.getCount() != 0) {
@@ -343,14 +279,7 @@ class IconExportSessionTest {
     }
 
     private static IconPack.Metadata metadata() {
-        return new IconPack.Metadata(
-            "test",
-            "loader",
-            "identity",
-            "generator",
-            "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+        return new IconPack.Metadata("test", "loader", "identity", "generator", "today", Collections.emptyMap());
     }
 
     private static final class Candidate implements IIconCandidate<Candidate> {

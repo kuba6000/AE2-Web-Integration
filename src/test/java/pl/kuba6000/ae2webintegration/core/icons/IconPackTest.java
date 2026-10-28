@@ -44,6 +44,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Location;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
@@ -55,14 +56,33 @@ class IconPackTest {
     Path directory;
 
     private static Metadata metadata(String time) {
-        return new Metadata(
-            "1.7.10",
-            "forge",
-            "legacy-v1",
-            "test",
-            time,
-            Collections.singletonMap("example", "1"),
-            Collections.singletonList("0000000000000000000000000000000000000000000000000000000000000000"));
+        return new Metadata("1.7.10", "forge", "legacy-v1", "test", time, Collections.singletonMap("example", "1"));
+    }
+
+    @Test
+    void exportedPacksRetainTheFormatTwoArrayWithoutSourceFingerprints() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
+            output = writer.finish();
+        }
+        try (ZipFile zip = new ZipFile(output.toFile())) {
+            JsonObject manifest = new JsonParser()
+                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            assertEquals(
+                0,
+                manifest.getAsJsonObject("environment")
+                    .getAsJsonArray("resourcePacks")
+                    .size());
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")));
+            assertEquals(
+                Collections.singletonMap("example", "1"),
+                pack.metadata()
+                    .mods());
+        }
     }
 
     @Test
@@ -90,6 +110,47 @@ class IconPackTest {
     }
 
     @Test
+    void readsExistingFingerprintedPacksAndStillChecksTheirManifestIntegrity() throws Exception {
+        Path original;
+        StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            writer.add(key, new int[4096]);
+            original = writer.finish();
+        }
+        for (boolean validDigest : new boolean[] { true, false }) {
+            Path legacy = directory.resolve("legacy-" + validDigest + ".ae2wi-icons");
+            try (ZipFile source = new ZipFile(original.toFile());
+                ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(legacy))) {
+                Enumeration<? extends ZipEntry> entries = source.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    byte[] bytes = entryBytes(source, entry.getName());
+                    if (entry.getName()
+                        .equals("manifest.json")) {
+                        JsonObject manifest = new JsonParser().parse(new String(bytes, StandardCharsets.UTF_8))
+                            .getAsJsonObject();
+                        manifest.getAsJsonObject("environment")
+                            .getAsJsonArray("resourcePacks")
+                            .add(new JsonPrimitive("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+                        String json = validDigest ? reseal(manifest.toString()) : manifest.toString();
+                        bytes = json.getBytes(StandardCharsets.UTF_8);
+                    }
+                    writeEntry(target, entry.getName(), bytes, entry.getMethod() == ZipEntry.STORED);
+                }
+            }
+            if (validDigest) {
+                try (IconPack pack = IconPack.open(legacy, "1.7.10", "forge", "legacy-v1")) {
+                    assertNotNull(pack.find(key));
+                    assertEquals(
+                        Collections.singletonMap("example", "1"),
+                        pack.metadata()
+                            .mods());
+                }
+            } else assertRejectedPack(legacy, "1.7.10");
+        }
+    }
+
+    @Test
     void compatibilityRequiresExactLoaderGameAndOpaqueVersion() throws Exception {
         for (String version : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
             Metadata provenance = metadata("today");
@@ -99,8 +160,7 @@ class IconPackTest {
                 version,
                 provenance.generatorVersion(),
                 provenance.generatedAt(),
-                provenance.mods(),
-                provenance.resourcePacks());
+                provenance.mods());
             Path output;
             try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
                 output = writer.finish();
@@ -450,7 +510,7 @@ class IconPackTest {
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             // SHA-256 calculated with Python hashlib from the specification's compact, alphabetically ordered
             // projection.
-            assertEquals("d2cc077101bea2074360e1ba61eb17f0b1ece3f23a62c8af3d5e13f83c5cf0df", pack.packId());
+            assertEquals("2de32c6d2b145c339ada6261a0dee06aea20f2ed1bdb06e901879c1ddded2a0b", pack.packId());
             assertThrows(FileNotFoundException.class, () -> pack.openPage("unknown"));
         }
         assertRejectedPack(output, "1.12.2");
@@ -803,37 +863,10 @@ class IconPackTest {
     }
 
     @Test
-    void malformedResourceFingerprintsAreNotPublished() throws Exception {
-        Metadata invalid = new Metadata(
-            "1.7.10",
-            "forge",
-            "legacy-v1",
-            "test",
-            "today",
-            Collections.emptyMap(),
-            Collections.singletonList("not-a-digest"));
-        try (IconPackWriter writer = new IconPackWriter(directory, invalid, 64)) {
-            assertThrows(IOException.class, writer::finish);
-        }
-        try (Stream<Path> files = Files.list(directory)) {
-            assertEquals(0, files.count());
-        }
-    }
-
-    @Test
-    void changedPixelsKeysAndResourcePriorityChangeIdentity() throws Exception {
-        String first = "0000000000000000000000000000000000000000000000000000000000000000";
-        String second = "1111111111111111111111111111111111111111111111111111111111111111";
+    void changedPixelsAndKeysChangeIdentity() throws Exception {
         Set<String> ids = new HashSet<>();
-        for (int variation = 0; variation < 4; variation++) {
-            Metadata metadata = new Metadata(
-                "1.7.10",
-                "forge",
-                "legacy-v1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                variation == 3 ? Arrays.asList(second, first) : Arrays.asList(first, second));
+        for (int variation = 0; variation < 3; variation++) {
+            Metadata metadata = new Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
             int[] pixels = new int[4096];
             pixels[0] = variation == 1 ? 0xffffffff : 0;
             StableKey key = StableKey.parse(variation == 2 ? "AQEBAQEBAQEBAQEBAQEBAQ" : "AAAAAAAAAAAAAAAAAAAAAA");
@@ -846,6 +879,6 @@ class IconPackTest {
                 ids.add(pack.packId());
             }
         }
-        assertEquals(4, ids.size());
+        assertEquals(3, ids.size());
     }
 }

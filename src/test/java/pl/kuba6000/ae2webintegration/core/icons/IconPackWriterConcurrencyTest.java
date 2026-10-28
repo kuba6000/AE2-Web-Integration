@@ -373,14 +373,7 @@ class IconPackWriterConcurrencyTest {
     }
 
     private static Metadata metadata() {
-        return new Metadata(
-            "1.7.10",
-            "forge",
-            "legacy-v1",
-            "test",
-            "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+        return new Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
     }
 
     private static IconPack open(Path output) throws IOException {

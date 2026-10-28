@@ -40,7 +40,7 @@ class IconAnimationSessionTest {
         renderer.drainNanos = TimeUnit.MILLISECONDS.toNanos(90);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(first, second),
             renderer,
             true,
@@ -80,7 +80,7 @@ class IconAnimationSessionTest {
         first.drawNanos = second.drawNanos = TimeUnit.MILLISECONDS.toNanos(100);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(first, second),
             new Renderer(clock),
             true,
@@ -126,7 +126,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(first, second),
             renderer,
             true,
@@ -151,7 +151,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -186,7 +186,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -213,7 +213,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -244,7 +244,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(stationary, changing),
             renderer,
             true,
@@ -282,7 +282,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             source,
             renderer,
             true,
@@ -333,7 +333,7 @@ class IconAnimationSessionTest {
         renderer.drainNanos = TimeUnit.MILLISECONDS.toNanos(200);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -393,7 +393,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(first, second, third),
             renderer,
             true,
@@ -423,7 +423,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(sprite, sampled),
             renderer,
             true,
@@ -470,7 +470,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(first, second),
             renderer,
             true,
@@ -510,7 +510,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(broken, healthy),
             renderer,
             true,
@@ -543,7 +543,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -563,7 +563,7 @@ class IconAnimationSessionTest {
         Source source = new Source(candidate);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             source,
             renderer,
             true,
@@ -583,7 +583,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -601,7 +601,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -622,7 +622,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer);
         finish(session);
@@ -640,7 +640,7 @@ class IconAnimationSessionTest {
         renderer.supported = false;
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -659,7 +659,7 @@ class IconAnimationSessionTest {
         Renderer renderer = new Renderer(clock);
         IconExportSession<Candidate> session = new IconExportSession<>(
             directory,
-            canceled -> metadata(),
+            metadata(),
             new Source(candidate),
             renderer,
             true,
@@ -690,14 +690,7 @@ class IconAnimationSessionTest {
     }
 
     private static IconPack.Metadata metadata() {
-        return new IconPack.Metadata(
-            "test",
-            "loader",
-            "identity",
-            "test",
-            "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
+        return new IconPack.Metadata("test", "loader", "identity", "test", "today", Collections.emptyMap());
     }
 
     private static final class Candidate implements IIconCandidate<Candidate> {
