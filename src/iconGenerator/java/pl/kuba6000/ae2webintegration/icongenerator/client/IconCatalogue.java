@@ -49,6 +49,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private Iterator<Map.Entry<String, Fluid>> fluids = Collections.<Map.Entry<String, Fluid>>emptyList()
         .iterator();
     private @Nullable NeiCatalogue nei;
+    private @Nullable NeiRecipeCatalogue recipes;
+    private long recipeFailures;
     private @Nullable BiConsumer<String, Throwable> failures;
     private Iterator<ItemStack> variants = Collections.<ItemStack>emptyList()
         .iterator();
@@ -94,6 +96,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             return "Waiting for NEI to finish loading its full catalogue; /ae2webicons cancel to stop";
         }
         this.failures = failures;
+        if (nei != null) recipes = new NeiRecipeCatalogue();
         initialize();
         prepared = true;
         return null;
@@ -134,6 +137,21 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             context = "fluid/" + fluid.getKey();
             fluidCandidates++;
             return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), FluidContainerRegistry.BUCKET_VOLUME));
+        }
+        if (recipes != null && !recipes.done()) {
+            try {
+                return recipes.next();
+            } catch (Throwable failure) {
+                Throwable cause = failureCause(failure);
+                if (cause instanceof VirtualMachineError fatal) throw fatal;
+                if (cause instanceof ThreadDeath fatal) throw fatal;
+                recipeFailures++;
+                assert failures != null : "Catalogue must be prepared before discovery";
+                failures.accept(recipes.context(), failure);
+                return null;
+            } finally {
+                context = recipes.context();
+            }
         }
         done = true;
         return null;
@@ -235,6 +253,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         result.put("oreDictionaryCandidates", (long) oreDictionaryCandidates);
         result.put("oreDictionarySkippedInvalid", (long) oreDictionarySkippedInvalid);
         result.put("oreDictionarySkippedWildcard", (long) oreDictionarySkippedWildcard);
+        result.put("neiRecipeFailures", recipeFailures);
+        if (recipes != null) recipes.counts(result);
         return result;
     }
 
@@ -242,7 +262,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     public @NotNull List<String> sources() {
         String neiSource = useNei ? "nei"
             : neiUnavailable ? "nei-unavailable" : neiDisabled ? "nei-disabled" : "nei-absent";
-        return Arrays.asList("native", neiSource, "ore-dictionary", "fluids");
+        return useNei ? Arrays.asList("native", neiSource, "ore-dictionary", "fluids", "nei-recipes")
+            : Arrays.asList("native", neiSource, "ore-dictionary", "fluids");
     }
 
     @Override
