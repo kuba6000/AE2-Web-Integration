@@ -46,6 +46,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private Iterator<Map.Entry<String, Fluid>> fluids = Collections.<Map.Entry<String, Fluid>>emptyList()
         .iterator();
     private @Nullable JeiCatalogue jei;
+    private @Nullable JeiRecipeCatalogue recipes;
+    private long recipeFailures;
     private @Nullable BiConsumer<String, Throwable> failures;
     private Iterator<ItemStack> variants = Collections.<ItemStack>emptyList()
         .iterator();
@@ -89,6 +91,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         if (useJei && jei == null)
             return "Waiting for JEI to finish loading its full catalogue; /ae2webicons cancel to stop";
         this.failures = failures;
+        if (jei != null) recipes = jei.recipes();
         List<Item> registered = new ArrayList<>();
         ForgeRegistries.ITEMS.forEach(registered::add);
         registered.sort(
@@ -123,6 +126,21 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             context = "fluid/" + fluid.getKey();
             fluidCandidates++;
             return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), Fluid.BUCKET_VOLUME));
+        }
+        if (recipes != null && !recipes.done()) {
+            try {
+                return recipes.next();
+            } catch (Throwable failure) {
+                Throwable cause = failureCause(failure);
+                if (cause instanceof VirtualMachineError fatal) throw fatal;
+                if (cause instanceof ThreadDeath fatal) throw fatal;
+                recipeFailures++;
+                assert failures != null : "Catalogue must be prepared before discovery";
+                failures.accept(recipes.context(), failure);
+                return null;
+            } finally {
+                context = recipes.context();
+            }
         }
         done = true;
         return null;
@@ -212,16 +230,15 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         counts.put("oreDictionarySkippedInvalid", (long) oreDictionarySkippedInvalid);
         counts.put("oreDictionarySkippedWildcard", (long) oreDictionarySkippedWildcard);
         counts.put("skippedEmpty", (long) skippedEmpty);
+        counts.put("jeiRecipeFailures", recipeFailures);
+        if (recipes != null) recipes.counts(counts);
         return counts;
     }
 
     @Override
     public @NotNull List<String> sources() {
-        return Arrays.asList(
-            "native",
-            useJei ? "jei" : jeiUnavailable ? "jei-unavailable" : "jei-absent",
-            "ore-dictionary",
-            "fluids");
+        return useJei ? Arrays.asList("native", "jei", "ore-dictionary", "fluids", "jei-recipes")
+            : Arrays.asList("native", jeiUnavailable ? "jei-unavailable" : "jei-absent", "ore-dictionary", "fluids");
     }
 
     @Override
