@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.storage.ValueInput;
 
 import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
@@ -36,7 +36,7 @@ public class GridNodeUpdateMixin {
     }
 
     @WrapMethod(method = "loadFromNBT")
-    private void web$loadOwner(String name, CompoundTag data, Operation<Void> original) {
+    private void web$loadOwner(String name, ValueInput data, Operation<Void> original) {
         GridNode node = (GridNode) (Object) this;
         int previousOwner = node.getOwningPlayerId();
         try {
