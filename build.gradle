@@ -6,6 +6,7 @@ plugins {
     id 'maven-publish'
     id 'com.diffplug.spotless' version '8.10.2'
     id 'com.palantir.git-version' version '4.0.0' apply false
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
 group = maven_group
@@ -97,3 +98,4 @@ tasks.withType(Test).configureEach {
 apply from: 'icon-generator.gradle'
 
 apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'
