@@ -5,7 +5,7 @@ import net.minecraft.client.multiplayer.WorldClient;
 
 import org.jetbrains.annotations.NotNull;
 
-import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IconExportSession;
 
 final class ExportSession {
@@ -15,7 +15,7 @@ final class ExportSession {
 
     ExportSession(@NotNull Minecraft minecraft, boolean allowPbo) {
         world = minecraft.theWorld;
-        IMetadataSource environment = ExportEnvironment.capture(minecraft);
+        IconPack.Metadata environment = ExportEnvironment.capture();
         IconCatalogue catalogue = new IconCatalogue(minecraft);
         session = new IconExportSession<>(
             minecraft.mcDataDir.toPath()
