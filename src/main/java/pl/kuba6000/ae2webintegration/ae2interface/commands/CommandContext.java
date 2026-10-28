@@ -2,8 +2,10 @@ package pl.kuba6000.ae2webintegration.ae2interface.commands;
 
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
+import net.minecraftforge.fml.common.FMLCommonHandler;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -36,6 +38,16 @@ public class CommandContext implements ICommandContext {
                     .getName());
         }
         return null;
+    }
+
+    @Override
+    public boolean isSingleplayerOwner() {
+        if (!(sender instanceof EntityPlayerMP player)) return false;
+        MinecraftServer server = FMLCommonHandler.instance()
+            .getMinecraftServerInstance();
+        return server.isSinglePlayer() && player.getGameProfile()
+            .getName()
+            .equalsIgnoreCase(server.getServerOwner()) && player.connection.netManager.isLocalChannel();
     }
 
     @Override

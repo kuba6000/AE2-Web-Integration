@@ -2,7 +2,10 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.UUID;
 
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.World;
 
 import org.jetbrains.annotations.NotNull;
@@ -11,6 +14,8 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+
+import com.mojang.authlib.GameProfile;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.CraftingItemList;
@@ -46,6 +51,9 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
 
     @Shadow
     private IItemList<IAEItemStack> waitingFor;
+
+    @Shadow
+    private @Nullable UUID requestingPlayerUUID;
 
     @Unique
     private int web$internalID = -1;
@@ -88,6 +96,19 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
     @Override
     public String web$getName() {
         return web$hasCustomName() ? ((CraftingCPUCluster) (Object) this).getName() : ("CPU #" + web$internalID);
+    }
+
+    @Override
+    public @Nullable String web$getRequesterName() {
+        if (requestingPlayerUUID == null) return null;
+        MinecraftServer server = getWorld().getMinecraftServer();
+        EntityPlayerMP player = server.getPlayerList()
+            .getPlayerByUUID(requestingPlayerUUID);
+        if (player != null) return player.getGameProfile()
+            .getName();
+        GameProfile profile = server.getPlayerProfileCache()
+            .getProfileByUUID(requestingPlayerUUID);
+        return profile == null ? null : profile.getName();
     }
 
     @Override
