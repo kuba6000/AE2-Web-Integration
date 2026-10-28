@@ -35,6 +35,7 @@ import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.icons.export.SpriteTimeline;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.icongenerator.mixins.InterpolationDataInvoker;
 
 /** Version-local GUI classification and controlled uploads; scratch starts only when its cursor runs. */
 final class SpriteAnimation implements IIconAnimation {
@@ -216,7 +217,8 @@ final class SpriteAnimation implements IIconAnimation {
                 .getId());
         animation.uploadFrame(sprite.getX(), sprite.getY(), animation.frames.get(index).index);
         if (ticker.interpolationData != null && remaining != 0)
-            ticker.interpolationData.uploadInterpolatedFrame(sprite.getX(), sprite.getY(), ticker);
+            ((InterpolationDataInvoker) (Object) ticker.interpolationData)
+                .ae2webicons$uploadInterpolatedFrame(sprite.getX(), sprite.getY(), ticker);
         AtlasPixels.checkTransfer();
     }
 
