@@ -33,6 +33,16 @@ neoForge {
         }
     }
 
+    mods.create('craftingIntegrationTests') {
+        sourceSet(sourceSets.main)
+        sourceSet(sourceSets.test)
+    }
+    unitTest {
+        enable()
+        testedMod = mods.craftingIntegrationTests
+        loadedMods.set([mods.craftingIntegrationTests])
+    }
+
     runs {
         client {
             client()
@@ -124,4 +134,9 @@ idea {
         downloadSources = true
         downloadJavadoc = true
     }
+}
+
+// Production packages core into the mod; tests must preserve that class-loader ownership too.
+gradle.projectsEvaluated {
+    neoForge.mods.craftingIntegrationTests.sourceSet(project(':core').sourceSets.main)
 }
