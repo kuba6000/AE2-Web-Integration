@@ -1,8 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.storage.ValueInput;
 
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -81,8 +80,8 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
     }
 
     @WrapMethod(method = "readFromNBT")
-    private void web$restoreState(CompoundTag data, HolderLookup.Provider registries, Operation<Void> original) {
-        original.call(data, registries);
+    private void web$restoreState(ValueInput data, Operation<Void> original) {
+        original.call(data);
         IAEMixinCallbacks.getInstance()
             .cpuStateReplaced((ICraftingCPUCluster) (Object) cluster);
     }
