@@ -11,13 +11,12 @@ type Lease = { read(): { url?: string; failed: boolean }; release(): void };
 type Playback = { animation: AnimationDescriptor; paint: (sprite: IconSprite | null) => void; frame: number };
 type Page = { descriptor: AtlasDescriptor; lease: Lease; users: Set<Playback> };
 
-/** One clock for visible icons. Admission counts decoded RGBA bytes, including pages shared with static icons. */
+/** One clock for visible icons; view observers own admission and release of shared atlas pages. */
 export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () => void) => Lease) {
     const pages = new Map<string, Page>();
     const waiting = new Set<Playback>();
     const phases = new Map<string, { start: number | null; users: number }>();
     const failed = new Set<string>();
-    let bytes = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let frameRequest: number | undefined;
     let enabled = false;
@@ -38,7 +37,6 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
 
     function releasePage(page: Page) {
         pages.delete(page.descriptor.source);
-        bytes -= page.descriptor.pageWidth * page.descriptor.pageHeight * 4;
         page.lease.release();
     }
 
@@ -90,12 +88,9 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
             if (failed.has(descriptor.source)) continue;
             let page = pages.get(descriptor.source);
             if (!page) {
-                const size = descriptor.pageWidth * descriptor.pageHeight * 4;
-                if (pages.size >= 8 || bytes + size > 64 * 1024 * 1024) continue;
                 const lease = acquire(descriptor, scheduleRender);
                 page = { descriptor, lease, users: new Set() };
                 pages.set(descriptor.source, page);
-                bytes += size;
             }
             page.users.add(playback);
             waiting.delete(playback);

@@ -43,6 +43,86 @@ test('terminal plays frame holds without replacing its resource tile or making p
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 2);
 });
 
+test('pinning and unpinning an animated resource keeps its frames advancing', async (t) => {
+    const { page, base } = await animatedFixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const moving = (selector) =>
+        page.waitForFunction((selector) => {
+            const icon = document.querySelector(selector);
+            return icon && getComputedStyle(icon).backgroundPositionX === '-32px';
+        }, selector);
+    await moving('#items .resource-icon');
+    for (const [from, action, to] of [
+        ['#items', 'Pin in terminal', '#pinned-items'],
+        ['#pinned-items', 'Unpin from terminal', '#items']
+    ]) {
+        await page.locator(`${from} .item`).click({ button: 'right' });
+        await page.getByRole('menuitem', { name: action, exact: true }).click();
+        await moving(`${to} .resource-icon`);
+        await page.waitForFunction((selector) => {
+            const icon = document.querySelector(selector);
+            return icon && getComputedStyle(icon).backgroundPositionX === '0px';
+        }, `${to} .resource-icon`);
+    }
+});
+
+test('pinning a visible animated resource does not strand it behind other visible atlases', async (t) => {
+    const { page, options, base } = await animatedFixture(t);
+    await page.setViewportSize({ width: 1400, height: 1400 });
+    const digests = Array.from({ length: 10 }, (_, index) => `e${index}`.padEnd(64, '0'));
+    options.icons.pages = [options.icons.pages[0], ...digests.map((digest) => ({ digest, width: 128, height: 64 }))];
+    options.icons.animations = digests.map((_, index) => ({ ...options.icons.animations[0], page: index + 1 }));
+    options.itemsA = digests.map((_, index) => ({
+        ...iron,
+        itemKey: `resource-${index}`,
+        displayName: `Resource ${index}`,
+        resourceType: index % 2 ? 'FLUID' : 'ITEM',
+        icon: { page: 0, x: 0, y: 0, animation: index }
+    }));
+    await page.route('**/api/icon-packs/**/pages/e*', (route) =>
+        route.fulfill({ status: 200, contentType: 'image/png', body: options.atlas })
+    );
+    const advances = async (container, name) => {
+        const icon = page
+            .locator(container)
+            .getByRole('button', { name: new RegExp(name) })
+            .locator('.resource-icon');
+        await icon.waitFor();
+        await page.waitForFunction(
+            (element) => getComputedStyle(element).backgroundPositionX === '-32px',
+            await icon.elementHandle(),
+            { timeout: 5000 }
+        );
+        await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+        await page.clock.runFor(1100);
+        assert.equal(await icon.evaluate((element) => getComputedStyle(element).backgroundPositionX), '0px');
+        await page.clock.resume();
+    };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await advances('#items', 'Resource 0');
+    for (const name of ['Resource 0', 'Resource 1']) {
+        await page
+            .locator('#items')
+            .getByRole('button', { name: new RegExp(name) })
+            .click({ button: 'right' });
+        await page.getByRole('menuitem', { name: 'Pin in terminal', exact: true }).click();
+        await advances('#pinned-items', name);
+    }
+    await page
+        .locator('#pinned-items')
+        .getByRole('button', { name: /Resource 0/ })
+        .click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Unpin from terminal', exact: true }).click();
+    await advances('#items', 'Resource 0');
+    await advances('#pinned-items', 'Resource 1');
+    await page.goto(`${base}#/grids/${gridA}/tracking/resource-0`);
+    await page.locator('.tracking-view').waitFor();
+    await clickTab(page, 'Terminal');
+    await advances('#items', 'Resource 0');
+    await advances('#pinned-items', 'Resource 1');
+    await advances('#items', 'Resource 9');
+});
+
 test('live response-local animation tables preserve the selected sequence and its current hold', async (t) => {
     const { page, options, base } = await animatedFixture(t, {}, true);
     options.liveView = { generation: '1', revision: '1' };
@@ -174,11 +254,9 @@ test('failed optional animation pages keep static icons and are not retried by r
     assert.equal(await page.getByRole('button', { name: 'Craft', exact: true }).isEnabled(), true);
 });
 
-for (const [size, admitted] of [
-    [128, 8],
-    [2048, 4]
-]) {
-    test(`visible animations respect page and decoded-byte budgets with ${size}px pages and release them when filtered`, async (t) => {
+for (const size of [128, 2048]) {
+    const admitted = 10;
+    test(`all visible animations play with ${size}px pages and retain their page when filtered`, async (t) => {
         const { page, options, base } = await animatedFixture(t);
         await page.setViewportSize({ width: 1400, height: 1400 });
         const png = Buffer.from(
@@ -235,7 +313,7 @@ for (const [size, admitted] of [
         assert.equal(
             reads.filter((url) => url.endsWith(digests[9])).length,
             1,
-            'a newly visible waiting page can use released capacity'
+            'the remaining visible resource reuses its loaded page'
         );
     });
 }
@@ -250,6 +328,7 @@ test('failed animation pages release admission so healthy visible resources can 
         ...iron,
         itemKey: `resource-${index}`,
         displayName: `Resource ${index}`,
+        resourceType: index % 2 ? 'FLUID' : 'ITEM',
         icon: { page: 0, x: 0, y: 0, animation: index }
     }));
     await page.route('**/api/icon-packs/**/pages/d*', (route) => {
