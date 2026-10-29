@@ -74,6 +74,9 @@ export type TreeState = {
     bounded: boolean;
     cacheBounded: boolean;
     canRevealMissing: boolean;
+    expanding: boolean;
+    expandedComplete: boolean;
+    expandedNodes: number;
     windowStart: number;
     totalRows: number;
     revision: number;
@@ -112,6 +115,9 @@ export function createCraftingTree(
         bounded: false,
         cacheBounded: false,
         canRevealMissing: false,
+        expanding: false,
+        expandedComplete: false,
+        expandedNodes: 0,
         windowStart: 0,
         totalRows: 0,
         revision: 0
@@ -126,8 +132,16 @@ export function createCraftingTree(
     let cachedRows = 0;
     let projection: TreeRow[] = [];
     let revealRequested = false;
+    let expansionRun = 0;
+    function cancelExpansion() {
+        expansionRun++;
+        state.expanding = false;
+        state.expandedComplete = false;
+        revealRequested = false;
+    }
     let fullView: { state: TreeState; rootKey: string | null; cachedRows: number } | null = null;
     function stop() {
+        cancelExpansion();
         generation++;
         request?.abort();
         request = null;
@@ -247,6 +261,7 @@ export function createCraftingTree(
             if (version !== generation) return;
             const page = response.data;
             if (state.captureId && state.captureId !== page.captureId) {
+                cancelExpansion();
                 fullView = null;
                 Object.assign(state, fresh(), { visible: true });
                 rootKey = null;
@@ -288,6 +303,7 @@ export function createCraftingTree(
             const error = caught as ApiFailure;
             if (error.name === 'AbortError') return;
             if (error.status === 'UPDATE_CHANGED') {
+                cancelExpansion();
                 fullView = null;
                 Object.assign(state, fresh(), { visible: true });
                 rootKey = null;
@@ -316,6 +332,7 @@ export function createCraftingTree(
         }
     }
     async function revealMissing() {
+        if (state.expanding) return;
         const version = generation;
         for (
             let count = 0;
@@ -336,9 +353,64 @@ export function createCraftingTree(
             else publish();
         }
     }
+    async function expandAll() {
+        if (!state.visible || state.status !== 'READY' || state.expanding) return;
+        stop();
+        const run = expansionRun;
+        state.expanding = true;
+        state.expandedNodes = 0;
+        const visited = new Set<string>();
+        publish();
+        try {
+            while (run === expansionRun && state.visible && state.status === 'READY') {
+                const row = projection.find((candidate) => {
+                    if (candidate.reference) return false;
+                    const page = state.pages[candidate.key];
+                    return (
+                        !state.expanded[candidate.key] ||
+                        (cachedRows < CACHE_LIMIT && (!page || page.nextOffset !== null))
+                    );
+                });
+                if (!row) {
+                    state.expandedComplete = projection.every(
+                        (candidate) =>
+                            candidate.reference ||
+                            (state.expanded[candidate.key] && state.pages[candidate.key]?.nextOffset === null)
+                    );
+                    break;
+                }
+                state.expanded[row.key] = true;
+                const page = state.pages[row.key];
+                if (cachedRows < CACHE_LIMIT && (!page || page.nextOffset !== null)) {
+                    await load(row.node.kind, row.node.id, page?.nextOffset ?? 0);
+                    if (run !== expansionRun || state.status !== 'READY') break;
+                }
+                visited.add(row.key);
+                state.expandedNodes = visited.size;
+                publish();
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            }
+        } finally {
+            if (run === expansionRun) {
+                state.expanding = false;
+                publish();
+            }
+        }
+    }
     return {
         state,
         revealMissing,
+        expandAll,
+        stopExpansion() {
+            stop();
+            publish();
+        },
+        collapseAll() {
+            stop();
+            state.expanded = {};
+            state.windowStart = 0;
+            publish();
+        },
         async setMissingOnly(value: boolean) {
             if (value === missingOnly) return;
             stop();
@@ -402,6 +474,8 @@ export function createCraftingTree(
             else publish();
         },
         async toggle(key: string) {
+            if (state.expanding) stop();
+            state.expandedComplete = false;
             if (state.expanded[key]) {
                 state.expanded[key] = false;
                 publish();
@@ -420,6 +494,7 @@ export function createCraftingTree(
             else publish();
         },
         async more(key: string) {
+            if (state.expanding) return;
             const node = state.nodes[key];
             const offset = state.pages[key]?.nextOffset;
             if (node && offset != null) await load(node.kind, node.id, offset);

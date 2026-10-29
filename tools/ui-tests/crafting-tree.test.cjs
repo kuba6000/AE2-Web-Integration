@@ -393,3 +393,142 @@ test('automatic missing-path reveal stops after a bounded request batch on a lon
     assert.ok(tree.state.rows.some((row) => !tree.state.expanded[row.key]));
     assert.ok(tree.state.rows.length < 30);
 });
+
+test('expand all follows root pages and groups beyond the visible window without cycling', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const calls = [];
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, query) => {
+                calls.push(query);
+                let result;
+                if (query.kind === 'ROOT' || (query.kind === 'RESOURCE' && query.id === 0)) {
+                    const end = Math.min(305, query.offset + query.limit);
+                    result = page(
+                        node('RESOURCE', 0),
+                        Array.from({ length: end - query.offset }, (_, i) => ({
+                            node: node('RECIPE', query.offset + i),
+                            relation: 'DECLARED_OUTPUT',
+                            quantity: '1'
+                        })),
+                        end < 305 ? end : null
+                    );
+                } else if (query.kind === 'RECIPE')
+                    result = page(node('RECIPE', query.id), [
+                        { node: node('RESOURCE', 0), relation: 'RECIPE_OUTPUT', quantity: '1' }
+                    ]);
+                else result = page(node(query.kind, 0));
+                Object.assign(result.data, { captureId: 'capture', unplacedCount: 1, unlinkedMissingCount: 1 });
+                return result;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.expandAll();
+    assert.equal(tree.state.expanding, false);
+    assert.equal(tree.state.expandedComplete, true);
+    assert.equal(tree.state.rows.length, 300);
+    assert.ok(tree.state.totalRows > 600);
+    assert.ok(calls.some((q) => q.kind === 'RESOURCE' && q.offset === 300));
+    assert.equal(calls.filter((q) => q.kind === 'RECIPE').length, 305);
+    assert.ok(calls.some((q) => q.kind === 'UNPLACED'));
+    assert.ok(calls.some((q) => q.kind === 'UNLINKED_MISSING'));
+    assert.equal(tree.state.expandedNodes, 308);
+    await tree.toggle('RECIPE:0');
+    assert.equal(tree.state.expandedComplete, false);
+    tree.collapseAll();
+    assert.equal(tree.state.rows.length, 3);
+    assert.equal(tree.state.windowStart, 0);
+    const loaded = calls.length;
+    await tree.expandAll();
+    assert.equal(calls.length, loaded);
+    tree.dispose();
+});
+
+test('collapse all and stop fence pending expansion without late reopening', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    let finish, signal;
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, q, s) => {
+                if (q.kind === 'ROOT')
+                    return page(node('RESOURCE', 0), [
+                        { node: node('RECIPE', 1), relation: 'DECLARED_OUTPUT', quantity: '1' }
+                    ]);
+                signal = s;
+                return new Promise((resolve) => {
+                    finish = resolve;
+                });
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    for (const collapse of [false, true]) {
+        const expanding = tree.expandAll();
+        while (!finish) await new Promise((resolve) => setTimeout(resolve, 1));
+        if (collapse) tree.collapseAll();
+        else tree.stopExpansion();
+        assert.equal(signal.aborted, true);
+        assert.equal(tree.state.expanding, false);
+        finish(
+            page(node('RECIPE', 1), [{ node: node('RESOURCE', 2), relation: 'DECLARED_ALTERNATIVE', quantity: '1' }])
+        );
+        await expanding;
+        assert.equal(tree.state.pages['RECIPE:1'], undefined);
+        assert.equal(tree.state.expandedComplete, false);
+        if (collapse) assert.equal(tree.state.rows.length, 1);
+        finish = null;
+    }
+    tree.dispose();
+});
+
+test('expand all stops at cache capacity and reports incomplete expansion', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    let calls = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, q) => {
+                calls++;
+                if (q.kind === 'UNPLACED') {
+                    const result = page(node('UNPLACED', 0));
+                    result.data.unplacedCount = 1;
+                    return result;
+                }
+                const id = q.kind === 'ROOT' ? 0 : q.id;
+                const result = page(
+                    node('RESOURCE', id),
+                    Array.from({ length: q.limit }, (_, i) => ({
+                        node: node('RESOURCE', i === q.limit - 1 ? id + 1 : 0),
+                        relation: 'DECLARED_ALTERNATIVE',
+                        quantity: '1'
+                    }))
+                );
+                result.data.unplacedCount = 1;
+                return result;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.toggle('UNPLACED:0');
+    await tree.toggle('UNPLACED:0');
+    await tree.expandAll();
+    assert.equal(tree.state.cacheBounded, true);
+    assert.equal(tree.state.expanding, false);
+    assert.equal(tree.state.expandedComplete, false);
+    assert.equal(calls, 61);
+    assert.equal(tree.state.expanded['UNPLACED:0'], true);
+    assert.ok(tree.state.totalRows > 300);
+    const retainedRows = tree.state.totalRows;
+    tree.collapseAll();
+    await tree.expandAll();
+    assert.equal(calls, 61);
+    assert.equal(tree.state.totalRows, retainedRows);
+    assert.equal(tree.state.expandedComplete, false);
+    tree.dispose();
+});

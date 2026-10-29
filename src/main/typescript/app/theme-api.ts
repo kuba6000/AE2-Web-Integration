@@ -106,6 +106,9 @@ export type ThemeApplication = {
         focusTree(key: string | null): void;
         missingTree(value: boolean): Promise<void>;
         revealMissingTree(): Promise<void>;
+        expandAllTree(): Promise<void>;
+        collapseAllTree(): void;
+        stopTreeExpansion(): void;
         showTree(visible: boolean): Promise<void>;
         toggleTree(key: string): Promise<void>;
         moreTree(key: string): Promise<void>;

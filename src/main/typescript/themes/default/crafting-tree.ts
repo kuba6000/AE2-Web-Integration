@@ -17,6 +17,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const fit = element('button', '⊡');
     const retry = element('button');
     const reveal = element('button');
+    const expandAll = element('button');
+    const collapseAll = element('button');
+    const stopExpansion = element('button');
     const previous = element('button');
     const next = element('button');
     const message = element('p', '', 'tree-message');
@@ -27,9 +30,22 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const content = element('div', '', 'tree-content');
     space.append(content);
     viewport.append(space);
-    bar.append(out, reset, zoomIn, fit, previous, next, retry, reveal);
+    bar.append(out, reset, zoomIn, fit, expandAll, collapseAll, stopExpansion, previous, next, retry, reveal);
     root.append(bar, message, caveat, viewport);
-    for (const button of [out, reset, zoomIn, fit, previous, next, retry, reveal]) button.type = 'button';
+    for (const button of [
+        out,
+        reset,
+        zoomIn,
+        fit,
+        expandAll,
+        collapseAll,
+        stopExpansion,
+        previous,
+        next,
+        retry,
+        reveal
+    ])
+        button.type = 'button';
     const icons = application.icons.observe(viewport, paintResourceIcon);
     let scale = 1,
         width = 300,
@@ -66,6 +82,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
         zoom(1);
         viewport.scrollTo(0, 0);
     };
+    expandAll.onclick = () => void application.crafting.expandAllTree();
+    collapseAll.onclick = () => application.crafting.collapseAllTree();
+    stopExpansion.onclick = () => application.crafting.stopTreeExpansion();
     reveal.onclick = () => void application.crafting.revealMissingTree();
     retry.onclick = () => void application.crafting.retryTree();
     let drag: { x: number; y: number; left: number; top: number } | null = null;
@@ -101,15 +120,21 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             reset.setAttribute('aria-label', t('treeReset'));
             fit.setAttribute('aria-label', t('treeFit'));
             retry.textContent = t('retry');
+            expandAll.textContent = t('treeExpandAll');
+            collapseAll.textContent = t('treeCollapseAll');
+            stopExpansion.textContent = t('treeStopExpansion');
+            expandAll.disabled = state.status !== 'READY' || state.expanding || state.expandedComplete;
+            collapseAll.disabled = !state.rows.length;
+            stopExpansion.disabled = !state.expanding;
             reveal.textContent = t('treeRevealMissing');
             reveal.hidden = !state.missingOnly;
-            reveal.disabled = !!state.loading || !state.canRevealMissing;
+            reveal.disabled = state.expanding || !!state.loading || !state.canRevealMissing;
             previous.textContent = t('treePrevious');
             next.textContent = t('treeNext');
             previous.hidden = state.windowStart === 0;
             next.hidden = state.windowStart + state.rows.length >= state.totalRows;
             retry.hidden = state.status !== 'ERROR' && !state.bounded;
-            retry.disabled = !!state.loading;
+            retry.disabled = state.expanding || !!state.loading;
             viewport.setAttribute('aria-label', t('treeNavigation'));
             message.textContent =
                 state.status === 'UNAVAILABLE'
@@ -119,6 +144,11 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                       : state.status === 'PREPARING' || state.status === 'CALCULATING' || state.status === 'IDLE'
                         ? t('treePreparing')
                         : [
+                              state.expanding
+                                  ? `${t('treeExpanding')} ${state.expandedNodes}`
+                                  : state.expandedComplete
+                                    ? t('treeExpandedComplete')
+                                    : '',
                               state.partial ? t('treePartial') : '',
                               state.cacheBounded ? t('treeCacheBounded') : state.bounded ? t('treeBounded') : '',
                               state.root?.simulated ? t('treeSimulation') : ''
@@ -212,7 +242,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                     const more = element('button', t('treeMore'), 'tree-more');
                     more.type = 'button';
                     more.dataset.treeMore = row.key;
-                    more.setAttribute('aria-disabled', String(!!state.loading || state.cacheBounded));
+                    more.setAttribute(
+                        'aria-disabled',
+                        String(state.expanding || !!state.loading || state.cacheBounded)
+                    );
                     more.onclick = () => void application.crafting.moreTree(row.key);
                     wrapper.append(more);
                 }
