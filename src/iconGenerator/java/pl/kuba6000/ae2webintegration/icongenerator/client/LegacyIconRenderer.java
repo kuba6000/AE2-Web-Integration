@@ -61,6 +61,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     long animationUnsupportedSprite;
     final Map<String, Long> animationCustomRenderers = new HashMap<>();
     long animationUnsupportedTimeline;
+    long reducedAnimationPlans;
     private long animationSpriteCursors;
     private long animationSampledCursors;
     private long snapshotNanos;
@@ -296,6 +297,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         if (!animationCustomRenderers.isEmpty())
             LOGGER.info("Icon animation custom renderer candidates: {}", animationCustomRenderers);
         counts.put("animationUnsupportedTimeline", animationUnsupportedTimeline);
+        counts.put("reducedAnimationPlans", reducedAnimationPlans);
         readback.statistics(counts);
     }
 
