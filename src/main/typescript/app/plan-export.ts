@@ -191,7 +191,7 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
     };
 }
 
-function prepareCanvas(canvas: HTMLCanvasElement, layout: PlanExportLayout) {
+export function prepareCanvas(canvas: HTMLCanvasElement, layout: Pick<PlanExportLayout, 'width' | 'height'>) {
     try {
         canvas.width = layout.width;
         canvas.height = layout.height;
@@ -204,13 +204,13 @@ function prepareCanvas(canvas: HTMLCanvasElement, layout: PlanExportLayout) {
     }
 }
 
-function drawText(
+export function drawText(
     ctx: CanvasRenderingContext2D,
     text: string,
     x: number,
     y: number,
     width: number,
-    style: PlanExportStyle,
+    style: Pick<PlanExportStyle, 'fontFamily' | 'foreground' | 'textColors'>,
     size: number
 ) {
     if (width <= 0) return;

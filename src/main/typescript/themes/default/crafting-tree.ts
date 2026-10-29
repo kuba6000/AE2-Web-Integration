@@ -1,3 +1,4 @@
+import { craftingTreeContent } from './crafting-tree-content.js';
 import { layoutCraftingTree } from './crafting-tree-layout.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
 import { element } from './dom.js';
@@ -15,6 +16,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const zoomIn = element('button', '+');
     const fit = element('button', '⊡');
     const retry = element('button');
+    const reveal = element('button');
     const previous = element('button');
     const next = element('button');
     const message = element('p', '', 'tree-message');
@@ -25,9 +27,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const content = element('div', '', 'tree-content');
     space.append(content);
     viewport.append(space);
-    bar.append(out, reset, zoomIn, fit, previous, next, retry);
+    bar.append(out, reset, zoomIn, fit, previous, next, retry, reveal);
     root.append(bar, message, caveat, viewport);
-    for (const button of [out, reset, zoomIn, fit, previous, next, retry]) button.type = 'button';
+    for (const button of [out, reset, zoomIn, fit, previous, next, retry, reveal]) button.type = 'button';
     const icons = application.icons.observe(viewport, paintResourceIcon);
     let scale = 1,
         width = 300,
@@ -64,6 +66,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
         zoom(1);
         viewport.scrollTo(0, 0);
     };
+    reveal.onclick = () => void application.crafting.revealMissingTree();
     retry.onclick = () => void application.crafting.retryTree();
     let drag: { x: number; y: number; left: number; top: number } | null = null;
     viewport.addEventListener('pointerdown', (event) => {
@@ -93,12 +96,14 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             revision = state.revision;
             locale = nextLocale;
             const t = locale.common;
-            const quantity = (value: string) => BigInt(value).toLocaleString(document.documentElement.lang || 'en');
             out.setAttribute('aria-label', t('treeZoomOut'));
             zoomIn.setAttribute('aria-label', t('treeZoomIn'));
             reset.setAttribute('aria-label', t('treeReset'));
             fit.setAttribute('aria-label', t('treeFit'));
             retry.textContent = t('retry');
+            reveal.textContent = t('treeRevealMissing');
+            reveal.hidden = !state.missingOnly;
+            reveal.disabled = !!state.loading || !state.canRevealMissing;
             previous.textContent = t('treePrevious');
             next.textContent = t('treeNext');
             previous.hidden = state.windowStart === 0;
@@ -120,7 +125,16 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                           ]
                               .filter(Boolean)
                               .join(' ');
-            caveat.textContent = t('treeDeclared');
+            caveat.textContent = t('treeDeclared') + (state.missingOnly ? ' ' + t('treeMissingPaths') : '');
+            if (
+                state.missingOnly &&
+                state.status === 'READY' &&
+                state.missingComplete &&
+                state.missingResourceCount === 0
+            )
+                message.textContent = t('treeNoMissing');
+            else if (state.missingOnly && !state.missingComplete)
+                message.textContent += ' ' + t('treeMissingIncomplete');
             const active = document.activeElement as HTMLElement | null;
             const focused = active?.dataset.treeKey ?? active?.dataset.treeMore;
             const focusedMore = !!active?.dataset.treeMore;
@@ -141,10 +155,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                 const { x, y } = position;
                 if (position.parent !== null) {
                     const parent = layout.nodes[position.parent];
-                    const px = parent.x + parent.width,
-                        py = parent.y + 54;
+                    const px = parent.x + parent.width / 2,
+                        py = parent.y + 108;
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    line.setAttribute('d', `M${px} ${py} H${x - 12} V${y + 54} H${x}`);
+                    line.setAttribute('d', `M${px} ${py} V${y - 16} H${x + position.width / 2} V${y}`);
                     svg.append(line);
                 }
                 const wrapper = element('div', '', 'tree-row');
@@ -156,54 +170,20 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                 button.type = 'button';
                 button.dataset.treeKey = row.key;
                 button.dataset.reference = String(row.reference);
-                const resource = row.node.kind === 'RESOURCE' ? state.resources[row.node.id] : null;
+                const presentation = craftingTreeContent(row, state, locale, document.documentElement.lang);
                 const name = element('strong');
-                if (resource) name.append(renderMinecraftText(resource.displayName));
-                else
-                    name.textContent = t(
-                        {
-                            RESOURCE: 'treeResource',
-                            RECIPE: 'treeRecipe',
-                            INGREDIENT: 'treeIngredient',
-                            UNPLACED: 'treeUnplaced'
-                        }[row.node.kind]
-                    );
+                name.append(renderMinecraftText(presentation.title));
                 const marker = element(
                     'span',
                     row.reference ? '↪' : state.expanded[row.key] ? '−' : '+',
                     'tree-marker'
                 );
-                const details = element('span', '', 'tree-details');
-                const labels: string[] = [];
-                if (row.reference) labels.push(t('treeReference'));
-                if (row.relation === 'RECIPE_OUTPUT')
-                    labels.push(
-                        t(
-                            row.primary === true
-                                ? 'treePrimaryOutput'
-                                : row.primary === false
-                                  ? 'treeSecondaryOutput'
-                                  : 'treeUnknownOutput'
-                        )
-                    );
-                if (
-                    row.quantity === null &&
-                    ['DECLARED_OUTPUT', 'RECIPE_OUTPUT', 'DECLARED_ALTERNATIVE'].includes(row.relation ?? '')
-                )
-                    labels.push(t('treeUnknownQuantity'));
-                if (row.quantity !== null)
-                    labels.push(
-                        `${t(row.relation === 'DECLARED_OUTPUT' || row.relation === 'RECIPE_OUTPUT' ? 'treePerCraft' : row.relation === 'DECLARED_ALTERNATIVE' ? 'treePerTemplate' : 'quantity')}: ${quantity(row.quantity)}`
-                    );
-                if (row.node.crafts !== null) labels.push(`${t('treeCrafts')}: ${quantity(row.node.crafts)}`);
-                if (row.node.multiplier !== null)
-                    labels.push(`${t('treeMultiplier')}: ${quantity(row.node.multiplier)}`);
-                if (row.node.complete === false) labels.push(t('treePartialNode'));
-                details.textContent = labels.join(' · ');
+                const details = element('span', presentation.details.join(' · '), 'tree-details');
+                button.dataset.missing = String(presentation.missing);
                 button.append(marker);
-                if (resource?.icon) {
+                if (presentation.icon) {
                     button.append(createResourceIcon());
-                    targets.push({ element: button, icon: resource.icon });
+                    targets.push({ element: button, icon: presentation.icon });
                 }
                 button.append(name, details);
                 tooltip.bind(button, () => [

@@ -238,6 +238,8 @@ export function createCrafting(
     const actions = {
         state,
         showTree: tree.show,
+        missingTree: tree.setMissingOnly,
+        revealMissingTree: tree.revealMissing,
         windowTree: tree.moveWindow,
         focusTree: tree.focus,
         toggleTree: tree.toggle,

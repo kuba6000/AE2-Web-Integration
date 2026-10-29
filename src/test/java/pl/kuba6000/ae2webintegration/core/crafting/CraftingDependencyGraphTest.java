@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -204,14 +205,17 @@ class CraftingDependencyGraphTest {
         int depth = 10000;
         CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(60000, 100000);
         int result = resource(builder, "node");
-        builder.result(result, 1, false);
+        builder.result(result, 1, true);
         int output = result;
         for (int i = 0; i < depth; i++) {
             int input = resource(builder, "node");
             recipe(builder, output, input);
             output = input;
         }
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, output, 1);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+        assertEquals(Collections.singletonList(0), graph.declaredProducers(result, true));
+        assertEquals(1, graph.missingResourceCount());
         assertTrue(
             graph.unplacedRecipes()
                 .isEmpty());
@@ -223,6 +227,115 @@ class CraftingDependencyGraphTest {
         assertTrue(
             graph.declaredProducers(output)
                 .isEmpty());
+    }
+
+    @Test
+    void missingFilterRetainsDeclaredAncestorPathsAndPlanTotalsBeyondLoadedPages() {
+        CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(80, 1000);
+        int target = resource(builder, "target");
+        int intermediate = resource(builder, "intermediate");
+        int absent = resource(builder, "absent");
+        int available = resource(builder, "available");
+        builder.result(target, 1, true);
+        int targetRecipe = recipe(builder, target, intermediate, available);
+        int intermediateRecipe = recipe(builder, intermediate, absent);
+        recipe(builder, available);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, absent, 9007199254740993L);
+        CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+
+        assertEquals(new BigInteger("9007199254740993"), graph.missingAmount(absent));
+        assertEquals(BigInteger.ZERO, graph.missingAmount(available));
+        assertTrue(graph.missingComplete());
+        assertEquals(1, graph.missingResourceCount());
+        assertEquals(Collections.singletonList(0), graph.declaredProducers(target, true));
+        assertEquals(Collections.singletonList(0), graph.ingredients(targetRecipe, true));
+        assertEquals(Collections.singletonList(0), graph.alternatives(0, true));
+        assertEquals(Collections.singletonList(2), graph.ingredients(intermediateRecipe, true));
+        assertTrue(
+            graph.declaredProducers(available, true)
+                .isEmpty());
+        assertTrue(
+            graph.unlinkedMissingResources()
+                .isEmpty());
+    }
+
+    @Test
+    void missingPathsBoundCyclesWithoutFollowingOutputPresentationBacklinks() {
+        CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(80, 1000);
+        int target = resource(builder, "target");
+        int intermediate = resource(builder, "intermediate");
+        int missing = resource(builder, "missing");
+        builder.result(target, 1, true);
+        int first = recipe(builder, target, intermediate);
+        int second = recipe(builder, intermediate, target, missing);
+        recipe(builder, missing);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, missing, 8);
+        CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+        assertEquals(Collections.singletonList(0), graph.declaredProducers(target, true));
+        assertEquals(Collections.singletonList(1), graph.declaredProducers(intermediate, true));
+        assertTrue(
+            graph.declaredProducers(missing, true)
+                .isEmpty());
+        assertEquals(Collections.singletonList(0), graph.ingredients(first, true));
+        assertEquals(Arrays.asList(1, 2), graph.ingredients(second, true));
+    }
+
+    @Test
+    void missingRootAndUnlinkedMissingRemainVisibleWithoutAnyRecipes() {
+        CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(20, 1000);
+        int root = resource(builder, "root");
+        int detached = resource(builder, "detached");
+        builder.result(root, 1, true);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, root, Long.MAX_VALUE);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, root, 1);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, detached, 3);
+        CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+        assertEquals(new BigInteger("9223372036854775808"), graph.missingAmount(root));
+        assertEquals(2, graph.missingResourceCount());
+        assertTrue(
+            graph.declaredProducers(root, true)
+                .isEmpty());
+        assertEquals(Collections.singletonList(detached), graph.unlinkedMissingResources());
+        assertTrue(graph.missingComplete());
+    }
+
+    @Test
+    void partialCaptureDoesNotTurnUnknownMissingAbsenceIntoZero() {
+        CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(3, 1000);
+        int root = resource(builder, "root");
+        int detached = resource(builder, "detached");
+        builder.result(root, 1, true);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, detached, 7);
+        assertEquals(-1, builder.addRecipe(1));
+        CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+        assertFalse(graph.missingComplete());
+        assertNull(graph.missingAmount(root));
+        assertEquals(BigInteger.valueOf(7), graph.missingAmount(detached));
+        assertEquals(Collections.singletonList(detached), graph.unlinkedMissingResources());
+        assertTrue(
+            graph.unplacedRecipes(true)
+                .isEmpty());
+    }
+
+    @Test
+    void unplacedMissingUsesStayNavigableWhileUnrelatedUnplacedRecipesAreFiltered() {
+        CraftingRecipeCapture.Builder builder = new CraftingRecipeCapture.Builder(60, 1000);
+        int target = resource(builder, "target");
+        int missing = resource(builder, "missing");
+        int detachedOutput = resource(builder, "detached output");
+        int unrelated = resource(builder, "unrelated");
+        builder.result(target, 1, true);
+        recipe(builder, target);
+        int relevant = recipe(builder, detachedOutput, missing);
+        recipe(builder, unrelated);
+        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, missing, 6);
+        CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
+        assertTrue(
+            graph.declaredProducers(target, true)
+                .isEmpty());
+        assertEquals(Collections.singletonList(relevant), graph.unplacedRecipes(true));
+        assertEquals(Arrays.asList(1, 2), graph.unplacedRecipes(false));
+        assertEquals(Collections.singletonList(missing), graph.unlinkedMissingResources());
     }
 
     private static int recipe(CraftingRecipeCapture.Builder builder, int output, int... inputs) {

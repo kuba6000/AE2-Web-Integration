@@ -104,6 +104,8 @@ export type ThemeApplication = {
     readonly crafting: {
         windowTree(direction: number): void;
         focusTree(key: string | null): void;
+        missingTree(value: boolean): Promise<void>;
+        revealMissingTree(): Promise<void>;
         showTree(visible: boolean): Promise<void>;
         toggleTree(key: string): Promise<void>;
         moreTree(key: string): Promise<void>;

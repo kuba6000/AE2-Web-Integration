@@ -1,3 +1,4 @@
+import { createTreeExportDialog } from './crafting-tree-export-dialog.js';
 import { createCraftingTreeView } from './crafting-tree.js';
 import { createCraftingDialog } from './crafting-dialog.js';
 import { createPlanPanel } from './plan-panel.js';
@@ -85,10 +86,7 @@ export function createCraftingView(
     tooltip.bind(search, () =>
         (search.getAttribute('aria-description') || '').split('\n').map((line) => element('span', line))
     );
-    const treeSwitch = element('button', '', 'tool-button');
-    treeSwitch.type = 'button';
-    treeSwitch.onclick = () => void application.crafting.showTree(!application.state.crafting.tree.visible);
-    tools.append(sortGroup, treeSwitch);
+    tools.append(sortGroup);
     workspace.insertBefore(tools, root);
     const criteria: PlanSort[] =
         application.state.capabilities.craftingPlanSteps === true
@@ -112,7 +110,9 @@ export function createCraftingView(
     const panel = createPlanPanel(application, tooltip);
     lifetime.onCleanup(panel.dispose);
     workspace.append(panel.element);
-    const actions = createPlanActions(application, workspace, tooltip, settings, beforeDialog);
+    const treeExporter = createTreeExportDialog(application, settings, beforeDialog);
+    lifetime.onCleanup(treeExporter.dispose);
+    const actions = createPlanActions(application, workspace, tooltip, settings, beforeDialog, treeExporter);
     lifetime.onCleanup(actions.dispose);
     planView.append(header, planBody, actions.element);
     root.append(planView);
@@ -204,9 +204,6 @@ export function createCraftingView(
             scroll.hidden = state.tree.visible;
             searchLabel.hidden = state.tree.visible;
             sortGroup.hidden = state.tree.visible;
-            treeSwitch.textContent = state.tree.visible ? t('treeBack') : t('treeOpen');
-            treeSwitch.setAttribute('aria-pressed', String(state.tree.visible));
-            treeSwitch.disabled = !state.plan?.isDone || !!state.mutation || !!state.uncertain;
             title.textContent = t('craftingPlan');
             panel.render(state, locale);
             searchName.textContent = t('searchPlanResources');
@@ -266,6 +263,7 @@ export function createCraftingView(
         dispose() {
             dialog.dispose();
             tree.dispose();
+            treeExporter.dispose();
             icons.dispose();
             slots.dispose();
             tools.remove();

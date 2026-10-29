@@ -3946,6 +3946,7 @@ button.toast:hover {
     border: 1px solid currentcolor;
 }
 .tree-space {
+    margin-inline: auto;
     position: relative;
 }
 .tree-content {
@@ -4052,5 +4053,44 @@ button.toast:hover {
     .tree-card strong,
     .tree-details {
         display: block;
+    }
+}
+
+.plan-view-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-inline-end: auto;
+    flex-wrap: wrap;
+}
+.plan-view-tools .plan-export-button {
+    margin-inline-end: 0;
+}
+.plan-view-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+.plan-view-switch button[aria-pressed='true'] {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+}
+.tree-card[data-missing='true'] {
+    background: #6b3030;
+    border-color: #ef8e8e;
+    color: #fff4f4;
+}
+@media (width <= 600px) {
+    .plan-view-tools {
+        width: 100%;
+        gap: 6px;
+        flex-wrap: nowrap;
+    }
+    .plan-view-switch button {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+    .plan-view-tools .plan-export-button {
+        margin-inline-start: auto;
     }
 }

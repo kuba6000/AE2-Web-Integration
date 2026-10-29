@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
+import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,7 +69,8 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         RESOURCE,
         RECIPE,
         INGREDIENT,
-        UNPLACED
+        UNPLACED,
+        UNLINKED_MISSING
     }
 
     public enum State {
@@ -83,16 +85,17 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         RECIPE_OUTPUT,
         INGREDIENT,
         DECLARED_ALTERNATIVE,
+        MISSING_RESOURCE,
         UNPLACED
     }
 
     @PathParam("planId")
     int planId;
-    /** ROOT, RESOURCE, RECIPE, INGREDIENT or UNPLACED. ROOT resolves the calculated output. */
+    /** ROOT, RESOURCE, RECIPE, INGREDIENT, UNPLACED or UNLINKED_MISSING. ROOT resolves the calculated output. */
     @QueryParam("kind")
     String requestedKind = "ROOT";
     private Kind kind = Kind.ROOT;
-    /** Capture-local node identifier; ignored for ROOT. UNPLACED uses zero. */
+    /** Capture-local node identifier; ignored for ROOT. Synthetic UNPLACED/UNLINKED_MISSING groups use zero. */
     @QueryParam("id")
     int nodeId;
     /** Offset within the requested adjacency list. */
@@ -108,6 +111,9 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     /** Include available response-local atlas references. */
     @QueryParam("icons")
     boolean icons;
+    /** Keep captured dependency paths to known missing resources; does not infer selected inputs. */
+    @QueryParam("missingOnly")
+    boolean missingOnly;
     private @Nullable CraftingPlanRegistry.Entry entry;
     private @Nullable CraftingPlanRegistry.TreePreparation preparation;
 
@@ -126,17 +132,22 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     public static final class Resource extends ResourceDescription {
 
         public final int id;
+        /** Captured plan-level missing amount; null when absence is unknown in an incomplete capture. */
+        public final @Nullable String missingAmount;
 
-        private Resource(int id, ResourceDescriptor descriptor, @Nullable IconMappings mappings) {
+        private Resource(int id, ResourceDescriptor descriptor, @Nullable IconMappings mappings,
+            @Nullable BigInteger missing) {
             super(descriptor, mappings);
             this.id = id;
+            missingAmount = missing == null ? null : missing.toString();
         }
     }
 
     @Desugar
     public record Data(@NotNull State state, @Nullable String captureId, @Nullable Root root, @Nullable Node node,
         @NotNull List<Child> children, @NotNull List<Resource> resources, @Nullable Integer nextOffset, boolean partial,
-        @NotNull Set<CraftingRecipeCapture.Limit> limits, int unplacedCount) {}
+        @NotNull Set<CraftingRecipeCapture.Limit> limits, int unplacedCount, boolean missingOnly,
+        boolean missingComplete, int missingResourceCount, int unlinkedMissingCount) {}
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull Data data, @Nullable IconMappings icons)
@@ -154,7 +165,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         if (nodeId < 0 || offset < 0
             || limit < 1
             || limit > MAX_PAGE_CHILDREN
-            || (kind == Kind.UNPLACED && nodeId != 0)
+            || ((kind == Kind.UNPLACED || kind == Kind.UNLINKED_MISSING) && nodeId != 0)
             || (expectedCaptureId != null && expectedCaptureId.length() > 64)) {
             deny(ApiStatus.BAD_PARAM);
             return false;
@@ -254,6 +265,10 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 null,
                 false,
                 Collections.emptySet(),
+                0,
+                missingOnly,
+                false,
+                0,
                 0),
             null);
     }
@@ -271,28 +286,29 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 .size()))
             return null;
         List<Integer> adjacent = switch (resolvedKind) {
-            case RESOURCE -> graph.declaredProducers(resolvedId);
-            case RECIPE -> graph.ingredients(resolvedId);
-            case INGREDIENT -> graph.alternatives(resolvedId);
-            case UNPLACED -> graph.unplacedRecipes();
+            case RESOURCE -> graph.declaredProducers(resolvedId, missingOnly);
+            case RECIPE -> graph.ingredients(resolvedId, missingOnly);
+            case INGREDIENT -> graph.alternatives(resolvedId, missingOnly);
+            case UNPLACED -> graph.unplacedRecipes(missingOnly);
+            case UNLINKED_MISSING -> graph.unlinkedMissingResources();
             default -> throw new IllegalStateException("Unresolved root");
         };
-        List<Integer> declaredOutputs = resolvedKind == Kind.RECIPE ? graph.outputs(resolvedId)
+        List<Integer> declaredOutputs = resolvedKind == Kind.RECIPE && !missingOnly ? graph.outputs(resolvedId)
             : Collections.emptyList();
         int total = declaredOutputs.size() + adjacent.size();
         if (offset > total) return null;
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
         Map<Integer, Resource> resources = new LinkedHashMap<>();
-        if (result != null) resource(resources, capture, result.resourceId(), mappings);
-        if (resolvedKind == Kind.RESOURCE) resource(resources, capture, resolvedId, mappings);
+        if (result != null) resource(resources, graph, result.resourceId(), mappings);
+        if (resolvedKind == Kind.RESOURCE) resource(resources, graph, resolvedId, mappings);
         List<Child> children = new ArrayList<>();
         int end = offset + Math.min(limit, total - offset);
         for (int index = offset; index < end; index++) {
             if (index < declaredOutputs.size()) {
                 CraftingRecipeCapture.Output output = capture.outputs()
                     .get(declaredOutputs.get(index));
-                resource(resources, capture, output.resourceId(), mappings);
+                resource(resources, graph, output.resourceId(), mappings);
                 children.add(
                     new Child(
                         Relation.RECIPE_OUTPUT,
@@ -316,7 +332,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 case INGREDIENT -> {
                     CraftingRecipeCapture.Candidate candidate = capture.candidates()
                         .get(row);
-                    resource(resources, capture, candidate.resourceId(), mappings);
+                    resource(resources, graph, candidate.resourceId(), mappings);
                     yield new Child(
                         Relation.DECLARED_ALTERNATIVE,
                         node(capture, Kind.RESOURCE, candidate.resourceId()),
@@ -324,6 +340,10 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                         null);
                 }
                 case UNPLACED -> new Child(Relation.UNPLACED, node(capture, Kind.RECIPE, row), null, null);
+                case UNLINKED_MISSING -> {
+                    resource(resources, graph, row, mappings);
+                    yield new Child(Relation.MISSING_RESOURCE, node(capture, Kind.RESOURCE, row), null, null);
+                }
                 default -> throw new IllegalStateException("Unresolved root");
             };
             children.add(child);
@@ -343,7 +363,12 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 !capture.limits()
                     .isEmpty(),
                 capture.limits(),
-                graph.unplacedRecipes()
+                graph.unplacedRecipes(missingOnly)
+                    .size(),
+                missingOnly,
+                graph.missingComplete(),
+                graph.missingResourceCount(),
+                graph.unlinkedMissingResources()
                     .size()),
             mappings);
     }
@@ -367,14 +392,16 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 .complete() : null);
     }
 
-    private static void resource(Map<Integer, Resource> resources, CraftingRecipeCapture capture, int id,
+    private static void resource(Map<Integer, Resource> resources, CraftingDependencyGraph graph, int id,
         @Nullable IconMappings mappings) {
         resources.computeIfAbsent(
             id,
             ignored -> new Resource(
                 id,
-                capture.resources()
+                graph.capture()
+                    .resources()
                     .get(id),
-                mappings));
+                mappings,
+                graph.missingAmount(id)));
     }
 }

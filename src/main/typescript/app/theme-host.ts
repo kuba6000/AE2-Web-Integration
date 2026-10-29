@@ -87,6 +87,8 @@ export function mountTheme(
         displayIcons: application.displayIcons,
         crafting: {
             showTree: crafting.showTree,
+            missingTree: crafting.missingTree,
+            revealMissingTree: crafting.revealMissingTree,
             windowTree: crafting.windowTree,
             focusTree: crafting.focusTree,
             toggleTree: crafting.toggleTree,

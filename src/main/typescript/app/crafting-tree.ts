@@ -1,7 +1,7 @@
 import type { Api, ApiFailure } from './api.js';
 import type { IconMetadata, ResourceDescription } from './api-types.js';
 
-export type TreeKind = 'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED';
+export type TreeKind = 'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED' | 'UNLINKED_MISSING';
 export type TreeNode = {
     kind: TreeKind;
     id: number;
@@ -10,7 +10,8 @@ export type TreeNode = {
     complete: boolean | null;
 };
 export type TreeChild = {
-    relation: 'DECLARED_OUTPUT' | 'RECIPE_OUTPUT' | 'INGREDIENT' | 'DECLARED_ALTERNATIVE' | 'UNPLACED';
+    relation:
+        'DECLARED_OUTPUT' | 'RECIPE_OUTPUT' | 'INGREDIENT' | 'DECLARED_ALTERNATIVE' | 'UNPLACED' | 'MISSING_RESOURCE';
     primary: boolean | null;
     node: TreeNode;
     quantity: string | null;
@@ -22,18 +23,24 @@ export type TreeQuery = {
     limit: number;
     icons: boolean;
     captureId?: string;
+    missingOnly: boolean;
 };
+export type TreeResource = ResourceDescription & { missingAmount: string | null };
 export type TreePage = {
     captureId: string | null;
     state: 'CALCULATING' | 'PREPARING' | 'UNAVAILABLE' | 'READY';
     root: { resourceId: number; quantity: string; simulated: boolean } | null;
     node: TreeNode | null;
     children: TreeChild[];
-    resources: (ResourceDescription & { id: number })[];
+    resources: (TreeResource & { id: number })[];
     nextOffset: number | null;
     partial: boolean;
     limits: string[];
     unplacedCount: number;
+    unlinkedMissingCount: number;
+    missingOnly: boolean;
+    missingComplete: boolean;
+    missingResourceCount: number;
 };
 export type TreeRow = {
     key: string;
@@ -50,7 +57,7 @@ export type TreeState = {
     status: TreePage['state'] | 'IDLE' | 'ERROR';
     root: TreePage['root'];
     nodes: Record<string, TreeNode>;
-    resources: Record<number, ResourceDescription>;
+    resources: Record<number, TreeResource>;
     icons: IconMetadata | null;
     expanded: Record<string, boolean>;
     pages: Record<string, { children: TreeChild[]; nextOffset: number | null }>;
@@ -58,10 +65,15 @@ export type TreeState = {
     partial: boolean;
     limits: string[];
     unplacedCount: number;
+    unlinkedMissingCount: number;
+    missingOnly: boolean;
+    missingComplete: boolean;
+    missingResourceCount: number;
     loading: string | null;
     error: string | null;
     bounded: boolean;
     cacheBounded: boolean;
+    canRevealMissing: boolean;
     windowStart: number;
     totalRows: number;
     revision: number;
@@ -76,6 +88,7 @@ export function createCraftingTree(
     changed: () => void,
     iconsEnabled: () => boolean = () => true
 ) {
+    let missingOnly = false;
     const fresh = (): TreeState => ({
         captureId: null,
         visible: false,
@@ -90,10 +103,15 @@ export function createCraftingTree(
         partial: false,
         limits: [],
         unplacedCount: 0,
+        unlinkedMissingCount: 0,
+        missingOnly,
+        missingComplete: false,
+        missingResourceCount: 0,
         loading: null,
         error: null,
         bounded: false,
         cacheBounded: false,
+        canRevealMissing: false,
         windowStart: 0,
         totalRows: 0,
         revision: 0
@@ -107,6 +125,8 @@ export function createCraftingTree(
     let rootKey: string | null = null;
     let cachedRows = 0;
     let projection: TreeRow[] = [];
+    let revealRequested = false;
+    let fullView: { state: TreeState; rootKey: string | null; cachedRows: number } | null = null;
     function stop() {
         generation++;
         request?.abort();
@@ -118,6 +138,14 @@ export function createCraftingTree(
         const seen = new Set<string>();
         const rows: TreeRow[] = [];
         const stack: Omit<TreeRow, 'reference'>[] = [];
+        if (state.unlinkedMissingCount)
+            stack.push({
+                key: 'UNLINKED_MISSING:0',
+                node: { kind: 'UNLINKED_MISSING', id: 0, crafts: null, multiplier: null, complete: null },
+                depth: 0,
+                quantity: null,
+                relation: 'MISSING_RESOURCE'
+            });
         if (state.unplacedCount && rootKey !== 'UNPLACED:0')
             stack.push({
                 key: 'UNPLACED:0',
@@ -160,6 +188,12 @@ export function createCraftingTree(
         state.totalRows = rows.length;
         state.cacheBounded = cachedRows >= CACHE_LIMIT;
         state.bounded = rows.length > VISIBLE_LIMIT || state.cacheBounded;
+        state.canRevealMissing =
+            missingOnly &&
+            state.status === 'READY' &&
+            !state.cacheBounded &&
+            rows.length < VISIBLE_LIMIT &&
+            rows.some((row) => !row.reference && !state.expanded[row.key]);
         state.revision = ++revision;
         changed();
     }
@@ -205,6 +239,7 @@ export function createCraftingTree(
                     offset,
                     limit: kind === 'ROOT' ? 50 : Math.min(50, CACHE_LIMIT - cachedRows),
                     icons: iconsEnabled(),
+                    missingOnly,
                     ...(state.captureId ? { captureId: state.captureId } : {})
                 },
                 request.signal
@@ -212,6 +247,7 @@ export function createCraftingTree(
             if (version !== generation) return;
             const page = response.data;
             if (state.captureId && state.captureId !== page.captureId) {
+                fullView = null;
                 Object.assign(state, fresh(), { visible: true });
                 rootKey = null;
                 cachedRows = 0;
@@ -226,6 +262,9 @@ export function createCraftingTree(
             state.partial = page.partial;
             state.limits = page.limits;
             state.unplacedCount = page.unplacedCount;
+            state.unlinkedMissingCount = page.unlinkedMissingCount ?? 0;
+            state.missingComplete = page.missingComplete ?? false;
+            state.missingResourceCount = page.missingResourceCount ?? 0;
             descriptors(page, response.icons);
             if (page.node) {
                 const key = keyOf(page.node);
@@ -249,6 +288,7 @@ export function createCraftingTree(
             const error = caught as ApiFailure;
             if (error.name === 'AbortError') return;
             if (error.status === 'UPDATE_CHANGED') {
+                fullView = null;
                 Object.assign(state, fresh(), { visible: true });
                 rootKey = null;
                 cachedRows = 0;
@@ -256,6 +296,7 @@ export function createCraftingTree(
                 return;
             }
             if (['INVALID_ID', 'GRID_NOT_FOUND', 'NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) {
+                fullView = null;
                 Object.assign(state, fresh(), { visible: true });
                 rootKey = null;
                 cachedRows = 0;
@@ -267,11 +308,59 @@ export function createCraftingTree(
                 state.loading = null;
                 publish();
                 if (restart) await load('ROOT', 0);
+                else if (kind === 'ROOT' && state.status === 'READY' && revealRequested) {
+                    revealRequested = false;
+                    await revealMissing();
+                }
             }
+        }
+    }
+    async function revealMissing() {
+        const version = generation;
+        for (
+            let count = 0;
+            count < 12 &&
+            missingOnly &&
+            state.visible &&
+            state.status === 'READY' &&
+            !state.loading &&
+            !state.cacheBounded &&
+            state.totalRows < VISIBLE_LIMIT;
+            count++
+        ) {
+            if (version !== generation) return;
+            const row = state.rows.find((candidate) => !candidate.reference && !state.expanded[candidate.key]);
+            if (!row) return;
+            state.expanded[row.key] = true;
+            if (!state.pages[row.key]) await load(row.node.kind, row.node.id);
+            else publish();
         }
     }
     return {
         state,
+        revealMissing,
+        async setMissingOnly(value: boolean) {
+            if (value === missingOnly) return;
+            stop();
+            const visible = state.visible;
+            const captureId = state.captureId;
+            if (value) fullView = { state: { ...state }, rootKey, cachedRows };
+            missingOnly = value;
+            if (!value && fullView) {
+                Object.assign(state, fullView.state, { visible, missingOnly: false });
+                rootKey = fullView.rootKey;
+                cachedRows = fullView.cachedRows;
+                fullView = null;
+            } else {
+                Object.assign(state, fresh(), { visible });
+                rootKey = null;
+                cachedRows = 0;
+            }
+            state.captureId = captureId;
+            revealRequested = value;
+            if (visible) await load('ROOT', 0);
+            else publish();
+        },
         moveWindow(direction: number) {
             state.windowStart = Math.max(
                 0,
@@ -293,6 +382,9 @@ export function createCraftingTree(
         },
         reset(grid: string | null, plan: string | number | null) {
             stop();
+            missingOnly = false;
+            fullView = null;
+            revealRequested = false;
             Object.assign(state, fresh());
             rootKey = null;
             cachedRows = 0;
@@ -317,7 +409,13 @@ export function createCraftingTree(
             }
             if (state.loading && !state.pages[key]) return;
             state.expanded[key] = true;
-            const node = state.nodes[key] ?? (key === 'UNPLACED:0' ? { kind: 'UNPLACED' as const, id: 0 } : null);
+            const node =
+                state.nodes[key] ??
+                (key === 'UNPLACED:0'
+                    ? { kind: 'UNPLACED' as const, id: 0 }
+                    : key === 'UNLINKED_MISSING:0'
+                      ? { kind: 'UNLINKED_MISSING' as const, id: 0 }
+                      : null);
             if (node && !state.pages[key]) await load(node.kind, node.id);
             else publish();
         },

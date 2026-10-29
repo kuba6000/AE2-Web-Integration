@@ -330,3 +330,66 @@ test('expired first request publishes an error revision newer than its loading r
     assert.equal(seen.at(-1).status, 'ERROR');
     assert.ok(seen.at(-1).revision > seen[0].revision);
 });
+
+test('missing mode asks the server for paths, reveals them with bounds and restores full-view expansion', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const calls = [];
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, query) => {
+                calls.push(query);
+                const response = page(
+                    query.kind === 'ROOT' ? node('RESOURCE', 0) : node('RECIPE', 1),
+                    query.kind === 'ROOT'
+                        ? [{ node: node('RECIPE', 1), relation: 'DECLARED_OUTPUT', quantity: '1' }]
+                        : []
+                );
+                response.data.captureId = 'same';
+                response.data.missingOnly = query.missingOnly;
+                response.data.missingComplete = true;
+                response.data.missingResourceCount = 1;
+                response.data.unlinkedMissingCount = 0;
+                return response;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.toggle('RESOURCE:0');
+    await tree.setMissingOnly(true);
+    assert.equal(tree.state.missingOnly, true);
+    assert.ok(calls.some((query) => query.kind === 'RECIPE' && query.missingOnly));
+    await tree.setMissingOnly(false);
+    assert.equal(tree.state.expanded['RESOURCE:0'], false);
+    assert.equal(tree.state.missingOnly, false);
+});
+
+test('automatic missing-path reveal stops after a bounded request batch on a long chain', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const kinds = ['RESOURCE', 'RECIPE', 'INGREDIENT'];
+    let missingRequests = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, query) => {
+                if (query.missingOnly) missingRequests++;
+                const id = query.kind === 'ROOT' ? 0 : query.id;
+                const response = page(
+                    node(kinds[id % 3], id),
+                    id < 90 ? [{ node: node(kinds[(id + 1) % 3], id + 1), relation: 'INGREDIENT', quantity: null }] : []
+                );
+                response.data.captureId = 'bounded';
+                response.data.missingComplete = true;
+                response.data.missingResourceCount = 1;
+                return response;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.setMissingOnly(true);
+    assert.ok(missingRequests > 1 && missingRequests <= 13);
+    assert.ok(tree.state.rows.some((row) => !tree.state.expanded[row.key]));
+    assert.ok(tree.state.rows.length < 30);
+});
