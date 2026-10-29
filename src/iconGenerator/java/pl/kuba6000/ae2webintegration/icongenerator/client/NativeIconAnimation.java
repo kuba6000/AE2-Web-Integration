@@ -47,13 +47,13 @@ final class NativeIconAnimation implements IIconAnimation {
     private final LegacyIconRenderer renderer;
     private final IconCandidate candidate;
     private final StableKey key;
-    private final ResourceLocation atlas;
+    private final @Nullable ResourceLocation atlas;
     private final List<NativeSprite> sprites;
     private final List<SpriteTimeline.Frame> frames;
     private int frame;
 
     private NativeIconAnimation(@NotNull LegacyIconRenderer renderer, @NotNull IconCandidate candidate,
-        @NotNull StableKey key, @NotNull ResourceLocation atlas, @NotNull List<NativeSprite> sprites,
+        @NotNull StableKey key, @Nullable ResourceLocation atlas, @NotNull List<NativeSprite> sprites,
         @NotNull List<SpriteTimeline.Frame> frames) {
         this.renderer = renderer;
         this.candidate = candidate;
@@ -75,7 +75,7 @@ final class NativeIconAnimation implements IIconAnimation {
                     .getName(),
                 1L,
                 Long::sum);
-            return sampled(renderer, candidate, key, atlas);
+            return sampled(renderer, candidate, key);
         }
         if (model == null || model.getClass() != SimpleBakedModel.class && model.getClass() != BakedItemModel.class
             && model.getClass() != BakedItemModel.BakedGuiItemModel.class) {
@@ -101,13 +101,13 @@ final class NativeIconAnimation implements IIconAnimation {
         return plan(renderer, candidate, key, TextureMap.LOCATION_BLOCKS_TEXTURE, Collections.singletonList(sprite));
     }
 
-    private static @NotNull IIconAnimation sampled(@NotNull LegacyIconRenderer renderer,
-        @NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull ResourceLocation atlas) {
+    static @NotNull IIconAnimation sampled(@NotNull LegacyIconRenderer renderer, @NotNull IconCandidate candidate,
+        @NotNull StableKey key) {
         return new NativeIconAnimation(
             renderer,
             candidate,
             key,
-            atlas,
+            null,
             Collections.emptyList(),
             Collections.emptyList());
     }
@@ -191,6 +191,7 @@ final class NativeIconAnimation implements IIconAnimation {
             renderer.animationFrame(candidate, key, captures, CaptureKind.SAMPLE, 0, drawClock);
             return true;
         }
+        assert atlas != null : "Controlled animation has an atlas";
         int texture = Minecraft.getMinecraft()
             .getTextureManager()
             .getTexture(atlas)
@@ -201,10 +202,10 @@ final class NativeIconAnimation implements IIconAnimation {
             sprites,
             renderer.atlasScratch,
             renderer.animationState)) {
-            scope.select(
-                frames.get(frame)
-                    .tick());
             try {
+                scope.select(
+                    frames.get(frame)
+                        .tick());
                 renderer.animationFrame(
                     candidate,
                     key,
