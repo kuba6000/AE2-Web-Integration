@@ -282,6 +282,20 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         return result;
     }
 
+    @Override
+    public @NotNull IIconAnimation sampledAnimation(@NotNull IconCandidate candidate, @NotNull StableKey key) {
+        return SpriteAnimation.sampled(minecraft, this, candidate, key);
+    }
+
+    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+        Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
+            ? failure.getCause()
+            : failure;
+        if (cause instanceof VirtualMachineError fatal) throw fatal;
+        if (cause instanceof ThreadDeath fatal) throw fatal;
+        return new RenderFailure(cause == null ? failure : cause);
+    }
+
     void animated(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures,
         @NotNull CaptureKind kind, long timing, @NotNull LongSupplier clock) throws RenderFailure {
         captureKind = kind;
