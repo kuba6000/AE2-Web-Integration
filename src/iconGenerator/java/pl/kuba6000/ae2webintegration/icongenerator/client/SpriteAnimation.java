@@ -129,10 +129,13 @@ final class SpriteAnimation implements IIconAnimation {
                         animation.frames.stream()
                             .mapToInt(frame -> frame.time)
                             .toArray(),
+                        animation.frames.stream()
+                            .mapToInt(frame -> frame.index)
+                            .toArray(),
                         animation.interpolateFrames));
             }
             SpriteTimeline timeline = SpriteTimeline.create(tracks);
-            renderer.animationPlan(timeline.truncated());
+            renderer.animationPlan(timeline.reduced());
             return new SpriteAnimation(minecraft, renderer, candidate, key, sprites, timeline);
         } catch (RuntimeException | LinkageError failure) {
             throw ModernIconRenderer.animationFailure(failure);
