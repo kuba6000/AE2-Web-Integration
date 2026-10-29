@@ -227,11 +227,30 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private void finish(@NotNull IIconSource<C> source) {
         source.verify();
         closeNative();
-        Map<String, Long> counts = source.counts();
+        Map<String, Long> counts = new HashMap<>();
+        try {
+            counts.putAll(source.counts());
+        } catch (Throwable failure) {
+            omit("statistics/source", failure);
+        }
         progress.addStatistics(counts);
-        renderer.statistics(counts);
+        try {
+            renderer.statistics(counts);
+        } catch (Throwable failure) {
+            omit("statistics/renderer", failure);
+        }
         if (animations != null) animations.statistics(counts);
-        writer.finish(counts, source.sources());
+        List<String> sources = Collections.emptyList();
+        try {
+            sources = source.sources();
+        } catch (Throwable failure) {
+            omit("statistics/sources", failure);
+        }
+        if (!failures.isEmpty()) {
+            writer.write(Collections.emptyList(), failures);
+            failures = new ArrayList<>();
+        }
+        writer.finish(counts, sources);
         catalogue = null;
         finishing = true;
         status = progress.saving(sourceNote);
@@ -261,13 +280,23 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         }
         C previous = identities.get(key);
         if (previous != null) {
-            if (!previous.sameIdentity(candidate))
-                throw new IllegalStateException("Conflicting native identities for key " + key);
-            progress.duplicates++;
+            try {
+                if (!previous.sameIdentity(candidate)) {
+                    omit(
+                        candidate.context() + "/identity",
+                        new IllegalArgumentException("Conflicting native identity for key " + key));
+                    return;
+                }
+                progress.duplicates++;
+            } catch (Throwable failure) {
+                omit(candidate.context() + "/identity", failure);
+            }
             return;
         }
         if (pendingIcons.size() >= MAX_QUEUED_ICONS) {
-            throw new IllegalStateException("Catalogue exceeds the queued-icon limit of " + MAX_QUEUED_ICONS);
+            failures.add(new Failure(candidate.context(), "Catalogue capacity reached; resource omitted"));
+            progress.omitted++;
+            return;
         }
         // Discovery finishes before rendering: these owned stacks cannot be changed by a renderer yet.
         identities.put(key, candidate);

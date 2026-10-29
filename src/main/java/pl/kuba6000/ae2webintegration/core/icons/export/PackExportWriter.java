@@ -166,26 +166,35 @@ public final class PackExportWriter {
         }
         for (Capture capture : captures) {
             if (publication.get() == Publication.CANCELED) return;
-            if (capture.kind() == CaptureKind.STATIC) output.add(capture.key(), capture.pixels());
-            else if (!animationsStopped && !disabledAnimations.contains(capture.key())) {
+            if (capture.kind() == CaptureKind.STATIC) {
                 try {
-                    if (capture.kind() == CaptureKind.FRAME)
-                        output.addAnimationFrame(capture.key(), capture.pixels(), Math.toIntExact(capture.timing()));
-                    else {
-                        boolean unchanged = output
-                            .addAnimationSample(capture.key(), capture.pixels(), capture.timing());
-                        if (probingSamples) {
-                            probedSamples.add(capture.key());
-                            if (unchanged) unchangedSamples.add(capture.key());
-                        }
-                    }
+                    output.add(capture.key(), capture.pixels());
                 } catch (IconPackWriter.CapacityException limit) {
-                    if (limit.scope() == IconPackWriter.CapacityException.Scope.EXPORT) animationsStopped = true;
-                    disabledAnimations.add(capture.key());
-                    output.discardAnimation(capture.key());
-                    output.failure(capture.key() + "/animation", limit.getMessage());
+                    output.failure(
+                        capture.key()
+                            .toString(),
+                        limit.getMessage());
                 }
-            }
+            } else if (!animationsStopped && output.hasStaticIcon(capture.key())
+                && !disabledAnimations.contains(capture.key())) {
+                    try {
+                        if (capture.kind() == CaptureKind.FRAME) output
+                            .addAnimationFrame(capture.key(), capture.pixels(), Math.toIntExact(capture.timing()));
+                        else {
+                            boolean unchanged = output
+                                .addAnimationSample(capture.key(), capture.pixels(), capture.timing());
+                            if (probingSamples) {
+                                probedSamples.add(capture.key());
+                                if (unchanged) unchangedSamples.add(capture.key());
+                            }
+                        }
+                    } catch (IconPackWriter.CapacityException limit) {
+                        if (limit.scope() == IconPackWriter.CapacityException.Scope.EXPORT) animationsStopped = true;
+                        disabledAnimations.add(capture.key());
+                        output.discardAnimation(capture.key());
+                        output.failure(capture.key() + "/animation", limit.getMessage());
+                    }
+                }
         }
     }
 

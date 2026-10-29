@@ -31,6 +31,38 @@ class PackExportWriterTest {
     Path directory;
 
     @Test
+    void staticMappingCapacityKeepsAdmittedIconsAndPublishesArchive() throws Exception {
+        PackExportWriter writer = new PackExportWriter(directory, metadata());
+        int[] pixels = new int[4096];
+        for (int start = 0; start < 250_001; start += 1024) {
+            awaitReady(writer);
+            List<PackExportWriter.Capture> batch = new ArrayList<>();
+            for (int i = start; i < Math.min(start + 1024, 250_001); i++) {
+                int identity = i;
+                batch.add(new PackExportWriter.Capture(StableKey.create(sink -> sink.putInt(identity)), pixels));
+            }
+            writer.write(batch, Collections.emptyList());
+        }
+        writer.beginAnimations();
+        awaitReady(writer);
+        writer.write(
+            new ArrayList<>(
+                Collections.singletonList(
+                    PackExportWriter.Capture.frame(StableKey.create(sink -> sink.putInt(250_000)), pixels, 100))),
+            Collections.emptyList());
+        writer.finish(new HashMap<>(), Collections.emptyList());
+        awaitFinished(writer);
+        assertNotNull(writer.completedPath());
+        try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity")) {
+            assertNotNull(pack.find(StableKey.create(sink -> sink.putInt(0))));
+            assertNotNull(pack.find(StableKey.create(sink -> sink.putInt(249_999))));
+            assertNull(pack.find(StableKey.create(sink -> sink.putInt(250_000))));
+            assertEquals(1, pack.failureCount());
+        }
+        writer.close();
+    }
+
+    @Test
     void optionalEncoderFailureStillAbortsInsteadOfPublishingStaticFallback() throws Exception {
         IOException failure = new IconPackWriter.CapacityException(
             IconPackWriter.CapacityException.Scope.EXPORT,

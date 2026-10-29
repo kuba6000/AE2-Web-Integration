@@ -470,6 +470,84 @@ class IconPackTest {
     }
 
     @Test
+    void oversizedOptionalModCatalogueKeepsIconsAndPublishesBoundedMetadata() throws Exception {
+        Map<String, String> mods = new TreeMap<>();
+        String version = String.join("", Collections.nCopies(4096, "x"));
+        for (int i = 0; i < 17_000; i++) mods.put("mod" + i, version);
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata("1.7.10", "forge", "legacy-v1", "generator", "today", mods))) {
+            writer.add(key, new int[4096]);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertFalse(
+                pack.metadata()
+                    .mods()
+                    .isEmpty());
+            assertTrue(
+                pack.metadata()
+                    .mods()
+                    .size() < mods.size());
+            assertEquals(
+                mods.size() - pack.metadata()
+                    .mods()
+                    .size(),
+                pack.failureCount());
+        }
+    }
+
+    @Test
+    void oversizedOptionalProvenanceDoesNotDiscardIcons() throws Exception {
+        Map<String, String> mods = new TreeMap<>();
+        mods.put("healthy", "1.0");
+        mods.put("oversized", String.join("", Collections.nCopies(5000, "x")));
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata("1.7.10", "forge", "legacy-v1", "generator", "today", mods))) {
+            writer.add(key, new int[4096]);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertEquals(
+                "1.0",
+                pack.metadata()
+                    .mods()
+                    .get("healthy"));
+            assertTrue(pack.failureCount() > 0);
+        }
+    }
+
+    @Test
+    void optionalStatisticsOverflowAndMalformedEntriesDoNotPreventPublication() throws Exception {
+        Map<String, Long> counts = new TreeMap<>();
+        List<String> sources = new ArrayList<>();
+        for (int i = 0; i < 70; i++) {
+            counts.put("counter" + i, (long) i);
+            sources.add("source" + i);
+        }
+        counts.put("bad count", -1L);
+        sources.add("bad source");
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
+            writer.add(key, new int[4096]);
+            writer.statistics(counts, sources);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertTrue(pack.failureCount() > 0);
+        }
+    }
+
+    @Test
     void repeatedStatisticsReplacePreviousValuesAndCopyCallerData() throws Exception {
         Map<String, Long> counts = new TreeMap<>();
         counts.put("current", 7L);
@@ -614,9 +692,6 @@ class IconPackTest {
         IconPackWriter writer = new IconPackWriter(directory, metadata("today"));
         try (IconPackWriter ignored = writer) {
             assertThrows(IllegalArgumentException.class, () -> writer.add(StableKey.random(), new int[1]));
-            assertThrows(
-                IllegalArgumentException.class,
-                () -> writer.statistics(Collections.singletonMap("invalid", -1L), Collections.emptyList()));
             writer.add(StableKey.random(), new int[4096]);
         }
         assertThrows(IOException.class, writer::finish);

@@ -28,6 +28,43 @@ class IconExportSessionTest {
     Path directory;
 
     @Test
+    void catalogueOverflowPublishesAdmittedIconsAndContinuesDiscovery() throws Exception {
+        Candidate[] candidates = new Candidate[250_002];
+        for (int i = 0; i < 250_001; i++) candidates[i] = new Candidate(i);
+        candidates[250_001] = new Candidate(0);
+        Source source = new Source(candidates);
+        Renderer renderer = new Renderer(source);
+        renderer.uniformPixels = true;
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
+        long deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(2);
+        while (!session.tick()) {
+            assertTrue(System.nanoTime() < deadline, session.status());
+            Thread.sleep(1);
+        }
+        assertTrue(source.done());
+        assertEquals(250_000, renderer.rendered);
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(key(0)));
+            assertNotNull(pack.find(key(249_999)));
+            assertNull(pack.find(key(250_000)));
+            assertEquals(1, pack.failureCount());
+        }
+    }
+
+    @Test
+    void optionalStatisticsFailureDoesNotDiscardCapturedIcons() throws Exception {
+        Source source = new Source(new Candidate(1));
+        source.statisticsFailure = new IllegalArgumentException("Broken source statistics");
+        Renderer renderer = new Renderer(source);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
+        awaitFinished(session);
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(key(1)));
+            assertEquals(1, pack.failureCount());
+        }
+    }
+
+    @Test
     void unsupportedCandidateIsOmittedWithoutRenderingOrAbortingHealthyIcons() throws Exception {
         Candidate unsupported = new Candidate(1);
         unsupported.unsupportedIdentity = true;
@@ -83,15 +120,36 @@ class IconExportSessionTest {
     }
 
     @Test
-    void differentNativeIdentitiesWithTheSameStableKeyAbortWithoutPublishing() throws Exception {
+    void conflictingNativeIdentityDoesNotDiscardFirstOrLaterHealthyIcons() throws Exception {
         Candidate collision = new Candidate(2);
         collision.encodedIdentity = 1;
-        Source source = new Source(new Candidate(1), collision);
+        Source source = new Source(new Candidate(1), collision, new Candidate(3));
         Renderer renderer = new Renderer(source);
         IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
         awaitFinished(session);
-        assertEmptyDirectory();
+        assertEquals(2, renderer.rendered);
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(key(1)));
+            assertNotNull(pack.find(key(3)));
+            assertEquals(1, pack.failureCount());
+        }
         assertTrue(renderer.closed);
+    }
+
+    @Test
+    void brokenDuplicateComparisonOmitsOnlyIncomingCandidate() throws Exception {
+        Candidate first = new Candidate(1);
+        first.comparisonFailure = new IllegalArgumentException("Broken native equality");
+        Source source = new Source(first, new Candidate(1), new Candidate(3));
+        Renderer renderer = new Renderer(source);
+        IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
+        awaitFinished(session);
+        assertEquals(2, renderer.rendered);
+        try (IconPack pack = openPack()) {
+            assertNotNull(pack.find(key(1)));
+            assertNotNull(pack.find(key(3)));
+            assertEquals(1, pack.failureCount());
+        }
     }
 
     @Test
@@ -292,6 +350,8 @@ class IconExportSessionTest {
         @Nullable
         RuntimeException identityFailure;
         @Nullable
+        RuntimeException comparisonFailure;
+        @Nullable
         RuntimeException baselineFailure;
         @Nullable
         Throwable drawFailure;
@@ -313,6 +373,7 @@ class IconExportSessionTest {
         }
 
         public boolean sameIdentity(@NotNull Candidate other) {
+            if (comparisonFailure != null) throw comparisonFailure;
             return identity == other.identity;
         }
 
@@ -330,6 +391,8 @@ class IconExportSessionTest {
         boolean invalidated;
         @Nullable
         RuntimeException discoveryFailure;
+        @Nullable
+        RuntimeException statisticsFailure;
 
         Source(Candidate... candidates) {
             this.candidates = Arrays.asList(candidates)
@@ -362,6 +425,7 @@ class IconExportSessionTest {
         }
 
         public @NotNull Map<String, Long> counts() {
+            if (statisticsFailure != null) throw statisticsFailure;
             return new HashMap<>();
         }
 
@@ -384,6 +448,7 @@ class IconExportSessionTest {
         final Source source;
         final List<PackExportWriter.Capture> pending = new ArrayList<>();
         boolean closed;
+        boolean uniformPixels;
         int rendered;
         boolean invalidateSource;
         @Nullable
@@ -401,7 +466,7 @@ class IconExportSessionTest {
             if (pending.size() >= PackExportWriter.MAX_CAPTURES_PER_BATCH)
                 throw new IllegalStateException("Capture memory budget exceeded");
             int[] pixels = new int[4096];
-            Arrays.fill(pixels, 0xff000000 | candidate.identity);
+            Arrays.fill(pixels, 0xff000000 | (uniformPixels ? 0 : candidate.identity));
             pending.add(new PackExportWriter.Capture(key, pixels));
             rendered++;
         }

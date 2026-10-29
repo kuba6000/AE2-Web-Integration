@@ -15,6 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,8 @@ import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,6 +52,7 @@ import pl.kuba6000.ae2webintegration.core.utils.TempDirectories;
 /** Single-owner assembly with bounded parallel PNG encoding. add consumes caller pixels synchronously. */
 public final class IconPackWriter implements Closeable {
 
+    private static final Logger LOG = LogManager.getLogger(IconPackWriter.class);
     private static final int PNG_BUFFER_BUDGET = 160 * 1024 * 1024;
     private static final int MAX_PENDING_PAGES = 10;
     private static final int PNG_BUFFERS_PER_PAGE = 4;
@@ -56,6 +60,7 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Path outputDirectory;
     private final @NotNull Path scratch;
     private final @NotNull Metadata metadata;
+    private final @NotNull Map<String, String> exportMods = new TreeMap<>();
     private static final int PAGE_SIZE = PackFormat.DEFAULT_PAGE_DIMENSION;
     private static final int COLUMNS = PAGE_SIZE / PackFormat.CELL_PITCH;
     /** Maximum distinct images in one exported animation; every clip belongs to one atlas. */
@@ -97,7 +102,32 @@ public final class IconPackWriter implements Closeable {
         if (!metadata.minecraftVersion()
             .matches("[A-Za-z0-9._-]+")) throw new IllegalArgumentException("Unsafe target filename");
         this.outputDirectory = outputDirectory;
-        this.metadata = metadata;
+        this.metadata = new Metadata(
+            metadata.minecraftVersion(),
+            metadata.loader(),
+            metadata.compatibilityVersion(),
+            boundedMetadata(metadata.generatorVersion()),
+            boundedMetadata(metadata.generatedAt()),
+            Collections.emptyMap());
+        long metadataBytes = 0;
+        for (Map.Entry<String, String> mod : metadata.mods()
+            .entrySet()) {
+            if (mod.getKey()
+                .length() > 4096
+                || mod.getValue()
+                    .length() > 4096) {
+                failure("metadata", "Oversized optional mod metadata omitted");
+                continue;
+            }
+            int bytes = PackFormat.json(Collections.singletonMap(mod.getKey(), mod.getValue())).length;
+            // Reserve manifest space for actual icons instead of retaining unbounded optional provenance.
+            if (bytes > PackFormat.MAX_MANIFEST / 4 - metadataBytes) {
+                failure("metadata", "Optional mod metadata capacity reached");
+                continue;
+            }
+            metadataBytes += bytes;
+            exportMods.put(mod.getKey(), mod.getValue());
+        }
         // Four raw ARGB buffers per PNG job estimate encoder/output storage; one assembly page is separate.
         pendingPageLimit = Math
             .min(MAX_PENDING_PAGES, PNG_BUFFER_BUDGET / (PAGE_SIZE * PAGE_SIZE * Integer.BYTES * PNG_BUFFERS_PER_PAGE));
@@ -128,7 +158,8 @@ public final class IconPackWriter implements Closeable {
             if (!samePixels(existingKey)) throw new IOException("Conflicting icon key");
             return;
         }
-        if (entries.size() >= PackFormat.MAX_KEYS) throw new IOException("Too many icon mappings");
+        if (entries.size() >= PackFormat.MAX_KEYS)
+            throw new CapacityException(CapacityException.Scope.EXPORT, "Too many icon mappings");
         PixelRecord record = internPixels();
         if (record.staticPosition == null) {
             record.staticPosition = placePixels(pixels);
@@ -137,6 +168,11 @@ public final class IconPackWriter implements Closeable {
         }
         entries.put(key.toString(), record.staticPosition);
         keyPixels.put(key.toString(), record);
+    }
+
+    /** Whether a static fallback was admitted; optional captures must have one. */
+    public boolean hasStaticIcon(@NotNull StableKey key) {
+        return entries.containsKey(key.toString());
     }
 
     /** Ends static admission and separates optional pages, allowing final capacity fallback without repacking. */
@@ -350,6 +386,8 @@ public final class IconPackWriter implements Closeable {
         }
 
         private final @NotNull Scope scope;
+        private long excessBytes;
+        private boolean manifestLimit;
 
         public CapacityException(@NotNull Scope scope, @NotNull String message) {
             super(message);
@@ -382,9 +420,9 @@ public final class IconPackWriter implements Closeable {
 
     public void failure(@NotNull String context, @NotNull String reason) throws IOException {
         checkOpen();
-        if (failureCount == Integer.MAX_VALUE) throw new IOException("Too many failures");
-        failureCount++;
+        if (failureCount < Integer.MAX_VALUE) failureCount++;
         if (failures.size() < PackFormat.MAX_FAILURE_RECORDS) {
+            LOG.warn("Icon export omission ({}): {}", bounded(context), bounded(reason));
             Map<String, String> record = new TreeMap<>();
             record.put("context", bounded(context));
             record.put("reason", bounded(reason));
@@ -397,22 +435,32 @@ public final class IconPackWriter implements Closeable {
         return failureCount;
     }
 
+    private @NotNull String boundedMetadata(@NotNull String value) throws IOException {
+        if (value.length() <= 4096) return value;
+        failure("metadata", "Oversized optional metadata text shortened");
+        return value.substring(0, 4096);
+    }
+
     private static @NotNull String bounded(@NotNull String value) {
         return value.substring(0, Math.min(PackFormat.MAX_FAILURE_TEXT, value.length()));
     }
 
     public void statistics(@NotNull Map<String, Long> counts, @NotNull List<String> sources) throws IOException {
         checkOpen();
-        if (counts.size() > PackFormat.MAX_STATISTICS || sources.size() > PackFormat.MAX_STATISTICS)
-            throw new IllegalArgumentException("Too many statistics");
-        for (Map.Entry<String, Long> entry : counts.entrySet()) if (!entry.getKey()
-            .matches("[A-Za-z0-9._-]{1,64}") || entry.getValue() < 0)
-            throw new IllegalArgumentException("Invalid statistic");
-        for (String source : sources)
-            if (!source.matches("[A-Za-z0-9._-]{1,64}")) throw new IllegalArgumentException("Invalid source name");
         statisticCounts.clear();
-        statisticCounts.putAll(counts);
-        statisticSources = new ArrayList<>(sources);
+        statisticSources = new ArrayList<>();
+        for (Map.Entry<String, Long> entry : new TreeMap<>(counts).entrySet()) {
+            if (!entry.getKey()
+                .matches("[A-Za-z0-9._-]{1,64}") || entry.getValue() < 0
+                || statisticCounts.size() >= PackFormat.MAX_STATISTICS) {
+                failure("statistics", "Optional statistic omitted: " + entry.getKey());
+            } else statisticCounts.put(entry.getKey(), entry.getValue());
+        }
+        for (String source : sources) {
+            if (!source.matches("[A-Za-z0-9._-]{1,64}") || statisticSources.size() >= PackFormat.MAX_STATISTICS) {
+                failure("statistics", "Optional source omitted: " + source);
+            } else statisticSources.add(source);
+        }
     }
 
     private void flushPage() throws IOException {
@@ -441,9 +489,9 @@ public final class IconPackWriter implements Closeable {
             if (!ImageIO.write(completed, "PNG", stream)) throw new IOException("PNG encoder unavailable");
         }
         byte[] bytes = encoded.toByteArray();
-        if (bytes.length > PackFormat.MAX_PAGE) throw new IOException("Encoded atlas too large");
         String digest = PackFormat.hash(bytes);
-        Files.write(scratch.resolve(digest + ".png"), bytes);
+        // Keep its index for pending references; final admission omits an oversized page and its users.
+        if (bytes.length <= PackFormat.MAX_PAGE) Files.write(scratch.resolve(digest + ".png"), bytes);
         return new EncodedPage(
             new Page(digest, "pages/" + digest + ".png", completed.getWidth(), completed.getHeight(), bytes.length),
             System.nanoTime() - started,
@@ -512,6 +560,7 @@ public final class IconPackWriter implements Closeable {
         layoutAnimations(canceled);
         flushPage(canceled);
         while (!pendingPages.isEmpty()) collectPage(canceled);
+        omitOversizedPages(canceled);
         Path temporary = Files.createTempFile(outputDirectory, ".ae2wi-pack-", ".tmp");
         try {
             String packId;
@@ -520,11 +569,25 @@ public final class IconPackWriter implements Closeable {
                     packId = writeArchive(temporary, canceled);
                     break;
                 } catch (CapacityException limit) {
-                    if (!staticSealed || animations.isEmpty()) throw limit;
-                    int omitted = animations.size();
-                    animations.clear();
-                    animationFrames = 0;
-                    failure("animations", "Omitted " + omitted + " animations: " + limit.getMessage());
+                    if (!animations.isEmpty()) {
+                        int omitted = animations.size();
+                        animations.clear();
+                        animationFrames = 0;
+                        capacityOmissions("animations", omitted, limit.getMessage());
+                    } else if (limit.manifestLimit && !exportMods.isEmpty()) {
+                        long remaining = Math.max(1, limit.excessBytes);
+                        int omitted = 0;
+                        for (String key : new TreeMap<>(exportMods).descendingKeySet()) {
+                            checkCanceled(canceled);
+                            remaining -= PackFormat.json(Collections.singletonMap(key, exportMods.remove(key))).length
+                                - 1;
+                            omitted++;
+                            if (remaining <= 0) break;
+                        }
+                        capacityOmissions("metadata", omitted, limit.getMessage());
+                    } else if (!entries.isEmpty()) {
+                        pruneStatic(limit, canceled);
+                    } else throw limit;
                 }
             }
             checkCanceled(canceled);
@@ -534,11 +597,13 @@ public final class IconPackWriter implements Closeable {
             }
             Path output = outputDirectory
                 .resolve("AE2WebIntegration-icons-" + metadata.minecraftVersion() + "-" + packId + ".ae2wi-icons");
-            // Cleanup must succeed before publication: a visible final archive always means success.
+            // Settle workers and handles before publication; leftover scratch files are only a cleanup warning.
             close();
             checkCanceled(canceled);
             if (!beginCommit.getAsBoolean()) throw new CancellationException("Icon export publication canceled");
             Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            if (failureCount != 0)
+                LOG.warn("Icon export completed with {} omissions or recoverable failures", failureCount);
             return output;
         } catch (IOException | RuntimeException | Error failure) {
             try {
@@ -548,6 +613,89 @@ public final class IconPackWriter implements Closeable {
             }
             throw failure;
         }
+    }
+
+    private void omitOversizedPages(BooleanSupplier canceled) throws IOException {
+        int omitted = 0;
+        java.util.Iterator<Map.Entry<String, int[]>> statics = entries.entrySet()
+            .iterator();
+        while (statics.hasNext()) {
+            checkCanceled(canceled);
+            Map.Entry<String, int[]> entry = statics.next();
+            if (pages.get(entry.getValue()[0])
+                .bytes() <= PackFormat.MAX_PAGE) continue;
+            animations.remove(entry.getKey());
+            keyPixels.remove(entry.getKey());
+            statics.remove();
+            omitted++;
+        }
+        java.util.Iterator<Map.Entry<String, List<AnimationFrame>>> clips = animations.entrySet()
+            .iterator();
+        while (clips.hasNext()) {
+            checkCanceled(canceled);
+            Map.Entry<String, List<AnimationFrame>> entry = clips.next();
+            boolean oversized = false;
+            for (AnimationFrame frame : entry.getValue()) {
+                if (frame.position() != null && pages.get(frame.position()[0])
+                    .bytes() > PackFormat.MAX_PAGE) {
+                    oversized = true;
+                    break;
+                }
+            }
+            if (oversized) {
+                clips.remove();
+                omitted++;
+            }
+        }
+        if (omitted != 0) capacityOmissions("atlas-pages", omitted, "Encoded atlas exceeds page capacity");
+    }
+
+    private void capacityOmissions(String context, int omitted, String reason) throws IOException {
+        failure(context, "Omitted " + omitted + ": " + reason);
+        failureCount = (int) Math.min(Integer.MAX_VALUE, (long) failureCount + omitted - 1);
+    }
+
+    private void pruneStatic(CapacityException limit, BooleanSupplier canceled) throws IOException {
+        long remaining = Math.max(1, limit.excessBytes);
+        int omitted = 0;
+        if (limit.manifestLimit) {
+            for (String key : new TreeMap<>(entries).descendingKeySet()) {
+                checkCanceled(canceled);
+                remaining -= PackFormat.json(Collections.singletonMap(key, entries.remove(key))).length - 1;
+                keyPixels.remove(key);
+                omitted++;
+                if (remaining <= 0) break;
+            }
+        } else {
+            Set<String> droppedPages = new HashSet<>();
+            List<Page> referenced = referencedPages();
+            Map<String, Integer> pageOrder = new HashMap<>();
+            for (int index = 0; index < pages.size(); index++) pageOrder.put(
+                pages.get(index)
+                    .digest(),
+                index);
+            referenced.sort(Comparator.comparingInt(page -> pageOrder.get(page.digest())));
+            for (int index = referenced.size() - 1; index >= 0 && remaining > 0; index--) {
+                checkCanceled(canceled);
+                Page page = referenced.get(index);
+                droppedPages.add(page.digest());
+                remaining -= page.bytes();
+            }
+            java.util.Iterator<Map.Entry<String, int[]>> iterator = entries.entrySet()
+                .iterator();
+            while (iterator.hasNext()) {
+                checkCanceled(canceled);
+                Map.Entry<String, int[]> entry = iterator.next();
+                if (droppedPages.contains(
+                    pages.get(entry.getValue()[0])
+                        .digest())) {
+                    keyPixels.remove(entry.getKey());
+                    iterator.remove();
+                    omitted++;
+                }
+            }
+        }
+        capacityOmissions("static-icons", omitted, limit.getMessage());
     }
 
     private @NotNull String writeArchive(@NotNull Path temporary, @NotNull BooleanSupplier canceled)
@@ -561,11 +709,20 @@ public final class IconPackWriter implements Closeable {
                 .getAsJsonObject());
         root.put("packId", packId);
         byte[] manifest = PackFormat.json(root);
-        if (manifest.length > PackFormat.MAX_MANIFEST)
-            throw new CapacityException(CapacityException.Scope.EXPORT, "Manifest too large");
+        if (manifest.length > PackFormat.MAX_MANIFEST) {
+            CapacityException limit = new CapacityException(CapacityException.Scope.EXPORT, "Manifest too large");
+            limit.manifestLimit = true;
+            limit.excessBytes = manifest.length - PackFormat.MAX_MANIFEST;
+            throw limit;
+        }
         ArchiveOutput output = new ArchiveOutput(Files.newOutputStream(temporary));
+        long projectedBytes;
         try (ZipOutputStream zip = new ZipOutputStream(output)) {
             PackFormat.zipEntry(zip, "manifest.json", manifest, false);
+            // Actual compressed manifest plus conservative ZIP directory/header overhead.
+            projectedBytes = output.written + 128;
+            for (Page page : sorted) projectedBytes += page.bytes() + page.path()
+                .length() * 2L + 128;
             for (Page page : sorted) {
                 checkCanceled(canceled);
                 if (output.exceeded) break;
@@ -573,8 +730,13 @@ public final class IconPackWriter implements Closeable {
                     .zipEntry(zip, page.path(), Files.readAllBytes(scratch.resolve(page.digest() + ".png")), true);
             }
         }
-        if (output.exceeded)
-            throw new CapacityException(CapacityException.Scope.EXPORT, "Icon archive exceeds size limit");
+        if (output.exceeded) {
+            CapacityException limit = new CapacityException(
+                CapacityException.Scope.EXPORT,
+                "Icon archive exceeds size limit");
+            limit.excessBytes = Math.max(1, projectedBytes - PackFormat.MAX_ARCHIVE);
+            throw limit;
+        }
         return packId;
     }
 
@@ -694,7 +856,7 @@ public final class IconPackWriter implements Closeable {
         return new ArrayList<>(result.values());
     }
 
-    private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) {
+    private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) throws IOException {
         recordStatistic("failures", failureCount);
         recordStatistic("pngWorkers", pngWorkers);
         recordStatistic("pngPeakPendingPages", peakPendingPages);
@@ -743,7 +905,7 @@ public final class IconPackWriter implements Closeable {
         root.put("contentWidth", PackFormat.ICON_SIZE);
         root.put("contentHeight", PackFormat.ICON_SIZE);
         Map<String, Object> environment = new TreeMap<>();
-        environment.put("mods", metadata.mods());
+        environment.put("mods", exportMods);
         // Released format-2 readers require this array, even though input fingerprints are no longer collected.
         environment.put("resourcePacks", new String[0]);
         root.put("environment", environment);
@@ -825,7 +987,7 @@ public final class IconPackWriter implements Closeable {
         try {
             deleteScratch();
         } catch (IOException cleanup) {
-            failure = combineFailures(failure, cleanup);
+            LOG.warn("Could not remove icon export scratch directory {}", scratch, cleanup);
         }
         if (failure != null) throw encodingFailure(failure);
     }

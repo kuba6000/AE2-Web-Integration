@@ -18,10 +18,10 @@ final class IconExportProgress {
     private int total;
     int renderFailures;
     int animationFallbacks;
-    int omitted;
-    int duplicates;
-    int exactCandidates;
-    int baseCandidates;
+    long omitted;
+    long duplicates;
+    long exactCandidates;
+    long baseCandidates;
     long longestStep;
     long captureWorkNanos;
     private long renderStarted;
@@ -44,16 +44,16 @@ final class IconExportProgress {
     }
 
     void addStatistics(@NotNull Map<String, Long> counts) {
-        counts.put("exactCandidates", (long) exactCandidates);
-        counts.put("baseCandidates", (long) baseCandidates);
+        counts.put("exactCandidates", exactCandidates);
+        counts.put("baseCandidates", baseCandidates);
         counts.put("uniqueIdentities", (long) total);
         counts.put("processed", (long) processed);
         counts.put("renderFailures", (long) renderFailures);
         counts.put("animationFallbacks", (long) animationFallbacks);
         counts.put("discoveryFailures", (long) (omitted - renderFailures));
         counts.put("captured", (long) captured);
-        counts.put("failures", (long) omitted);
-        counts.put("duplicates", (long) duplicates);
+        counts.put("failures", omitted);
+        counts.put("duplicates", duplicates);
         counts.put("longestNativeStepNanos", longestStep);
         counts.put("captureWorkNanos", captureWorkNanos);
         counts.put("captureBackpressureNanos", captureBackpressureNanos);
