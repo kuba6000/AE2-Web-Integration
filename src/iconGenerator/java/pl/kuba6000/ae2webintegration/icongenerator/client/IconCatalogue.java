@@ -13,7 +13,6 @@ import java.util.function.BiConsumer;
 import net.minecraft.ReportedException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -87,7 +86,6 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             failures.accept("emi/setup", failure);
             String warning = "EMI catalogue unavailable (initialization failed); exporting native items and fluids only";
             LOG.warn(warning, failure);
-            if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal(warning), false);
         }
         if (useEmi && emi == null) {
             return "Waiting for EMI to finish loading its full catalogue; /ae2webicons cancel to stop";
