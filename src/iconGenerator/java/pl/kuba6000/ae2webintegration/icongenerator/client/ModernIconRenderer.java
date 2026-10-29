@@ -62,7 +62,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     private LongSupplier drawClock = System::nanoTime;
     private final Map<SpriteAnimation.Selection, Long> animationSelections = new EnumMap<>(
         SpriteAnimation.Selection.class);
-    private long spriteAnimationPlans, truncatedAnimationPlans;
+    private long spriteAnimationPlans, reducedAnimationPlans;
     private long snapshotNanos, snapshotCount, setupNanos, setupCount;
     private long drawNanos, drawCount, restoreNanos, restoreCount;
 
@@ -323,9 +323,9 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         animationSelections.merge(selection, 1L, Long::sum);
     }
 
-    void animationPlan(boolean truncated) {
+    void animationPlan(boolean reduced) {
         spriteAnimationPlans++;
-        if (truncated) truncatedAnimationPlans++;
+        if (reduced) reducedAnimationPlans++;
     }
 
     @Override
@@ -334,7 +334,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
             counts.put(selection.statistic, animationSelections.getOrDefault(selection, 0L));
         }
         counts.put("spriteAnimationPlans", spriteAnimationPlans);
-        counts.put("truncatedAnimationPlans", truncatedAnimationPlans);
+        counts.put("reducedAnimationPlans", reducedAnimationPlans);
         counts.put("renderSnapshotNanos", snapshotNanos);
         counts.put("renderSnapshotCount", snapshotCount);
         counts.put("renderSetupNanos", setupNanos);
