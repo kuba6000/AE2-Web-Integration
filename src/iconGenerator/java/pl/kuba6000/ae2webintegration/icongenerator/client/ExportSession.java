@@ -16,7 +16,7 @@ final class ExportSession {
     ExportSession(@NotNull Minecraft minecraft, boolean allowPbo, boolean animated) {
         world = minecraft.theWorld;
         IconPack.Metadata environment = ExportEnvironment.capture();
-        IconCatalogue catalogue = new IconCatalogue(minecraft);
+        IconCatalogue catalogue = new IconCatalogue();
         session = new IconExportSession<>(
             minecraft.mcDataDir.toPath()
                 .resolve("ae2webicons"),

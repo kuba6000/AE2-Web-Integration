@@ -10,12 +10,10 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
@@ -37,7 +35,6 @@ import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
-    private final Minecraft minecraft;
     private final boolean neiInstalled;
     private boolean useNei;
     private boolean neiUnavailable;
@@ -73,8 +70,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int neiCandidates;
     private int fluidCandidates;
 
-    IconCatalogue(@NotNull Minecraft minecraft) {
-        this.minecraft = minecraft;
+    IconCatalogue() {
         neiInstalled = Loader.isModLoaded("NotEnoughItems");
     }
 
@@ -94,7 +90,6 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             failures.accept("nei/setup", failure);
             String warning = "NEI catalogue unavailable (initialization failed); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
-            if (minecraft.thePlayer != null) minecraft.thePlayer.addChatMessage(new ChatComponentText(warning));
         }
         if (useNei && nei == null) {
             return "Waiting for NEI to finish loading its full catalogue; /ae2webicons cancel to stop";
