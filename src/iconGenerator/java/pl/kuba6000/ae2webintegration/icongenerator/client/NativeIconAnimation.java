@@ -40,8 +40,7 @@ final class NativeIconAnimation implements IIconAnimation {
 
     private static final boolean MODIFIED_ATLAS = FMLClientHandler.instance()
         .hasOptifine();
-    private static final int MAX_TICKS = 1200;
-    private static final int MAX_FRAMES = 256;
+    private static final int MAX_TICKS = 12_000;
     private static final Field METADATA = ReflectionHelper
         .findField(TextureAtlasSprite.class, "animationMetadata", "field_110982_k");
     private final LegacyIconRenderer renderer;
@@ -138,7 +137,7 @@ final class NativeIconAnimation implements IIconAnimation {
                 return null;
             }
             timelines.add(timeline);
-            tracks.add(new SpriteTimeline.Track(timeline.durations, timeline.interpolated));
+            tracks.add(new SpriteTimeline.Track(timeline.durations, timeline.indexes, timeline.interpolated));
         }
         if (timelines.isEmpty()) return null;
         // Unknown shader atlas layouts cannot be safely controlled; keep the successful static icon.
@@ -148,10 +147,7 @@ final class NativeIconAnimation implements IIconAnimation {
         }
 
         SpriteTimeline timing = SpriteTimeline.create(tracks);
-        if (timing.truncated()) {
-            renderer.animationUnsupportedTimeline++;
-            return null;
-        }
+        if (timing.reduced()) renderer.reducedAnimationPlans++;
         return new NativeIconAnimation(renderer, candidate, key, atlas, timelines, timing.frames());
     }
 
@@ -159,7 +155,10 @@ final class NativeIconAnimation implements IIconAnimation {
         try {
             AnimationMetadataSection metadata = (AnimationMetadataSection) METADATA.get(sprite);
             int count = metadata.getFrameCount();
-            if (count < 1 || count > MAX_FRAMES) return null;
+            if (count < 1) return null;
+            // Each native position lasts at least one tick; reject before allocating unbounded snapshots.
+            if (count > MAX_TICKS)
+                throw new IllegalArgumentException("Unsupported complete sprite cycle duration: more than 12000 ticks");
             int[] ends = new int[count];
             int[] durations = new int[count];
             int[] indexes = new int[count];
@@ -169,7 +168,8 @@ final class NativeIconAnimation implements IIconAnimation {
                 int image = metadata.getFrameIndex(index);
                 if (duration <= 0 || image < 0 || image >= sprite.getFrameCount()) return null;
                 total += duration;
-                if (total > MAX_TICKS) return null;
+                if (total > MAX_TICKS) throw new IllegalArgumentException(
+                    "Unsupported complete sprite cycle duration: more than 12000 ticks");
                 durations[index] = duration;
                 ends[index] = (int) total;
                 indexes[index] = image;
