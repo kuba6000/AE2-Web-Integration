@@ -10,13 +10,11 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.ReportedException;
-import net.minecraft.util.text.TextComponentString;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
@@ -36,7 +34,6 @@ import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
-    private final Minecraft minecraft;
     private final boolean jeiInstalled;
     private boolean useJei;
     private boolean jeiUnavailable;
@@ -70,8 +67,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int fluidCandidates;
     private int skippedEmpty;
 
-    IconCatalogue(@NotNull Minecraft minecraft) {
-        this.minecraft = minecraft;
+    IconCatalogue() {
         jeiInstalled = Loader.isModLoaded("jei");
     }
 
@@ -89,7 +85,6 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             failures.accept("jei/setup", failure);
             String warning = "JEI catalogue unavailable (initialization failed); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
-            if (minecraft.player != null) minecraft.player.sendMessage(new TextComponentString(warning));
         }
         if (useJei && jei == null)
             return "Waiting for JEI to finish loading its full catalogue; /ae2webicons cancel to stop";
