@@ -231,7 +231,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
                 preparationFailure = animationFailure(failure);
             }
         } catch (RuntimeException | Error failure) {
-            if (preparationFailure != null && failure != preparationFailure) failure.addSuppressed(preparationFailure);
+            if (preparationFailure != null) failure.addSuppressed(preparationFailure);
             throw failure;
         }
         if (preparationFailure != null) throw preparationFailure;
