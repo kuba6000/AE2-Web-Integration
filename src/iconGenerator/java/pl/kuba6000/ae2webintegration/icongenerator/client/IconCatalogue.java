@@ -85,10 +85,14 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             neiDisabled = neiInstalled && NeiCatalogue.disabled();
             useNei = neiInstalled && !neiDisabled;
             nei = useNei ? NeiCatalogue.ready() : null;
-        } catch (NoClassDefFoundError failure) {
+            if (nei != null) recipes = new NeiRecipeCatalogue();
+        } catch (RuntimeException | LinkageError failure) {
+            nei = null;
+            recipes = null;
             neiUnavailable = true;
             useNei = false;
-            String warning = "NEI catalogue unavailable (missing class); exporting native items, OreDictionary and fluids";
+            failures.accept("nei/setup", failure);
+            String warning = "NEI catalogue unavailable (initialization failed); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
             if (minecraft.thePlayer != null) minecraft.thePlayer.addChatMessage(new ChatComponentText(warning));
         }
@@ -96,7 +100,6 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             return "Waiting for NEI to finish loading its full catalogue; /ae2webicons cancel to stop";
         }
         this.failures = failures;
-        if (nei != null) recipes = new NeiRecipeCatalogue();
         initialize();
         prepared = true;
         return null;
