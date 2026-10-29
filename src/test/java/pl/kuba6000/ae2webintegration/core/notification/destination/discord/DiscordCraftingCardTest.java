@@ -43,7 +43,7 @@ class DiscordCraftingCardTest {
             Collections.emptyMap());
         int exactColor = 0xff1234ab;
         int baseColor = 0xffab3412;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
             int[] pixels = new int[4096];
             Arrays.fill(pixels, exactColor);
             writer.add(exact, pixels);

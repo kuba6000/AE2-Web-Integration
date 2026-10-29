@@ -43,7 +43,6 @@ final class PackFormat {
     static final int ICON_BYTES = ICON_PIXELS * Integer.BYTES;
     static final int GUTTER = 1;
     static final int CELL_PITCH = ICON_SIZE + 2 * GUTTER;
-    static final int SMALL_PAGE_DIMENSION = 512;
     static final int DEFAULT_PAGE_DIMENSION = 1024;
     static final int MAX_PAGE_DIMENSION = 2048;
     static final int MAX_FAILURE_RECORDS = 100;

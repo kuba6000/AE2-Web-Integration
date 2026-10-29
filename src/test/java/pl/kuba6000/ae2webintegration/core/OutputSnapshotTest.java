@@ -165,10 +165,14 @@ class OutputSnapshotTest extends GridTestScope {
             "today",
             Collections.emptyMap());
         Path archive;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff112233);
             writer.add(otherKey, pixels);
+            for (int cell = 1; cell < 225; cell++) {
+                Arrays.fill(pixels, 0xff000000 | cell);
+                writer.add(TestGridFixtures.key(9000 + cell), pixels);
+            }
             Arrays.fill(pixels, 0xff445566);
             writer.add(
                 snapshot.description()

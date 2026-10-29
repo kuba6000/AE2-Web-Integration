@@ -32,7 +32,6 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 public final class PackExportWriter {
 
     public static final int MAX_CAPTURES_PER_BATCH = 1024;
-    private static final int PAGE_SIZE = 1024;
     private static final int MAX_BUFFERED_BATCHES = 2;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "AE2 web icon pack writer");
@@ -69,7 +68,7 @@ public final class PackExportWriter {
     public PackExportWriter(@NotNull Path root, @NotNull IconPack.Metadata environment) {
         try {
             submit(() -> {
-                writer = new IconPackWriter(root, environment, PAGE_SIZE);
+                writer = new IconPackWriter(root, environment);
                 initialized = true;
                 return null;
             });

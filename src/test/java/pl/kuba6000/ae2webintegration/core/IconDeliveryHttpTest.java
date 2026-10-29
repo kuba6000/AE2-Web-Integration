@@ -189,7 +189,7 @@ class IconDeliveryHttpTest {
                 "test",
                 "today",
                 Collections.emptyMap());
-            try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
                 int[] pixels = new int[4096];
                 Arrays.fill(pixels, 0xff1234ab);
                 writer.add(exact, pixels);
@@ -1185,7 +1185,7 @@ class IconDeliveryHttpTest {
             "test",
             "today",
             Collections.emptyMap());
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff112233);
             writer.add(exact, pixels);
@@ -2148,7 +2148,7 @@ class IconDeliveryHttpTest {
             "test",
             "today",
             Collections.emptyMap());
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff405060);
             if (keys.length == 0) writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), pixels);

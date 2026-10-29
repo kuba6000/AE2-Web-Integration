@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -63,9 +62,9 @@ class IconPackWriterConcurrencyTest {
             throw fatal;
         })) {
             Future<Path> export = owner.submit(() -> {
-                try (IconPackWriter writer = new IconPackWriter(directory, metadata(), 64)) {
-                    add(writer, 1);
-                    add(writer, 2);
+                try (IconPackWriter writer = new IconPackWriter(directory, metadata())) {
+                    addPage(writer, 1);
+                    addPage(writer, 2);
                     if (close) {
                         writer.close();
                         return null;
@@ -157,8 +156,8 @@ class IconPackWriterConcurrencyTest {
             started.countDown();
             await(release);
             delegate.run();
-        }); IconPackWriter writer = new IconPackWriter(directory, metadata(), 64)) {
-            add(writer, 1);
+        }); IconPackWriter writer = new IconPackWriter(directory, metadata())) {
+            addPage(writer, 1);
             await(started);
             Future<Boolean> closed = owner.submit(() -> {
                 Thread.currentThread()
@@ -191,11 +190,10 @@ class IconPackWriterConcurrencyTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = { 64, 512, 1024, 2048 })
-    void finishedPageOwnershipIsBoundedUntilEncodersReleaseTheirBuffers(int pageSize) throws Exception {
-        int allowance = pageSize == 2048 ? 2 : 10;
-        int cells = pageSize == 64 ? 1 : (pageSize / 66) * (pageSize / 66);
+    @Test
+    void finishedPageOwnershipIsBoundedUntilEncodersReleaseTheirBuffers() throws Exception {
+        int allowance = 10;
+        int cells = 225;
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch full = new CountDownLatch(1);
         ExecutorService owner = Executors.newSingleThreadExecutor();
@@ -204,7 +202,7 @@ class IconPackWriterConcurrencyTest {
             delegate.run();
         })) {
             Future<Path> export = owner.submit(() -> {
-                try (IconPackWriter writer = new IconPackWriter(directory, metadata(), pageSize)) {
+                try (IconPackWriter writer = new IconPackWriter(directory, metadata())) {
                     for (int i = 1; i <= cells * (allowance + 1); i++) {
                         if (i == cells * (allowance + 1)) full.countDown();
                         add(writer, i);
@@ -259,9 +257,9 @@ class IconPackWriterConcurrencyTest {
         Map<String, Long> supplied = new TreeMap<>();
         for (int i = 0; i < 64; i++) supplied.put("caller" + i, (long) i);
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata(), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata())) {
             writer.statistics(supplied, Collections.emptyList());
-            add(writer, 1);
+            addPage(writer, 1);
             output = writer.finish();
         }
         JsonObject counts = counts(output);
@@ -297,8 +295,8 @@ class IconPackWriterConcurrencyTest {
             started.countDown();
             await(release);
             delegate.run();
-        }); IconPackWriter writer = new IconPackWriter(directory, metadata(), 64)) {
-            add(writer, 1);
+        }); IconPackWriter writer = new IconPackWriter(directory, metadata())) {
+            addPage(writer, 1);
             await(started);
             Future<Path> finish = owner.submit(() -> writer.finish(() -> true));
             try {
@@ -355,11 +353,16 @@ class IconPackWriterConcurrencyTest {
     }
 
     private static Path writeTwoPages(Path directory) throws IOException {
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata(), 64)) {
-            add(writer, 1);
-            add(writer, 2);
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata())) {
+            addPage(writer, 1);
+            addPage(writer, 2);
             return writer.finish();
         }
+    }
+
+    private static void addPage(IconPackWriter writer, int index) throws IOException {
+        add(writer, index);
+        for (int cell = 1; cell < 225; cell++) add(writer, index * 1000 + cell);
     }
 
     private static void add(IconPackWriter writer, int index) throws IOException {

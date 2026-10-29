@@ -9,17 +9,19 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
+
 /** Bounded common capture times for native sprites whose frame schedules are already normalized. */
 public final class SpriteTimeline {
 
-    private static final int MAX_TICKS = 1200;
-    private static final int MAX_FRAMES = 256;
+    private static final int MAX_TICKS = 12000;
+    private static final int MAX_FRAMES = IconPackWriter.MAX_ANIMATION_IMAGES;
     private final @NotNull List<Frame> frames;
-    private final boolean truncated;
+    private final boolean reduced;
 
-    private SpriteTimeline(@NotNull List<Frame> frames, boolean truncated) {
+    private SpriteTimeline(@NotNull List<Frame> frames, boolean reduced) {
         this.frames = Collections.unmodifiableList(frames);
-        this.truncated = truncated;
+        this.reduced = reduced;
     }
 
     public static @NotNull SpriteTimeline create(@NotNull List<Track> tracks) {
@@ -28,27 +30,49 @@ public final class SpriteTimeline {
         for (Track track : tracks) {
             long cycle = track.ends[track.ends.length - 1];
             long factor = period / gcd(period, cycle);
-            period = cycle > MAX_TICKS || factor > MAX_TICKS / cycle ? MAX_TICKS + 1 : factor * cycle;
-            if (period > MAX_TICKS) break;
+            if (cycle > MAX_TICKS || factor > MAX_TICKS / cycle)
+                throw new IllegalArgumentException("Complete sprite cycle exceeds 600000 ms");
+            period = factor * cycle;
         }
-        int end = (int) Math.min(period, MAX_TICKS);
+        int end = (int) period;
         List<Frame> frames = new ArrayList<>();
         int tick = 0;
-        while (tick < end && frames.size() < MAX_FRAMES) {
+        while (tick < end) {
             int next = end;
             for (Track track : tracks) next = Math.min(next, track.nextChange(tick, end));
             frames.add(new Frame(tick, (next - tick) * 50));
             tick = next;
         }
-        return new SpriteTimeline(frames, period > MAX_TICKS || tick < end);
+        if (frames.size() <= MAX_FRAMES) return new SpriteTimeline(frames, false);
+        List<Frame> selected = new ArrayList<>();
+        // Sampling time rather than event rank preserves long holds amid dense changes.
+        int event = 0;
+        for (int index = 0; index < MAX_FRAMES; index++) {
+            int moment = index * end / MAX_FRAMES;
+            while (event + 1 < frames.size() && frames.get(event + 1)
+                .tick() <= moment) event++;
+            Frame frame = frames.get(event);
+            if (selected.isEmpty() || selected.get(selected.size() - 1)
+                .tick() != frame.tick()) selected.add(frame);
+        }
+        for (int index = 0; index < selected.size(); index++) {
+            int start = selected.get(index)
+                .tick();
+            int next = index + 1 == selected.size() ? end
+                : selected.get(index + 1)
+                    .tick();
+            selected.set(index, new Frame(start, (next - start) * 50));
+        }
+        return new SpriteTimeline(selected, true);
     }
 
     public @NotNull List<Frame> frames() {
         return frames;
     }
 
-    public boolean truncated() {
-        return truncated;
+    /** True when intermediate native states were omitted while retaining the complete cycle duration. */
+    public boolean reduced() {
+        return reduced;
     }
 
     private static long gcd(long left, long right) {
@@ -60,13 +84,17 @@ public final class SpriteTimeline {
         return left;
     }
 
-    /** Loaded frame durations in ticks, including repeated frame entries in their original order. */
+    /** Loaded durations in ticks and native image indexes, both in the original schedule order. */
     public static final class Track {
 
         private final long[] ends;
         private final boolean interpolated;
+        private final int[] indexes;
 
-        public Track(int @NotNull [] frameDurationsTicks, boolean interpolated) {
+        public Track(int @NotNull [] frameDurationsTicks, int @NotNull [] frameIndexes, boolean interpolated) {
+            if (frameIndexes.length != frameDurationsTicks.length)
+                throw new IllegalArgumentException("Mismatched sprite schedule");
+            indexes = frameIndexes.clone();
             if (frameDurationsTicks.length == 0) throw new IllegalArgumentException("Empty sprite timeline");
             ends = new long[frameDurationsTicks.length];
             long total = 0;
@@ -80,12 +108,21 @@ public final class SpriteTimeline {
         }
 
         private int nextChange(int tick, int end) {
-            if (interpolated) return Math.min(end, tick + 1);
             long cycle = ends[ends.length - 1];
             long position = tick % cycle;
             int index = Arrays.binarySearch(ends, position);
             index = index < 0 ? -index - 1 : index + 1;
-            return (int) Math.min(end, tick + ends[index] - position);
+            long next = tick + ends[index] - position;
+            if (interpolated && indexes[index] != indexes[(index + 1) % indexes.length]) return Math.min(end, tick + 1);
+            for (int visited = 0; visited < indexes.length; visited++) {
+                int following = (index + 1) % indexes.length;
+                if (indexes[index] != indexes[following]) return (int) Math.min(end, next);
+                index = following;
+                if (interpolated && indexes[index] != indexes[(index + 1) % indexes.length])
+                    return (int) Math.min(end, next + 1);
+                next += ends[index] - (index == 0 ? 0 : ends[index - 1]);
+            }
+            return end;
         }
     }
 

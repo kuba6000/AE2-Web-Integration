@@ -41,7 +41,7 @@ class IconPackWriterCleanupTest {
             "today",
             Collections.emptyMap());
         StableKey key = StableKey.create(sink -> sink.putInt(1));
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
             writer.add(key, new int[4096]);
             Path scratch;
             try (Stream<Path> files = Files.list(directory)) {

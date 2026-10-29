@@ -52,23 +52,25 @@ class IconPackAnimationTest {
     @TempDir
     Path directory;
 
-    @ParameterizedTest
-    @ValueSource(ints = { 64, 512, 1024, 2048 })
-    void everyFrameOfMaximumUniqueSequenceLivesOnOnePage(int staticPageSize) throws Exception {
+    @Test
+    void everyFrameOfMaximumUniqueSequenceLivesOnOnePage() throws Exception {
         Path output;
         try (IconPackWriter writer = new IconPackWriter(
             directory,
-            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
-            staticPageSize)) {
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()))) {
             writer.add(KEY, pixels(0xff000000));
-            for (int index = 0; index < 256; index++)
+            for (int index = 0; index < 225; index++)
                 writer.addAnimationFrame(KEY, pixels(0xff000000 | index), index + 1);
             output = writer.finish();
         }
         try (IconPack pack = open(output)) {
+            for (IconPack.Page page : pack.pages()) {
+                assertEquals(1024, page.width());
+                assertEquals(1024, page.height());
+            }
             List<IconPack.Frame> frames = pack.animation(KEY)
                 .frames();
-            assertEquals(256, frames.size());
+            assertEquals(225, frames.size());
             Set<IconPack.Location> locations = new HashSet<>();
             for (int index = 0; index < frames.size(); index++) {
                 locations.add(location(pack.animation(KEY), index));
@@ -77,14 +79,102 @@ class IconPackAnimationTest {
                     frames.get(index)
                         .durationMillis());
             }
-            assertEquals(256, locations.size());
+            assertEquals(225, locations.size());
             assertEquals(
-                2048,
+                1024,
                 location(pack.animation(KEY), 0).page()
                     .width());
             assertEquals(0xff000000, color(pack, location(pack.animation(KEY), 0)));
-            assertEquals(0xff0000ff, color(pack, location(pack.animation(KEY), 255)));
+            assertEquals(0xff0000e0, color(pack, location(pack.animation(KEY), 224)));
             assertEquals(0xff000000, color(pack, pack.find(KEY)));
+        }
+    }
+
+    @Test
+    void excessDistinctAnimationImageIsRejectedBeforeItCanCrossThePage() throws Exception {
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            writer.add(KEY, pixels(0xffabcdef));
+            for (int index = 0; index < 225; index++) writer.addAnimationFrame(KEY, pixels(index), 50);
+            IconPackWriter.CapacityException failure = assertThrows(
+                IconPackWriter.CapacityException.class,
+                () -> writer.addAnimationFrame(KEY, pixels(225), 50));
+            assertEquals(IconPackWriter.CapacityException.Scope.RESOURCE, failure.scope());
+            writer.discardAnimation(KEY);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertNull(pack.animation(KEY));
+            assertEquals(0xffabcdef, color(pack, pack.find(KEY)));
+        }
+    }
+
+    @Test
+    void independentAnimationsFillAvailableSpaceRegardlessOfKeyOrder() throws Exception {
+        StableKey large = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
+        StableKey medium = StableKey.parse("AgICAgICAgICAgICAgICAg");
+        Path output;
+        try (IconPackWriter writer = writer()) {
+            for (StableKey key : Arrays.asList(KEY, large, medium)) writer.add(key, pixels(0xffabcdef));
+            for (int index = 0; index < 24; index++) writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 50);
+            for (int index = 0; index < 225; index++) writer.addAnimationFrame(large, pixels(0xff002000 | index), 50);
+            for (int index = 0; index < 200; index++) writer.addAnimationFrame(medium, pixels(0xff003000 | index), 50);
+            output = writer.finish();
+        }
+        try (IconPack pack = open(output)) {
+            assertEquals(
+                3,
+                pack.pages()
+                    .size());
+            assertEquals(
+                pack.animation(KEY)
+                    .page(),
+                pack.animation(medium)
+                    .page());
+            for (StableKey key : Arrays.asList(KEY, large, medium)) {
+                assertEquals(
+                    1024,
+                    pack.animation(key)
+                        .page()
+                        .width());
+                assertEquals(0xffabcdef, color(pack, pack.find(key)));
+            }
+            assertEquals(0xff001017, color(pack, location(pack.animation(KEY), 23)));
+            assertEquals(0xff0020e0, color(pack, location(pack.animation(large), 224)));
+            assertEquals(0xff0030c7, color(pack, location(pack.animation(medium), 199)));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 64, 512, 2048 })
+    void historicalArchivesRetainTheirOriginalGeometryAndSequences(int dimension) throws Exception {
+        Path fixture = directory.resolve("legacy.ae2wi-icons");
+        try (InputStream input = getClass().getResourceAsStream("/icons/legacy-" + dimension + ".ae2wi-icons")) {
+            assertNotNull(input);
+            Files.copy(input, fixture);
+        }
+        try (IconPack pack = IconPack.open(fixture, "test", "loader", "1")) {
+            assertEquals(
+                dimension,
+                pack.find(KEY)
+                    .page()
+                    .width());
+            assertEquals(0xffabcdef, color(pack, pack.find(KEY)));
+            if (dimension == 2048) {
+                assertEquals(
+                    256,
+                    pack.animation(KEY)
+                        .frames()
+                        .size());
+                assertEquals(
+                    12800,
+                    pack.animation(KEY)
+                        .frames()
+                        .stream()
+                        .mapToInt(IconPack.Frame::durationMillis)
+                        .sum());
+                assertEquals(0xff0000ff, color(pack, location(pack.animation(KEY), 255)));
+            } else assertNull(pack.animation(KEY));
         }
     }
 
@@ -154,7 +244,7 @@ class IconPackAnimationTest {
             Path output;
             try (IconPackWriter writer = writer()) {
                 writer.add(KEY, pixels(0xff000000));
-                for (int index = 0; index < 256; index++) writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 10);
+                for (int index = 0; index < 225; index++) writer.addAnimationFrame(KEY, pixels(0xff001000 | index), 10);
                 writer.discardAnimation(KEY);
                 output = writer.finish();
             }
@@ -173,7 +263,7 @@ class IconPackAnimationTest {
     void cancellationWhileEncodingFinalAnimationPagesSettlesWorkersAndPublishesNothing() throws Exception {
         AtomicBoolean canceled = new AtomicBoolean();
         try (ControlledPng encoder = new ControlledPng((image, delegate) -> {
-            if (image.getWidth() >= 1024) canceled.set(true);
+            if (image.getRGB(1, 1) == 0xff001000) canceled.set(true);
             delegate.run();
         })) {
             try (IconPackWriter writer = writer()) {
@@ -265,8 +355,7 @@ class IconPackAnimationTest {
         Path output;
         try (IconPackWriter writer = new IconPackWriter(
             directory,
-            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
-            512)) {
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()))) {
             writer.add(KEY, pixels(0xff112233));
             writer.sealStatic();
             writer.sealStatic();
@@ -631,8 +720,7 @@ class IconPackAnimationTest {
     private IconPackWriter writer() throws Exception {
         return new IconPackWriter(
             directory,
-            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()),
-            64);
+            new IconPack.Metadata("1.7.10", "forge", "1", "test", "today", Collections.emptyMap()));
     }
 
     private static IconPack open(Path output) throws Exception {
