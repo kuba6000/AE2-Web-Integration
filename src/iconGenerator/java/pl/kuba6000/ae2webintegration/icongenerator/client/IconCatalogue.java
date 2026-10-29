@@ -81,10 +81,13 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         try {
             useJei = jeiInstalled;
             jei = useJei ? JeiCatalogue.ready() : null;
-        } catch (LinkageError failure) {
+        } catch (RuntimeException | LinkageError failure) {
+            jei = null;
+            recipes = null;
             jeiUnavailable = true;
             useJei = false;
-            String warning = "JEI catalogue unavailable (incompatible integration); exporting native items, OreDictionary and fluids";
+            failures.accept("jei/setup", failure);
+            String warning = "JEI catalogue unavailable (initialization failed); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
             if (minecraft.player != null) minecraft.player.sendMessage(new TextComponentString(warning));
         }
