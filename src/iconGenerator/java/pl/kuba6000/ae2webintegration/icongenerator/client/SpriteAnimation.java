@@ -93,7 +93,7 @@ final class SpriteAnimation implements IIconAnimation {
             }
             if (sampled) {
                 renderer.animationSelection(Selection.CUSTOM_RENDERER);
-                return new SpriteAnimation(minecraft, renderer, candidate, key, List.of(), null);
+                return sampled(minecraft, renderer, candidate, key);
             }
             List<TextureAtlasSprite> sprites = used.stream()
                 .filter(sprite -> sprite.contents().animatedTexture != null)
@@ -134,9 +134,14 @@ final class SpriteAnimation implements IIconAnimation {
             SpriteTimeline timeline = SpriteTimeline.create(tracks);
             renderer.animationPlan(timeline.truncated());
             return new SpriteAnimation(minecraft, renderer, candidate, key, sprites, timeline);
-        } catch (RuntimeException failure) {
-            throw new RenderFailure(failure);
+        } catch (RuntimeException | LinkageError failure) {
+            throw ModernIconRenderer.animationFailure(failure);
         }
+    }
+
+    static @NotNull IIconAnimation sampled(Minecraft minecraft, ModernIconRenderer renderer, IconCandidate candidate,
+        StableKey key) {
+        return new SpriteAnimation(minecraft, renderer, candidate, key, List.of(), null);
     }
 
     private static boolean collectItem(Minecraft minecraft, ItemStack item, Set<TextureAtlasSprite> sprites) {
@@ -187,8 +192,8 @@ final class SpriteAnimation implements IIconAnimation {
         try (RenderState ignored = renderer.controlledState();
             AtlasPixels pixels = new AtlasPixels(minecraft, sprites)) {
             pixels.changing();
-            for (int i = 0; i < sprites.size(); i++) upload(sprites.get(i), tickers.get(i), frame.tick());
             try {
+                for (int i = 0; i < sprites.size(); i++) upload(sprites.get(i), tickers.get(i), frame.tick());
                 renderer.animated(candidate, key, captures, CaptureKind.FRAME, frame.durationMillis(), drawClock);
             } catch (RenderFailure failure) {
                 drawFailure = failure;
@@ -202,24 +207,31 @@ final class SpriteAnimation implements IIconAnimation {
             .size();
     }
 
-    private void upload(TextureAtlasSprite sprite, SpriteContents.Ticker ticker, int tick) {
-        SpriteContents.AnimatedTexture animation = sprite.contents().animatedTexture;
-        long cycle = 0;
-        for (SpriteContents.FrameInfo frame : animation.frames) cycle += frame.time;
-        long remaining = tick % cycle;
-        int index = 0;
-        while (remaining >= animation.frames.get(index).time) remaining -= animation.frames.get(index++).time;
-        ticker.frame = index;
-        ticker.subFrame = (int) remaining;
+    private void upload(TextureAtlasSprite sprite, SpriteContents.Ticker ticker, int tick) throws RenderFailure {
         RenderSystem.bindTexture(
             minecraft.getTextureManager()
                 .getTexture(sprite.atlasLocation())
                 .getId());
-        animation.uploadFrame(sprite.getX(), sprite.getY(), animation.frames.get(index).index);
-        if (ticker.interpolationData != null && remaining != 0)
-            ((InterpolationDataInvoker) (Object) ticker.interpolationData)
-                .ae2webicons$uploadInterpolatedFrame(sprite.getX(), sprite.getY(), ticker);
+        RenderFailure uploadFailure = null;
+        try {
+            SpriteContents.AnimatedTexture animation = sprite.contents().animatedTexture;
+            long cycle = 0;
+            for (SpriteContents.FrameInfo frame : animation.frames) cycle += frame.time;
+            long remaining = tick % cycle;
+            int index = 0;
+            while (remaining >= animation.frames.get(index).time) remaining -= animation.frames.get(index++).time;
+            ticker.frame = index;
+            ticker.subFrame = (int) remaining;
+            animation.uploadFrame(sprite.getX(), sprite.getY(), animation.frames.get(index).index);
+            if (ticker.interpolationData != null && remaining != 0)
+                ((InterpolationDataInvoker) (Object) ticker.interpolationData)
+                    .ae2webicons$uploadInterpolatedFrame(sprite.getX(), sprite.getY(), ticker);
+        } catch (RuntimeException | LinkageError failure) {
+            uploadFailure = ModernIconRenderer.animationFailure(failure);
+        }
+        // A callback exception cannot hide a GPU transfer error. Atlas/state closure still follows.
         AtlasPixels.checkTransfer();
+        if (uploadFailure != null) throw uploadFailure;
     }
 
     @Override
