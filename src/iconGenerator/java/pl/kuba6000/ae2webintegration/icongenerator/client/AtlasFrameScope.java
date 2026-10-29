@@ -16,6 +16,8 @@ import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture.RenderFailure;
+
 /** Saves only touched sprite mip rectangles. Every write is restored before the client can yield. */
 final class AtlasFrameScope implements AutoCloseable {
 
@@ -110,14 +112,20 @@ final class AtlasFrameScope implements AutoCloseable {
         }
     }
 
-    void select(int tick) {
+    void select(int tick) throws RenderFailure {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
         modified = true;
         for (Rectangle rectangle : rectangles) {
-            rectangle.upload.clear();
-            sprites.get(rectangle.sprite)
-                .write(tick, rectangle.level, rectangle.upload);
-            rectangle.upload.flip();
+            try {
+                rectangle.upload.clear();
+                sprites.get(rectangle.sprite)
+                    .write(tick, rectangle.level, rectangle.upload);
+                rectangle.upload.flip();
+            } catch (RuntimeException | LinkageError failure) {
+                RenderFailure safeFailure = LegacyIconRenderer.animationFailure(failure);
+                checkError();
+                throw safeFailure;
+            }
             GL11.glTexSubImage2D(
                 GL11.GL_TEXTURE_2D,
                 rectangle.level,

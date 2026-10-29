@@ -223,26 +223,38 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
         throws RenderFailure {
         IIconAnimation animation = null;
-        Throwable preparationFailure = null;
+        RenderFailure preparationFailure = null;
         try (RenderState ignored = state.snapshot()) {
             try {
                 animation = candidate.animation(this, key);
-            } catch (Throwable failure) {
-                Throwable cause = failure instanceof ReportedException ? failure.getCause() : failure;
-                if (cause instanceof VirtualMachineError fatal) throw fatal;
-                if (cause instanceof ThreadDeath fatal) throw fatal;
-                preparationFailure = cause;
+            } catch (RuntimeException | LinkageError failure) {
+                preparationFailure = animationFailure(failure);
             }
         } catch (RuntimeException | Error failure) {
             if (preparationFailure != null && failure != preparationFailure) failure.addSuppressed(preparationFailure);
             throw failure;
         }
-        if (preparationFailure != null) throw new RenderFailure(preparationFailure);
+        if (preparationFailure != null) throw preparationFailure;
         if (animation != null) {
             if (animation.kind() == IIconAnimation.Kind.SPRITE) animationSpriteCursors++;
             else animationSampledCursors++;
         }
         return animation;
+    }
+
+    @Override
+    public @NotNull IIconAnimation sampledAnimation(@NotNull IconCandidate candidate, @NotNull StableKey key) {
+        animationSampledCursors++;
+        return NativeIconAnimation.sampled(this, candidate, key);
+    }
+
+    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+        Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
+            ? failure.getCause()
+            : failure;
+        if (cause instanceof VirtualMachineError fatal) throw fatal;
+        if (cause instanceof ThreadDeath fatal) throw fatal;
+        return new RenderFailure(cause == null ? failure : cause);
     }
 
     void animationFrame(IconCandidate candidate, StableKey key, List<Capture> captures, CaptureKind kind, long duration,
