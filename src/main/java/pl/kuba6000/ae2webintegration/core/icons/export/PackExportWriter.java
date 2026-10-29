@@ -160,7 +160,7 @@ public final class PackExportWriter {
         for (Failure omitted : failures) {
             if (publication.get() == Publication.CANCELED) return;
             if (omitted.animationKey() != null) {
-                disabledAnimations.add(omitted.animationKey());
+                if (!omitted.animationFallback()) disabledAnimations.add(omitted.animationKey());
                 output.discardAnimation(omitted.animationKey());
             }
             output.failure(omitted.context(), omitted.reason());
@@ -316,15 +316,22 @@ public final class PackExportWriter {
     }
 
     @Desugar
-    public record Failure(@NotNull String context, @NotNull String reason, @Nullable StableKey animationKey) {
+    public record Failure(@NotNull String context, @NotNull String reason, @Nullable StableKey animationKey,
+        boolean animationFallback) {
 
         public Failure(@NotNull String context, @NotNull String reason) {
-            this(context, reason, null);
+            this(context, reason, null, false);
+        }
+
+        /** Reset the prior forced clip without overriding any existing capacity-based disable decision. */
+        public static @NotNull Failure animationFallback(@NotNull StableKey key, @NotNull String context,
+            @NotNull String reason) {
+            return new Failure(context, reason, key, true);
         }
 
         public static @NotNull Failure animation(@NotNull StableKey key, @NotNull String context,
             @NotNull String reason) {
-            return new Failure(context, reason, key);
+            return new Failure(context, reason, key, false);
         }
     }
 }

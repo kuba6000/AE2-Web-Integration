@@ -24,6 +24,16 @@ public interface IIconCapture<C extends IIconCandidate<C>> extends AutoCloseable
         return null;
     }
 
+    /**
+     * One live-sampling alternative after a safely restored controlled-animation failure. Do not rerun
+     * controlled classification or capture here. Null means this backend cannot sample the resource.
+     * A returned cursor must be SAMPLED; its safe failure keeps only the original static icon.
+     */
+    default @Nullable IIconAnimation sampledAnimation(@NotNull C candidate, @NotNull StableKey key)
+        throws RenderFailure {
+        return null;
+    }
+
     void statistics(@NotNull Map<String, Long> counts);
 
     @Override

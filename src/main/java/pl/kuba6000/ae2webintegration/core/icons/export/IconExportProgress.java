@@ -17,6 +17,7 @@ final class IconExportProgress {
     int processed;
     private int total;
     int renderFailures;
+    int animationFallbacks;
     int omitted;
     int duplicates;
     int exactCandidates;
@@ -48,6 +49,7 @@ final class IconExportProgress {
         counts.put("uniqueIdentities", (long) total);
         counts.put("processed", (long) processed);
         counts.put("renderFailures", (long) renderFailures);
+        counts.put("animationFallbacks", (long) animationFallbacks);
         counts.put("discoveryFailures", (long) (omitted - renderFailures));
         counts.put("captured", (long) captured);
         counts.put("failures", (long) omitted);

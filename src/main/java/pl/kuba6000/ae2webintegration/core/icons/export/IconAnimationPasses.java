@@ -11,6 +11,7 @@ import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -43,19 +44,26 @@ final class IconAnimationPasses implements AutoCloseable {
     private long workBudget = GROUP_TARGET;
     private int groupsStarted, groupsFinished;
     private long groupTime;
+    private @Nullable Entry recovering;
+    private @Nullable Throwable recoveryCause;
 
     IconAnimationPasses(@NotNull LongSupplier clock) {
         this.clock = clock;
     }
 
-    void add(@NotNull StableKey key, @NotNull String context, @NotNull IIconAnimation cursor) {
-        Entry entry = new Entry(key, context, cursor);
+    void add(@NotNull StableKey key, @NotNull String context, @NotNull IIconAnimation cursor,
+        @Nullable SampledFallback fallback) {
+        Entry entry = new Entry(key, context, cursor, fallback);
         if (cursor.kind() == IIconAnimation.Kind.SPRITE) sprites.addLast(entry);
         else sampled.addLast(entry);
     }
 
     boolean done() {
-        return !awaitingProbe && sprites.isEmpty() && sampled.isEmpty() && group.isEmpty() && queuedGroups.isEmpty();
+        return recovering == null && !awaitingProbe
+            && sprites.isEmpty()
+            && sampled.isEmpty()
+            && group.isEmpty()
+            && queuedGroups.isEmpty();
     }
 
     boolean awaitingProbe() {
@@ -109,6 +117,12 @@ final class IconAnimationPasses implements AutoCloseable {
                     more = false;
                 }
             } catch (IIconCapture.RenderFailure failure) {
+                if (sprite && entry.fallback != null) {
+                    recovering = queue.removeFirst();
+                    recoveryCause = failure.getCause();
+                    // The owner must drain old transfers before closing this cursor or preparing live sampling.
+                    return;
+                }
                 omitted.accept(entry, failure.getCause());
                 more = false;
             }
@@ -127,6 +141,29 @@ final class IconAnimationPasses implements AutoCloseable {
                 break;
             }
             if (clock.getAsLong() - started >= FRAME_BUDGET) break;
+        }
+    }
+
+    /** Resolve one failed controlled cursor only after its deferred readback has drained. */
+    void recover(@NotNull List<PackExportWriter.Capture> captures, @NotNull BiConsumer<Entry, Throwable> fallback,
+        @NotNull BiConsumer<Entry, Throwable> omitted) {
+        Entry entry = recovering;
+        if (entry == null) return;
+        Throwable cause = recoveryCause;
+        assert cause != null && entry.fallback != null;
+        // Remove ownership before the close attempt, matching ordinary completed-cursor teardown.
+        recovering = null;
+        recoveryCause = null;
+        captures.removeIf(
+            capture -> capture.key()
+                .equals(entry.key) && capture.kind() == PackExportWriter.CaptureKind.FRAME);
+        entry.cursor.close();
+        fallback.accept(entry, cause);
+        try {
+            IIconAnimation replacement = entry.fallback.create();
+            if (replacement != null) sampled.addLast(new Entry(entry.key, entry.context, replacement, null));
+        } catch (IIconCapture.RenderFailure failure) {
+            omitted.accept(entry, failure.getCause());
         }
     }
 
@@ -185,6 +222,11 @@ final class IconAnimationPasses implements AutoCloseable {
 
     @Override
     public void close() {
+        if (recovering != null) {
+            completed.addLast(recovering);
+            recovering = null;
+            recoveryCause = null;
+        }
         completed.addAll(sprites);
         completed.addAll(sampled);
         completed.addAll(group);
@@ -239,18 +281,28 @@ final class IconAnimationPasses implements AutoCloseable {
         counts.put("animationGroups", (long) groupsStarted);
     }
 
+    @FunctionalInterface
+    interface SampledFallback {
+
+        @Nullable
+        IIconAnimation create() throws IIconCapture.RenderFailure;
+    }
+
     static final class Entry {
 
         final @NotNull StableKey key;
         final @NotNull String context;
         final @NotNull IIconAnimation cursor;
+        final @Nullable SampledFallback fallback;
         int samples;
         long workNanos;
 
-        Entry(@NotNull StableKey key, @NotNull String context, @NotNull IIconAnimation cursor) {
+        Entry(@NotNull StableKey key, @NotNull String context, @NotNull IIconAnimation cursor,
+            @Nullable SampledFallback fallback) {
             this.key = key;
             this.context = context;
             this.cursor = cursor;
+            this.fallback = fallback;
         }
     }
 }

@@ -208,6 +208,10 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         List<Capture> captures = new ArrayList<>();
         animations.capture(captures, (entry, cause) -> omitAnimation(entry.key, entry.context, cause));
         renderer.drain(captures);
+        animations.recover(
+            captures,
+            (entry, cause) -> animationFallback(entry.key, entry.context, cause),
+            (entry, cause) -> omitAnimation(entry.key, entry.context, cause));
         animations.releaseCompleted();
         if (!captures.isEmpty() || !failures.isEmpty()) {
             writer.write(captures, failures);
@@ -290,13 +294,20 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                     queued.key(),
                     queued.candidate()
                         .context(),
-                    cursor);
+                    cursor,
+                    cursor.kind() == IIconAnimation.Kind.SPRITE
+                        ? () -> renderer.sampledAnimation(queued.candidate(), queued.key())
+                        : null);
             } catch (IIconCapture.RenderFailure failure) {
-                omitAnimation(
-                    queued.key(),
-                    queued.candidate()
-                        .context(),
-                    failure.getCause());
+                String context = queued.candidate()
+                    .context();
+                animationFallback(queued.key(), context, failure.getCause());
+                try {
+                    IIconAnimation fallback = renderer.sampledAnimation(queued.candidate(), queued.key());
+                    if (fallback != null) animations.add(queued.key(), context, fallback, null);
+                } catch (IIconCapture.RenderFailure sampledFailure) {
+                    omitAnimation(queued.key(), context, sampledFailure.getCause());
+                }
             }
         }
     }
@@ -338,6 +349,13 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         failures.add(new Failure(context, reason));
         progress.omitted++;
         LOG.warn("Icon candidate omitted ({}): {}", context, reason);
+    }
+
+    private void animationFallback(@NotNull StableKey key, @NotNull String context, @NotNull Throwable failure) {
+        String reason = failureReason(failure);
+        failures.add(Failure.animationFallback(key, context + "/animation", reason));
+        progress.animationFallbacks++;
+        LOG.warn("Controlled icon animation failed; trying live samples ({}): {}", context, reason);
     }
 
     private void omitAnimation(@NotNull StableKey key, @NotNull String context, @NotNull Throwable failure) {
