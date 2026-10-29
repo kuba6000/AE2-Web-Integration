@@ -82,28 +82,35 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
                 throw new IllegalStateException(
                     "EMI reload failed or is retrying; start a new export after EMI reload completes");
             }
-        } catch (LinkageError failure) {
+        } catch (RuntimeException | LinkageError failure) {
+            emi = null;
             emiUnavailable = true;
             useEmi = false;
-            String warning = "EMI catalogue unavailable (incompatible integration); exporting native items and fluids only";
+            failures.accept("emi/setup", failure);
+            String warning = "EMI catalogue unavailable (initialization failed); exporting native items and fluids only";
             LOG.warn(warning, failure);
             if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal(warning), false);
         }
         if (useEmi && emi == null) {
             return "Waiting for EMI to finish loading its full catalogue; /ae2webicons cancel to stop";
         }
-        initialize();
+        initialize(failures);
         prepared = true;
         return null;
     }
 
-    private void initialize() {
+    private void initialize(@NotNull BiConsumer<String, Throwable> failures) {
         long started = System.nanoTime();
         // Match ordinary creative visibility, without privileged operator entries.
-        CreativeModeTabs.tryRebuildTabContents(features, false, minecraft.level.registryAccess());
-        creativeRebuildNanos = System.nanoTime() - started;
-        tabs = CreativeModeTabs.allTabs()
-            .iterator();
+        try {
+            CreativeModeTabs.tryRebuildTabContents(features, false, minecraft.level.registryAccess());
+            tabs = CreativeModeTabs.allTabs()
+                .iterator();
+        } catch (RuntimeException | LinkageError failure) {
+            failures.accept("creative/setup", failure);
+        } finally {
+            creativeRebuildNanos = System.nanoTime() - started;
+        }
         List<Item> registeredItems = new ArrayList<>();
         BuiltInRegistries.ITEM.forEach(registeredItems::add);
         registeredItems.sort(
