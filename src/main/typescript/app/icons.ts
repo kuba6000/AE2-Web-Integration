@@ -3,6 +3,8 @@ import { createIconPlayback, type AnimationDescriptor, type AtlasDescriptor } fr
 
 export type IconSprite = {
     url: string;
+    /** Borrowed from the loader; valid until this binding receives its next sprite or is disposed. */
+    readonly image?: ImageBitmap;
     x: number;
     y: number;
     width: number;
@@ -20,6 +22,7 @@ type Page = {
     controller: AbortController;
     url?: string;
     blob?: Blob;
+    image?: ImageBitmap;
 };
 export type IconTarget = { element: HTMLElement; icon?: IconReference | null };
 export type DrawableIcon = { image: CanvasImageSource; x: number; y: number; width: number; height: number };
@@ -37,6 +40,7 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
     let active = 0;
     let checkedPack: string | null = null;
     let animate = false;
+    let animationInterval = 0;
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     const animationCache = new WeakMap<object, AnimationDescriptor | null>();
     const playback = createIconPlayback((descriptor, changed) => {
@@ -44,7 +48,7 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
         page.users.add(changed);
         pump();
         return {
-            read: () => ({ url: page.url, failed: page.status === 'failed' }),
+            read: () => ({ url: page.url, image: page.image, failed: page.status === 'failed' }),
             release() {
                 page.users.delete(changed);
                 if (!page.users.size) remove(page);
@@ -52,7 +56,7 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
         };
     });
     const updateViews = () => {
-        playback.enabled(enabled && animate && !motion.matches && !document.hidden);
+        playback.enabled(enabled && animate && !motion.matches && !document.hidden, animationInterval);
         for (const update of views) update();
     };
     motion.addEventListener('change', updateViews);
@@ -162,6 +166,8 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
     function remove(page: Page) {
         page.controller.abort();
         if (page.url) URL.revokeObjectURL(page.url);
+        page.image?.close();
+        page.image = undefined;
         pages.delete(page.source);
         for (const update of page.users) update();
     }
@@ -192,13 +198,17 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                 throw new Error('Invalid atlas response');
             const blob = await response.blob();
             const bitmap = await createImageBitmap(blob);
-            const valid = bitmap.width === page.width && bitmap.height === page.height;
-            bitmap.close();
-            if (!valid) throw new Error('Invalid atlas dimensions');
-            if (page.controller.signal.aborted || disposed) return;
-            page.url = URL.createObjectURL(blob);
-            page.blob = blob;
-            page.status = 'ready';
+            try {
+                if (bitmap.width !== page.width || bitmap.height !== page.height)
+                    throw new Error('Invalid atlas dimensions');
+                if (page.controller.signal.aborted || disposed) return;
+                page.url = URL.createObjectURL(blob);
+                page.blob = blob;
+                page.image = bitmap;
+                page.status = 'ready';
+            } finally {
+                if (page.image !== bitmap) bitmap.close();
+            }
         } catch {
             if (page.controller.signal.aborted) return;
             // A failed visible page stays failed; polling quantities must not cause retry storms.
@@ -325,8 +335,10 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
             updateViews();
             if (!enabled) for (const page of pages.values()) remove(page);
         },
-        animate(value: boolean) {
+        animate(value: boolean, intervalMillis = 0) {
             animate = value;
+            animationInterval =
+                value && Number.isFinite(intervalMillis) ? Math.max(0, Math.min(1000, intervalMillis)) : 0;
             updateViews();
         },
         observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void) {
@@ -368,11 +380,17 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                         binding.playing = playing;
                         playing.stop = playback.watch(animation, (sprite) => {
                             playing.sprite = sprite;
-                            paint(target, sprite ?? (page.url ? { ...descriptor, url: page.url } : null));
+                            paint(
+                                target,
+                                sprite ?? (page.url ? { ...descriptor, url: page.url, image: page.image } : null)
+                            );
                         });
                     }
                 }
-                paint(target, binding.playing?.sprite ?? (page.url ? { ...descriptor, url: page.url } : null));
+                paint(
+                    target,
+                    binding.playing?.sprite ?? (page.url ? { ...descriptor, url: page.url, image: page.image } : null)
+                );
             }
             const update = () => {
                 for (const [target, binding] of bindings) refresh(target, binding);

@@ -128,8 +128,8 @@ export type ThemeApplication = {
         'edit' | 'editSecret' | 'removeSecret' | 'resetSecret' | 'save' | 'reload'
     >;
     readonly icons: {
-        /** Opt into visible icon playback; reduced motion still takes precedence. Defaults to false per theme. */
-        animate(enabled: boolean): void;
+        /** Opt into playback (off by default), optionally spacing batches by 0–1000 ms. Reduced motion takes precedence. */
+        animate(enabled: boolean, intervalMillis?: number): void;
         resolve(
             references: readonly import('./api-types.js').IconReference[],
             metadata: ThemeState['itemIcons'],

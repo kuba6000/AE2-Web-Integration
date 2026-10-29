@@ -1,13 +1,13 @@
 import type { IconSprite } from './icons.js';
 
-export type AtlasDescriptor = Omit<IconSprite, 'url'> & { source: string };
+export type AtlasDescriptor = Omit<IconSprite, 'url' | 'image'> & { source: string };
 export type AnimationDescriptor = {
     page: AtlasDescriptor;
     key: string;
     frames: { x: number; y: number; durationMillis: number }[];
     duration: number;
 };
-type Lease = { read(): { url?: string; failed: boolean }; release(): void };
+type Lease = { read(): { url?: string; image?: ImageBitmap; failed: boolean }; release(): void };
 type Playback = { animation: AnimationDescriptor; paint: (sprite: IconSprite | null) => void; frame: number };
 type Page = { descriptor: AtlasDescriptor; lease: Lease; users: Set<Playback> };
 
@@ -21,9 +21,18 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
     let frameRequest: number | undefined;
     let enabled = false;
     let disposed = false;
+    let interval = 0;
+    let lastRender: number | null = null;
 
     function scheduleRender() {
         if (disposed || !enabled || frameRequest !== undefined) return;
+        clearTimeout(timer);
+        timer = undefined;
+        const delay = lastRender === null ? 0 : lastRender + interval - performance.now();
+        if (delay > 0) {
+            timer = setTimeout(scheduleRender, Math.ceil(delay));
+            return;
+        }
         frameRequest = requestAnimationFrame(() => {
             frameRequest = undefined;
             render();
@@ -45,6 +54,7 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
         timer = undefined;
         if (disposed || !enabled) return;
         const now = performance.now();
+        lastRender = now;
         let next = Infinity;
         for (const page of pages.values()) {
             const loaded = page.lease.read();
@@ -75,10 +85,10 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
                 if (playback.frame === frame) continue;
                 playback.frame = frame;
                 const crop = animation.frames[frame];
-                playback.paint({ ...animation.page, url: loaded.url, x: crop.x, y: crop.y });
+                playback.paint({ ...animation.page, url: loaded.url, image: loaded.image, x: crop.x, y: crop.y });
             }
         }
-        if (Number.isFinite(next)) timer = setTimeout(scheduleRender, Math.max(16, Math.ceil(next)));
+        if (Number.isFinite(next)) timer = setTimeout(scheduleRender, Math.max(16, Math.ceil(next), interval));
     }
 
     function admit() {
@@ -102,12 +112,19 @@ export function createIconPlayback(acquire: (page: AtlasDescriptor, changed: () 
     }
 
     return {
-        enabled(value: boolean) {
+        enabled(value: boolean, intervalMillis = 0) {
+            if (interval !== intervalMillis) {
+                clearTimeout(timer);
+                if (frameRequest !== undefined) cancelAnimationFrame(frameRequest);
+                frameRequest = undefined;
+            }
+            interval = intervalMillis;
             enabled = value;
             if (!value) {
                 clearTimeout(timer);
                 if (frameRequest !== undefined) cancelAnimationFrame(frameRequest);
                 frameRequest = undefined;
+                lastRender = null;
             } else admit();
         },
         watch(animation: AnimationDescriptor, paint: Playback['paint']) {

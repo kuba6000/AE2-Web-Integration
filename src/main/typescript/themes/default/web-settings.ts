@@ -78,6 +78,10 @@ export function createWebSettings(
                 <label class="web-preference-toggle">
                     <span data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons">
                 </label>
+                <label>
+                    <span><span id="animation-interval-label" data-theme-text="animationUpdateInterval"></span> — <output id="animation-interval-value" for="animation-update-interval"></output></span>
+                    <input type="range" id="animation-update-interval" min="0" max="1000" step="10" aria-labelledby="animation-interval-label">
+                </label>
             </section>
         </div>
         </div>
@@ -86,6 +90,8 @@ export function createWebSettings(
         terminalDisplay: root.querySelector<HTMLSelectElement>('#terminal-display')!,
         pageSize: root.querySelector<HTMLSelectElement>('#terminal-page-size')!,
         animatedIcons: root.querySelector<HTMLInputElement>('#animated-icons')!,
+        animationInterval: root.querySelector<HTMLInputElement>('#animation-update-interval')!,
+        animationIntervalValue: root.querySelector<HTMLOutputElement>('#animation-interval-value')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
@@ -124,10 +130,32 @@ export function createWebSettings(
         savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons' ? savedDisplay : 'both';
     application.displayIcons(terminalDisplay !== 'names');
     controls.animatedIcons.checked = settings.get('animatedIcons') !== false;
-    application.icons.animate(controls.animatedIcons.checked);
+    const savedInterval = settings.get('animationUpdateInterval');
+    let animationInterval =
+        typeof savedInterval === 'number' &&
+        Number.isInteger(savedInterval) &&
+        savedInterval >= 0 &&
+        savedInterval <= 1000 &&
+        savedInterval % 10 === 0
+            ? savedInterval
+            : 200;
+    function updateAnimationInterval() {
+        const value = animationInterval === 0 ? 'Instant' : `${animationInterval} ms`;
+        controls.animationInterval.value = String(animationInterval);
+        controls.animationInterval.setAttribute('aria-valuetext', value);
+        controls.animationInterval.disabled = !controls.animatedIcons.checked;
+        controls.animationIntervalValue.value = value;
+        application.icons.animate(controls.animatedIcons.checked, animationInterval);
+    }
+    updateAnimationInterval();
     controls.animatedIcons.addEventListener('change', () => {
         settings.set('animatedIcons', controls.animatedIcons.checked);
-        application.icons.animate(controls.animatedIcons.checked);
+        updateAnimationInterval();
+    });
+    controls.animationInterval.addEventListener('input', () => {
+        animationInterval = Number(controls.animationInterval.value);
+        settings.set('animationUpdateInterval', animationInterval);
+        updateAnimationInterval();
     });
 
     lifetime.onCleanup(() => {

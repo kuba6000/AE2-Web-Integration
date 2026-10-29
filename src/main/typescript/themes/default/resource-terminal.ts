@@ -8,7 +8,8 @@ import { filterResources, registryId, selectResources, sortResources } from '../
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
-import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
+import { createResourceIcon } from './resource-icon.js';
+import { createTerminalIconCanvas } from './terminal-icon-canvas.js';
 import { createSlotGrid } from './slot-grid.js';
 import { createResourceHistoryView } from './resource-history.js';
 import { slotQuantity } from './resource-quantity.js';
@@ -110,7 +111,8 @@ export function createResourceTerminal(
     controls.details.after(pinDetails.element);
     const pinRows = new Map<string, ReturnType<typeof createItemRow>>();
     const pinSlots = createSlotGrid(controls.pinned, controls.itemScroll, controls.terminal, false, thumbtackIcon);
-    const pinIcons = application.icons.observe(controls.pinned, paintResourceIcon);
+    const iconCanvas = createTerminalIconCanvas(controls.itemScroll);
+    const pinIcons = application.icons.observe(controls.pinned, iconCanvas.paint);
     const terminalPins = () =>
         state.pins.items
             .filter(
@@ -181,7 +183,7 @@ export function createResourceTerminal(
             };
         }
     > = root.querySelectorAll('.tool-button');
-    const itemIcons = application.icons.observe(controls.itemScroll, paintResourceIcon);
+    const itemIcons = application.icons.observe(controls.itemScroll, iconCanvas.paint);
     const slots = createSlotGrid(controls.items, controls.itemScroll, controls.terminal);
     lifetime.onCleanup(() => slots.dispose());
     let itemTooltip:
@@ -192,6 +194,7 @@ export function createResourceTerminal(
     let language: string;
     let locale: Translator;
     let effectiveDisplay: TerminalDisplay = 'names';
+    let iconAppearance = '';
     let page = 0;
     let listInput: { items: ThemeState['items']; signature: string; snapshot: number } | undefined;
     let orderTimer: ReturnType<typeof setTimeout> | undefined;
@@ -263,8 +266,11 @@ export function createResourceTerminal(
             hideTooltip();
             return;
         }
-        const box = row.button.getBoundingClientRect();
-        showTooltip(row.button, row.item, pointer ? x : box.left, pointer ? y : box.bottom);
+        if (pointer) showTooltip(row.button, row.item, x, y);
+        else {
+            const box = row.button.getBoundingClientRect();
+            showTooltip(row.button, row.item, box.left, box.bottom);
+        }
     }
     function stopOrdering() {
         clearTimeout(orderTimer);
@@ -276,8 +282,10 @@ export function createResourceTerminal(
         if (state.itemStatus !== 'ready' || !state.stream) return;
         orderTimer = setTimeout(() => {
             orderTimer = undefined;
-            if (!lifetime.signal.aborted && state.route.view === 'items' && state.itemStatus === 'ready')
+            if (!lifetime.signal.aborted && state.route.view === 'items' && state.itemStatus === 'ready') {
                 renderItems(true);
+                refreshItemTooltip();
+            }
         }, 30000);
     }
     function renderItems(reorder = false) {
@@ -604,7 +612,6 @@ export function createResourceTerminal(
             focused.button.focus({ preventScroll: true });
         }
         updatingRows = false;
-        refreshItemTooltip();
         controls.pages.hidden = allFiltered.length <= pageSize;
         controls.previousPage.disabled = page === 0;
         controls.nextPage.disabled = (page + 1) * pageSize >= allFiltered.length;
@@ -760,11 +767,13 @@ export function createResourceTerminal(
         page--;
         renderPage();
         controls.itemScroll.scrollTop = 0;
+        refreshItemTooltip();
     });
     controls.nextPage.addEventListener('click', () => {
         page++;
         renderPage();
         controls.itemScroll.scrollTop = 0;
+        refreshItemTooltip();
     });
 
     window.addEventListener(
@@ -793,6 +802,11 @@ export function createResourceTerminal(
             language = state.preferences.language;
             const changed = effectiveDisplay !== display;
             effectiveDisplay = display;
+            const appearance = JSON.stringify([display, settings.get('font'), settings.get('resourceColumns')]);
+            if (appearance !== iconAppearance) {
+                iconAppearance = appearance;
+                iconCanvas.invalidate();
+            }
             controls.terminal.hidden = state.route.view !== 'items';
             controls.terminalTools.hidden = state.route.view !== 'items';
             controls.resourcePanel.hidden = state.route.view !== 'items';
@@ -827,6 +841,7 @@ export function createResourceTerminal(
             historyView.dispose();
             itemIcons.dispose();
             pinIcons.dispose();
+            iconCanvas.dispose();
             pinSlots.dispose();
             slots.dispose();
             resourceMenu.remove();
