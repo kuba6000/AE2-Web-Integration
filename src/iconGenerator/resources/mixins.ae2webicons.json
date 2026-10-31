@@ -1,0 +1,10 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "pl.kuba6000.ae2webintegration.icongenerator.mixins",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "InterpolationDataInvoker"
+  ],
+  "refmap": "mixins.ae2webicons.refmap.json"
+}

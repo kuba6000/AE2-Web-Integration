@@ -53,6 +53,7 @@ final class RenderState implements AutoCloseable {
     private FogShape fogShape;
     private int drawFramebuffer, readFramebuffer, readBuffer, packBuffer, unpackBuffer;
     private int packAlignment, packRowLength, packSkipRows, packSkipPixels;
+    private int unpackAlignment, unpackRowLength, unpackSkipRows, unpackSkipPixels;
     private int activeTexture, program, vertexArray, arrayBuffer, elementBuffer;
     private int depthFunc, srcRgb, dstRgb, srcAlpha, dstAlpha, equationRgb, equationAlpha;
     private int cullFace, frontFace;
@@ -73,6 +74,10 @@ final class RenderState implements AutoCloseable {
         packRowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
         packSkipRows = GL11.glGetInteger(GL11.GL_PACK_SKIP_ROWS);
         packSkipPixels = GL11.glGetInteger(GL11.GL_PACK_SKIP_PIXELS);
+        unpackAlignment = GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT);
+        unpackRowLength = GL11.glGetInteger(GL11.GL_UNPACK_ROW_LENGTH);
+        unpackSkipRows = GL11.glGetInteger(GL11.GL_UNPACK_SKIP_ROWS);
+        unpackSkipPixels = GL11.glGetInteger(GL11.GL_UNPACK_SKIP_PIXELS);
         viewport.clear();
         GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
         scissor.clear();
@@ -197,6 +202,10 @@ final class RenderState implements AutoCloseable {
         GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, packRowLength);
         GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, packSkipRows);
         GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, packSkipPixels);
+        GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, unpackAlignment);
+        GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, unpackRowLength);
+        GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, unpackSkipRows);
+        GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, unpackSkipPixels);
         GL30.glBindVertexArray(vertexArray);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, arrayBuffer);
         if (vertexArray != 0) GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
