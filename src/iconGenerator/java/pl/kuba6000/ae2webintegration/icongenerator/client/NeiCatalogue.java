@@ -28,7 +28,10 @@ final class NeiCatalogue {
     }
 
     static @Nullable NeiCatalogue ready() {
-        return locked(0, () -> idle() && ItemList.loadFinished ? new NeiCatalogue(ItemList.items) : null);
+        return locked(
+            0,
+            () -> NEIClientConfig.isLoaded() && idle() && ItemList.loadFinished ? new NeiCatalogue(ItemList.items)
+                : null);
     }
 
     static boolean disabled() {
