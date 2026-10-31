@@ -1,0 +1,8 @@
+NightConfig 3.6.4 (core and TOML modules)
+Author: TheElectronWill and NightConfig contributors
+License: GNU Lesser General Public License, version 3
+Source: https://github.com/TheElectronWill/night-config/tree/v3.6.4
+
+This product includes NightConfig under the LGPL v3.
+See LGPL-3.0.txt and GPL-3.0.txt for the full license terms.
+Library packages are relocated to avoid conflicts with other mods.
