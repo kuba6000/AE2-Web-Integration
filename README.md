@@ -429,12 +429,13 @@ documentation host.
 ## License
 
 Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
-Bundled third-party assets retain their own licenses:
+Bundled third-party libraries and assets retain their own licenses:
 
 | Component | Author / source | License |
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](https://github.com/kuba6000/AE2-Web-Integration/blob/core/LICENSE) |
 | Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
+| Configuration library (bundled in Minecraft 1.7.10 and 1.12.2 builds) | [NightConfig 3.6.4, TheElectronWill and contributors](https://github.com/TheElectronWill/night-config/tree/v3.6.4) | [LGPL-3.0](https://github.com/TheElectronWill/night-config/blob/v3.6.4/LICENSE) |
 | Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
