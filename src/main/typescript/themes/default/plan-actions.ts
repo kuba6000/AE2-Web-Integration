@@ -111,7 +111,7 @@ export function createPlanActions(
     missing.onclick = () => void application.crafting.missingTree(!application.state.crafting.tree.missingOnly);
     views.append(list, tree, missing);
     const left = element('div', '', 'plan-view-tools');
-    left.append(views, exportButton);
+    left.append(exportButton, views);
     actions.append(left, startControls, remove);
 
     return {

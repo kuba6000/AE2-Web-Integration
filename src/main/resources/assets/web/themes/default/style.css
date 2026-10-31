@@ -4108,15 +4108,11 @@ button.toast:hover {
 }
 @media (width <= 600px) {
     .plan-view-tools {
-        width: 100%;
         gap: 6px;
         flex-wrap: nowrap;
     }
     .plan-view-switch button {
         padding: 6px 8px;
         font-size: 12px;
-    }
-    .plan-view-tools .plan-export-button {
-        margin-inline-start: auto;
     }
 }
