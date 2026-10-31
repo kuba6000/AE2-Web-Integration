@@ -163,6 +163,107 @@ test('page-local icon indexes are rebased while earlier resource icons stay corr
     assert.equal(tree.state.icons.pages[tree.state.resources[1].icon.page].digest, 'atlas-1');
 });
 
+test('page-local animation indexes are merged without crossing sequences or pages', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    let calls = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async () => {
+                const id = calls++;
+                const response = page(node('RESOURCE', 0), [
+                    { node: node('RECIPE', 0), relation: 'DECLARED_OUTPUT', quantity: '1' }
+                ]);
+                response.icons = {
+                    packId: 'same',
+                    width: 64,
+                    height: 64,
+                    pages: [{ digest: `atlas-${id}`, width: 128, height: 64 }],
+                    animations: [
+                        {
+                            page: 0,
+                            frames: [
+                                { x: id, y: 0, durationMillis: 50 },
+                                { x: 64, y: 0, durationMillis: 50 }
+                            ]
+                        }
+                    ]
+                };
+                response.data.resources = [
+                    { id, displayName: `resource-${id}`, icon: { page: 0, x: 0, y: 0, animation: 0 } },
+                    { id: id + 10, displayName: `static-${id}`, icon: { page: 0, x: 0, y: 0 } }
+                ];
+                return response;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.toggle('RECIPE:0');
+    const { icons, resources } = tree.state;
+    assert.equal(icons.animations.length, 2);
+    for (const id of [0, 1]) {
+        const animation = icons.animations[resources[id].icon.animation];
+        assert.equal(animation.frames[0].x, id);
+        assert.equal(icons.pages[animation.page].digest, `atlas-${id}`);
+    }
+    assert.equal(resources[10].icon.animation, undefined);
+});
+
+test('animation indexes stay valid after missing-only mode restores the full view tables', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const frames = new Map();
+    let calls = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async (_g, _p, query) => {
+                const id = calls++;
+                // The full view's first page and the missing-only pages differ; later full pages repeat the latter.
+                const x = query.missingOnly || id > 0 ? 64 : 0;
+                frames.set(id, x);
+                const response = page(
+                    query.kind === 'ROOT' ? node('RESOURCE', 0) : node('RECIPE', 1),
+                    query.kind === 'ROOT'
+                        ? [{ node: node('RECIPE', 1), relation: 'DECLARED_OUTPUT', quantity: '1' }]
+                        : []
+                );
+                response.data.captureId = 'same';
+                response.data.missingOnly = query.missingOnly;
+                response.data.missingComplete = true;
+                response.icons = {
+                    packId: 'same',
+                    width: 64,
+                    height: 64,
+                    pages: [{ digest: 'atlas', width: 128, height: 64 }],
+                    animations: [
+                        {
+                            page: 0,
+                            frames: [
+                                { x, y: 0, durationMillis: 50 },
+                                { x: 128 - x, y: 0, durationMillis: 50 }
+                            ]
+                        }
+                    ]
+                };
+                response.data.resources = [
+                    { id, displayName: `resource-${id}`, icon: { page: 0, x: 0, y: 0, animation: 0 } }
+                ];
+                return response;
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.setMissingOnly(true);
+    await tree.setMissingOnly(false);
+    await tree.toggle('RESOURCE:0');
+    const { icons, resources } = tree.state;
+    assert.ok(Object.keys(resources).length >= 2);
+    for (const [id, resource] of Object.entries(resources))
+        assert.equal(icons.animations[resource.icon.animation].frames[0].x, frames.get(Number(id)));
+});
+
 test('large fanout is bounded in the visible projection without duplicating the entire graph', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const tree = createCraftingTree(

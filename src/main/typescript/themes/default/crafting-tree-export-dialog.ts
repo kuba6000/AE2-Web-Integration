@@ -161,7 +161,15 @@ export function createTreeExportDialog(
                     const card = craftingTreeContent(row, tree, locale, document.documentElement.lang, false);
                     return { ...card, icon: card.icon ? { ...card.icon } : null };
                 }),
-                icons: tree.icons ? { ...tree.icons, pages: tree.icons.pages.map((page) => ({ ...page })) } : null,
+                // The PNG is a still image, so animation sequences are not part of the snapshot.
+                icons: tree.icons
+                    ? {
+                          packId: tree.icons.packId,
+                          width: tree.icons.width,
+                          height: tree.icons.height,
+                          pages: tree.icons.pages.map((page) => ({ ...page }))
+                      }
+                    : null,
                 title: state.plan?.finalOutput.displayName ?? t('craftingPlan'),
                 scope: notes
             };

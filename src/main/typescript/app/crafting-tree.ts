@@ -1,5 +1,5 @@
 import type { Api, ApiFailure } from './api.js';
-import type { IconMetadata, ResourceDescription } from './api-types.js';
+import type { IconAnimation, IconMetadata, ResourceDescription } from './api-types.js';
 
 export type TreeKind = 'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED' | 'UNLINKED_MISSING';
 export type TreeNode = {
@@ -123,6 +123,8 @@ export function createCraftingTree(
         revision: 0
     });
     const state = fresh();
+    // Indexes belong to a merged animation table, which swaps with the state it came from.
+    const sequenceIndices = new WeakMap<IconAnimation[], Map<string, number>>();
     let target: { grid: string; plan: string | number } | null = null;
     let generation = 0;
     let revision = 0;
@@ -213,7 +215,7 @@ export function createCraftingTree(
     }
     function descriptors(page: TreePage, icons: IconMetadata | null) {
         if (icons && state.icons?.packId !== icons.packId) {
-            state.icons = { ...icons, pages: [] };
+            state.icons = { ...icons, pages: [], animations: [] };
             for (const resource of Object.values(state.resources)) resource.icon = null;
         }
         const indices = icons?.pages.map((atlas) => {
@@ -225,10 +227,34 @@ export function createCraftingTree(
             }
             return index;
         });
+        // Animation indexes are response-local like pages; equal sequences share one merged entry.
+        const sequences = icons?.animations?.map((animation) => {
+            const merged = state.icons!.animations!;
+            let known = sequenceIndices.get(merged);
+            if (!known) sequenceIndices.set(merged, (known = new Map()));
+            const sequence = { ...animation, page: indices![animation.page] };
+            const key = `${sequence.page}:${sequence.frames.map((frame) => `${frame.x},${frame.y},${frame.durationMillis}`).join(';')}`;
+            let index = known.get(key);
+            if (index === undefined) {
+                index = merged.length;
+                merged.push(sequence);
+                known.set(key, index);
+            }
+            return index;
+        });
         for (const resource of page.resources)
             state.resources[resource.id] = {
                 ...resource,
-                icon: resource.icon && indices ? { ...resource.icon, page: indices[resource.icon.page] } : null
+                icon:
+                    resource.icon && indices
+                        ? {
+                              ...resource.icon,
+                              page: indices[resource.icon.page],
+                              ...(resource.icon.animation != null
+                                  ? { animation: sequences?.[resource.icon.animation] ?? null }
+                                  : {})
+                          }
+                        : null
             };
     }
     async function load(kind: TreeKind | 'ROOT', id: number, offset = 0) {
