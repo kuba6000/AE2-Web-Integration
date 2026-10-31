@@ -11,7 +11,8 @@ import { slotQuantity } from './resource-quantity.js';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
 import type { CpuTooltips } from './cpu-tooltips.js';
 
-type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
+const RESOURCE_SORTS = ['name', 'active', 'pending', 'stored', 'shareInCraftingTime'] as const;
+type ResourceSort = (typeof RESOURCE_SORTS)[number];
 
 export function createCpuResources(
     application: ThemeApplication,
@@ -47,10 +48,10 @@ export function createCpuResources(
     sortGroup.role = 'group';
     tools.append(filterGroup, sortGroup);
     const itemRows: Map<string, ReturnType<typeof createResourceRow>> = new Map();
-    let hideStored = false;
-    let activeFirst = false;
-
-    let sort: ResourceSort = 'name';
+    let hideStored = settings.get('cpuResourceHideStored') === true;
+    let activeFirst = settings.get('cpuResourceActiveFirst') === true;
+    const savedSort = settings.get('cpuResourceSort');
+    let sort: ResourceSort = RESOURCE_SORTS.find((value) => value === savedSort) ?? 'name';
 
     let locale: Translator;
 
@@ -63,6 +64,7 @@ export function createCpuResources(
     let lastItems: readonly CpuResource[] | null = null;
     let lastIcons: ThemeState['cpus']['icons'];
     let tracked = false;
+    const effectiveSort = (): ResourceSort => (!tracked && sort === 'shareInCraftingTime' ? 'name' : sort);
     let presentation = '';
     let headingName = '';
     let orderAfter = 0;
@@ -140,9 +142,16 @@ export function createCpuResources(
         button.type = 'button';
         button.innerHTML = icon;
         button.addEventListener('click', () => {
-            if (value === 'hideStored') hideStored = !hideStored;
-            else if (value === 'activeFirst') activeFirst = !activeFirst;
-            else sort = value;
+            if (value === 'hideStored') {
+                hideStored = !hideStored;
+                settings.set('cpuResourceHideStored', hideStored);
+            } else if (value === 'activeFirst') {
+                activeFirst = !activeFirst;
+                settings.set('cpuResourceActiveFirst', activeFirst);
+            } else {
+                sort = value;
+                settings.set('cpuResourceSort', sort);
+            }
             scroll.scrollTop = 0;
             tips.hide();
             renderResources(true);
@@ -175,7 +184,7 @@ export function createCpuResources(
                     ? locale.common(control.key)
                     : `${locale.common('sort')}: ${locale.common(control.key)}`
             );
-            let pressed = control.value === sort;
+            let pressed = control.value === effectiveSort();
             if (control.value === 'hideStored') pressed = hideStored;
             else if (control.value === 'activeFirst') pressed = activeFirst;
             control.button.setAttribute('aria-pressed', String(pressed));
@@ -251,7 +260,7 @@ export function createCpuResources(
             geometryChanged = true;
             grid.classList.toggle('cpu-items-tracked', tracked);
         }
-        if (!tracked && sort === 'shareInCraftingTime') sort = 'name';
+        const ordering = effectiveSort();
         if (force || reorder) renderControls(tracked);
         const changed = incoming !== lastItems || unkeyedRevision !== state.unkeyedRevision;
         if (!changed && !force && !reorder && lastIcons === state.icons) {
@@ -347,7 +356,7 @@ export function createCpuResources(
                 .sort(
                     (a, b) =>
                         (activeFirst ? craftingPriority(a.item) - craftingPriority(b.item) : 0) ||
-                        (sort === 'name' ? 0 : b.item[sort] - a.item[sort]) ||
+                        (ordering === 'name' ? 0 : b.item[ordering] - a.item[ordering]) ||
                         a.nameText.localeCompare(b.nameText, language)
                 );
             const visible = new Set(next);
@@ -385,7 +394,7 @@ export function createCpuResources(
             if (row.li.parentNode) paintTiming(row);
         }
         // This timer owns ordering; the clock callback itself never moves or creates a row.
-        if (sort === 'shareInCraftingTime') queueOrder();
+        if (effectiveSort() === 'shareInCraftingTime') queueOrder();
         lastItems = state.detail.items;
         tips.refreshResource();
     }

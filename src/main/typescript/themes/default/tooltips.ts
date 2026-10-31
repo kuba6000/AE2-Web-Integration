@@ -28,8 +28,9 @@ export function createTooltips(root: HTMLElement, lifetime: ThemeLifetime) {
     }
     function positionTooltip(x: number, y: number) {
         const box = tooltip.getBoundingClientRect();
-        tooltip.style.left = `${Math.max(8, Math.min(x + 14, innerWidth - box.width - 8))}px`;
-        tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
+        const left = Math.max(8, Math.min(x + 14, innerWidth - box.width - 8));
+        const top = Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16);
+        tooltip.style.transform = `translate(${left}px, ${top}px)`;
     }
 
     function refreshAttachedTooltip() {
@@ -45,8 +46,11 @@ export function createTooltips(root: HTMLElement, lifetime: ThemeLifetime) {
         }
         tooltip.replaceChildren(...content());
         tooltip.hidden = false;
-        const box = target.getBoundingClientRect();
-        positionTooltip(pointer ? x : box.left, pointer ? y : box.bottom);
+        if (pointer) positionTooltip(x, y);
+        else {
+            const box = target.getBoundingClientRect();
+            positionTooltip(box.left, box.bottom);
+        }
     }
     function bindTooltip(target: HTMLElement, content: () => Node[], focusTarget = target) {
         let pointerInside = false;

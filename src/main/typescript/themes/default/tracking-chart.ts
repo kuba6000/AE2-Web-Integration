@@ -56,7 +56,7 @@ export function createTrackingChart(
     window.addEventListener('keydown', releaseOnEscape);
     const chartHeight = () => height ?? (compact ? 110 : mobile ? 280 : 380);
     const pixelCanvas = document.createElement('canvas');
-    const pixelContext = pixelCanvas.getContext('2d')!;
+    const pixelContext = pixelCanvas.getContext('2d', { willReadFrequently: true })!;
     const amount = (value: bigint | null) =>
         value === null ? '—' : new Intl.NumberFormat(document.documentElement.lang).format(value);
     function drawPixelLine(chart: uPlot, net: boolean) {

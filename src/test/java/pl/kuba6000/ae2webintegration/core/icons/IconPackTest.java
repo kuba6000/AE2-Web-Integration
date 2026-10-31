@@ -44,6 +44,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Location;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
@@ -55,20 +56,39 @@ class IconPackTest {
     Path directory;
 
     private static Metadata metadata(String time) {
-        return new Metadata(
-            "1.7.10",
-            "forge",
-            "legacy-v1",
-            "test",
-            time,
-            Collections.singletonMap("example", "1"),
-            Collections.singletonList("0000000000000000000000000000000000000000000000000000000000000000"));
+        return new Metadata("1.7.10", "forge", "legacy-v1", "test", time, Collections.singletonMap("example", "1"));
+    }
+
+    @Test
+    void exportedPacksRetainTheFormatTwoArrayWithoutSourceFingerprints() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
+            writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
+            output = writer.finish();
+        }
+        try (ZipFile zip = new ZipFile(output.toFile())) {
+            JsonObject manifest = new JsonParser()
+                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            assertEquals(
+                0,
+                manifest.getAsJsonObject("environment")
+                    .getAsJsonArray("resourcePacks")
+                    .size());
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")));
+            assertEquals(
+                Collections.singletonMap("example", "1"),
+                pack.metadata()
+                    .mods());
+        }
     }
 
     @Test
     void manifestUsesOneOpaqueCompatibilityVersion() throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.random(), new int[4096]);
             output = writer.finish();
         }
@@ -90,6 +110,47 @@ class IconPackTest {
     }
 
     @Test
+    void readsExistingFingerprintedPacksAndStillChecksTheirManifestIntegrity() throws Exception {
+        Path original;
+        StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
+            writer.add(key, new int[4096]);
+            original = writer.finish();
+        }
+        for (boolean validDigest : new boolean[] { true, false }) {
+            Path legacy = directory.resolve("legacy-" + validDigest + ".ae2wi-icons");
+            try (ZipFile source = new ZipFile(original.toFile());
+                ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(legacy))) {
+                Enumeration<? extends ZipEntry> entries = source.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    byte[] bytes = entryBytes(source, entry.getName());
+                    if (entry.getName()
+                        .equals("manifest.json")) {
+                        JsonObject manifest = new JsonParser().parse(new String(bytes, StandardCharsets.UTF_8))
+                            .getAsJsonObject();
+                        manifest.getAsJsonObject("environment")
+                            .getAsJsonArray("resourcePacks")
+                            .add(new JsonPrimitive("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+                        String json = validDigest ? reseal(manifest.toString()) : manifest.toString();
+                        bytes = json.getBytes(StandardCharsets.UTF_8);
+                    }
+                    writeEntry(target, entry.getName(), bytes, entry.getMethod() == ZipEntry.STORED);
+                }
+            }
+            if (validDigest) {
+                try (IconPack pack = IconPack.open(legacy, "1.7.10", "forge", "legacy-v1")) {
+                    assertNotNull(pack.find(key));
+                    assertEquals(
+                        Collections.singletonMap("example", "1"),
+                        pack.metadata()
+                            .mods());
+                }
+            } else assertRejectedPack(legacy, "1.7.10");
+        }
+    }
+
+    @Test
     void compatibilityRequiresExactLoaderGameAndOpaqueVersion() throws Exception {
         for (String version : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
             Metadata provenance = metadata("today");
@@ -99,10 +160,9 @@ class IconPackTest {
                 version,
                 provenance.generatorVersion(),
                 provenance.generatedAt(),
-                provenance.mods(),
-                provenance.resourcePacks());
+                provenance.mods());
             Path output;
-            try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
                 output = writer.finish();
             }
             try (IconPack pack = IconPack.open(output, "1.7.10", "forge", version)) {
@@ -122,7 +182,7 @@ class IconPackTest {
     @Test
     void rejectsOldTwoVersionManifestAndNonStringCompatibility() throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             output = writer.finish();
         }
         for (int mutation = 0; mutation < 3; mutation++) {
@@ -154,7 +214,7 @@ class IconPackTest {
         int[] pixels = new int[4096];
         Arrays.fill(pixels, 0x804080ff);
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(key, pixels);
             writer.failure(key.toString(), "renderer failed");
             output = writer.finish();
@@ -185,7 +245,7 @@ class IconPackTest {
     @Test
     void closingArchiveDrainsExistingReadersAndRejectsNewOnes() throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             output = writer.finish();
         }
@@ -212,7 +272,7 @@ class IconPackTest {
         int[] pixels = new int[4096];
         Arrays.fill(pixels, 0xff123456);
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(exact, pixels);
             writer.add(base, pixels);
             writer.add(exact, pixels);
@@ -239,9 +299,8 @@ class IconPackTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = { 64, 512 })
-    void interleavedCapturesKeepPixelsAndDeduplicationIndependentOfCallerBufferReuse(int pageSize) throws Exception {
+    @Test
+    void interleavedCapturesKeepPixelsAndDeduplicationIndependentOfCallerBufferReuse() throws Exception {
         StableKey first = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey second = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
         StableKey duplicate = StableKey.parse("AgICAgICAgICAgICAgICAg");
@@ -250,7 +309,7 @@ class IconPackTest {
         for (int i = 0; i < original.length; i++) original[i] = colors.nextInt();
         int[] supplied = original.clone();
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), pageSize)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(first, supplied);
             assertArrayEquals(original, supplied);
             Arrays.fill(supplied, 0xff123456);
@@ -319,7 +378,7 @@ class IconPackTest {
     @ValueSource(strings = { "-0", "quoted \"-0\"", "escaped \\\"-0", "backslash \\ then -0" })
     void metadataTextContainingNegativeZeroRoundTrips(String text) throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata(text), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata(text))) {
             output = writer.finish();
         }
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
@@ -332,7 +391,7 @@ class IconPackTest {
 
     private Path packWithFailureCount(String count) throws Exception {
         Path original;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             original = writer.finish();
         }
         Path modified = directory.resolve("failure-count.zip");
@@ -352,7 +411,7 @@ class IconPackTest {
 
     @Test
     void cancellationRemovesUnpublishedOutputAndScratch() throws Exception {
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             assertThrows(CancellationException.class, () -> writer.finish(() -> true));
         }
@@ -364,7 +423,7 @@ class IconPackTest {
     @Test
     void publicationRequiresAtomicJobOwnershipAfterValidation() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             assertThrows(CancellationException.class, () -> writer.finish(() -> false, () -> {
                 attempts.incrementAndGet();
@@ -375,7 +434,7 @@ class IconPackTest {
         try (Stream<Path> files = Files.list(directory)) {
             assertEquals(0, files.count());
         }
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             Path output = writer.finish(() -> false, () -> {
                 attempts.incrementAndGet();
@@ -395,7 +454,7 @@ class IconPackTest {
         String[] ids = new String[2];
         for (int i = 0; i < 2; i++) {
             Path output;
-            try (IconPackWriter writer = new IconPackWriter(directory, metadata("time" + i), 64)) {
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata("time" + i))) {
                 writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
                 writer.statistics(
                     Collections.singletonMap("discovered", (long) i),
@@ -411,12 +470,90 @@ class IconPackTest {
     }
 
     @Test
+    void oversizedOptionalModCatalogueKeepsIconsAndPublishesBoundedMetadata() throws Exception {
+        Map<String, String> mods = new TreeMap<>();
+        String version = String.join("", Collections.nCopies(4096, "x"));
+        for (int i = 0; i < 17_000; i++) mods.put("mod" + i, version);
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata("1.7.10", "forge", "legacy-v1", "generator", "today", mods))) {
+            writer.add(key, new int[4096]);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertFalse(
+                pack.metadata()
+                    .mods()
+                    .isEmpty());
+            assertTrue(
+                pack.metadata()
+                    .mods()
+                    .size() < mods.size());
+            assertEquals(
+                mods.size() - pack.metadata()
+                    .mods()
+                    .size(),
+                pack.failureCount());
+        }
+    }
+
+    @Test
+    void oversizedOptionalProvenanceDoesNotDiscardIcons() throws Exception {
+        Map<String, String> mods = new TreeMap<>();
+        mods.put("healthy", "1.0");
+        mods.put("oversized", String.join("", Collections.nCopies(5000, "x")));
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(
+            directory,
+            new IconPack.Metadata("1.7.10", "forge", "legacy-v1", "generator", "today", mods))) {
+            writer.add(key, new int[4096]);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertEquals(
+                "1.0",
+                pack.metadata()
+                    .mods()
+                    .get("healthy"));
+            assertTrue(pack.failureCount() > 0);
+        }
+    }
+
+    @Test
+    void optionalStatisticsOverflowAndMalformedEntriesDoNotPreventPublication() throws Exception {
+        Map<String, Long> counts = new TreeMap<>();
+        List<String> sources = new ArrayList<>();
+        for (int i = 0; i < 70; i++) {
+            counts.put("counter" + i, (long) i);
+            sources.add("source" + i);
+        }
+        counts.put("bad count", -1L);
+        sources.add("bad source");
+        StableKey key = StableKey.random();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
+            writer.add(key, new int[4096]);
+            writer.statistics(counts, sources);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            assertNotNull(pack.find(key));
+            assertTrue(pack.failureCount() > 0);
+        }
+    }
+
+    @Test
     void repeatedStatisticsReplacePreviousValuesAndCopyCallerData() throws Exception {
         Map<String, Long> counts = new TreeMap<>();
         counts.put("current", 7L);
         List<String> sources = new ArrayList<>(Arrays.asList("second", "first"));
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.statistics(Collections.singletonMap("previous", 1L), Collections.singletonList("old"));
             writer.statistics(counts, sources);
             counts.put("current", 99L);
@@ -444,13 +581,13 @@ class IconPackTest {
     @Test
     void canonicalEmptyPackMatchesIndependentSha256Vector() throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 1024)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             output = writer.finish();
         }
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             // SHA-256 calculated with Python hashlib from the specification's compact, alphabetically ordered
             // projection.
-            assertEquals("d2cc077101bea2074360e1ba61eb17f0b1ece3f23a62c8af3d5e13f83c5cf0df", pack.packId());
+            assertEquals("2de32c6d2b145c339ada6261a0dee06aea20f2ed1bdb06e901879c1ddded2a0b", pack.packId());
             assertThrows(FileNotFoundException.class, () -> pack.openPage("unknown"));
         }
         assertRejectedPack(output, "1.12.2");
@@ -459,8 +596,8 @@ class IconPackTest {
     @Test
     void imagesCrossPageBoundariesWithoutRetainingOrChangingPixels() throws Exception {
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512)) {
-            for (int i = 0; i < 50; i++) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
+            for (int i = 0; i < 226; i++) {
                 int[] pixels = new int[4096];
                 Arrays.fill(pixels, 0xff000000 | i);
                 final int identity = i;
@@ -473,7 +610,7 @@ class IconPackTest {
                 2,
                 pack.pages()
                     .size());
-            for (int i = 0; i < 50; i++) {
+            for (int i = 0; i < 226; i++) {
                 final int identity = i;
                 Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
                 assertNotNull(location);
@@ -489,15 +626,14 @@ class IconPackTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = { 64, 512, 1024, 2048 })
-    void patternedPixelsAndExtrudedEdgesSurviveAtlasPlacement(int pageSize) throws Exception {
-        int columns = pageSize == 64 ? 1 : pageSize / 66;
+    @Test
+    void patternedPixelsAndExtrudedEdgesSurviveAtlasPlacement() throws Exception {
+        int columns = 15;
         int count = columns * columns + 1;
         int[][] expected = new int[count][4096];
         Random colors = new Random(1947);
         Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), pageSize)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             for (int i = 0; i < count; i++) {
                 for (int pixel = 0; pixel < 4096; pixel++) expected[i][pixel] = colors.nextInt();
                 // Exercise transparent RGB, partial alpha and opaque corners without premultiplication.
@@ -532,7 +668,6 @@ class IconPackTest {
                                 .digest()))
                         continue;
                     assertArrayEquals(expected[i], atlas.getRGB(location.x(), location.y(), 64, 64, null, 0, 64));
-                    if (pageSize == 64) continue;
                     for (int offset = 0; offset < 64; offset++) {
                         assertEquals(expected[i][offset], atlas.getRGB(location.x() + offset, location.y() - 1));
                         assertEquals(
@@ -554,17 +689,9 @@ class IconPackTest {
 
     @Test
     void malformedInputAndAbortedWritersNeverPublishPartialPacks() throws Exception {
-        assertThrows(IllegalArgumentException.class, () -> {
-            try (IconPackWriter ignored = new IconPackWriter(directory, metadata("today"), 65)) {
-                fail("Invalid atlas size must be rejected");
-            }
-        });
-        IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512);
+        IconPackWriter writer = new IconPackWriter(directory, metadata("today"));
         try (IconPackWriter ignored = writer) {
             assertThrows(IllegalArgumentException.class, () -> writer.add(StableKey.random(), new int[1]));
-            assertThrows(
-                IllegalArgumentException.class,
-                () -> writer.statistics(Collections.singletonMap("invalid", -1L), Collections.emptyList()));
             writer.add(StableKey.random(), new int[4096]);
         }
         assertThrows(IOException.class, writer::finish);
@@ -577,7 +704,7 @@ class IconPackTest {
     @Test
     void corruptPagesDuplicateFieldsAndUnexpectedEntriesAreRejected() throws Exception {
         Path original;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             original = writer.finish();
         }
@@ -601,7 +728,7 @@ class IconPackTest {
                         String json = new String(data, StandardCharsets.UTF_8);
                         if (mutation == 0)
                             json = json.replace("\"formatVersion\":2", "\"formatVersion\":2,\"formatVersion\":2");
-                        if (mutation == 1) json = reseal(json.replace("[0,0,0]", "[0,2147483647,0]"));
+                        if (mutation == 1) json = reseal(json.replace("[0,1,1]", "[0,2147483647,1]"));
                         data = json.getBytes(StandardCharsets.UTF_8);
                         if (mutation == 4) data[json.indexOf("today")] = (byte) 0xff;
                     } else if (mutation == 2) data[data.length - 1] ^= 1;
@@ -683,7 +810,7 @@ class IconPackTest {
     @Test
     void precompressedPagesCannotAddAnotherInflationLayer() throws Exception {
         Path original;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             original = writer.finish();
         }
@@ -703,7 +830,7 @@ class IconPackTest {
     @Test
     void pngDimensionsAreValidatedEvenWithCorrectArchiveAndContentDigests() throws Exception {
         Path original;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             original = writer.finish();
         }
@@ -778,7 +905,7 @@ class IconPackTest {
     @Test
     void duplicateZipNamesCannotHideConflictingEntries() throws Exception {
         Path valid;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
             valid = writer.finish();
         }
         Path archive = directory.resolve("duplicate.zip");
@@ -803,42 +930,15 @@ class IconPackTest {
     }
 
     @Test
-    void malformedResourceFingerprintsAreNotPublished() throws Exception {
-        Metadata invalid = new Metadata(
-            "1.7.10",
-            "forge",
-            "legacy-v1",
-            "test",
-            "today",
-            Collections.emptyMap(),
-            Collections.singletonList("not-a-digest"));
-        try (IconPackWriter writer = new IconPackWriter(directory, invalid, 64)) {
-            assertThrows(IOException.class, writer::finish);
-        }
-        try (Stream<Path> files = Files.list(directory)) {
-            assertEquals(0, files.count());
-        }
-    }
-
-    @Test
-    void changedPixelsKeysAndResourcePriorityChangeIdentity() throws Exception {
-        String first = "0000000000000000000000000000000000000000000000000000000000000000";
-        String second = "1111111111111111111111111111111111111111111111111111111111111111";
+    void changedPixelsAndKeysChangeIdentity() throws Exception {
         Set<String> ids = new HashSet<>();
-        for (int variation = 0; variation < 4; variation++) {
-            Metadata metadata = new Metadata(
-                "1.7.10",
-                "forge",
-                "legacy-v1",
-                "test",
-                "today",
-                Collections.emptyMap(),
-                variation == 3 ? Arrays.asList(second, first) : Arrays.asList(first, second));
+        for (int variation = 0; variation < 3; variation++) {
+            Metadata metadata = new Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
             int[] pixels = new int[4096];
             pixels[0] = variation == 1 ? 0xffffffff : 0;
             StableKey key = StableKey.parse(variation == 2 ? "AQEBAQEBAQEBAQEBAQEBAQ" : "AAAAAAAAAAAAAAAAAAAAAA");
             Path output;
-            try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
                 writer.add(key, pixels);
                 output = writer.finish();
             }
@@ -846,6 +946,6 @@ class IconPackTest {
                 ids.add(pack.packId());
             }
         }
-        assertEquals(4, ids.size());
+        assertEquals(3, ids.size());
     }
 }

@@ -157,7 +157,7 @@ let browserLaunch;
 // One browser serves every test of this process; each test gets its own context. A lost browser is relaunched.
 async function sharedBrowser() {
     const launch = (browserLaunch ??= chromium.launch({
-        headless: true,
+        headless: process.env.BROWSER_HEADED !== '1',
         ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
     }));
     const browser = await launch.catch((error) => {
@@ -795,6 +795,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
     return { page, options, base: `http://127.0.0.1:${server.address().port}${mount}/` };
 }
 
+// Freeze wall time before pausing so protocol latency cannot move the target into the past.
+// Timers and performance.now retain their phase; Date advances with runFor again after the pause.
+async function pauseClock(page) {
+    const time = await page.evaluate(() => Date.now());
+    await page.clock.setFixedTime(time);
+    await page.clock.pauseAt(time);
+    await page.clock.setSystemTime(time);
+}
+
 async function clickTab(page, name) {
     const link = page.getByRole('link', { name, exact: true });
     if (page.viewportSize().width <= 600 && !(await link.isVisible()))
@@ -922,6 +931,7 @@ module.exports = {
     historyEntry,
     iron,
     openMobilePane,
+    pauseClock,
     poll,
     quartz,
     readyPlan,

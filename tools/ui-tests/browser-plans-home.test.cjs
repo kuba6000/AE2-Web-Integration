@@ -936,6 +936,29 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
     assert.equal(await tooltip.isVisible(), false, 'Access loss must remove private tooltip contents');
 });
 
+test('resource tooltip keeps its readable width while following the pointer and stays within the viewport', async (t) => {
+    const { page, options, base } = await refreshingFixture(t, '', { viewport: { width: 600, height: 800 } });
+    options.itemsA = [{ ...iron, displayName: 'Iron Ingot with a deliberately long descriptive resource name' }];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    await item.hover({ position: { x: 5, y: 10 } });
+    await tooltip.waitFor();
+    const before = await tooltip.boundingBox();
+    const row = await item.boundingBox();
+    await page.mouse.move(row.x + row.width - 5, row.y + 10, { steps: 10 });
+    await settleFrames(page);
+    const after = await tooltip.boundingBox();
+    assert.ok(Math.abs(before.width - after.width) < 1, 'Moving the pointer must not squeeze tooltip text');
+    assert.ok(after.x >= 0 && after.x + after.width <= 600, 'Tooltip remains horizontally visible');
+    assert.ok(after.y >= 0 && after.y + after.height <= 800, 'Tooltip remains vertically visible');
+    options.itemsA = [{ ...options.itemsA[0], quantity: 87654321 }];
+    await poll(page);
+    await tooltip.getByText(/87,654,321/).waitFor();
+    await page.setViewportSize({ width: 650, height: 800 });
+    await tooltip.waitFor({ state: 'hidden' });
+});
+
 test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes', async (t) => {
     const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);

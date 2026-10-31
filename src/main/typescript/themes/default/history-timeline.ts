@@ -1,4 +1,4 @@
-import type { ReadonlyData } from '../../app/theme-api.js';
+import type { ReadonlyData, ThemeSettings } from '../../app/theme-api.js';
 type CraftingHistory = ReadonlyData<MutableHistory>;
 type ResourceTiming = ReadonlyData<MutableResource>;
 type ProviderTiming = ReadonlyData<MutableProvider>;
@@ -114,7 +114,8 @@ export function renderHistoryTimeline(
     snapshot: CraftingHistory,
     locale: Translator,
     visibleIcons: (targets: IconTarget[]) => void,
-    bindTooltip: HistoryTooltipBinder
+    bindTooltip: HistoryTooltipBinder,
+    settings: ThemeSettings
 ) {
     const { common: t, duration: formatDuration, dateTime, number } = locale;
     const container = element('div');
@@ -147,6 +148,8 @@ export function renderHistoryTimeline(
         option.value = value;
         sort.append(option);
     }
+    const savedSort = settings.get('historyTimelineSort');
+    sort.value = savedSort === 'name' || savedSort === 'quantity' ? savedSort : 'time';
     sortLabel.append(sort);
     toolbar.append(searchLabel, sortLabel);
     const legend = element('details');
@@ -402,7 +405,10 @@ export function renderHistoryTimeline(
         render();
     };
     search.oninput = () => render();
-    sort.onchange = () => render();
+    sort.onchange = () => {
+        settings.set('historyTimelineSort', sort.value);
+        render();
+    };
     render();
     return container;
 }

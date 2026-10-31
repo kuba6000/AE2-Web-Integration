@@ -75,6 +75,13 @@ export function createWebSettings(
                     <span data-theme-text="resourcesPerPage"></span>
                     <select id="terminal-page-size"></select>
                 </label>
+                <label class="web-preference-toggle">
+                    <span data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons">
+                </label>
+                <label>
+                    <span><span id="animation-interval-label" data-theme-text="animationUpdateInterval"></span> — <output id="animation-interval-value" for="animation-update-interval"></output></span>
+                    <input type="range" id="animation-update-interval" min="0" max="1000" step="10" aria-labelledby="animation-interval-label">
+                </label>
             </section>
         </div>
         </div>
@@ -82,6 +89,9 @@ export function createWebSettings(
     const controls = {
         terminalDisplay: root.querySelector<HTMLSelectElement>('#terminal-display')!,
         pageSize: root.querySelector<HTMLSelectElement>('#terminal-page-size')!,
+        animatedIcons: root.querySelector<HTMLInputElement>('#animated-icons')!,
+        animationInterval: root.querySelector<HTMLInputElement>('#animation-update-interval')!,
+        animationIntervalValue: root.querySelector<HTMLOutputElement>('#animation-interval-value')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
@@ -119,6 +129,38 @@ export function createWebSettings(
     let terminalDisplay: TerminalDisplay =
         savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons' ? savedDisplay : 'both';
     application.displayIcons(terminalDisplay !== 'names');
+    controls.animatedIcons.checked = settings.get('animatedIcons') !== false;
+    const savedInterval = settings.get('animationUpdateInterval');
+    let animationInterval =
+        typeof savedInterval === 'number' &&
+        Number.isInteger(savedInterval) &&
+        savedInterval >= 0 &&
+        savedInterval <= 1000 &&
+        savedInterval % 10 === 0
+            ? savedInterval
+            : 200;
+    let uncappedLabel = '';
+    function renderAnimationInterval() {
+        const value = animationInterval === 0 ? uncappedLabel : `${animationInterval} ms`;
+        controls.animationInterval.value = String(animationInterval);
+        controls.animationInterval.setAttribute('aria-valuetext', value);
+        controls.animationInterval.disabled = !controls.animatedIcons.checked;
+        controls.animationIntervalValue.value = value;
+    }
+    function updateAnimationInterval() {
+        renderAnimationInterval();
+        application.icons.animate(controls.animatedIcons.checked, animationInterval);
+    }
+    updateAnimationInterval();
+    controls.animatedIcons.addEventListener('change', () => {
+        settings.set('animatedIcons', controls.animatedIcons.checked);
+        updateAnimationInterval();
+    });
+    controls.animationInterval.addEventListener('input', () => {
+        animationInterval = Number(controls.animationInterval.value);
+        settings.set('animationUpdateInterval', animationInterval);
+        updateAnimationInterval();
+    });
 
     lifetime.onCleanup(() => {
         delete document.documentElement.dataset.appearance;
@@ -174,6 +216,8 @@ export function createWebSettings(
     const autoRefresh = controls.autoRefresh;
     autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     function render(state: ThemeState, locale: Translator): TerminalDisplay {
+        uncappedLabel = locale.t('animationUncapped');
+        renderAnimationInterval();
         root.hidden = state.route.view !== 'web-settings';
         const language = state.preferences.language;
         document.documentElement.dataset.appearance = appearance;
