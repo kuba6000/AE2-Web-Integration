@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -307,39 +308,142 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
     }
 
     @Test
-    void recipePagesExposeDeclaredProductsAndPrimaryDesignation() {
+    void recipePagesListOnlyIngredientGroupsAndTheRecipeNodeCarriesItsDeclaredOutputs() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(62);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(
-                CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(new AtomicInteger())),
+                CompletableFuture
+                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
                 TestGridFixtures.planOutput(),
                 new CraftingOptions(false, false),
                 false);
-        GetCraftingPlanTree request = request(grid, plan, "kind=RECIPE&id=0&limit=1");
+        GetCraftingPlanTree request = request(grid, plan, "kind=RECIPE&id=0");
         request.runOnServerThread(TestGridFixtures.ae(grid));
         JsonObject data = json(
             request.finishResponse()
                 .json())
             .getAsJsonObject("data");
-        JsonObject output = data.getAsJsonArray("children")
-            .get(0)
-            .getAsJsonObject();
+        JsonArray children = data.getAsJsonArray("children");
+        assertEquals(2, children.size());
+        for (JsonElement value : children) {
+            JsonObject child = value.getAsJsonObject();
+            assertEquals(
+                "INGREDIENT",
+                child.get("relation")
+                    .getAsString());
+            assertEquals(
+                "INGREDIENT",
+                child.getAsJsonObject("node")
+                    .get("kind")
+                    .getAsString());
+        }
+        JsonArray outputs = data.getAsJsonObject("node")
+            .getAsJsonArray("outputs");
+        assertEquals(3, outputs.size());
         assertEquals(
-            "RECIPE_OUTPUT",
-            output.get("relation")
-                .getAsString());
+            0,
+            outputs.get(0)
+                .getAsJsonObject()
+                .get("resourceId")
+                .getAsInt());
         assertEquals(
-            "RESOURCE",
-            output.getAsJsonObject("node")
-                .get("kind")
-                .getAsString());
-        assertEquals(
-            "3",
-            output.get("quantity")
+            "64",
+            outputs.get(0)
+                .getAsJsonObject()
+                .get("quantity")
                 .getAsString());
         assertTrue(
-            output.get("primary")
+            outputs.get(0)
+                .getAsJsonObject()
+                .get("primary")
                 .getAsBoolean());
+        assertFalse(
+            outputs.get(1)
+                .getAsJsonObject()
+                .get("primary")
+                .getAsBoolean());
+        assertTrue(
+            outputs.get(2)
+                .getAsJsonObject()
+                .get("primary")
+                .isJsonNull());
+        for (JsonElement value : outputs) resourceData(
+            data,
+            value.getAsJsonObject()
+                .get("resourceId")
+                .getAsInt());
+    }
+
+    @Test
+    void recipesReachedFromAResourceCarryTheirOutputsWhileOtherNodesDoNot() {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(72);
+        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture
+                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        GetCraftingPlanTree resource = request(grid, plan, "kind=RESOURCE&id=0");
+        resource.runOnServerThread(TestGridFixtures.ae(grid));
+        JsonObject data = json(
+            resource.finishResponse()
+                .json())
+            .getAsJsonObject("data");
+        assertTrue(
+            data.getAsJsonObject("node")
+                .get("outputs")
+                .isJsonNull());
+        JsonObject recipe = data.getAsJsonArray("children")
+            .get(0)
+            .getAsJsonObject()
+            .getAsJsonObject("node");
+        assertEquals(
+            3,
+            recipe.getAsJsonArray("outputs")
+                .size());
+        resourceData(data, 1);
+        GetCraftingPlanTree group = request(grid, plan, "kind=INGREDIENT&id=0");
+        group.runOnServerThread(TestGridFixtures.ae(grid));
+        JsonObject groupNode = json(
+            group.finishResponse()
+                .json())
+            .getAsJsonObject("data")
+            .getAsJsonObject("node");
+        assertTrue(
+            groupNode.get("outputs")
+                .isJsonNull());
+        assertEquals(
+            1,
+            groupNode.get("candidates")
+                .getAsInt());
+    }
+
+    @Test
+    void ingredientGroupsStateTheirDeclaredCandidateCountEvenWhenTheMissingFilterNarrowsThePage() {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(73);
+        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture
+                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        GetCraftingPlanTree request = request(grid, plan, "kind=INGREDIENT&id=1&missingOnly=true");
+        request.runOnServerThread(TestGridFixtures.ae(grid));
+        JsonObject data = json(
+            request.finishResponse()
+                .json())
+            .getAsJsonObject("data");
+        assertEquals(
+            2,
+            data.getAsJsonObject("node")
+                .get("candidates")
+                .getAsInt());
+        assertEquals(
+            1,
+            data.getAsJsonArray("children")
+                .size());
     }
 
     @Test
@@ -503,7 +607,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                 .json())
             .getAsJsonObject("data");
         assertEquals(
-            "RECIPE_OUTPUT",
+            "INGREDIENT",
             normal.getAsJsonArray("children")
                 .get(0)
                 .getAsJsonObject()
@@ -562,6 +666,27 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                 .getAsInt() == id) return resource;
         }
         throw new AssertionError("Resource missing from response: " + id);
+    }
+
+    /** One recipe: a primary output, a byproduct and an output without designation; one single and one double group. */
+    private static CraftingRecipeCapture producedExample() {
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(40, 1000);
+        for (int i = 0; i < 4; i++) capture.addResource(
+            () -> TestGridFixtures.planOutput()
+                .description());
+        capture.result(0, 64, false);
+        int recipe = capture.addRecipe(2);
+        int single = capture.addIngredient(recipe, 1);
+        capture.addCandidate(single, 2, 3);
+        int pair = capture.addIngredient(recipe, 2);
+        capture.addCandidate(pair, 2, 1);
+        capture.addCandidate(pair, 3, 1);
+        capture.addOutput(recipe, 0, 64, true);
+        capture.addOutput(recipe, 1, 2, false);
+        capture.addOutput(recipe, 3, 5, null);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 3, 1);
+        capture.finishRecipe(recipe);
+        return capture.build();
     }
 
     private static CraftingRecipeCapture missingExample() {

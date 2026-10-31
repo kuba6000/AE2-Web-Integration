@@ -74,6 +74,16 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
         space.style.height = `${height * scale}px`;
         reset.textContent = `${Math.round(scale * 100)}%`;
     }
+    /** Zoom so that the diagram point under the given screen position stays under it. */
+    function zoomAt(value: number, clientX: number, clientY: number) {
+        const before = space.getBoundingClientRect();
+        const x = (clientX - before.left) / scale,
+            y = (clientY - before.top) / scale;
+        zoom(value);
+        const after = space.getBoundingClientRect();
+        viewport.scrollLeft += after.left + x * scale - clientX;
+        viewport.scrollTop += after.top + y * scale - clientY;
+    }
     previous.onclick = () => {
         application.crafting.windowTree(-1);
         requestAnimationFrame(() =>
@@ -103,21 +113,68 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     missingOnly.onclick = () => void application.crafting.missingTree(!application.state.crafting.tree.missingOnly);
     reveal.onclick = () => void application.crafting.revealMissingTree();
     retry.onclick = () => void application.crafting.retryTree();
-    let drag: { x: number; y: number; left: number; top: number } | null = null;
+    // The narrow layout is an ordinary outline: it has nothing to zoom and its wheel scrolls the page.
+    const outline = window.matchMedia('(width <= 700px)');
+    viewport.addEventListener(
+        'wheel',
+        (event) => {
+            if (outline.matches || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+            event.preventDefault();
+            const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+            // Trackpad pinch arrives as a ctrl+wheel with small deltas.
+            zoomAt(
+                scale * Math.exp((-event.deltaY * lines) / (event.ctrlKey ? 100 : 700)),
+                event.clientX,
+                event.clientY
+            );
+        },
+        { passive: false }
+    );
+    // A press moves the diagram only after it travels a few pixels, so a plain click still reaches its card.
+    const DRAG_DISTANCE = 4;
+    let drag: { x: number; y: number; left: number; top: number; pointer: number; moving: boolean } | null = null;
+    let dragged = false;
+    function endDrag() {
+        drag = null;
+        delete viewport.dataset.dragging;
+    }
     viewport.addEventListener('pointerdown', (event) => {
-        if ((event.target as HTMLElement).closest('button') || event.pointerType !== 'mouse') return;
-        drag = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
-        viewport.setPointerCapture(event.pointerId);
+        if (event.pointerType !== 'mouse' || event.button !== 0) return;
+        dragged = false;
+        drag = {
+            x: event.clientX,
+            y: event.clientY,
+            left: viewport.scrollLeft,
+            top: viewport.scrollTop,
+            pointer: event.pointerId,
+            moving: false
+        };
     });
     viewport.addEventListener('pointermove', (event) => {
-        if (drag) viewport.scrollTo(drag.left - event.clientX + drag.x, drag.top - event.clientY + drag.y);
+        if (!drag || event.pointerId !== drag.pointer) return;
+        const dx = event.clientX - drag.x,
+            dy = event.clientY - drag.y;
+        if (!drag.moving) {
+            if (Math.hypot(dx, dy) < DRAG_DISTANCE) return;
+            drag.moving = dragged = true;
+            viewport.dataset.dragging = 'true';
+            viewport.setPointerCapture(event.pointerId);
+        }
+        viewport.scrollTo(drag.left - dx, drag.top - dy);
     });
-    viewport.addEventListener('pointerup', () => {
-        drag = null;
-    });
-    viewport.addEventListener('pointercancel', () => {
-        drag = null;
-    });
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+    // Releasing a drag over a card must not also press it.
+    viewport.addEventListener(
+        'click',
+        (event) => {
+            if (!dragged) return;
+            dragged = false;
+            event.stopPropagation();
+            event.preventDefault();
+        },
+        true
+    );
     return {
         element: root,
         render(state: ThemeState['crafting']['tree'], nextLocale: Translator, busy: boolean) {

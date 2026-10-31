@@ -2,16 +2,21 @@ import type { Api, ApiFailure } from './api.js';
 import type { IconAnimation, IconMetadata, ResourceDescription } from './api-types.js';
 
 export type TreeKind = 'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED' | 'UNLINKED_MISSING';
+/** An output a recipe declares, per craft; primary is false for a byproduct and null when not retained. */
+export type TreeOutput = { resourceId: number; quantity: string; primary: boolean | null };
 export type TreeNode = {
     kind: TreeKind;
     id: number;
     crafts: string | null;
     multiplier: string | null;
     complete: boolean | null;
+    /** Declared candidate count of an ingredient group, whatever the missing-only filter leaves in its page. */
+    candidates: number | null;
+    /** Declared outputs of a recipe. */
+    outputs: TreeOutput[] | null;
 };
 export type TreeChild = {
-    relation:
-        'DECLARED_OUTPUT' | 'RECIPE_OUTPUT' | 'INGREDIENT' | 'DECLARED_ALTERNATIVE' | 'UNPLACED' | 'MISSING_RESOURCE';
+    relation: 'DECLARED_OUTPUT' | 'INGREDIENT' | 'DECLARED_ALTERNATIVE' | 'UNPLACED' | 'MISSING_RESOURCE';
     primary: boolean | null;
     node: TreeNode;
     quantity: string | null;
@@ -66,7 +71,8 @@ export type TreeRow = {
     reference: boolean;
     quantity: string | null;
     relation: TreeChild['relation'] | null;
-    primary?: boolean | null;
+    /** The single-candidate ingredient group this resource stands in for; the group has no row of its own. */
+    group?: TreeNode;
 };
 export type TreeState = {
     captureId: string | null;
@@ -99,6 +105,15 @@ export type TreeState = {
     revision: number;
 };
 const keyOf = (node: TreeNode) => `${node.kind}:${node.id}`;
+const syntheticNode: TreeNode = {
+    kind: 'UNPLACED',
+    id: 0,
+    crafts: null,
+    multiplier: null,
+    complete: null,
+    candidates: null,
+    outputs: null
+};
 const VISIBLE_LIMIT = 300;
 const CACHE_LIMIT = 3000;
 // One batched response carries at most this many child rows; the server accepts up to twice as many.
@@ -173,6 +188,23 @@ export function createCraftingTree(
         clearTimeout(timer);
         state.loading = null;
     }
+    /** The only declared candidate of an ingredient group whose page is held completely, else null. */
+    function singleCandidate(child: TreeChild) {
+        if (child.node.kind !== 'INGREDIENT' || child.node.candidates !== 1) return null;
+        const page = state.pages[keyOf(child.node)];
+        return page && page.nextOffset === null && page.children.length === 1 ? page.children[0] : null;
+    }
+    /**
+     * Single-candidate groups of a recipe page whose own page is not held yet. Each group page costs exactly one
+     * row, so one batch with that row budget reads them all and nothing beyond.
+     */
+    function unreadGroups(recipeKey: string) {
+        return (state.pages[recipeKey]?.children ?? [])
+            .filter((child) => child.node.kind === 'INGREDIENT' && child.node.candidates === 1)
+            .map((child) => keyOf(child.node))
+            .filter((key) => !state.pages[key])
+            .map((key) => ({ key, offset: 0 }));
+    }
     function publish() {
         const seen = new Set<string>();
         const rows: TreeRow[] = [];
@@ -180,7 +212,7 @@ export function createCraftingTree(
         if (state.unlinkedMissingCount)
             stack.push({
                 key: 'UNLINKED_MISSING:0',
-                node: { kind: 'UNLINKED_MISSING', id: 0, crafts: null, multiplier: null, complete: null },
+                node: { ...syntheticNode, kind: 'UNLINKED_MISSING' },
                 depth: 0,
                 quantity: null,
                 relation: 'MISSING_RESOURCE'
@@ -188,7 +220,7 @@ export function createCraftingTree(
         if (state.unplacedCount && rootKey !== 'UNPLACED:0')
             stack.push({
                 key: 'UNPLACED:0',
-                node: { kind: 'UNPLACED', id: 0, crafts: null, multiplier: null, complete: null },
+                node: { ...syntheticNode, kind: 'UNPLACED' },
                 depth: 0,
                 quantity: null,
                 relation: 'UNPLACED'
@@ -211,13 +243,16 @@ export function createCraftingTree(
             const children = state.pages[row.key]?.children ?? [];
             for (let index = children.length - 1; index >= 0; index--) {
                 const child = children[index];
+                // A group with one declared candidate adds no choice, so its candidate stands in for the group.
+                const only = singleCandidate(child);
+                const shown = only ?? child;
                 stack.push({
-                    key: keyOf(child.node),
-                    node: child.node,
+                    key: keyOf(shown.node),
+                    node: shown.node,
                     depth: row.depth + 1,
-                    quantity: child.quantity,
-                    primary: child.primary,
-                    relation: child.relation
+                    quantity: shown.quantity,
+                    relation: shown.relation,
+                    ...(only ? { group: child.node } : {})
                 });
             }
         }
@@ -363,6 +398,13 @@ export function createCraftingTree(
                     if (rootKey === null) state.expanded[key] = true;
                     rootKey = key;
                 }
+                // Read before the recipe's rows are published, so no group card flashes up and is replaced.
+                const groups = kind === 'RECIPE' ? unreadGroups(key) : [];
+                if (groups.length) {
+                    const outcome = await readBatch(groups, groups.length, version);
+                    if (outcome === 'stale') return;
+                    restart = outcome === 'replaced';
+                }
             }
             if (page.state === 'PREPARING' || page.state === 'CALCULATING')
                 timer = setTimeout(() => void load('ROOT', 0), 1000);
@@ -417,45 +459,57 @@ export function createCraftingTree(
     }
     /**
      * Reads the pages of the given nodes and, breadth-first, of the nodes they reference, up to a child-row
-     * budget. Resolves true when the response was merged into the tree.
+     * budget, and merges them. A response for a replaced plan capture discards the tree ("replaced"); one from
+     * before a reset or stop is dropped ("stale"). Failures propagate to the caller.
      */
+    async function readBatch(
+        starts: { key: string; offset: number }[],
+        rows: number,
+        version: number
+    ): Promise<'merged' | 'unready' | 'replaced' | 'stale'> {
+        if (!target || !request) return 'stale';
+        const loaded = loadedHint();
+        const response = await api.planTreeBatch(
+            target.grid,
+            target.plan,
+            {
+                nodes: starts.map(({ key, offset }) => (offset ? `${key}:${offset}` : key)).join(','),
+                rows: Math.max(1, Math.min(rows, CACHE_LIMIT - cachedRows)),
+                icons: iconsEnabled(),
+                missingOnly,
+                ...(loaded ? { loaded } : {}),
+                ...(state.captureId ? { captureId: state.captureId } : {})
+            },
+            request.signal
+        );
+        if (version !== generation) return 'stale';
+        const page = response.data;
+        if (state.captureId && state.captureId !== page.captureId) {
+            cancelExpansion();
+            discard();
+            return 'replaced';
+        }
+        applyHeader(page, response.icons);
+        for (const entry of page.pages ?? []) storePage(entry);
+        if (page.state === 'PREPARING' || page.state === 'CALCULATING')
+            timer = setTimeout(() => void load('ROOT', 0), 1000);
+        return page.state === 'READY' ? 'merged' : 'unready';
+    }
+    /** Resolves true when the response was merged into the tree. */
     async function loadBatch(starts: { key: string; offset: number }[], rows: number) {
         if (!target || !state.visible || state.loading) return false;
         const version = generation;
         let restart = false;
         let merged = false;
-        const loaded = loadedHint();
         request = new AbortController();
         state.loading = starts[0].key;
         state.error = null;
         publish();
         try {
-            const response = await api.planTreeBatch(
-                target.grid,
-                target.plan,
-                {
-                    nodes: starts.map(({ key, offset }) => (offset ? `${key}:${offset}` : key)).join(','),
-                    rows: Math.max(1, Math.min(rows, CACHE_LIMIT - cachedRows)),
-                    icons: iconsEnabled(),
-                    missingOnly,
-                    ...(loaded ? { loaded } : {}),
-                    ...(state.captureId ? { captureId: state.captureId } : {})
-                },
-                request.signal
-            );
-            if (version !== generation) return false;
-            const page = response.data;
-            if (state.captureId && state.captureId !== page.captureId) {
-                cancelExpansion();
-                discard();
-                restart = true;
-                return false;
-            }
-            applyHeader(page, response.icons);
-            for (const entry of page.pages ?? []) storePage(entry);
-            if (page.state === 'PREPARING' || page.state === 'CALCULATING')
-                timer = setTimeout(() => void load('ROOT', 0), 1000);
-            merged = page.state === 'READY';
+            const outcome = await readBatch(starts, rows, version);
+            if (outcome === 'stale') return false;
+            merged = outcome === 'merged';
+            restart = outcome === 'replaced';
         } catch (caught) {
             if (version !== generation) return false;
             restart = failure(caught as ApiFailure);
@@ -635,7 +689,9 @@ export function createCraftingTree(
                     : key === 'UNLINKED_MISSING:0'
                       ? { kind: 'UNLINKED_MISSING' as const, id: 0 }
                       : null);
+            const unread = node?.kind === 'RECIPE' ? unreadGroups(key) : [];
             if (node && !state.pages[key]) await load(node.kind, node.id);
+            else if (unread.length) await loadBatch(unread, unread.length);
             else publish();
         },
         async more(key: string) {

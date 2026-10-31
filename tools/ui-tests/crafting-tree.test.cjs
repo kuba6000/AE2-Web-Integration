@@ -433,11 +433,18 @@ test('expired first request publishes an error revision newer than its loading r
 });
 
 const keyOf = (value) => `${value.kind}:${value.id}`;
+let nodeExtras = {};
 const nodeOf = (key) => {
     const [kind, id] = key.split(':');
-    return node(kind, Number(id));
+    return { ...node(kind, Number(id)), ...nodeExtras[key] };
 };
-const edge = (key) => ({ node: nodeOf(key), relation: 'DECLARED_OUTPUT', quantity: '1' });
+const relationBelow = (parent) =>
+    parent.startsWith('RECIPE:')
+        ? 'INGREDIENT'
+        : parent.startsWith('INGREDIENT:')
+          ? 'DECLARED_ALTERNATIVE'
+          : 'DECLARED_OUTPUT';
+const edge = (key, parent = '') => ({ node: nodeOf(key), relation: relationBelow(parent), quantity: '1' });
 const parseLoaded = (text = '') => {
     const keys = new Set();
     for (const group of text.split('|').filter(Boolean)) {
@@ -489,7 +496,7 @@ function treeServer(adjacency, { header = {}, root = 'RESOURCE:0' } = {}) {
                 const key = query.kind === 'ROOT' ? root : `${query.kind}:${query.id}`;
                 const all = childrenOf(key);
                 const end = Math.min(all.length, query.offset + query.limit);
-                const children = all.slice(query.offset, end).map(edge);
+                const children = all.slice(query.offset, end).map((child) => edge(child, key));
                 server.rowsDelivered += children.length;
                 return envelope(query, { node: nodeOf(key), children, nextOffset: end < all.length ? end : null });
             },
@@ -508,7 +515,7 @@ function treeServer(adjacency, { header = {}, root = 'RESOURCE:0' } = {}) {
                     const start = queue.shift();
                     const all = childrenOf(start.key);
                     const end = Math.min(all.length, start.offset + budget);
-                    const children = all.slice(start.offset, end).map(edge);
+                    const children = all.slice(start.offset, end).map((child) => edge(child, start.key));
                     pages.push({
                         node: nodeOf(start.key),
                         offset: start.offset,
@@ -732,4 +739,94 @@ test('expand all stops at cache capacity and reports incomplete expansion', asyn
     assert.equal(tree.state.totalRows, retainedRows);
     assert.equal(tree.state.expandedComplete, false);
     tree.dispose();
+});
+
+test('a group with one declared candidate shows that candidate directly, without a group card or a flash of one', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    nodeExtras = { 'INGREDIENT:0': { candidates: 1, multiplier: '4' }, 'INGREDIENT:1': { candidates: 2 } };
+    const server = treeServer({
+        'RESOURCE:0': ['RECIPE:0'],
+        'RECIPE:0': ['INGREDIENT:0', 'INGREDIENT:1'],
+        'INGREDIENT:0': ['RESOURCE:1'],
+        'INGREDIENT:1': ['RESOURCE:2', 'RESOURCE:3']
+    });
+    const published = [];
+    const tree = createCraftingTree(server.api, () => published.push(tree.state.rows.map((row) => row.key)));
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.toggle('RECIPE:0');
+    const layout = tree.state.rows.map((row) => [row.key, row.depth]);
+    assert.deepEqual(layout, [
+        ['RESOURCE:0', 0],
+        ['RECIPE:0', 1],
+        ['RESOURCE:1', 2],
+        ['INGREDIENT:1', 2]
+    ]);
+    const direct = tree.state.rows[2];
+    assert.equal(direct.relation, 'DECLARED_ALTERNATIVE');
+    assert.equal(direct.quantity, '1');
+    assert.equal(direct.group.multiplier, '4');
+    assert.ok(published.every((keys) => !keys.includes('INGREDIENT:0')));
+    assert.deepEqual(
+        server.batches().map((request) => [request.query.nodes, request.query.rows]),
+        [['INGREDIENT:0', 1]],
+        'Only the single-candidate group is read ahead, with exactly its own row budget'
+    );
+    await tree.toggle('INGREDIENT:1');
+    nodeExtras = {};
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.key),
+        ['RESOURCE:0', 'RECIPE:0', 'RESOURCE:1', 'INGREDIENT:1', 'RESOURCE:2', 'RESOURCE:3']
+    );
+});
+
+test('a collapsed single candidate keeps its own expansion key and later occurrences stay references', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    nodeExtras = { 'INGREDIENT:0': { candidates: 1 }, 'INGREDIENT:1': { candidates: 1 } };
+    const server = treeServer({
+        'RESOURCE:0': ['RECIPE:0'],
+        'RECIPE:0': ['INGREDIENT:0', 'INGREDIENT:1'],
+        'INGREDIENT:0': ['RESOURCE:1'],
+        'INGREDIENT:1': ['RESOURCE:1'],
+        'RESOURCE:1': ['RECIPE:1']
+    });
+    const tree = createCraftingTree(server.api, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.toggle('RECIPE:0');
+    assert.deepEqual(
+        tree.state.rows.map((row) => [row.key, row.reference]),
+        [
+            ['RESOURCE:0', false],
+            ['RECIPE:0', false],
+            ['RESOURCE:1', false],
+            ['RESOURCE:1', true]
+        ]
+    );
+    await tree.toggle('RESOURCE:1');
+    assert.equal(tree.state.expanded['RESOURCE:1'], true);
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.key),
+        ['RESOURCE:0', 'RECIPE:0', 'RESOURCE:1', 'RECIPE:1', 'RESOURCE:1']
+    );
+    nodeExtras = {};
+});
+
+test('expand all collapses single-candidate groups too', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    nodeExtras = { 'INGREDIENT:0': { candidates: 1 } };
+    const server = treeServer({
+        'RESOURCE:0': ['RECIPE:0'],
+        'RECIPE:0': ['INGREDIENT:0'],
+        'INGREDIENT:0': ['RESOURCE:1']
+    });
+    const tree = createCraftingTree(server.api, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.expandAll();
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.key),
+        ['RESOURCE:0', 'RECIPE:0', 'RESOURCE:1']
+    );
+    nodeExtras = {};
 });

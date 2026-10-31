@@ -1,6 +1,7 @@
 import type { TreeRow, TreeState } from '../../app/crafting-tree.js';
 import type { ReadonlyData } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
 
 /** Shared screen/PNG wording; amounts remain exact plan totals or declared recipe quantities. */
 export function craftingTreeContent(
@@ -26,24 +27,26 @@ export function craftingTreeContent(
         );
     const details: string[] = [];
     if (row.reference) details.push(t(interactive ? 'treeReference' : 'treeReferenceStatic'));
-    if (row.relation === 'RECIPE_OUTPUT')
+    // A recipe reached from a resource states its own outputs below, which include that resource's amount.
+    if (row.relation !== 'DECLARED_OUTPUT') {
+        if (row.quantity !== null)
+            details.push(
+                `${t(row.relation === 'DECLARED_ALTERNATIVE' ? 'treePerTemplate' : 'quantity')}: ${number(row.quantity)}`
+            );
+        else if (row.relation === 'DECLARED_ALTERNATIVE') details.push(t('treeUnknownQuantity'));
+    }
+    if (row.node.outputs?.length)
         details.push(
-            t(
-                row.primary === true
-                    ? 'treePrimaryOutput'
-                    : row.primary === false
-                      ? 'treeSecondaryOutput'
-                      : 'treeUnknownOutput'
-            )
+            `${t('treeOutputs')}: ${row.node.outputs
+                .map((output) => {
+                    const name = plainMinecraftText(state.resources[output.resourceId]?.displayName ?? '?');
+                    return `${name} ×${number(output.quantity)}${output.primary === false ? ` (${t('treeByproduct')})` : ''}`;
+                })
+                .join(', ')}`
         );
-    if (row.quantity !== null)
-        details.push(
-            `${t(row.relation === 'DECLARED_OUTPUT' || row.relation === 'RECIPE_OUTPUT' ? 'treePerCraft' : row.relation === 'DECLARED_ALTERNATIVE' ? 'treePerTemplate' : 'quantity')}: ${number(row.quantity)}`
-        );
-    else if (['DECLARED_OUTPUT', 'RECIPE_OUTPUT', 'DECLARED_ALTERNATIVE'].includes(row.relation ?? ''))
-        details.push(t('treeUnknownQuantity'));
     if (row.node.crafts !== null) details.push(`${t('treeCrafts')}: ${number(row.node.crafts)}`);
-    if (row.node.multiplier !== null) details.push(`${t('treeMultiplier')}: ${number(row.node.multiplier)}`);
+    const multiplier = row.node.multiplier ?? row.group?.multiplier ?? null;
+    if (multiplier !== null) details.push(`${t('treeMultiplier')}: ${number(multiplier)}`);
     if (row.node.complete === false) details.push(t('treePartialNode'));
     const missing = resource?.missingAmount != null && BigInt(resource.missingAmount) > 0n;
     if (missing) details.unshift(`${t('treeMissingInPlan')}: ${number(resource.missingAmount!)}`);

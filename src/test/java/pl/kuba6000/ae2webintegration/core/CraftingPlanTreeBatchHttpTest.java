@@ -269,7 +269,7 @@ class CraftingPlanTreeBatchHttpTest extends GridTestScope {
             1,
             truncated.get("nextOffset")
                 .getAsInt());
-        JsonObject resumed = data(get("nodes=RECIPE:0:1&rows=2", 200, "OK"));
+        JsonObject resumed = data(get("nodes=RECIPE:0:1&rows=1", 200, "OK"));
         JsonObject tail = resumed.getAsJsonArray("pages")
             .get(0)
             .getAsJsonObject();
@@ -278,7 +278,7 @@ class CraftingPlanTreeBatchHttpTest extends GridTestScope {
             tail.get("offset")
                 .getAsInt());
         assertEquals(
-            2,
+            1,
             tail.getAsJsonArray("children")
                 .size());
         assertTrue(
@@ -293,7 +293,7 @@ class CraftingPlanTreeBatchHttpTest extends GridTestScope {
 
     @Test
     void requestedNodesBeyondTheBudgetAreLeftForTheNextRequest() throws Exception {
-        JsonObject batch = data(get("nodes=RECIPE:0,RECIPE:1,RECIPE:2&rows=3", 200, "OK"));
+        JsonObject batch = data(get("nodes=RECIPE:0,RECIPE:1,RECIPE:2&rows=2", 200, "OK"));
         JsonArray pages = batch.getAsJsonArray("pages");
         assertEquals(1, pages.size());
         assertEquals(
@@ -392,7 +392,7 @@ class CraftingPlanTreeBatchHttpTest extends GridTestScope {
 
     @Test
     void duplicateStartNodesCollapseIntoOnePage() throws Exception {
-        JsonObject batch = data(get("nodes=RECIPE:0,RECIPE:0&rows=3", 200, "OK"));
+        JsonObject batch = data(get("nodes=RECIPE:0,RECIPE:0&rows=2", 200, "OK"));
         assertEquals(
             1,
             batch.getAsJsonArray("pages")

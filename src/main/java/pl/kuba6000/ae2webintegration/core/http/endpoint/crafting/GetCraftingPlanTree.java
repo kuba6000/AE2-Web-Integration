@@ -47,6 +47,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 /**
  * Browse declared dependencies of a retained calculated plan. Capture is lazy and shared by viewers.
  * Links describe recipe declarations, never selected substitutes or per-consumer material allocation.
+ * A recipe's children are only its ingredient groups; its declared outputs travel on the recipe node
+ * itself (see {@link Node}), and an ingredient group's children are its declared candidates.
  * <p>
  * Once a plan has been captured, pages are served without waiting for the server thread. A request with
  * {@code nodes} is a batched read: it returns the pages of the listed nodes and then, breadth-first, the
@@ -99,7 +101,6 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
 
     public enum Relation {
         DECLARED_OUTPUT,
-        RECIPE_OUTPUT,
         INGREDIENT,
         DECLARED_ALTERNATIVE,
         MISSING_RESOURCE,
@@ -158,9 +159,22 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     @Desugar
     public record Root(int resourceId, @NotNull String quantity, boolean simulated) {}
 
+    /**
+     * One output declared by a recipe, amount per craft. Primary is true or false when the native plan retains
+     * the designation (false marks a byproduct) and null when it does not.
+     */
+    @Desugar
+    public record Output(int resourceId, @NotNull String quantity, @Nullable Boolean primary) {}
+
+    /**
+     * A graph node. Crafts and complete belong to recipes, whose outputs list every declared output (their
+     * descriptors are in the response's resources). Multiplier and candidates belong to ingredient groups;
+     * candidates is the declared candidate count even when the missing-only filter narrows the group's page.
+     * Fields that do not apply to the node kind are null.
+     */
     @Desugar
     public record Node(@NotNull Kind kind, int id, @Nullable String crafts, @Nullable String multiplier,
-        @Nullable Boolean complete) {}
+        @Nullable Boolean complete, @Nullable Integer candidates, @Nullable List<Output> outputs) {}
 
     @Desugar
     public record Child(@NotNull Relation relation, @NotNull Node node, @Nullable String quantity,
@@ -187,14 +201,6 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
 
     @Desugar
     private record Start(@NotNull Kind kind, int id, int offset) {}
-
-    @Desugar
-    private record Adjacent(@NotNull List<Integer> declaredOutputs, @NotNull List<Integer> rows) {
-
-        int total() {
-            return declaredOutputs.size() + rows.size();
-        }
-    }
 
     /** Single-node reads fill node, children and nextOffset; batched reads fill pages and leave those empty. */
     @Desugar
@@ -414,8 +420,8 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         Kind resolvedKind = kind == Kind.ROOT ? result == null ? Kind.UNPLACED : Kind.RESOURCE : kind;
         int resolvedId = kind == Kind.ROOT ? result == null ? 0 : result.resourceId() : nodeId;
         if (isOutside(graph, resolvedKind, resolvedId)) return null;
-        Adjacent adjacent = adjacent(graph, resolvedKind, resolvedId);
-        if (offset > adjacent.total()) return null;
+        List<Integer> adjacent = adjacent(graph, resolvedKind, resolvedId);
+        if (offset > adjacent.size()) return null;
         Projection projection = new Projection(graph);
         Page page = projection.page(resolvedKind, resolvedId, adjacent, offset, limit);
         return projection.respond(captureId, page.node(), page.children(), page.nextOffset(), null);
@@ -425,7 +431,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     private @Nullable Response batch(CraftingDependencyGraph graph, String captureId, List<Start> requested) {
         for (Start start : requested) {
             if (isOutside(graph, start.kind(), start.id())
-                || start.offset() > adjacent(graph, start.kind(), start.id()).total()) return null;
+                || start.offset() > adjacent(graph, start.kind(), start.id()).size()) return null;
         }
         Projection projection = new Projection(graph);
         ArrayDeque<Start> queue = new ArrayDeque<>(requested);
@@ -471,8 +477,8 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     }
 
     /** Neighborhood of a node whose identifier is known to exist. */
-    private @NotNull Adjacent adjacent(CraftingDependencyGraph graph, Kind kind, int id) {
-        List<Integer> rows = switch (kind) {
+    private @NotNull List<Integer> adjacent(CraftingDependencyGraph graph, Kind kind, int id) {
+        return switch (kind) {
             case RESOURCE -> graph.declaredProducers(id, missingOnly);
             case RECIPE -> graph.ingredients(id, missingOnly);
             case INGREDIENT -> graph.alternatives(id, missingOnly);
@@ -480,7 +486,6 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
             case UNLINKED_MISSING -> graph.unlinkedMissingResources();
             default -> throw new IllegalStateException("Unresolved root");
         };
-        return new Adjacent(kind == Kind.RECIPE && !missingOnly ? graph.outputs(id) : Collections.emptyList(), rows);
     }
 
     /** One response: its pages share the descriptor table and icon mappings. */
@@ -501,58 +506,77 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         }
 
         /** The children from the offset, at most max of them. */
-        private Page page(Kind kind, int id, Adjacent adjacent, int offset, int max) {
+        private Page page(Kind kind, int id, List<Integer> rows, int offset, int max) {
             if (kind == Kind.RESOURCE) resource(resources, graph, id, mappings);
-            List<Integer> declaredOutputs = adjacent.declaredOutputs();
-            List<Integer> rows = adjacent.rows();
-            int total = adjacent.total();
+            int total = rows.size();
             List<Child> children = new ArrayList<>();
             int end = offset + Math.min(max, total - offset);
             for (int index = offset; index < end; index++) {
-                if (index < declaredOutputs.size()) {
-                    CraftingRecipeCapture.Output output = capture.outputs()
-                        .get(declaredOutputs.get(index));
-                    resource(resources, graph, output.resourceId(), mappings);
-                    children.add(
-                        new Child(
-                            Relation.RECIPE_OUTPUT,
-                            node(capture, Kind.RESOURCE, output.resourceId()),
-                            Long.toString(output.amount()),
-                            output.primary()));
-                    continue;
-                }
-                int row = rows.get(index - declaredOutputs.size());
+                int row = rows.get(index);
                 Child child = switch (kind) {
                     case RESOURCE -> {
                         CraftingRecipeCapture.Output output = capture.outputs()
                             .get(row);
                         yield new Child(
                             Relation.DECLARED_OUTPUT,
-                            node(capture, Kind.RECIPE, output.recipeId()),
+                            node(Kind.RECIPE, output.recipeId()),
                             Long.toString(output.amount()),
                             output.primary());
                     }
-                    case RECIPE -> new Child(Relation.INGREDIENT, node(capture, Kind.INGREDIENT, row), null, null);
+                    case RECIPE -> new Child(Relation.INGREDIENT, node(Kind.INGREDIENT, row), null, null);
                     case INGREDIENT -> {
                         CraftingRecipeCapture.Candidate candidate = capture.candidates()
                             .get(row);
                         resource(resources, graph, candidate.resourceId(), mappings);
                         yield new Child(
                             Relation.DECLARED_ALTERNATIVE,
-                            node(capture, Kind.RESOURCE, candidate.resourceId()),
+                            node(Kind.RESOURCE, candidate.resourceId()),
                             Long.toString(candidate.amount()),
                             null);
                     }
-                    case UNPLACED -> new Child(Relation.UNPLACED, node(capture, Kind.RECIPE, row), null, null);
+                    case UNPLACED -> new Child(Relation.UNPLACED, node(Kind.RECIPE, row), null, null);
                     case UNLINKED_MISSING -> {
                         resource(resources, graph, row, mappings);
-                        yield new Child(Relation.MISSING_RESOURCE, node(capture, Kind.RESOURCE, row), null, null);
+                        yield new Child(Relation.MISSING_RESOURCE, node(Kind.RESOURCE, row), null, null);
                     }
                     default -> throw new IllegalStateException("Unresolved root");
                 };
                 children.add(child);
             }
-            return new Page(node(capture, kind, id), offset, children, end < total ? end : null);
+            return new Page(node(kind, id), offset, children, end < total ? end : null);
+        }
+
+        /** Recipes list every declared output and register the output descriptors with this response. */
+        private Node node(Kind kind, int id) {
+            List<Output> outputs = null;
+            if (kind == Kind.RECIPE) {
+                outputs = new ArrayList<>();
+                for (int row : graph.outputs(id)) {
+                    CraftingRecipeCapture.Output output = capture.outputs()
+                        .get(row);
+                    resource(resources, graph, output.resourceId(), mappings);
+                    outputs.add(new Output(output.resourceId(), Long.toString(output.amount()), output.primary()));
+                }
+            }
+            return new Node(
+                kind,
+                id,
+                kind == Kind.RECIPE ? Long.toString(
+                    capture.recipes()
+                        .get(id)
+                        .crafts())
+                    : null,
+                kind == Kind.INGREDIENT ? Long.toString(
+                    capture.ingredients()
+                        .get(id)
+                        .multiplier())
+                    : null,
+                kind == Kind.RECIPE ? capture.recipes()
+                    .get(id)
+                    .complete() : null,
+                kind == Kind.INGREDIENT ? graph.alternatives(id)
+                    .size() : null,
+                outputs);
         }
 
         private Response respond(String captureId, @Nullable Node node, List<Child> children,
@@ -583,25 +607,6 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                     pages),
                 mappings);
         }
-    }
-
-    private static Node node(CraftingRecipeCapture capture, Kind kind, int id) {
-        return new Node(
-            kind,
-            id,
-            kind == Kind.RECIPE ? Long.toString(
-                capture.recipes()
-                    .get(id)
-                    .crafts())
-                : null,
-            kind == Kind.INGREDIENT ? Long.toString(
-                capture.ingredients()
-                    .get(id)
-                    .multiplier())
-                : null,
-            kind == Kind.RECIPE ? capture.recipes()
-                .get(id)
-                .complete() : null);
     }
 
     private static void resource(Map<Integer, Resource> resources, CraftingDependencyGraph graph, int id,

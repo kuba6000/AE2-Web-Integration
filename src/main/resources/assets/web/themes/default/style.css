@@ -1939,7 +1939,8 @@ label {
         .history-product,
         .history-summary-icon,
         .tracking-resource,
-        .history-analysis-name
+        .history-analysis-name,
+        .tree-card
     )
     .resource-icon {
     display: grid;
@@ -1964,7 +1965,8 @@ label {
         .history-product,
         .history-summary-icon,
         .tracking-resource,
-        .history-analysis-name
+        .history-analysis-name,
+        .tree-card
     )
     .resource-icon-ready {
     outline: none;
@@ -3974,6 +3976,12 @@ button.toast:hover {
     flex: 1;
     position: relative;
     border: 1px solid currentcolor;
+    cursor: grab;
+    user-select: none;
+}
+.tree-viewport[data-dragging='true'],
+.tree-viewport[data-dragging='true'] * {
+    cursor: grabbing;
 }
 .tree-space {
     margin-inline: auto;
@@ -3989,12 +3997,14 @@ button.toast:hover {
     min-height: 88px;
 }
 .tree-card {
+    --resource-icon-size: 24px;
+
     height: 108px;
     overflow: hidden;
     width: 100%;
     min-height: 84px;
     display: grid;
-    grid-template-columns: 20px 1fr;
+    grid-template-columns: 24px 1fr;
     text-align: left;
     gap: 4px;
     padding: 8px;
@@ -4009,6 +4019,7 @@ button.toast:hover {
 .tree-card .resource-icon {
     grid-column: 1;
     grid-row: 2;
+    align-self: start;
 }
 .tree-marker {
     grid-column: 1;
@@ -4019,7 +4030,7 @@ button.toast:hover {
     grid-row: 2;
     font-size: 11px;
     overflow-wrap: anywhere;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 4;
 }
 .tree-card[data-reference='true'] {
     border-style: dashed;
