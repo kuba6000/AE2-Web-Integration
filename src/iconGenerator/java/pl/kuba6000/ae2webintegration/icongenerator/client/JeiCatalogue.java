@@ -9,6 +9,7 @@ import net.minecraftforge.fluids.FluidStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import mezz.jei.api.IRecipeRegistry;
 import mezz.jei.api.ingredients.IIngredientRegistry;
 import mezz.jei.api.ingredients.VanillaTypes;
 
@@ -16,13 +17,16 @@ import mezz.jei.api.ingredients.VanillaTypes;
 final class JeiCatalogue {
 
     private static @Nullable IIngredientRegistry registry;
+    private static @Nullable IRecipeRegistry recipes;
     private static boolean ready;
     private static long generation;
     private final long capturedGeneration;
     private final List<ItemStack> items;
     private final List<FluidStack> fluids;
+    private final JeiRecipeCatalogue recipeCatalogue;
 
-    private JeiCatalogue(@NotNull IIngredientRegistry ingredients) {
+    private JeiCatalogue(@NotNull IIngredientRegistry ingredients, @NotNull IRecipeRegistry recipes) {
+        recipeCatalogue = new JeiRecipeCatalogue(recipes, ingredients);
         capturedGeneration = generation;
         items = new ArrayList<>(ingredients.getAllIngredients(VanillaTypes.ITEM));
         fluids = new ArrayList<>(ingredients.getAllIngredients(VanillaTypes.FLUID));
@@ -31,6 +35,7 @@ final class JeiCatalogue {
     static void invalidate() {
         ready = false;
         registry = null;
+        recipes = null;
         generation++;
     }
 
@@ -38,12 +43,18 @@ final class JeiCatalogue {
         registry = ingredients;
     }
 
-    static void available() {
+    static void available(@NotNull IRecipeRegistry recipeRegistry) {
+        recipes = recipeRegistry;
         ready = true;
     }
 
     static @Nullable JeiCatalogue ready() {
-        return ready && registry != null ? new JeiCatalogue(registry) : null;
+        return ready && registry != null && recipes != null ? new JeiCatalogue(registry, recipes) : null;
+    }
+
+    @NotNull
+    JeiRecipeCatalogue recipes() {
+        return recipeCatalogue;
     }
 
     void verify() {

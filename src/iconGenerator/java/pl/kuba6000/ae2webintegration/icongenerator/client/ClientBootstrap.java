@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiYesNo;
+import net.minecraft.client.gui.GuiYesNoCallback;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResourceManager;
@@ -32,6 +35,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
     private static final long PROGRESS_MESSAGE_INTERVAL = TimeUnit.SECONDS.toNanos(5);
     private @Nullable ExportSession session;
+    private @Nullable AnimationConfirmation confirmation;
     private @Nullable ExportProgressScreen progressScreen;
     private long lastProgressMessage;
     private String lastStatus = "No icon export started";
@@ -66,8 +70,10 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
     @SubscribeEvent
     public void clientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.START || session == null) return;
+        if (event.phase != TickEvent.Phase.START) return;
         Minecraft minecraft = Minecraft.getMinecraft();
+        if (confirmation != null) confirmation.tick(minecraft);
+        if (session == null) return;
         if (!session.isCurrentWorld(minecraft)) {
             session.cancel("world closed or changed");
             ExportProgressScreen previous = progressScreen;
@@ -78,6 +84,10 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void guiOpened(GuiOpenEvent event) {
+        if (confirmation != null && confirmation.shown && event.getGui() != confirmation.screen) {
+            confirmation = null;
+            lastStatus = "Animated icon export canceled";
+        }
         if (progressScreen == null || event.getGui() == progressScreen) return;
         Minecraft minecraft = Minecraft.getMinecraft();
         if (session != null && session.isCurrentWorld(minecraft)) {
@@ -89,6 +99,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
     }
 
     private void cancel() {
+        cancelConfirmation();
         if (session != null) session.cancel("requested");
     }
 
@@ -100,6 +111,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
     @Override
     public void onResourceManagerReload(@NotNull IResourceManager resources) {
+        cancelConfirmation();
         if (session != null) session.cancel("resources reloaded");
         if (Loader.isModLoaded("jei")) JeiCatalogue.invalidate();
     }
@@ -113,7 +125,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
         @Override
         public @NotNull String getUsage(@NotNull ICommandSender sender) {
-            return "/ae2webicons <export [nopbo]|status|cancel>";
+            return "/ae2webicons <export [animation] [nopbo]|status|cancel>";
         }
 
         // ClientCommandHandler supplies no integrated server on a multiplayer connection.
@@ -121,8 +133,8 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         public @NotNull List<String> getTabCompletions(@Nullable MinecraftServer server, @NotNull ICommandSender sender,
             String @NotNull [] arguments, @Nullable BlockPos target) {
             if (arguments.length == 1) return getListOfStringsMatchingLastWord(arguments, "export", "status", "cancel");
-            if (arguments.length == 2 && "export".equals(arguments[0]))
-                return getListOfStringsMatchingLastWord(arguments, "nopbo");
+            if (arguments.length >= 2 && arguments.length <= 3 && "export".equals(arguments[0]))
+                return getListOfStringsMatchingLastWord(arguments, "animation", "nopbo");
             return Collections.emptyList();
         }
 
@@ -135,15 +147,18 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         public void execute(@Nullable MinecraftServer server, @NotNull ICommandSender sender,
             String @NotNull [] arguments) {
             String response;
-            if (arguments.length >= 1 && "export".equals(arguments[0])
-                && (arguments.length == 1 || arguments.length == 2 && "nopbo".equals(arguments[1]))) {
-                response = start(arguments.length == 1);
+            if (arguments.length >= 1 && "export".equals(arguments[0]) && validExportOptions(arguments)) {
+                response = requestExport(
+                    !java.util.Arrays.asList(arguments)
+                        .contains("nopbo"),
+                    java.util.Arrays.asList(arguments)
+                        .contains("animation"));
             } else if (arguments.length != 1) {
                 response = getUsage(sender);
             } else if ("status".equals(arguments[0])) {
                 response = session == null ? lastStatus : session.status();
             } else if ("cancel".equals(arguments[0])) {
-                if (session != null) session.cancel("requested");
+                cancel();
                 response = session == null ? lastStatus : session.status();
             } else {
                 response = getUsage(sender);
@@ -151,30 +166,105 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
             sender.sendMessage(new TextComponentString(response));
         }
 
-        private String start(boolean allowPbo) {
-            if (session != null) return "An export is already active: " + session.status();
-            Minecraft minecraft = Minecraft.getMinecraft();
-            if (minecraft.world == null || minecraft.player == null) return "Open a client world before exporting";
-            if (!OpenGlHelper.isFramebufferEnabled()) return "Enable framebuffer rendering before exporting";
-            try {
-                session = new ExportSession(minecraft, allowPbo);
-                progressScreen = new ExportProgressScreen(
-                    session.status(),
-                    ClientBootstrap.this::cancel,
-                    ClientBootstrap.this::closeScreen);
-                minecraft.displayGuiScreen(progressScreen);
-                if (minecraft.currentScreen != progressScreen)
-                    throw new IllegalStateException("Another mod prevented the export screen from opening");
-                lastProgressMessage = System.nanoTime();
-                return "Started full 64px icon export; use the export screen to view progress or cancel";
-            } catch (RuntimeException | Error exception) {
-                if (exception instanceof VirtualMachineError fatal) throw fatal;
-                if (exception instanceof ThreadDeath fatal) throw fatal;
-                if (session != null) session.cancel("could not open export screen");
-                progressScreen = null;
-                lastStatus = "Could not start icon export: " + exception;
-                return lastStatus;
+        private boolean validExportOptions(String[] arguments) {
+            boolean animation = false;
+            boolean nopbo = false;
+            for (int index = 1; index < arguments.length; index++) {
+                if ("animation".equals(arguments[index]) && !animation) animation = true;
+                else if ("nopbo".equals(arguments[index]) && !nopbo) nopbo = true;
+                else return false;
+            }
+            return true;
+        }
+
+    }
+
+    private String requestExport(boolean allowPbo, boolean animated) {
+        if (session != null) return "An export is already active: " + session.status();
+        if (confirmation != null) return "Confirm or cancel the pending animated export";
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft.world == null || minecraft.player == null) return "Open a client world before exporting";
+        if (!animated) return start(allowPbo, false);
+        confirmation = new AnimationConfirmation(minecraft.world, allowPbo);
+        lastStatus = "Animated icon export is waiting for confirmation";
+        return lastStatus;
+    }
+
+    private void cancelConfirmation() {
+        AnimationConfirmation previous = confirmation;
+        confirmation = null;
+        if (previous == null) return;
+        lastStatus = "Animated icon export canceled";
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft.currentScreen == previous.screen) minecraft.displayGuiScreen(null);
+    }
+
+    private final class AnimationConfirmation implements GuiYesNoCallback {
+
+        private final WorldClient world;
+        private final boolean allowPbo;
+        private final GuiYesNo screen;
+        private boolean shown;
+
+        private AnimationConfirmation(@NotNull WorldClient world, boolean allowPbo) {
+            this.world = world;
+            this.allowPbo = allowPbo;
+            screen = new GuiYesNo(
+                this,
+                "Animated export may take much longer.",
+                "Icon packs may be much larger. Continue?",
+                0);
+        }
+
+        private void tick(@NotNull Minecraft minecraft) {
+            if (minecraft.world != world || minecraft.player == null) {
+                cancelConfirmation();
+                return;
+            }
+            if (!shown) {
+                // GuiChat closes after command submission; open the confirmation on the next client tick.
+                shown = true;
+                minecraft.displayGuiScreen(screen);
+                if (minecraft.currentScreen != screen) cancelConfirmation();
             }
         }
+
+        @Override
+        public void confirmClicked(boolean accepted, int id) {
+            if (confirmation != this) return;
+            Minecraft minecraft = Minecraft.getMinecraft();
+            boolean valid = minecraft.currentScreen == screen && minecraft.world == world && minecraft.player != null;
+            cancelConfirmation();
+            if (!accepted || !valid) return;
+            String response = start(allowPbo, true);
+            if (minecraft.player != null) minecraft.player.sendMessage(new TextComponentString(response));
+        }
     }
+
+    private String start(boolean allowPbo, boolean animated) {
+        if (session != null) return "An export is already active: " + session.status();
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft.world == null || minecraft.player == null) return "Open a client world before exporting";
+        if (!OpenGlHelper.isFramebufferEnabled()) return "Enable framebuffer rendering before exporting";
+        try {
+            session = new ExportSession(minecraft, allowPbo, animated);
+            progressScreen = new ExportProgressScreen(
+                session.status(),
+                ClientBootstrap.this::cancel,
+                ClientBootstrap.this::closeScreen);
+            minecraft.displayGuiScreen(progressScreen);
+            if (minecraft.currentScreen != progressScreen)
+                throw new IllegalStateException("Another mod prevented the export screen from opening");
+            lastProgressMessage = System.nanoTime();
+            return "Started full 64px icon export; use the export screen to view progress or cancel";
+        } catch (RuntimeException | Error exception) {
+            if (exception instanceof VirtualMachineError fatal) throw fatal;
+            if (exception instanceof ThreadDeath fatal) throw fatal;
+            if (session != null) session.cancel("could not open export screen");
+            progressScreen = null;
+            lastStatus = "Could not start icon export: " + exception;
+            return lastStatus;
+        }
+    }
+
 }

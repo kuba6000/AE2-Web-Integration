@@ -26,6 +26,6 @@ public final class JeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(@NotNull IJeiRuntime runtime) {
-        JeiCatalogue.available();
+        JeiCatalogue.available(runtime.getRecipeRegistry());
     }
 }
