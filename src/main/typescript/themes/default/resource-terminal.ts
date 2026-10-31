@@ -641,7 +641,11 @@ export function createResourceTerminal(
                 element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo')),
                 ...recentTrackingLines(state.recent, item.itemKey, locale)
             );
-            if (!item.itemKey) details.append(element('p', locale.common('identityUnavailable'), 'hint'));
+            if (item.itemKey) {
+                const key = element('p');
+                key.append(element('span', `${locale.t('resourceKey')}:`), ' ', element('code', item.itemKey));
+                details.append(key);
+            } else details.append(element('p', locale.common('identityUnavailable'), 'hint'));
         }
         if (item.craftable && item.itemKey) {
             const order = craftingView.order(item, state.crafting, locale);
