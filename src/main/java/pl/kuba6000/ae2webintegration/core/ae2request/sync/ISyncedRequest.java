@@ -30,6 +30,16 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
         awaitServerReadiness(timeout, unit);
     }
 
+    /**
+     * HTTP worker, before server-thread dispatch. Return true only when every read this request needs is
+     * stored, detached data whose access checks are safe off the server thread; the router then skips the
+     * native stage and {@link #finishResponse()} completes the request on the worker. The default always
+     * takes the server stage.
+     */
+    public boolean serveWithoutServerStage() {
+        return false;
+    }
+
     /** Runs on the HTTP worker after bounded native dispatch. Ordinary requests are already complete. */
     public ApiResponse finishResponse() {
         return getResponse();

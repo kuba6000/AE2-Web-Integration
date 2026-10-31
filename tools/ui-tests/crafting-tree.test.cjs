@@ -432,99 +432,162 @@ test('expired first request publishes an error revision newer than its loading r
     assert.ok(seen.at(-1).revision > seen[0].revision);
 });
 
+const keyOf = (value) => `${value.kind}:${value.id}`;
+const nodeOf = (key) => {
+    const [kind, id] = key.split(':');
+    return node(kind, Number(id));
+};
+const edge = (key) => ({ node: nodeOf(key), relation: 'DECLARED_OUTPUT', quantity: '1' });
+const parseLoaded = (text = '') => {
+    const keys = new Set();
+    for (const group of text.split('|').filter(Boolean)) {
+        const [kind, ranges] = group.split(':');
+        for (const range of ranges.split(',')) {
+            const [from, to = from] = range.split('-').map(Number);
+            for (let id = from; id <= to; id++) keys.add(`${kind}:${id}`);
+        }
+    }
+    return keys;
+};
+
+/**
+ * An in-memory graph that answers like the tree endpoint: single pages, and batches that read the requested
+ * nodes and then breadth-first the nodes they reference within a child-row budget, never repeating a node.
+ */
+function treeServer(adjacency, { header = {}, root = 'RESOURCE:0' } = {}) {
+    const childrenOf = (key) => (typeof adjacency === 'function' ? adjacency(key) : (adjacency[key] ?? []));
+    const requests = [];
+    const delivered = new Set();
+    const repeated = [];
+    const envelope = (query, body) => ({
+        data: {
+            state: 'READY',
+            captureId: 'capture',
+            root: { resourceId: 0, quantity: '9007199254740993', simulated: false },
+            partial: false,
+            limits: [],
+            unplacedCount: 0,
+            unlinkedMissingCount: 0,
+            missingOnly: !!query.missingOnly,
+            missingComplete: false,
+            missingResourceCount: 0,
+            resources: [],
+            ...header,
+            ...body
+        },
+        icons: null
+    });
+    const server = {
+        requests,
+        repeated,
+        envelope,
+        rowsDelivered: 0,
+        batches: () => requests.filter((request) => request.batch),
+        api: {
+            planTree: async (_g, _p, query) => {
+                requests.push({ batch: false, query });
+                const key = query.kind === 'ROOT' ? root : `${query.kind}:${query.id}`;
+                const all = childrenOf(key);
+                const end = Math.min(all.length, query.offset + query.limit);
+                const children = all.slice(query.offset, end).map(edge);
+                server.rowsDelivered += children.length;
+                return envelope(query, { node: nodeOf(key), children, nextOffset: end < all.length ? end : null });
+            },
+            planTreeBatch: async (_g, _p, query) => {
+                requests.push({ batch: true, query, held: new Set(delivered) });
+                const loaded = parseLoaded(query.loaded);
+                const queue = query.nodes.split(',').map((token) => {
+                    const [kind, id, offset = '0'] = token.split(':');
+                    return { key: `${kind}:${id}`, offset: Number(offset) };
+                });
+                for (const start of queue) if (!start.offset && delivered.has(start.key)) repeated.push(start.key);
+                const seen = new Set(queue.map((start) => start.key));
+                const pages = [];
+                let budget = query.rows;
+                while (budget > 0 && queue.length) {
+                    const start = queue.shift();
+                    const all = childrenOf(start.key);
+                    const end = Math.min(all.length, start.offset + budget);
+                    const children = all.slice(start.offset, end).map(edge);
+                    pages.push({
+                        node: nodeOf(start.key),
+                        offset: start.offset,
+                        children,
+                        nextOffset: end < all.length ? end : null
+                    });
+                    if (end >= all.length) delivered.add(start.key);
+                    server.rowsDelivered += children.length;
+                    budget -= Math.max(1, children.length);
+                    for (const next of children.map((child) => keyOf(child.node)))
+                        if (!loaded.has(next) && !seen.has(next)) {
+                            seen.add(next);
+                            queue.push({ key: next, offset: 0 });
+                        }
+                }
+                return envelope(query, { pages });
+            }
+        }
+    };
+    return server;
+}
+
 test('missing mode asks the server for paths, reveals them with bounds and restores full-view expansion', async () => {
     const { createCraftingTree } = await import(moduleUrl);
-    const calls = [];
-    const tree = createCraftingTree(
-        {
-            planTree: async (_g, _p, query) => {
-                calls.push(query);
-                const response = page(
-                    query.kind === 'ROOT' ? node('RESOURCE', 0) : node('RECIPE', 1),
-                    query.kind === 'ROOT'
-                        ? [{ node: node('RECIPE', 1), relation: 'DECLARED_OUTPUT', quantity: '1' }]
-                        : []
-                );
-                response.data.captureId = 'same';
-                response.data.missingOnly = query.missingOnly;
-                response.data.missingComplete = true;
-                response.data.missingResourceCount = 1;
-                response.data.unlinkedMissingCount = 0;
-                return response;
-            }
-        },
-        () => {}
+    const server = treeServer(
+        { 'RESOURCE:0': ['RECIPE:1'] },
+        { header: { captureId: 'same', missingComplete: true, missingResourceCount: 1 } }
     );
+    const tree = createCraftingTree(server.api, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
     await tree.toggle('RESOURCE:0');
     await tree.setMissingOnly(true);
     assert.equal(tree.state.missingOnly, true);
-    assert.ok(calls.some((query) => query.kind === 'RECIPE' && query.missingOnly));
+    assert.ok(
+        server.requests.some(
+            (request) =>
+                request.query.missingOnly && (request.query.id === 1 || request.query.nodes?.includes('RECIPE:1'))
+        )
+    );
     await tree.setMissingOnly(false);
     assert.equal(tree.state.expanded['RESOURCE:0'], false);
     assert.equal(tree.state.missingOnly, false);
 });
 
-test('automatic missing-path reveal stops after a bounded request batch on a long chain', async () => {
+test('automatic missing-path reveal loads a long chain in one batch and opens a bounded number of levels', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const kinds = ['RESOURCE', 'RECIPE', 'INGREDIENT'];
-    let missingRequests = 0;
-    const tree = createCraftingTree(
-        {
-            planTree: async (_g, _p, query) => {
-                if (query.missingOnly) missingRequests++;
-                const id = query.kind === 'ROOT' ? 0 : query.id;
-                const response = page(
-                    node(kinds[id % 3], id),
-                    id < 90 ? [{ node: node(kinds[(id + 1) % 3], id + 1), relation: 'INGREDIENT', quantity: null }] : []
-                );
-                response.data.captureId = 'bounded';
-                response.data.missingComplete = true;
-                response.data.missingResourceCount = 1;
-                return response;
-            }
+    const server = treeServer(
+        (key) => {
+            const id = Number(key.split(':')[1]);
+            return id < 90 ? [`${kinds[(id + 1) % 3]}:${id + 1}`] : [];
         },
-        () => {}
+        { header: { captureId: 'bounded', missingComplete: true, missingResourceCount: 1 } }
     );
+    const tree = createCraftingTree(server.api, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
     await tree.setMissingOnly(true);
-    assert.ok(missingRequests > 1 && missingRequests <= 13);
+    assert.equal(server.batches().length, 1);
+    assert.ok(server.batches()[0].query.missingOnly);
+    assert.ok(server.batches()[0].query.rows <= 300);
     assert.ok(tree.state.rows.some((row) => !tree.state.expanded[row.key]));
     assert.ok(tree.state.rows.length < 30);
+    assert.ok(Object.keys(tree.state.pages).length > 60);
 });
 
-test('expand all follows root pages and groups beyond the visible window without cycling', async () => {
+test('expand all reads the graph in a few batches, never asking again for a node it holds', async () => {
     const { createCraftingTree } = await import(moduleUrl);
-    const calls = [];
-    const tree = createCraftingTree(
-        {
-            planTree: async (_g, _p, query) => {
-                calls.push(query);
-                let result;
-                if (query.kind === 'ROOT' || (query.kind === 'RESOURCE' && query.id === 0)) {
-                    const end = Math.min(305, query.offset + query.limit);
-                    result = page(
-                        node('RESOURCE', 0),
-                        Array.from({ length: end - query.offset }, (_, i) => ({
-                            node: node('RECIPE', query.offset + i),
-                            relation: 'DECLARED_OUTPUT',
-                            quantity: '1'
-                        })),
-                        end < 305 ? end : null
-                    );
-                } else if (query.kind === 'RECIPE')
-                    result = page(node('RECIPE', query.id), [
-                        { node: node('RESOURCE', 0), relation: 'RECIPE_OUTPUT', quantity: '1' }
-                    ]);
-                else result = page(node(query.kind, 0));
-                Object.assign(result.data, { captureId: 'capture', unplacedCount: 1, unlinkedMissingCount: 1 });
-                return result;
-            }
-        },
-        () => {}
+    const server = treeServer(
+        (key) =>
+            key === 'RESOURCE:0'
+                ? Array.from({ length: 305 }, (_, index) => `RECIPE:${index}`)
+                : key.startsWith('RECIPE:')
+                  ? ['RESOURCE:0']
+                  : [],
+        { header: { unplacedCount: 1, unlinkedMissingCount: 1 } }
     );
+    const tree = createCraftingTree(server.api, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
     await tree.expandAll();
@@ -532,35 +595,55 @@ test('expand all follows root pages and groups beyond the visible window without
     assert.equal(tree.state.expandedComplete, true);
     assert.equal(tree.state.rows.length, 300);
     assert.ok(tree.state.totalRows > 600);
-    assert.ok(calls.some((q) => q.kind === 'RESOURCE' && q.offset === 300));
-    assert.equal(calls.filter((q) => q.kind === 'RECIPE').length, 305);
-    assert.ok(calls.some((q) => q.kind === 'UNPLACED'));
-    assert.ok(calls.some((q) => q.kind === 'UNLINKED_MISSING'));
     assert.equal(tree.state.expandedNodes, 308);
+    // The fixture used to need one request per node: 314 requests for the same graph.
+    assert.equal(server.requests.filter((request) => !request.batch).length, 1);
+    assert.ok(server.batches().length <= 4, `batches: ${server.batches().length}`);
+    assert.ok(server.batches().every((request) => request.query.rows <= 500));
+    const tokens = server.batches().flatMap((request) => request.query.nodes.split(','));
+    assert.ok(tokens.includes('RESOURCE:0:50'), 'the root page continues from its next offset');
+    assert.ok(tokens.includes('UNPLACED:0') && tokens.includes('UNLINKED_MISSING:0'));
+    assert.deepEqual(server.repeated, []);
+    for (const request of server.batches().slice(1)) {
+        const hinted = parseLoaded(request.query.loaded);
+        for (const key of request.held)
+            if (key !== 'UNPLACED:0' && key !== 'UNLINKED_MISSING:0') assert.ok(hinted.has(key));
+    }
     await tree.toggle('RECIPE:0');
     assert.equal(tree.state.expandedComplete, false);
     tree.collapseAll();
     assert.equal(tree.state.rows.length, 3);
     assert.equal(tree.state.windowStart, 0);
-    const loaded = calls.length;
+    const loaded = server.requests.length;
     await tree.expandAll();
-    assert.equal(calls.length, loaded);
+    assert.equal(server.requests.length, loaded);
+    assert.equal(tree.state.expandedComplete, true);
     tree.dispose();
 });
 
 test('collapse all and stop fence pending expansion without late reopening', async () => {
     const { createCraftingTree } = await import(moduleUrl);
+    const server = treeServer({ 'RESOURCE:0': ['RECIPE:1'] });
     let finish, signal;
     const tree = createCraftingTree(
         {
-            planTree: async (_g, _p, q, s) => {
-                if (q.kind === 'ROOT')
-                    return page(node('RESOURCE', 0), [
-                        { node: node('RECIPE', 1), relation: 'DECLARED_OUTPUT', quantity: '1' }
-                    ]);
+            planTree: server.api.planTree,
+            planTreeBatch: async (_g, _p, query, s) => {
                 signal = s;
                 return new Promise((resolve) => {
-                    finish = resolve;
+                    finish = () =>
+                        resolve(
+                            server.envelope(query, {
+                                pages: [
+                                    {
+                                        node: node('RECIPE', 1),
+                                        offset: 0,
+                                        children: [edge('RESOURCE:2')],
+                                        nextOffset: null
+                                    }
+                                ]
+                            })
+                        );
                 });
             }
         },
@@ -575,9 +658,7 @@ test('collapse all and stop fence pending expansion without late reopening', asy
         else tree.stopExpansion();
         assert.equal(signal.aborted, true);
         assert.equal(tree.state.expanding, false);
-        finish(
-            page(node('RECIPE', 1), [{ node: node('RESOURCE', 2), relation: 'DECLARED_ALTERNATIVE', quantity: '1' }])
-        );
+        finish();
         await expanding;
         assert.equal(tree.state.pages['RECIPE:1'], undefined);
         assert.equal(tree.state.expandedComplete, false);
@@ -587,33 +668,49 @@ test('collapse all and stop fence pending expansion without late reopening', asy
     tree.dispose();
 });
 
-test('expand all stops at cache capacity and reports incomplete expansion', async () => {
+test('a batch for a replaced plan capture discards the old tree and restarts from the root', async () => {
     const { createCraftingTree } = await import(moduleUrl);
-    let calls = 0;
+    const server = treeServer({ 'RESOURCE:0': ['RECIPE:1'] });
+    let replaced = false;
     const tree = createCraftingTree(
         {
-            planTree: async (_g, _p, q) => {
-                calls++;
-                if (q.kind === 'UNPLACED') {
-                    const result = page(node('UNPLACED', 0));
-                    result.data.unplacedCount = 1;
-                    return result;
-                }
-                const id = q.kind === 'ROOT' ? 0 : q.id;
-                const result = page(
-                    node('RESOURCE', id),
-                    Array.from({ length: q.limit }, (_, i) => ({
-                        node: node('RESOURCE', i === q.limit - 1 ? id + 1 : 0),
-                        relation: 'DECLARED_ALTERNATIVE',
-                        quantity: '1'
-                    }))
-                );
-                result.data.unplacedCount = 1;
-                return result;
+            planTree: async (g, p, query, s) => {
+                const response = await server.api.planTree(g, p, query, s);
+                if (replaced) response.data.captureId = 'new';
+                return response;
+            },
+            planTreeBatch: async (_g, _p, query) => {
+                assert.equal(query.captureId, 'capture');
+                replaced = true;
+                throw Object.assign(new Error(), { status: 'UPDATE_CHANGED' });
             }
         },
         () => {}
     );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.expandAll();
+    assert.equal(tree.state.captureId, 'new');
+    assert.equal(tree.state.expanding, false);
+    assert.equal(tree.state.error, null);
+    assert.equal(server.requests.filter((request) => request.query.kind === 'ROOT').length, 2);
+    assert.equal(tree.state.pages['RECIPE:1'], undefined);
+    tree.dispose();
+});
+
+test('expand all stops at cache capacity and reports incomplete expansion', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    // Every resource declares forty producers, so the graph is far larger than the browser keeps.
+    const server = treeServer(
+        (key) =>
+            key === 'UNPLACED:0'
+                ? ['RESOURCE:999999999']
+                : key.startsWith('RESOURCE:')
+                  ? Array.from({ length: 40 }, (_, index) => `RESOURCE:${Number(key.split(':')[1]) * 40 + index + 1}`)
+                  : [],
+        { header: { unplacedCount: 1 } }
+    );
+    const tree = createCraftingTree(server.api, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
     await tree.toggle('UNPLACED:0');
@@ -622,13 +719,16 @@ test('expand all stops at cache capacity and reports incomplete expansion', asyn
     assert.equal(tree.state.cacheBounded, true);
     assert.equal(tree.state.expanding, false);
     assert.equal(tree.state.expandedComplete, false);
-    assert.equal(calls, 61);
+    assert.ok(server.rowsDelivered <= 3000, `rows: ${server.rowsDelivered}`);
+    assert.ok(server.batches().length >= 5 && server.batches().length <= 8, `batches: ${server.batches().length}`);
+    assert.ok(server.batches().every((request) => request.query.rows <= 500));
     assert.equal(tree.state.expanded['UNPLACED:0'], true);
     assert.ok(tree.state.totalRows > 300);
     const retainedRows = tree.state.totalRows;
+    const requests = server.requests.length;
     tree.collapseAll();
     await tree.expandAll();
-    assert.equal(calls, 61);
+    assert.equal(server.requests.length, requests);
     assert.equal(tree.state.totalRows, retainedRows);
     assert.equal(tree.state.expandedComplete, false);
     tree.dispose();

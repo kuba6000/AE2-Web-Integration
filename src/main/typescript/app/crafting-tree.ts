@@ -25,6 +25,16 @@ export type TreeQuery = {
     captureId?: string;
     missingOnly: boolean;
 };
+export type TreeBatchQuery = {
+    /** Comma-separated KIND:id[:offset] start nodes. */
+    nodes: string;
+    rows: number;
+    icons: boolean;
+    captureId?: string;
+    missingOnly: boolean;
+    /** Nodes already held completely, as KIND:ranges groups separated by |. */
+    loaded?: string;
+};
 export type TreeResource = ResourceDescription & { missingAmount: string | null };
 export type TreePage = {
     captureId: string | null;
@@ -42,6 +52,13 @@ export type TreePage = {
     missingComplete: boolean;
     missingResourceCount: number;
 };
+export type TreeBatchPage = {
+    node: TreeNode;
+    offset: number;
+    children: TreeChild[];
+    nextOffset: number | null;
+};
+export type TreeBatch = Omit<TreePage, 'node' | 'children' | 'nextOffset'> & { pages: TreeBatchPage[] | null };
 export type TreeRow = {
     key: string;
     node: TreeNode;
@@ -84,10 +101,16 @@ export type TreeState = {
 const keyOf = (node: TreeNode) => `${node.kind}:${node.id}`;
 const VISIBLE_LIMIT = 300;
 const CACHE_LIMIT = 3000;
+// One batched response carries at most this many child rows; the server accepts up to twice as many.
+const BATCH_ROWS = 500;
+const BATCH_NODES = 32;
+// The loaded hint travels in the query string, so it is capped to stay far below common URL limits.
+const LOADED_RANGES = 250;
+const REVEAL_STEPS = 12;
 
 /** Plan-owned lazy adjacency navigation. Shared/cyclic occurrences remain references. */
 export function createCraftingTree(
-    api: Pick<Api, 'planTree'>,
+    api: Pick<Api, 'planTree' | 'planTreeBatch'>,
     changed: () => void,
     iconsEnabled: () => boolean = () => true
 ) {
@@ -213,7 +236,7 @@ export function createCraftingTree(
         state.revision = ++revision;
         changed();
     }
-    function descriptors(page: TreePage, icons: IconMetadata | null) {
+    function descriptors(page: Pick<TreePage, 'resources'>, icons: IconMetadata | null) {
         if (icons && state.icons?.packId !== icons.packId) {
             state.icons = { ...icons, pages: [], animations: [] };
             for (const resource of Object.values(state.resources)) resource.icon = null;
@@ -257,6 +280,37 @@ export function createCraftingTree(
                         : null
             };
     }
+    function discard() {
+        fullView = null;
+        Object.assign(state, fresh(), { visible: true });
+        rootKey = null;
+        cachedRows = 0;
+    }
+    function applyHeader(page: Omit<TreePage, 'node' | 'children' | 'nextOffset'>, icons: IconMetadata | null) {
+        state.captureId = page.captureId ?? null;
+        state.status = page.state;
+        state.root = page.root;
+        state.partial = page.partial;
+        state.limits = page.limits;
+        state.unplacedCount = page.unplacedCount;
+        state.unlinkedMissingCount = page.unlinkedMissingCount ?? 0;
+        state.missingComplete = page.missingComplete ?? false;
+        state.missingResourceCount = page.missingResourceCount ?? 0;
+        descriptors(page, icons);
+    }
+    /** Handles a failed read; true when the plan identity changed and the tree has to restart from its root. */
+    function failure(error: ApiFailure) {
+        if (error.name === 'AbortError') return false;
+        if (error.status === 'UPDATE_CHANGED') {
+            cancelExpansion();
+            discard();
+            return true;
+        }
+        if (['INVALID_ID', 'GRID_NOT_FOUND', 'NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) discard();
+        state.status = 'ERROR';
+        state.error = error.status ?? 'NETWORK_ERROR';
+        return false;
+    }
     async function load(kind: TreeKind | 'ROOT', id: number, offset = 0) {
         if (!target || !state.visible || state.loading) return;
         if (cachedRows >= CACHE_LIMIT && kind !== 'ROOT') {
@@ -288,25 +342,13 @@ export function createCraftingTree(
             const page = response.data;
             if (state.captureId && state.captureId !== page.captureId) {
                 cancelExpansion();
-                fullView = null;
-                Object.assign(state, fresh(), { visible: true });
-                rootKey = null;
-                cachedRows = 0;
+                discard();
                 if (kind !== 'ROOT') {
                     restart = true;
                     return;
                 }
             }
-            state.captureId = page.captureId ?? null;
-            state.status = page.state;
-            state.root = page.root;
-            state.partial = page.partial;
-            state.limits = page.limits;
-            state.unplacedCount = page.unplacedCount;
-            state.unlinkedMissingCount = page.unlinkedMissingCount ?? 0;
-            state.missingComplete = page.missingComplete ?? false;
-            state.missingResourceCount = page.missingResourceCount ?? 0;
-            descriptors(page, response.icons);
+            applyHeader(page, response.icons);
             if (page.node) {
                 const key = keyOf(page.node);
                 state.nodes[key] = page.node;
@@ -326,25 +368,7 @@ export function createCraftingTree(
                 timer = setTimeout(() => void load('ROOT', 0), 1000);
         } catch (caught) {
             if (version !== generation) return;
-            const error = caught as ApiFailure;
-            if (error.name === 'AbortError') return;
-            if (error.status === 'UPDATE_CHANGED') {
-                cancelExpansion();
-                fullView = null;
-                Object.assign(state, fresh(), { visible: true });
-                rootKey = null;
-                cachedRows = 0;
-                restart = true;
-                return;
-            }
-            if (['INVALID_ID', 'GRID_NOT_FOUND', 'NO_PERMISSIONS', 'UNAUTHORIZED'].includes(error.status ?? '')) {
-                fullView = null;
-                Object.assign(state, fresh(), { visible: true });
-                rootKey = null;
-                cachedRows = 0;
-            }
-            state.status = 'ERROR';
-            state.error = error.status ?? 'NETWORK_ERROR';
+            restart = failure(caught as ApiFailure);
         } finally {
             if (version === generation) {
                 state.loading = null;
@@ -357,12 +381,99 @@ export function createCraftingTree(
             }
         }
     }
+    /** Pages the server has already delivered completely; sent so a batch does not read them again. */
+    function loadedHint() {
+        const loaded = new Map<string, number[]>();
+        for (const [key, page] of Object.entries(state.pages)) {
+            if (page.nextOffset !== null) continue;
+            const [kind, id] = key.split(':');
+            if (kind === 'UNPLACED' || kind === 'UNLINKED_MISSING') continue;
+            loaded.set(kind, [...(loaded.get(kind) ?? []), Number(id)]);
+        }
+        let budget = LOADED_RANGES;
+        const groups: string[] = [];
+        for (const [kind, ids] of loaded) {
+            ids.sort((first, second) => first - second);
+            const ranges: string[] = [];
+            for (let from = 0; from < ids.length && budget > 0; budget--) {
+                let to = from;
+                while (to + 1 < ids.length && ids[to + 1] === ids[to] + 1) to++;
+                ranges.push(to > from ? `${ids[from]}-${ids[to]}` : String(ids[from]));
+                from = to + 1;
+            }
+            if (ranges.length) groups.push(`${kind}:${ranges.join(',')}`);
+        }
+        return groups.join('|');
+    }
+    function storePage(entry: TreeBatchPage) {
+        const key = keyOf(entry.node);
+        const known = state.pages[key];
+        // A page already held, or a continuation that does not follow the held children, is not merged again.
+        if (entry.offset === 0 ? known : known?.children.length !== entry.offset) return;
+        state.nodes[key] = entry.node;
+        for (const child of entry.children) state.nodes[keyOf(child.node)] = child.node;
+        cachedRows += entry.children.length;
+        state.pages[key] = { children: [...(known?.children ?? []), ...entry.children], nextOffset: entry.nextOffset };
+    }
+    /**
+     * Reads the pages of the given nodes and, breadth-first, of the nodes they reference, up to a child-row
+     * budget. Resolves true when the response was merged into the tree.
+     */
+    async function loadBatch(starts: { key: string; offset: number }[], rows: number) {
+        if (!target || !state.visible || state.loading) return false;
+        const version = generation;
+        let restart = false;
+        let merged = false;
+        const loaded = loadedHint();
+        request = new AbortController();
+        state.loading = starts[0].key;
+        state.error = null;
+        publish();
+        try {
+            const response = await api.planTreeBatch(
+                target.grid,
+                target.plan,
+                {
+                    nodes: starts.map(({ key, offset }) => (offset ? `${key}:${offset}` : key)).join(','),
+                    rows: Math.max(1, Math.min(rows, CACHE_LIMIT - cachedRows)),
+                    icons: iconsEnabled(),
+                    missingOnly,
+                    ...(loaded ? { loaded } : {}),
+                    ...(state.captureId ? { captureId: state.captureId } : {})
+                },
+                request.signal
+            );
+            if (version !== generation) return false;
+            const page = response.data;
+            if (state.captureId && state.captureId !== page.captureId) {
+                cancelExpansion();
+                discard();
+                restart = true;
+                return false;
+            }
+            applyHeader(page, response.icons);
+            for (const entry of page.pages ?? []) storePage(entry);
+            if (page.state === 'PREPARING' || page.state === 'CALCULATING')
+                timer = setTimeout(() => void load('ROOT', 0), 1000);
+            merged = page.state === 'READY';
+        } catch (caught) {
+            if (version !== generation) return false;
+            restart = failure(caught as ApiFailure);
+        } finally {
+            if (version === generation) {
+                state.loading = null;
+                publish();
+                if (restart) await load('ROOT', 0);
+            }
+        }
+        return merged;
+    }
     async function revealMissing() {
         if (state.expanding) return;
         const version = generation;
         for (
             let count = 0;
-            count < 12 &&
+            count < REVEAL_STEPS &&
             missingOnly &&
             state.visible &&
             state.status === 'READY' &&
@@ -375,9 +486,34 @@ export function createCraftingTree(
             const row = state.rows.find((candidate) => !candidate.reference && !state.expanded[candidate.key]);
             if (!row) return;
             state.expanded[row.key] = true;
-            if (!state.pages[row.key]) await load(row.node.kind, row.node.id);
+            // The batch also loads the paths below the row, so the next steps usually open cached pages.
+            if (!state.pages[row.key]) await loadBatch([{ key: row.key, offset: 0 }], VISIBLE_LIMIT - state.totalRows);
             else publish();
         }
+    }
+    /**
+     * Opens every reachable node in display order, whether or not its children are among the visible rows.
+     * Returns the nodes seen and those whose page, or continuation, still has to be fetched.
+     */
+    function openLoaded() {
+        const seen = new Set<string>();
+        const pending: { key: string; offset: number }[] = [];
+        const stack: string[] = [];
+        if (state.unlinkedMissingCount) stack.push('UNLINKED_MISSING:0');
+        if (state.unplacedCount && rootKey !== 'UNPLACED:0') stack.push('UNPLACED:0');
+        if (rootKey && state.nodes[rootKey]) stack.push(rootKey);
+        while (stack.length) {
+            const key = stack.pop()!;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            state.expanded[key] = true;
+            const page = state.pages[key];
+            if (!page || page.nextOffset !== null) pending.push({ key, offset: page?.nextOffset ?? 0 });
+            if (page)
+                for (let index = page.children.length - 1; index >= 0; index--)
+                    stack.push(keyOf(page.children[index].node));
+        }
+        return { seen, pending };
     }
     async function expandAll() {
         if (!state.visible || state.status !== 'READY' || state.expanding) return;
@@ -385,35 +521,18 @@ export function createCraftingTree(
         const run = expansionRun;
         state.expanding = true;
         state.expandedNodes = 0;
-        const visited = new Set<string>();
         publish();
         try {
             while (run === expansionRun && state.visible && state.status === 'READY') {
-                const row = projection.find((candidate) => {
-                    if (candidate.reference) return false;
-                    const page = state.pages[candidate.key];
-                    return (
-                        !state.expanded[candidate.key] ||
-                        (cachedRows < CACHE_LIMIT && (!page || page.nextOffset !== null))
-                    );
-                });
-                if (!row) {
-                    state.expandedComplete = projection.every(
-                        (candidate) =>
-                            candidate.reference ||
-                            (state.expanded[candidate.key] && state.pages[candidate.key]?.nextOffset === null)
-                    );
+                const { seen, pending } = openLoaded();
+                state.expandedNodes = seen.size;
+                const fetchable = cachedRows < CACHE_LIMIT ? pending.slice(0, BATCH_NODES) : [];
+                if (!fetchable.length) {
+                    state.expandedComplete = !pending.length;
                     break;
                 }
-                state.expanded[row.key] = true;
-                const page = state.pages[row.key];
-                if (cachedRows < CACHE_LIMIT && (!page || page.nextOffset !== null)) {
-                    await load(row.node.kind, row.node.id, page?.nextOffset ?? 0);
-                    if (run !== expansionRun || state.status !== 'READY') break;
-                }
-                visited.add(row.key);
-                state.expandedNodes = visited.size;
                 publish();
+                if (!(await loadBatch(fetchable, BATCH_ROWS)) || run !== expansionRun) break;
                 await new Promise<void>((resolve) => setTimeout(resolve, 0));
             }
         } finally {
