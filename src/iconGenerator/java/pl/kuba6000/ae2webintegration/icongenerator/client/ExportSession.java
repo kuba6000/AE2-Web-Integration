@@ -5,7 +5,7 @@ import net.minecraft.client.multiplayer.WorldClient;
 
 import org.jetbrains.annotations.NotNull;
 
-import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IconExportSession;
 
 final class ExportSession {
@@ -13,16 +13,17 @@ final class ExportSession {
     private final WorldClient world;
     private final IconExportSession<IconCandidate> session;
 
-    ExportSession(@NotNull Minecraft minecraft, boolean allowPbo) {
+    ExportSession(@NotNull Minecraft minecraft, boolean allowPbo, boolean animated) {
         world = minecraft.world;
-        IMetadataSource environment = ExportEnvironment.capture(minecraft);
-        IconCatalogue catalogue = new IconCatalogue(minecraft);
+        IconPack.Metadata environment = ExportEnvironment.capture();
+        IconCatalogue catalogue = new IconCatalogue();
         session = new IconExportSession<>(
             minecraft.gameDir.toPath()
                 .resolve("ae2webicons"),
             environment,
             catalogue,
-            new LegacyIconRenderer(minecraft, allowPbo));
+            new LegacyIconRenderer(minecraft, allowPbo),
+            animated);
     }
 
     boolean tick(@NotNull Minecraft minecraft) {

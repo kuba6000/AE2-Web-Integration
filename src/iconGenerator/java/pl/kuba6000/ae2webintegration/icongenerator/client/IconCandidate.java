@@ -3,10 +3,12 @@ package pl.kuba6000.ae2webintegration.icongenerator.client;
 import java.util.List;
 import java.util.Objects;
 
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.oredict.OreDictionary;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -14,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -31,6 +34,17 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         return stack.isEmpty() ? null : new ItemCandidate(context, stack);
     }
 
+    static @Nullable IconCandidate recipeItem(@NotNull String context, @NotNull ItemStack source) {
+        if (source == ItemStack.EMPTY || source.getItemDamage() == OreDictionary.WILDCARD_VALUE) return null;
+        if (source.getCount() > 0) return item(context, source);
+        Item raw = source.getItemRaw();
+        if (raw == null) return null;
+        Item actualItem = raw.delegate.get();
+        if (actualItem == null) return null;
+        ItemCandidate candidate = new ItemCandidate(context, source, actualItem);
+        return candidate.stack.isEmpty() ? null : candidate;
+    }
+
     static @NotNull IconCandidate fluid(@NotNull String context, @NotNull FluidStack stack) {
         return new FluidCandidate(context, stack.copy());
     }
@@ -39,6 +53,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
     public final @NotNull String context() {
         return context;
     }
+
+    abstract @Nullable IIconAnimation animation(LegacyIconRenderer renderer, StableKey key);
 
     abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws LegacyIconRenderer.RenderFailure;
@@ -53,6 +69,10 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         private final @Nullable StableKey key;
 
         private ItemCandidate(@NotNull String context, @NotNull ItemStack source) {
+            this(context, source, null);
+        }
+
+        private ItemCandidate(@NotNull String context, @NotNull ItemStack source, @Nullable Item nonconsumable) {
             super(context);
             // Forge exposes all capabilities only through its native item codec. Snapshot before
             // copy invokes capability deserialization, which a mod may use to normalize state.
@@ -62,12 +82,23 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
             NBTTagCompound sourceTag = source.getTagCompound();
             tag = sourceTag == null ? null : sourceTag.copy();
             metadata = source.getItemDamage();
-            key = LegacyItemIdentity.encode(source.getItem(), metadata, tag, capabilities);
-            sourceMaxDamage = !source.getItem()
-                .getHasSubtypes() && source.getItem()
-                    .isDamageable() ? source.getItem()
-                        .getMaxDamage(source) : 0;
-            stack = source.copy();
+            ItemStack definition = source;
+            if (nonconsumable != null) {
+                // Forge redirects raw item reads in copy/codec to getItem(), which masks zero
+                // counts as AIR. Only its raw getter can recover the item without mutating source.
+                definition = new ItemStack(
+                    nonconsumable,
+                    1,
+                    metadata,
+                    capabilities == null ? null : capabilities.copy());
+                definition.setTagCompound(tag == null ? null : tag.copy());
+            }
+            key = LegacyItemIdentity.encode(definition.getItem(), metadata, tag, capabilities);
+            sourceMaxDamage = !definition.getItem()
+                .getHasSubtypes() && definition.getItem()
+                    .isDamageable() ? definition.getItem()
+                        .getMaxDamage(definition) : 0;
+            stack = nonconsumable != null ? definition : source.copy();
             stack.setCount(1);
         }
 
@@ -89,6 +120,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
             return new ItemCandidate(
                 context() + "/base",
                 LegacyResourceBaseline.item(stack.getItem(), metadata, sourceMaxDamage));
+        }
+
+        @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.item(renderer, this, key, stack);
         }
 
         @Override
@@ -122,6 +159,12 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         public @NotNull IconCandidate baseline() {
             return new FluidCandidate(context() + "/base", new FluidStack(stack.getFluid(), Fluid.BUCKET_VOLUME));
+        }
+
+        @Override
+        @Nullable
+        IIconAnimation animation(LegacyIconRenderer renderer, StableKey key) {
+            return NativeIconAnimation.fluid(renderer, this, key, stack);
         }
 
         @Override
