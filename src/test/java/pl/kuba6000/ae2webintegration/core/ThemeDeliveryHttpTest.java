@@ -177,6 +177,56 @@ class ThemeDeliveryHttpTest {
                     .resolve("theme.js")));
     }
 
+    @Test
+    void themeAssetsAreRevalidatedAndTheirEtagFollowsTheContent() throws Exception {
+        install("one.zip", manifest("one"), Collections.singletonMap("data.txt", bytes("first")));
+        install("two.zip", manifest("two"), Collections.singletonMap("data.txt", bytes("second")));
+        port = HttpServerTestFixture.startWorld(config);
+        HttpURLConnection first = connection("/themes/one/data.txt");
+        assertEquals(200, first.getResponseCode());
+        String etag = first.getHeaderField("ETag");
+        assertNotNull(etag);
+        assertEquals("no-cache", first.getHeaderField("Cache-Control"));
+        assertEquals("nosniff", first.getHeaderField("X-Content-Type-Options"));
+        try (InputStream input = first.getInputStream()) {
+            assertEquals("first", IOUtils.toString(input, StandardCharsets.UTF_8));
+        }
+
+        HttpURLConnection unchanged = connection("/themes/one/data.txt");
+        unchanged.setRequestProperty("If-None-Match", etag);
+        assertEquals(304, unchanged.getResponseCode());
+        assertEquals(etag, unchanged.getHeaderField("ETag"));
+        assertEquals("no-cache", unchanged.getHeaderField("Cache-Control"));
+        unchanged.disconnect();
+
+        HttpURLConnection stale = connection("/themes/one/data.txt");
+        stale.setRequestProperty("If-None-Match", "\"stale\"");
+        assertEquals(200, stale.getResponseCode());
+        try (InputStream input = stale.getInputStream()) {
+            assertEquals("first", IOUtils.toString(input, StandardCharsets.UTF_8));
+        }
+
+        HttpURLConnection other = connection("/themes/two/data.txt");
+        assertEquals(200, other.getResponseCode());
+        assertNotEquals(etag, other.getHeaderField("ETag"));
+        other.disconnect();
+        HttpURLConnection otherWithFirstEtag = connection("/themes/two/data.txt");
+        otherWithFirstEtag.setRequestProperty("If-None-Match", etag);
+        assertEquals(200, otherWithFirstEtag.getResponseCode());
+        otherWithFirstEtag.disconnect();
+
+        HttpURLConnection head = connection("/themes/one/data.txt");
+        head.setRequestMethod("HEAD");
+        assertEquals(200, head.getResponseCode());
+        assertEquals(etag, head.getHeaderField("ETag"));
+        assertEquals(5, head.getContentLength());
+        head.disconnect();
+    }
+
+    private static byte[] bytes(String text) {
+        return text.getBytes(StandardCharsets.UTF_8);
+    }
+
     private Path install(String filename, String manifest, Map<String, byte[]> extra) throws Exception {
         Path folder = directory.resolve("ae2webintegration/themes");
         Files.createDirectories(folder);

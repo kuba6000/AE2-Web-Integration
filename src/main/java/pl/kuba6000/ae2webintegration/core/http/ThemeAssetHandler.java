@@ -1,8 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.util.Locale;
 
 import org.jetbrains.annotations.NotNull;
@@ -69,24 +67,9 @@ public final class ThemeAssetHandler implements HttpHandler {
                 .send(exchange);
             return;
         }
-        exchange.getResponseHeaders()
-            .set("Content-Type", contentType);
-        exchange.getResponseHeaders()
-            .set("X-Content-Type-Options", "nosniff");
-        // Replacing a ZIP at the next startup must not leave stale JS/CSS at the same URL.
-        exchange.getResponseHeaders()
-            .set("Cache-Control", "no-store");
-        exchange.getResponseHeaders()
-            .set("Content-Length", Integer.toString(bytes.length));
-        if (method.equals("HEAD")) {
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
-            exchange.close();
-            return;
-        }
-        exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, bytes.length);
-        try (OutputStream output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
+        // Replacing a ZIP at the next startup changes the bytes and therefore the ETag. Browsers keep unchanged
+        // JS/CSS cached but revalidate on every use, so a replaced theme never serves stale files at the same URL.
+        StaticAssetResponse.send(exchange, contentType, bytes);
     }
 
     private static @NotNull String contentType(String path) {
