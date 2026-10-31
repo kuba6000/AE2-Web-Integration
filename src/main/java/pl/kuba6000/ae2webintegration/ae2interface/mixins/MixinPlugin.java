@@ -43,6 +43,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
             Arrays.asList(
                 "AE2.CraftingGridCacheMixin",
                 "AE2.CraftingJobFastMixin",
+                "AE2.CraftFromPatternTaskMixin",
                 "AE2.NetworkMonitorTrackingMixin",
                 "AE2.GridStorageTrackingMixin",
                 "AE2.ControllerRemovalMixin",
