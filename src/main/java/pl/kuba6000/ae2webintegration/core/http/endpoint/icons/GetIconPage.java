@@ -16,6 +16,7 @@ import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.RequestInputs;
+import pl.kuba6000.ae2webintegration.core.http.StaticAssetResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -127,17 +128,13 @@ public final class GetIconPage {
                 .set("Cache-Control", "private, max-age=31536000, immutable");
             exchange.getResponseHeaders()
                 .set("X-Content-Type-Options", "nosniff");
-            String conditional = exchange.getRequestHeaders()
-                .getFirst("If-None-Match");
-            if (conditional != null) {
-                for (String token : conditional.split(",")) {
-                    String value = token.trim();
-                    if (value.equals("*") || value.equals(etag) || value.equals("W/" + etag)) {
-                        exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_MODIFIED, -1);
-                        exchange.close();
-                        return;
-                    }
-                }
+            if (StaticAssetResponse.matches(
+                exchange.getRequestHeaders()
+                    .getFirst("If-None-Match"),
+                etag)) {
+                exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_MODIFIED, -1);
+                exchange.close();
+                return;
             }
             exchange.getResponseHeaders()
                 .set("Content-Type", "image/png");
