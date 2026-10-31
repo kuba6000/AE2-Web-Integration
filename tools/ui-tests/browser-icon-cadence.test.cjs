@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { fixture, atlasFixture, gridA, iron } = require('./fixtures.cjs');
+const { fixture, atlasFixture, pauseClock, gridA, iron } = require('./fixtures.cjs');
 const { iconColor, waitIconColor } = require('./icon-pixels.cjs');
 
 test('animation update interval defaults to 200 ms and preserves an explicit Uncapped preference', async (t) => {
@@ -71,7 +71,7 @@ test('animation update interval holds frames between batches while preserving el
     const icon = page.getByRole('button', { name: /Iron Ingot/ }).locator('.resource-icon');
     const lateIcon = page.getByRole('button', { name: /Second Resource/ }).locator('.resource-icon');
     await waitIconColor(page, icon, 'green');
-    await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+    await pauseClock(page);
     await page.clock.runFor(200);
     assert.equal(await iconColor(page, icon), 'green', 'The visible frame waits for the selected update interval');
     const loaded = page.waitForResponse((response) => response.url().includes(`/pages/${'d'.repeat(64)}`));
@@ -90,7 +90,7 @@ test('animation update interval holds frames between batches while preserving el
     await page.getByRole('slider', { name: 'Animation update interval', exact: true }).fill('0');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await waitIconColor(page, icon, 'green');
-    await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+    await pauseClock(page);
     await page.clock.runFor(200);
     assert.equal(await iconColor(page, icon), 'red', 'Uncapped restores playback at the authored frame duration');
 });

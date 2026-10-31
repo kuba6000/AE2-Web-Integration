@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { fixture, atlasFixture, gridA, iron, clickTab, settleFrames } = require('./fixtures.cjs');
+const { fixture, atlasFixture, pauseClock, gridA, iron, clickTab, settleFrames } = require('./fixtures.cjs');
 const { iconColor, waitIconColor } = require('./icon-pixels.cjs');
 
 async function animatedFixture(t, contextOptions = {}, autoRefresh = false) {
@@ -31,7 +31,7 @@ test('terminal plays frame holds without replacing its resource tile or making p
     const original = await tile.elementHandle();
     const position = () => iconColor(page, tile.locator('.resource-icon'));
     await waitIconColor(page, page.locator('#items .resource-icon').first(), 'green');
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     assert.equal(await position(), 'green');
     await page.clock.runFor(1100);
     assert.equal(await position(), 'red');
@@ -81,7 +81,7 @@ test('pinning a visible animated resource does not strand it behind other visibl
             .getByRole('button', { name: new RegExp(name) })
             .locator('.resource-icon');
         await waitIconColor(page, icon, 'green');
-        await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+        await pauseClock(page);
         await page.clock.runFor(1100);
         assert.equal(await iconColor(page, icon), 'red');
         await page.clock.resume();
@@ -118,7 +118,7 @@ test('live response-local animation tables preserve the selected sequence and it
     await page.goto(`${base}#/grids/${gridA}/items`);
     await opened;
     await waitIconColor(page, page.locator('#items .resource-icon').first(), 'green');
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     await page.clock.runFor(800);
     const definition = { ...options.itemsA[0], quantity: 777, icon: { page: 1, x: 0, y: 0, animation: 1 } };
     options.itemStreams[0].write(
@@ -182,13 +182,13 @@ test('slow animation pages keep the static fallback and begin with a full first-
     await page.goto(`${base}#/grids/${gridA}/items`);
     const pending = await captured;
     await waitIconColor(page, page.locator('#items .resource-icon'), 'red');
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     await page.clock.runFor(2500);
     assert.equal(await iconColor(page, page.locator('#items .resource-icon')), 'red');
     await pending.fulfill({ status: 200, contentType: 'image/png', body: options.atlas });
     await page.clock.resume();
     await waitIconColor(page, page.locator('#items .resource-icon').first(), 'green');
-    await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+    await pauseClock(page);
     await page.clock.runFor(900);
     assert.equal(await iconColor(page, page.locator('#items .resource-icon')), 'green');
     await page.clock.runFor(200);
@@ -366,7 +366,7 @@ test('terminal keeps animated icons visible when a drawing surface is unavailabl
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.evaluate(() => window.restoreCanvasContext());
     await waitIconColor(page, icon, 'green');
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     await page.clock.runFor(1100);
     assert.equal(await iconColor(page, icon), 'red');
 });
