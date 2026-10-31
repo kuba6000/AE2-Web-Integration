@@ -166,6 +166,8 @@ To show item icons in the web panel, generate an icon pack from your Minecraft c
 3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
    To include animations, use `/ae2webicons export animation` and confirm the warning; this can take much longer
    and may produce a much larger pack.
+   Packs containing animations require a server mod version that supports animated icons; version 2.0.0
+   supports static exports only.
 4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
 5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
    the filename can stay unchanged.

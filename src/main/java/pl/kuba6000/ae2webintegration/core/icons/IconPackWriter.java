@@ -569,11 +569,14 @@ public final class IconPackWriter implements Closeable {
                     packId = writeArchive(temporary, canceled);
                     break;
                 } catch (CapacityException limit) {
-                    if (!animations.isEmpty()) {
-                        int omitted = animations.size();
+                    int omittedAnimations = 0;
+                    for (List<AnimationFrame> frames : animations.values()) {
+                        if (frames.size() > 1) omittedAnimations++;
+                    }
+                    if (omittedAnimations > 0) {
                         animations.clear();
                         animationFrames = 0;
-                        capacityOmissions("animations", omitted, limit.getMessage());
+                        capacityOmissions("animations", omittedAnimations, limit.getMessage());
                     } else if (limit.manifestLimit && !exportMods.isEmpty()) {
                         long remaining = Math.max(1, limit.excessBytes);
                         int omitted = 0;
