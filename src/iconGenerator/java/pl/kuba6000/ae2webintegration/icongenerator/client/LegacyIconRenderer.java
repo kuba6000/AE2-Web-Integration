@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -17,6 +19,8 @@ import net.minecraft.util.IIcon;
 import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.FluidStack;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
@@ -27,13 +31,16 @@ import org.lwjgl.opengl.GL21;
 
 import com.gtnewhorizon.gtnhlib.client.renderer.TessellatorManager;
 
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-thread inventory capture. Each call restores the caller's GL state, including on failure. */
 final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
 
+    private static final Logger LOGGER = LogManager.getLogger(LegacyIconRenderer.class);
     static final int ICON_SIZE = 64;
     private static final int GUI_SIZE = 16;
     private static final int GUI_DEPTH = 1000;
@@ -42,8 +49,21 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     private final Minecraft minecraft;
     private final RenderItem renderItem = new AlphaPreservingRenderItem();
     private final PixelReadback readback;
+    final RenderState animationState = new RenderState();
+    final AtlasFrameScope.Scratch atlasScratch = new AtlasFrameScope.Scratch();
     private final RenderState state = new RenderState();
     private @Nullable Framebuffer target;
+    private CaptureKind captureKind = CaptureKind.STATIC;
+    private long frameDuration;
+    private LongSupplier drawClock = System::nanoTime;
+    long animationUnsupportedAtlas;
+    long animationUnsupportedShape;
+    long animationUnsupportedSprite;
+    final Map<String, Long> animationCustomRenderers = new HashMap<>();
+    long animationUnsupportedTimeline;
+    long reducedAnimationPlans;
+    private long animationSpriteCursors;
+    private long animationSampledCursors;
     private long snapshotNanos;
     private long snapshotCount;
     private long setupNanos;
@@ -114,6 +134,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
             snapshotComplete = true;
             try {
                 setup(size);
+                long submittedNanos = drawClock.getAsLong();
                 long drawStarted = System.nanoTime();
                 try {
                     draw.run();
@@ -128,7 +149,11 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
                     drawCount++;
                 }
                 if (renderFailure == null) {
-                    readback.submit(key, captures);
+                    readback.submit(
+                        key,
+                        captureKind,
+                        captureKind == CaptureKind.SAMPLE ? submittedNanos : frameDuration,
+                        captures);
                     return;
                 }
             } finally {
@@ -196,6 +221,58 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
+    public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
+        throws RenderFailure {
+        IIconAnimation animation = null;
+        RenderFailure preparationFailure = null;
+        try (RenderState ignored = state.snapshot()) {
+            try {
+                animation = candidate.animation(this, key);
+            } catch (RuntimeException | LinkageError failure) {
+                preparationFailure = animationFailure(failure);
+            }
+        } catch (RuntimeException | Error failure) {
+            if (preparationFailure != null) failure.addSuppressed(preparationFailure);
+            throw failure;
+        }
+        if (preparationFailure != null) throw preparationFailure;
+        if (animation != null) {
+            if (animation.kind() == IIconAnimation.Kind.SPRITE) animationSpriteCursors++;
+            else animationSampledCursors++;
+        }
+        return animation;
+    }
+
+    @Override
+    public @NotNull IIconAnimation sampledAnimation(@NotNull IconCandidate candidate, @NotNull StableKey key) {
+        animationSampledCursors++;
+        return NativeIconAnimation.sampled(this, candidate, key);
+    }
+
+    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+        Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
+            ? failure.getCause()
+            : failure;
+        if (cause instanceof VirtualMachineError fatal) throw fatal;
+        if (cause instanceof ThreadDeath fatal) throw fatal;
+        return new RenderFailure(cause == null ? failure : cause);
+    }
+
+    void animationFrame(IconCandidate candidate, StableKey key, List<Capture> captures, CaptureKind kind, long duration,
+        LongSupplier clock) throws RenderFailure {
+        captureKind = kind;
+        frameDuration = duration;
+        drawClock = clock;
+        try {
+            candidate.render(this, key, captures);
+        } finally {
+            captureKind = CaptureKind.STATIC;
+            frameDuration = 0;
+            drawClock = System::nanoTime;
+        }
+    }
+
+    @Override
     public void drain(@NotNull List<Capture> captures) {
         readback.drain(captures);
     }
@@ -211,6 +288,16 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         counts.put("renderDrawCount", drawCount);
         counts.put("renderRestoreNanos", restoreNanos);
         counts.put("renderRestoreCount", restoreCount);
+        counts.put("animationSpriteCursors", animationSpriteCursors);
+        counts.put("animationSampledCursors", animationSampledCursors);
+        counts.put("animationUnsupportedAtlas", animationUnsupportedAtlas);
+        counts.put("animationUnsupportedShape", animationUnsupportedShape);
+        counts.put("animationUnsupportedSprite", animationUnsupportedSprite);
+        counts.put("animationCustomRendererClasses", (long) animationCustomRenderers.size());
+        if (!animationCustomRenderers.isEmpty())
+            LOGGER.info("Icon animation custom renderer candidates: {}", animationCustomRenderers);
+        counts.put("animationUnsupportedTimeline", animationUnsupportedTimeline);
+        counts.put("reducedAnimationPlans", reducedAnimationPlans);
         readback.statistics(counts);
     }
 

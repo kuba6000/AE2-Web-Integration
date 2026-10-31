@@ -10,16 +10,16 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.creativetab.CreativeTabs;
+import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.oredict.OreDictionary;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,11 +31,10 @@ import cpw.mods.fml.common.registry.GameData;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
-/** Incremental registry traversal. Only one item's published variant list is retained at a time. */
+/** Incremental native/NEI/OreDictionary discovery plus registered fluids. */
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
-    private final Minecraft minecraft;
     private final boolean neiInstalled;
     private boolean useNei;
     private boolean neiUnavailable;
@@ -47,6 +46,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private Iterator<Map.Entry<String, Fluid>> fluids = Collections.<Map.Entry<String, Fluid>>emptyList()
         .iterator();
     private @Nullable NeiCatalogue nei;
+    private @Nullable NeiRecipeCatalogue recipes;
+    private long recipeFailures;
     private @Nullable BiConsumer<String, Throwable> failures;
     private Iterator<ItemStack> variants = Collections.<ItemStack>emptyList()
         .iterator();
@@ -56,14 +57,20 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int variantCount;
     private int variantIndex;
     private int neiIndex;
+    private String[] oreNames = new String[0];
+    private int oreNameIndex;
+    private List<ItemStack> oreEntries = Collections.emptyList();
+    private int oreEntryIndex;
+    private int oreDictionaryCandidates;
+    private int oreDictionarySkippedInvalid;
+    private int oreDictionarySkippedWildcard;
     private boolean done;
     private String context = "native";
     private int nativeCandidates;
     private int neiCandidates;
     private int fluidCandidates;
 
-    IconCatalogue(@NotNull Minecraft minecraft) {
-        this.minecraft = minecraft;
+    IconCatalogue() {
         neiInstalled = Loader.isModLoaded("NotEnoughItems");
     }
 
@@ -74,12 +81,15 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             neiDisabled = neiInstalled && NeiCatalogue.disabled();
             useNei = neiInstalled && !neiDisabled;
             nei = useNei ? NeiCatalogue.ready() : null;
-        } catch (NoClassDefFoundError failure) {
+            if (nei != null) recipes = new NeiRecipeCatalogue();
+        } catch (RuntimeException | LinkageError failure) {
+            nei = null;
+            recipes = null;
             neiUnavailable = true;
             useNei = false;
-            String warning = "NEI catalogue unavailable (missing class); exporting native items and fluids only";
+            failures.accept("nei/setup", failure);
+            String warning = "NEI catalogue unavailable (initialization failed); exporting native items, OreDictionary and fluids";
             LOG.warn(warning, failure);
-            if (minecraft.thePlayer != null) minecraft.thePlayer.addChatMessage(new ChatComponentText(warning));
         }
         if (useNei && nei == null) {
             return "Waiting for NEI to finish loading its full catalogue; /ae2webicons cancel to stop";
@@ -99,6 +109,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
                 item -> GameData.getItemRegistry()
                     .getNameForObject(item)));
         items = registry.iterator();
+        oreNames = OreDictionary.getOreNames();
+        Arrays.sort(oreNames);
         fluids = new TreeMap<>(FluidRegistry.getRegisteredFluids()).entrySet()
             .iterator();
     }
@@ -117,14 +129,51 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             neiCandidates++;
             return IconCandidate.item(context, nei.copy(neiIndex++));
         }
+        if (oreEntryIndex < oreEntries.size() || oreNameIndex < oreNames.length) return nextOreDictionary();
         if (fluids.hasNext()) {
             Map.Entry<String, Fluid> fluid = fluids.next();
             context = "fluid/" + fluid.getKey();
             fluidCandidates++;
             return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), FluidContainerRegistry.BUCKET_VOLUME));
         }
+        if (recipes != null && !recipes.done()) {
+            try {
+                return recipes.next();
+            } catch (Throwable failure) {
+                Throwable cause = failureCause(failure);
+                if (cause instanceof VirtualMachineError fatal) throw fatal;
+                if (cause instanceof ThreadDeath fatal) throw fatal;
+                recipeFailures++;
+                assert failures != null : "Catalogue must be prepared before discovery";
+                failures.accept(recipes.context(), failure);
+                return null;
+            } finally {
+                context = recipes.context();
+            }
+        }
         done = true;
         return null;
+    }
+
+    private @Nullable IconCandidate nextOreDictionary() {
+        if (oreEntryIndex >= oreEntries.size()) {
+            context = "ore-dictionary/" + oreNames[oreNameIndex];
+            oreEntries = OreDictionary.getOres(oreNames[oreNameIndex++], false);
+            oreEntryIndex = 0;
+            return null;
+        }
+        context = "ore-dictionary/" + oreNames[oreNameIndex - 1] + "/" + oreEntryIndex;
+        ItemStack stack = oreEntries.get(oreEntryIndex++);
+        oreDictionaryCandidates++;
+        if (stack == null || stack.getItem() == null || stack.stackSize <= 0) {
+            oreDictionarySkippedInvalid++;
+            return null;
+        }
+        if (Items.blaze_rod.getDamage(stack) == OreDictionary.WILDCARD_VALUE) {
+            oreDictionarySkippedWildcard++;
+            return null;
+        }
+        return IconCandidate.item(context, stack.copy());
     }
 
     private @Nullable IconCandidate nextNative() {
@@ -199,6 +248,11 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         result.put("nativeCandidates", (long) nativeCandidates);
         result.put("neiCandidates", (long) neiCandidates);
         result.put("fluidCandidates", (long) fluidCandidates);
+        result.put("oreDictionaryCandidates", (long) oreDictionaryCandidates);
+        result.put("oreDictionarySkippedInvalid", (long) oreDictionarySkippedInvalid);
+        result.put("oreDictionarySkippedWildcard", (long) oreDictionarySkippedWildcard);
+        result.put("neiRecipeFailures", recipeFailures);
+        if (recipes != null) recipes.counts(result);
         return result;
     }
 
@@ -206,13 +260,14 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     public @NotNull List<String> sources() {
         String neiSource = useNei ? "nei"
             : neiUnavailable ? "nei-unavailable" : neiDisabled ? "nei-disabled" : "nei-absent";
-        return Arrays.asList("native", neiSource, "fluids");
+        return useNei ? Arrays.asList("native", neiSource, "ore-dictionary", "fluids", "nei-recipes")
+            : Arrays.asList("native", neiSource, "ore-dictionary", "fluids");
     }
 
     @Override
     public @NotNull String note() {
-        if (neiUnavailable) return " (NEI unavailable; native catalogue only)";
-        if (neiDisabled) return " (NEI disabled; native catalogue only)";
+        if (neiUnavailable) return " (NEI unavailable; native and OreDictionary catalogues)";
+        if (neiDisabled) return " (NEI disabled; native and OreDictionary catalogues)";
         return "";
     }
 
