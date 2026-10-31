@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core.http;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +46,7 @@ public final class WebHandler implements HttpHandler {
                 .set("Content-Type", "image/x-icon");
             try (InputStream input = WebHandler.class.getResourceAsStream("/assets/favicon.ico")) {
                 if (input == null) return;
-                sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+                StaticAssetResponse.sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
             }
             return;
         }
@@ -107,11 +106,8 @@ public final class WebHandler implements HttpHandler {
                 sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
                 return;
             }
-            exchange.getResponseHeaders()
-                .set("Content-Type", contentType);
-            exchange.getResponseHeaders()
-                .set("X-Content-Type-Options", "nosniff");
-            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+            byte[] bytes = IOUtils.toByteArray(input);
+            StaticAssetResponse.send(exchange, contentType, bytes);
         }
     }
 
@@ -178,7 +174,7 @@ public final class WebHandler implements HttpHandler {
             .set("Content-Type", "text/html; charset=UTF-8");
         try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
             if (input == null) return;
-            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+            StaticAssetResponse.sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
         }
     }
 
@@ -189,22 +185,7 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
-        sendBytes(exchange, status, text.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static void sendBytes(HttpExchange exchange, int status, byte[] bytes) throws IOException {
-        if (exchange.getRequestMethod()
-            .equals("HEAD")) {
-            exchange.getResponseHeaders()
-                .set("Content-Length", Integer.toString(bytes.length));
-            exchange.sendResponseHeaders(status, -1);
-            exchange.close();
-            return;
-        }
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
+        StaticAssetResponse.sendBytes(exchange, status, text.getBytes(StandardCharsets.UTF_8));
     }
 
     private static final int MAX_BODY_BYTES = 8 * 1024;

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -528,6 +529,53 @@ class ServerLifecycleHttpTest {
             "/assets/web/%2e%2e%5clogin.html", "/assets/web/config.toml" }) {
             assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, null).status(), path);
         }
+    }
+
+    @Test
+    void browserAssetsAreRevalidatedWithEtagsInsteadOfLeftToHeuristicCaching() throws Exception {
+        startApi();
+        String path = "/assets/web/http-test.mjs";
+        HttpURLConnection first = connection(path, null);
+        Response content = read(first);
+        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        String etag = first.getHeaderField("ETag");
+        assertNotNull(etag);
+        assertEquals("no-cache", first.getHeaderField("Cache-Control"));
+        assertEquals("nosniff", first.getHeaderField("X-Content-Type-Options"));
+
+        HttpURLConnection unchanged = connection(path, null);
+        unchanged.setRequestProperty("If-None-Match", etag);
+        Response notModified = read(unchanged);
+        assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, notModified.status());
+        assertEquals("", notModified.body());
+        assertEquals(etag, unchanged.getHeaderField("ETag"));
+        assertEquals("no-cache", unchanged.getHeaderField("Cache-Control"));
+
+        for (String validator : new String[] { "W/" + etag, "\"other\", " + etag, "*" }) {
+            HttpURLConnection listed = connection(path, null);
+            listed.setRequestProperty("If-None-Match", validator);
+            assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, read(listed).status(), validator);
+        }
+
+        HttpURLConnection changed = connection(path, null);
+        changed.setRequestProperty("If-None-Match", "\"stale\"");
+        Response refreshed = read(changed);
+        assertEquals(HttpURLConnection.HTTP_OK, refreshed.status());
+        assertEquals(content.body(), refreshed.body());
+        assertEquals(etag, changed.getHeaderField("ETag"));
+
+        HttpURLConnection head = connection(path, null);
+        head.setRequestMethod("HEAD");
+        assertEquals(HttpURLConnection.HTTP_OK, read(head).status());
+        assertEquals(etag, head.getHeaderField("ETag"));
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+
+        HttpURLConnection style = connection("/assets/web/http-test.css", null);
+        assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+        assertNotEquals(etag, style.getHeaderField("ETag"));
     }
 
     @Test
