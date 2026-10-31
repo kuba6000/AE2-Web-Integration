@@ -1911,8 +1911,7 @@ label {
     isolation: isolate;
 }
 .terminal-icon-layer {
-    position: sticky;
-    top: 0;
+    position: relative;
     height: 0;
     z-index: 1;
     pointer-events: none;

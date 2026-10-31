@@ -310,6 +310,68 @@ test('malformed animation metadata falls back to the valid static crop', async (
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 1);
 });
 
+for (const deviceScaleFactor of [1, 1.25, 2])
+    test(`painted terminal icons move with their rows before the next animation frame at density ${deviceScaleFactor}`, async (t) => {
+        const { page, options, base } = await animatedFixture(t, {
+            deviceScaleFactor,
+            viewport: { width: 1100, height: 1000 }
+        });
+        options.itemsA = Array.from({ length: 120 }, (_, index) => ({
+            ...options.itemsA[0],
+            itemKey: `resource-${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`
+        }));
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const icon = page.getByRole('button', { name: /Resource 014/ }).locator('.resource-icon');
+        await waitIconColor(page, icon, 'green');
+        await pauseClock(page);
+        const before = await icon.boundingBox();
+        await page.locator('#item-scroll').evaluate((viewport) => {
+            viewport.scrollTop += 40;
+        });
+        const after = await icon.boundingBox();
+
+        assert.equal(before.y - after.y, 40, 'the resource row has scrolled before scheduled drawing');
+        assert.equal(
+            await iconColor(page, icon),
+            'green',
+            'painted pixels must travel with the resource row while drawing is pending'
+        );
+        await page.clock.runFor(32);
+        assert.equal(await iconColor(page, icon), 'green', 'refreshing the viewport keeps the icon aligned');
+        await page.locator('#item-scroll').evaluate((viewport) => {
+            viewport.scrollTop -= 40;
+        });
+        assert.equal(
+            await iconColor(page, icon),
+            'green',
+            'reverse scrolling also moves the retained pixels immediately'
+        );
+        await page.clock.resume();
+        const last = page.getByRole('button', { name: /Resource 119/ });
+        await last.scrollIntoViewIfNeeded();
+        await waitIconColor(page, last.locator('.resource-icon'), 'green');
+        await page.locator('#search').fill('Resource 014');
+        await waitIconColor(page, icon, 'green');
+        await page.waitForFunction(() => {
+            const viewport = document.querySelector('#item-scroll');
+            return viewport.scrollTop === 0 && viewport.scrollHeight <= viewport.clientHeight + 1;
+        });
+        await page.locator('#search').fill('');
+        await last.scrollIntoViewIfNeeded();
+        await waitIconColor(page, last.locator('.resource-icon'), 'green');
+        await page.locator('#search').fill('No matching resource');
+        await page.waitForFunction(() => {
+            const viewport = document.querySelector('#item-scroll');
+            return (
+                document.querySelectorAll('#items .item').length === 0 &&
+                viewport.scrollHeight <= viewport.clientHeight + 1
+            );
+        });
+        await page.locator('#search').fill('Resource 014');
+        await waitIconColor(page, icon, 'green');
+    });
+
 for (const deviceScaleFactor of [1.25, 2])
     test(`terminal icons remain aligned after scrolling and resizing at pixel density ${deviceScaleFactor}`, async (t) => {
         const { page, options, base } = await animatedFixture(t, {

@@ -18,14 +18,25 @@ export function createTerminalIconCanvas(viewport: HTMLElement) {
     viewport.prepend(layer);
     const context = canvas.getContext('2d');
     const entries = new Map<HTMLElement, Entry>();
+    const overscan = 96;
     let dirty = true;
     let frame = 0;
     let disposed = false;
+    let scale = 1;
 
     function clear(entry: Entry) {
         if (context && entry.box) {
             const { x, y, width, height } = entry.box;
-            context.clearRect(x, y, width, height);
+            // GPU rasterization can cover edge pixels beyond a fractional clear rectangle.
+            // Clear whole backing pixels using the scale of the current bitmap.
+            const left = Math.floor(x * scale) / scale;
+            const top = Math.floor(y * scale) / scale;
+            context.clearRect(
+                left,
+                top,
+                Math.ceil((x + width) * scale) / scale - left,
+                Math.ceil((y + height) * scale) / scale - top
+            );
         }
     }
 
@@ -56,15 +67,29 @@ export function createTerminalIconCanvas(viewport: HTMLElement) {
         dirty = false;
         if (!entries.size) {
             canvas.width = canvas.height = 0;
+            canvas.style.height = '0px';
+            canvas.style.top = '0px';
             return;
         }
         const bounds = layer.getBoundingClientRect();
-        const height = viewport.clientHeight;
-        const scale = devicePixelRatio;
+        // Keep the bitmap in scroll-content coordinates so compositor scrolling moves it with rows.
+        // Measure actual content, excluding our own surface, so a shrinking list cannot retain overflow.
+        const contentHeight = Math.max(
+            0,
+            ...[...viewport.children]
+                .filter((child) => child !== layer)
+                .map((child) => child.getBoundingClientRect())
+                .filter((box) => box.height > 0)
+                .map((box) => box.bottom - bounds.top)
+        );
+        const scroll = Math.min(viewport.scrollTop, Math.max(0, contentHeight - viewport.clientHeight));
+        const top = Math.max(0, scroll - overscan);
+        const height = Math.min(viewport.clientHeight + 2 * overscan, Math.max(0, contentHeight - top));
+        scale = devicePixelRatio;
         for (const entry of entries.values()) {
             const box = entry.icon.getBoundingClientRect();
             const x = box.left - bounds.left;
-            const y = box.top - bounds.top;
+            const y = box.top - bounds.top - top;
             entry.box =
                 box.width && box.height && x < bounds.width && y < height && x + box.width > 0 && y + box.height > 0
                     ? { x, y, width: box.width, height: box.height }
@@ -72,6 +97,7 @@ export function createTerminalIconCanvas(viewport: HTMLElement) {
         }
         canvas.width = Math.ceil(bounds.width * scale);
         canvas.height = Math.ceil(height * scale);
+        canvas.style.top = `${top}px`;
         canvas.style.width = `${bounds.width}px`;
         canvas.style.height = `${height}px`;
         context.setTransform(scale, 0, 0, scale, 0, 0);

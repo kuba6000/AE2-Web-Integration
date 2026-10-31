@@ -157,7 +157,7 @@ let browserLaunch;
 // One browser serves every test of this process; each test gets its own context. A lost browser is relaunched.
 async function sharedBrowser() {
     const launch = (browserLaunch ??= chromium.launch({
-        headless: true,
+        headless: process.env.BROWSER_HEADED !== '1',
         ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
     }));
     const browser = await launch.catch((error) => {
