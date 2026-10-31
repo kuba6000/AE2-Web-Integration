@@ -139,12 +139,16 @@ export function createWebSettings(
         savedInterval % 10 === 0
             ? savedInterval
             : 200;
-    function updateAnimationInterval() {
-        const value = animationInterval === 0 ? 'Instant' : `${animationInterval} ms`;
+    let uncappedLabel = '';
+    function renderAnimationInterval() {
+        const value = animationInterval === 0 ? uncappedLabel : `${animationInterval} ms`;
         controls.animationInterval.value = String(animationInterval);
         controls.animationInterval.setAttribute('aria-valuetext', value);
         controls.animationInterval.disabled = !controls.animatedIcons.checked;
         controls.animationIntervalValue.value = value;
+    }
+    function updateAnimationInterval() {
+        renderAnimationInterval();
         application.icons.animate(controls.animatedIcons.checked, animationInterval);
     }
     updateAnimationInterval();
@@ -212,6 +216,8 @@ export function createWebSettings(
     const autoRefresh = controls.autoRefresh;
     autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     function render(state: ThemeState, locale: Translator): TerminalDisplay {
+        uncappedLabel = locale.t('animationUncapped');
+        renderAnimationInterval();
         root.hidden = state.route.view !== 'web-settings';
         const language = state.preferences.language;
         document.documentElement.dataset.appearance = appearance;

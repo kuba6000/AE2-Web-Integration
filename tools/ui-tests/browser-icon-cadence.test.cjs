@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { fixture, atlasFixture, gridA, iron } = require('./fixtures.cjs');
 const { iconColor, waitIconColor } = require('./icon-pixels.cjs');
 
-test('animation update interval defaults to 200 ms and preserves an explicit Instant preference', async (t) => {
+test('animation update interval defaults to 200 ms and preserves an explicit Uncapped preference', async (t) => {
     const { page, base } = await fixture(t);
     await page.goto(`${base}#/web-settings`);
     await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
@@ -25,9 +25,17 @@ test('animation update interval defaults to 200 ms and preserves an explicit Ins
     await animations.check();
     assert.equal(await interval.inputValue(), '230', 'Toggling playback preserves the selected interval');
     await interval.fill('0');
-    assert.equal(await page.getByText('Instant', { exact: true }).isVisible(), true);
+    assert.equal(await page.getByText('Uncapped', { exact: true }).isVisible(), true);
     await page.reload();
     assert.equal(await interval.inputValue(), '0');
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    const polishInterval = page.getByRole('slider', { name: 'Odstęp aktualizacji animacji', exact: true });
+    await page.getByText('Bez limitu', { exact: true }).waitFor();
+    assert.equal(await polishInterval.getAttribute('aria-valuetext'), 'Bez limitu');
+    await polishInterval.fill('200');
+    assert.equal(await page.getByText('200 ms', { exact: true }).isVisible(), true);
+    await polishInterval.fill('0');
+    assert.equal(await page.getByText('Bez limitu', { exact: true }).isVisible(), true);
 });
 
 test('animation update interval holds frames between batches while preserving elapsed animation time', async (t) => {
@@ -84,5 +92,5 @@ test('animation update interval holds frames between batches while preserving el
     await waitIconColor(page, icon, 'green');
     await page.clock.pauseAt(await page.evaluate(() => Date.now()));
     await page.clock.runFor(200);
-    assert.equal(await iconColor(page, icon), 'red', 'Instant restores playback at the authored frame duration');
+    assert.equal(await iconColor(page, icon), 'red', 'Uncapped restores playback at the authored frame duration');
 });
