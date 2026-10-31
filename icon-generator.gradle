@@ -27,6 +27,14 @@ dependencies {
     modIconGeneratorCompileOnly(forge.emi)
     modIconGeneratorRuntimeOnly(forge.guideme)
     iconGeneratorCompileOnly(libs.jetbrains.annotations)
+    iconGeneratorAnnotationProcessor(variantOf(libs.mixin) { classifier("processor") })
+}
+
+mixin.add(sourceSets.iconGenerator, 'mixins.ae2webicons.refmap.json')
+def mixinArgsType = mixin.class.classLoader.loadClass('net.neoforged.moddevgradle.legacyforge.dsl.MixinCompilerArgs')
+// Keep the compiler task as producer; its nested argument property's output has no task owner.
+def generatorMixinMappings = tasks.named('compileIconGeneratorJava', JavaCompile).map { compile ->
+    compile.options.compilerArgumentProviders.find { mixinArgsType.isInstance(it) }.outMappings.get().asFile
 }
 
 tasks.named('processIconGeneratorResources') {
@@ -56,8 +64,16 @@ def generatorJar = tasks.register('iconGeneratorJar', shadowJarType) {
 
 def generatorRelease = obfuscation.reobfuscate(generatorJar, sourceSets.iconGenerator) {
     archiveClassifier = ''
-    // This artifact has no mixins from the server integration source set.
-    remapOperation.mappings.setFrom(obfuscation.namedToSrgMappings)
+    // Keep standalone generator mappings independent of the server integration's mixins.
+    remapOperation.mappings.setFrom(obfuscation.namedToSrgMappings, generatorMixinMappings)
+}
+
+// Mixin's extension shares extra mappings globally; keep the normal mod on its own producer too.
+def integrationMixinMappings = tasks.named('compileJava', JavaCompile).map { compile ->
+    compile.options.compilerArgumentProviders.find { mixinArgsType.isInstance(it) }.outMappings.get().asFile
+}
+tasks.matching { it.name in ['reobfSlimJar', 'reobfShadowJar'] }.configureEach {
+    remapOperation.mappings.setFrom(obfuscation.namedToSrgMappings, integrationMixinMappings)
 }
 
 tasks.named('assemble') {
@@ -69,7 +85,7 @@ afterEvaluate {
         // The server mod's manifest declares its own integration mixins.
         manifest.attributes.clear()
         manifest.attributes('Manifest-Version': '1.0', 'Implementation-Version': project.version,
-            'FMLAT': 'accesstransformer.cfg')
+            'FMLAT': 'accesstransformer.cfg', 'MixinConfigs': 'mixins.ae2webicons.json')
     }
 }
 
@@ -88,6 +104,7 @@ legacyForge.runs.create('iconGeneratorClient') {
     loadedMods.set([legacyForge.mods.getByName('ae2webintegration_icon_generator')])
     gameDirectory.set(file('run/icon-generator'))
     ideName = 'Standalone icon generator'
+    programArguments.addAll('--mixin.config', 'mixins.ae2webicons.json')
 }
 
 spotless.java {

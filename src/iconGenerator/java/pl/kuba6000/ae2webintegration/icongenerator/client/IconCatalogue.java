@@ -13,7 +13,6 @@ import java.util.function.BiConsumer;
 import net.minecraft.ReportedException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -33,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
-/** Native registries and creative display/search entries, optionally unioned with a completed EMI index. */
+/** Native registries and creative display/search entries, optionally unioned with a completed EMI index and recipes. */
 final class IconCatalogue implements IIconSource<IconCandidate> {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
@@ -57,6 +56,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     private int nativeCandidates;
     private int creativeCandidates;
     private int emiCandidates;
+    private boolean readingEmiRecipes;
     private int fluidCandidates;
     private int skippedEmpty;
     private int skippedDisabled;
@@ -79,28 +79,34 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
                 throw new IllegalStateException(
                     "EMI reload failed or is retrying; start a new export after EMI reload completes");
             }
-        } catch (LinkageError failure) {
+        } catch (RuntimeException | LinkageError failure) {
+            emi = null;
             emiUnavailable = true;
             useEmi = false;
-            String warning = "EMI catalogue unavailable (incompatible integration); exporting native items and fluids only";
+            failures.accept("emi/setup", failure);
+            String warning = "EMI catalogue unavailable (initialization failed); exporting native items and fluids only";
             LOG.warn(warning, failure);
-            if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal(warning), false);
         }
         if (useEmi && emi == null) {
             return "Waiting for EMI to finish loading its full catalogue; /ae2webicons cancel to stop";
         }
-        initialize();
+        initialize(failures);
         prepared = true;
         return null;
     }
 
-    private void initialize() {
+    private void initialize(@NotNull BiConsumer<String, Throwable> failures) {
         long started = System.nanoTime();
         // Match ordinary creative visibility, without privileged operator entries.
-        CreativeModeTabs.tryRebuildTabContents(features, false, minecraft.level.registryAccess());
-        creativeRebuildNanos = System.nanoTime() - started;
-        tabs = CreativeModeTabs.allTabs()
-            .iterator();
+        try {
+            CreativeModeTabs.tryRebuildTabContents(features, false, minecraft.level.registryAccess());
+            tabs = CreativeModeTabs.allTabs()
+                .iterator();
+        } catch (RuntimeException | LinkageError failure) {
+            failures.accept("creative/setup", failure);
+        } finally {
+            creativeRebuildNanos = System.nanoTime() - started;
+        }
         List<Item> registeredItems = new ArrayList<>();
         ForgeRegistries.ITEMS.forEach(registeredItems::add);
         registeredItems.sort(
@@ -161,6 +167,10 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             fluidCandidates++;
             return new IconCandidate(context, new FluidStack(fluid, 1));
         }
+        if (emi != null && !emi.recipesDone()) {
+            readingEmiRecipes = true;
+            return emi.nextRecipe();
+        }
         done = true;
         return null;
     }
@@ -186,7 +196,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     @Override
     @NotNull
     public String context() {
-        return context;
+        return readingEmiRecipes && emi != null ? emi.recipeContext() : context;
     }
 
     @Override
@@ -196,6 +206,8 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
         counts.put("nativeCandidates", (long) nativeCandidates);
         counts.put("creativeCandidates", (long) creativeCandidates);
         counts.put("emiCandidates", (long) emiCandidates);
+        counts.put("emiRecipesVisited", emi == null ? 0L : (long) emi.recipesVisited());
+        counts.put("emiRecipeCandidates", emi == null ? 0L : emi.recipeCandidates());
         counts.put("fluidCandidates", (long) fluidCandidates);
         counts.put("skippedEmpty", (long) skippedEmpty);
         counts.put("skippedFeatureDisabled", (long) skippedDisabled);
@@ -206,7 +218,9 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
     @Override
     public @NotNull List<String> sources() {
         String emiSource = useEmi ? "emi" : emiUnavailable ? "emi-unavailable" : "emi-absent";
-        return Arrays.asList("native", "creative", emiSource, "fluids");
+        List<String> sources = new ArrayList<>(Arrays.asList("native", "creative", emiSource, "fluids"));
+        if (useEmi) sources.add("emi-recipes");
+        return sources;
     }
 
     @Override

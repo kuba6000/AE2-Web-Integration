@@ -18,6 +18,7 @@ import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-owned, bounded readback pages. Only detached pixels leave the GL thread. */
@@ -54,7 +55,7 @@ final class PixelReadback implements AutoCloseable {
     }
 
     /** Called inside the renderer's per-icon state guard, after successful drawing. */
-    void submit(@NotNull StableKey key, @NotNull List<Capture> captures) {
+    void submit(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull CaptureKind kind, long timing) {
         discardRenderingErrors();
         initialize();
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
@@ -72,7 +73,7 @@ final class PixelReadback implements AutoCloseable {
                 readbackNanos += System.nanoTime() - started;
                 readbackCount++;
             }
-            captures.add(new Capture(key, convert(rgba)));
+            captures.add(new Capture(key, convert(rgba), kind, timing));
             return;
         }
         if (current == null) {
@@ -93,7 +94,9 @@ final class PixelReadback implements AutoCloseable {
             readbackNanos += System.nanoTime() - started;
             readbackCount++;
         }
-        page.keys[page.count++] = key;
+        page.keys[page.count] = key;
+        page.kinds[page.count] = kind;
+        page.timings[page.count++] = timing;
         if (page.count == ICONS_PER_PAGE) {
             pending.addLast(page);
             current = null;
@@ -154,7 +157,8 @@ final class PixelReadback implements AutoCloseable {
                 checkError();
                 mapped.clear();
                 for (int index = 0; index < page.count; index++) {
-                    completed.add(new Capture(page.keys[index], convert(mapped)));
+                    completed
+                        .add(new Capture(page.keys[index], convert(mapped), page.kinds[index], page.timings[index]));
                 }
             } catch (RuntimeException | Error failure) {
                 conversionFailure = failure;
@@ -174,6 +178,7 @@ final class PixelReadback implements AutoCloseable {
             }
             captures.addAll(completed);
             Arrays.fill(page.keys, null);
+            Arrays.fill(page.kinds, null);
             page.count = 0;
         } finally {
             GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, previous);
@@ -212,7 +217,7 @@ final class PixelReadback implements AutoCloseable {
         if (error != GL11.GL_NO_ERROR) throw new IllegalStateException("OpenGL icon readback error: " + error);
     }
 
-    private static void discardRenderingErrors() {
+    static void discardRenderingErrors() {
         // Mod renderers can leave sticky flags, including when their draw throws. Attribute only new errors to
         // readback.
         // Never swallow out-of-memory/context-loss errors or loop indefinitely on an unhealthy context.
@@ -255,6 +260,8 @@ final class PixelReadback implements AutoCloseable {
 
         final int buffer;
         final StableKey[] keys = new StableKey[ICONS_PER_PAGE];
+        final CaptureKind[] kinds = new CaptureKind[ICONS_PER_PAGE];
+        final long[] timings = new long[ICONS_PER_PAGE];
         private @Nullable ByteBuffer mapping;
         private int count;
 
