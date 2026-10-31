@@ -397,25 +397,39 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                 trim();
                 pump();
             };
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        const binding = bindings.get(entry.target as HTMLElement);
-                        if (binding) binding.visible = entry.isIntersecting;
+            const updateVisibility = (entries: IntersectionObserverEntry[], field: 'visible' | 'animationVisible') => {
+                const changed = new Map<HTMLElement, { binding: Binding; visible: boolean }>();
+                for (const entry of entries) {
+                    const target = entry.target as HTMLElement;
+                    const binding = bindings.get(target);
+                    if (binding && binding[field] !== entry.isIntersecting) {
+                        binding[field] = entry.isIntersecting;
+                        changed.set(target, { binding, visible: entry.isIntersecting });
                     }
-                    update();
-                },
-                { root, rootMargin: '96px 0px' }
-            );
+                }
+                // Entrants keep a shared page and animation phase alive before departing users release them.
+                for (const visible of [true, false])
+                    for (const [target, change] of changed)
+                        if (
+                            change.visible === visible &&
+                            bindings.get(target) === change.binding &&
+                            change.binding[field] === visible
+                        )
+                            refresh(target, change.binding);
+                if (changed.size) {
+                    trim();
+                    pump();
+                }
+            };
+            const observer = new IntersectionObserver((entries) => updateVisibility(entries, 'visible'), {
+                root,
+                rootMargin: '96px 0px'
+            });
             const animationObserver = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        const binding = bindings.get(entry.target as HTMLElement);
-                        if (binding) binding.animationVisible = entry.isIntersecting;
-                    }
-                    update();
-                },
-                { root }
+                (entries) => updateVisibility(entries, 'animationVisible'),
+                {
+                    root
+                }
             );
             views.add(update);
             return {
