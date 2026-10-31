@@ -200,7 +200,7 @@ export function createCraftingView(
                 panel.clearIcons();
                 return;
             }
-            tree.render(state.tree, locale);
+            tree.render(state.tree, locale, !!state.mutation);
             scroll.hidden = state.tree.visible;
             searchLabel.hidden = state.tree.visible;
             sortGroup.hidden = state.tree.visible;

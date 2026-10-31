@@ -3956,6 +3956,10 @@ button.toast:hover {
 .tree-controls button {
     min-width: 40px;
 }
+.tree-controls button[aria-pressed='true'] {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+}
 .tree-message,
 .tree-caveat {
     margin: 0;

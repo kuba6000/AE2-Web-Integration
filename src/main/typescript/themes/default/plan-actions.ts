@@ -104,12 +104,10 @@ export function createPlanActions(
     views.role = 'group';
     const list = element('button');
     const tree = element('button');
-    const missing = element('button');
-    for (const control of [list, tree, missing]) control.type = 'button';
+    for (const control of [list, tree]) control.type = 'button';
     list.onclick = () => void application.crafting.showTree(false);
     tree.onclick = () => void application.crafting.showTree(true);
-    missing.onclick = () => void application.crafting.missingTree(!application.state.crafting.tree.missingOnly);
-    views.append(list, tree, missing);
+    views.append(list, tree);
     const left = element('div', '', 'plan-view-tools');
     left.append(exportButton, views);
     actions.append(left, startControls, remove);
@@ -138,13 +136,9 @@ export function createPlanActions(
             views.setAttribute('aria-label', t('treeViewMode'));
             list.textContent = t('treeList');
             tree.textContent = t('treeTree');
-            missing.textContent = t('treeMissingOnly');
             list.setAttribute('aria-pressed', String(!state.tree.visible));
             tree.setAttribute('aria-pressed', String(state.tree.visible));
-            missing.setAttribute('aria-pressed', String(state.tree.missingOnly));
             tree.disabled = !state.plan?.isDone || !!state.mutation || !!state.uncertain;
-            missing.hidden = !state.tree.visible;
-            missing.disabled = !!state.mutation;
 
             start.textContent = t('startCrafting');
             start.disabled = state.status !== 'ready' || !!state.mutation || !!state.uncertain || !state.selectedCpu;

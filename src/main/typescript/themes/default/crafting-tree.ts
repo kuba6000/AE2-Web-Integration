@@ -19,6 +19,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const reveal = element('button');
     const expandAll = element('button');
     const collapseAll = element('button');
+    const missingOnly = element('button');
     const stopExpansion = element('button');
     const previous = element('button');
     const next = element('button');
@@ -30,7 +31,20 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     const content = element('div', '', 'tree-content');
     space.append(content);
     viewport.append(space);
-    bar.append(out, reset, zoomIn, fit, expandAll, collapseAll, stopExpansion, previous, next, retry, reveal);
+    bar.append(
+        out,
+        reset,
+        zoomIn,
+        fit,
+        expandAll,
+        collapseAll,
+        missingOnly,
+        stopExpansion,
+        previous,
+        next,
+        retry,
+        reveal
+    );
     root.append(bar, message, caveat, viewport);
     for (const button of [
         out,
@@ -39,6 +53,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
         fit,
         expandAll,
         collapseAll,
+        missingOnly,
         stopExpansion,
         previous,
         next,
@@ -85,6 +100,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     expandAll.onclick = () => void application.crafting.expandAllTree();
     collapseAll.onclick = () => application.crafting.collapseAllTree();
     stopExpansion.onclick = () => application.crafting.stopTreeExpansion();
+    missingOnly.onclick = () => void application.crafting.missingTree(!application.state.crafting.tree.missingOnly);
     reveal.onclick = () => void application.crafting.revealMissingTree();
     retry.onclick = () => void application.crafting.retryTree();
     let drag: { x: number; y: number; left: number; top: number } | null = null;
@@ -104,13 +120,16 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     });
     return {
         element: root,
-        render(state: ThemeState['crafting']['tree'], nextLocale: Translator) {
+        render(state: ThemeState['crafting']['tree'], nextLocale: Translator, busy: boolean) {
             root.hidden = !state.visible;
             if (!state.visible) {
                 icons.update([], null);
                 revision = -1;
                 return;
             }
+            missingOnly.textContent = nextLocale.common('treeMissingOnly');
+            missingOnly.setAttribute('aria-pressed', String(state.missingOnly));
+            missingOnly.disabled = busy;
             if (revision === state.revision && locale === nextLocale) return;
             revision = state.revision;
             locale = nextLocale;
