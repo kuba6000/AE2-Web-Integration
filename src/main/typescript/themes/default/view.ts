@@ -96,7 +96,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     workspace.insertBefore(resourceTerminal.panel, windowFrame.nextSibling);
     const cpuView = createCpuView(windowFrame, application, { workspace: workspace, settings, lifetime });
     lifetime.onCleanup(() => cpuView.dispose());
-    const historyView = createHistoryView(windowFrame, application, tooltips.bind);
+    const historyView = createHistoryView(windowFrame, application, tooltips.bind, settings);
     lifetime.onCleanup(() => historyView.dispose());
     const settingsView = createSettingsView(windowFrame, application);
     const serverSettingsView = createServerSettingsView(windowFrame, application, tooltips);

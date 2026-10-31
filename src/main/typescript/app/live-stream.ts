@@ -1,4 +1,4 @@
-import type { IconMetadata, IconReference, LiveDelta, TerminalView } from './api-types.js';
+import type { IconAnimation, IconMetadata, IconReference, LiveDelta, TerminalView } from './api-types.js';
 import type { EventHandlers } from './api.js';
 
 export type LiveStreamState = { status: 'connecting'; lastEventAt: null } | { status: 'live'; lastEventAt: number };
@@ -46,6 +46,15 @@ export function createLiveStream<
     let close: (() => void) | undefined;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
     let connection = 0;
+    const sequenceKeys = new WeakMap<IconAnimation, string>();
+    function sequenceKey(animation: IconAnimation) {
+        let key = sequenceKeys.get(animation);
+        if (!key) {
+            key = `${animation.page}:${animation.frames.map((frame) => `${frame.x},${frame.y},${frame.durationMillis}`).join(';')}`;
+            sequenceKeys.set(animation, key);
+        }
+        return key;
+    }
 
     function stop() {
         connection++;
@@ -99,19 +108,52 @@ export function createLiveStream<
                     resync();
                     return;
                 }
-                const pages = [...(previous?.pages ?? [])];
-                const indices = (delta.icons?.pages ?? []).map((page) => {
-                    let index = pages.findIndex((existing) => existing.digest === page.digest);
-                    if (index < 0) {
-                        index = pages.length;
-                        pages.push(page);
-                    }
-                    return index;
-                });
-                const remap: IconRemap = (value) => ({
-                    ...value,
-                    icon: value.icon && delta.icons ? { ...value.icon, page: indices[value.icon.page] } : null
-                });
+                let icons: IconMetadata | null = null;
+                let remap: IconRemap = (value) => ({ ...value, icon: null });
+                if (delta.icons) {
+                    const pages = [...(previous?.pages ?? [])];
+                    const indices = (delta.icons?.pages ?? []).map((page) => {
+                        let index = pages.findIndex((existing) => existing.digest === page.digest);
+                        if (index < 0) {
+                            index = pages.length;
+                            pages.push(page);
+                        }
+                        return index;
+                    });
+                    const animations = delta.icons.animations?.length
+                        ? [...(previous?.animations ?? [])]
+                        : (previous?.animations ?? []);
+                    const sequenceIndices = new Map(
+                        delta.icons.animations?.length
+                            ? animations.map((animation, index) => [sequenceKey(animation), index])
+                            : []
+                    );
+                    const animationIndices = (delta.icons?.animations ?? []).map((animation) => {
+                        const mapped = { ...animation, page: indices[animation.page] };
+                        const key = sequenceKey(mapped);
+                        let index = sequenceIndices.get(key);
+                        if (index === undefined) {
+                            index = animations.length;
+                            animations.push(mapped);
+                            sequenceIndices.set(key, index);
+                        }
+                        return index;
+                    });
+                    remap = (value) => ({
+                        ...value,
+                        icon:
+                            value.icon && delta.icons
+                                ? {
+                                      ...value.icon,
+                                      page: indices[value.icon.page],
+                                      ...(value.icon.animation != null
+                                          ? { animation: animationIndices[value.icon.animation] ?? null }
+                                          : {})
+                                  }
+                                : null
+                    });
+                    icons = { ...delta.icons, pages, animations };
+                }
                 host.section?.(delta, remap);
                 let rows: LiveChange<Row>['rows'] = null;
                 if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
@@ -135,7 +177,7 @@ export function createLiveStream<
                     const unkeyed = delta.unkeyed?.map(remap) ?? existing.filter((row) => !row.itemKey);
                     rows = { all: [...keyed.values(), ...unkeyed], keyed };
                 }
-                host.apply({ rows, icons: delta.icons ? { ...delta.icons, pages } : null });
+                host.apply({ rows, icons });
                 view = delta.view;
                 host.changed();
             },

@@ -20,6 +20,8 @@ export function createResourceHistoryView(
     const resourceIcon = createResourceIcon();
     const iconHost = element('div', '', 'tracking-resource');
     iconHost.append(resourceIcon, resourceName);
+    const resourceKey = element('p');
+    resourceKey.hidden = true;
     const toolbar = element('div', '', 'tracking-toolbar');
     toolbar.hidden = !full;
     const rangeLabel = element('label');
@@ -61,7 +63,7 @@ export function createResourceHistoryView(
     const back = element('a', '', 'tracking-back');
     const headingBar = element('div', '', 'terminal-heading');
     headingBar.append(heading, back);
-    section.append(headingBar, iconHost, toolbar, status, totals, chartHost, help, link);
+    section.append(headingBar, iconHost, resourceKey, toolbar, status, totals, chartHost, help, link);
     const pins = createPinActions(application);
     if (full) iconHost.after(pins.element);
     host.append(section);
@@ -92,6 +94,9 @@ export function createResourceHistoryView(
         section.hidden = !active;
         if (!active) return;
         const itemKey = state.route.view === 'tracking' ? state.route.itemKey : state.selected?.itemKey;
+        resourceKey.hidden = !full || !itemKey;
+        if (full && itemKey)
+            resourceKey.replaceChildren(element('span', `${locale.t('resourceKey')}:`), ' ', element('code', itemKey));
         const history = state.resourceHistory;
         if (full) pins.render(state, locale, state.route.gridKey, history.error ? null : (itemKey ?? null));
         const hasStock =

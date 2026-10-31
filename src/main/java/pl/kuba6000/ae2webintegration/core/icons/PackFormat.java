@@ -34,12 +34,15 @@ import com.google.gson.stream.JsonToken;
 final class PackFormat {
 
     static final int VERSION = 2;
+    static final int ANIMATED_VERSION = 3;
+    static final int MAX_ANIMATION_FRAMES = 256;
+    static final int MAX_TOTAL_ANIMATION_FRAMES = 1_000_000;
+    static final int MAX_ANIMATION_MILLIS = 600_000;
     static final int ICON_SIZE = 64;
     static final int ICON_PIXELS = ICON_SIZE * ICON_SIZE;
     static final int ICON_BYTES = ICON_PIXELS * Integer.BYTES;
     static final int GUTTER = 1;
     static final int CELL_PITCH = ICON_SIZE + 2 * GUTTER;
-    static final int SMALL_PAGE_DIMENSION = 512;
     static final int DEFAULT_PAGE_DIMENSION = 1024;
     static final int MAX_PAGE_DIMENSION = 2048;
     static final int MAX_FAILURE_RECORDS = 100;
@@ -50,6 +53,8 @@ final class PackFormat {
     private static final int MAX_TEXT_LENGTH = 4096;
     private static final @NotNull Pattern NONNEGATIVE_INTEGER = Pattern.compile("0|[1-9][0-9]*");
     static final int MAX_KEYS = 250_000;
+    // Static resources and their animation frames share pixels, but not the resource-key budget.
+    static final int MAX_IMAGES = 1_000_000;
     static final int MAX_MANIFEST = 64 * 1024 * 1024;
     static final int MAX_PAGE = 16 * 1024 * 1024;
     static final long MAX_ARCHIVE = 1024L * 1024 * 1024;

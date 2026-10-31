@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { iconColor, waitIconColor } = require('./icon-pixels.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
@@ -830,7 +831,7 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
         false
     );
     release();
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
+    await waitIconColor(page, page.locator('#items .resource-icon').first(), 'red');
     options.packError = true;
     await poll(page);
     await clickTab(page, 'Web settings');
@@ -1498,12 +1499,8 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     options.cpus['cpu-a'] = { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } };
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(
-        () =>
-            [...document.querySelectorAll('#items .resource-icon')].filter(
-                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
-            ).length === 2
-    );
+    await waitIconColor(page, page.locator('#items .resource-icon').first(), 'green');
+    await waitIconColor(page, page.locator('#items .resource-icon').last(), 'red');
     assert.equal(
         await page
             .locator('#items .resource-icon')
@@ -1517,10 +1514,11 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     );
     assert.equal(pages().length, 1);
     assert.deepEqual(
-        await page
-            .locator('#items .resource-icon')
-            .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).backgroundPosition)),
-        ['-32px 0px', '0px 0px']
+        await Promise.all([
+            iconColor(page, page.locator('#items .resource-icon').first()),
+            iconColor(page, page.locator('#items .resource-icon').last())
+        ]),
+        ['green', 'red']
     );
     assert.equal(
         new URLSearchParams(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query).get(
@@ -1601,41 +1599,26 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
     }));
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
+    await waitIconColor(page, page.locator('#items .resource-icon').first(), 'red');
     assert.ok(pages().length > 0 && pages().length < 50);
     assert.equal(
-        await page
-            .locator('#items .resource-icon')
-            .last()
-            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
-        'none'
+        pages().some((request) => request.path.endsWith(options.icons.pages.at(-1).digest)),
+        false
     );
     await page.locator('#item-scroll').evaluate((scroll) => {
         scroll.scrollTop = scroll.scrollHeight;
     });
-    await page.waitForFunction(
-        () => [...document.querySelectorAll('#items .resource-icon')].at(-1)?.style.backgroundImage
-    );
-    assert.equal(
-        await page
-            .locator('#items .resource-icon')
-            .first()
-            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
-        'none'
-    );
+    await waitIconColor(page, page.locator('#items .resource-icon').last(), 'red');
+    const firstBox = await page.locator('#items .resource-icon').first().boundingBox();
+    const viewportBox = await page.locator('#item-scroll').boundingBox();
+    assert.ok(firstBox.y + firstBox.height <= viewportBox.y, 'the first resource is outside the viewport');
     const before = pages().length;
     options.icons = { ...options.icons, packId: '../evil.example' };
     await page.reload();
     await page.getByRole('button', { name: /Resource 00/ }).waitFor();
     await settleFrames(page);
     assert.equal(pages().length, before);
-    assert.equal(
-        await page
-            .locator('#items .resource-icon')
-            .first()
-            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
-        'none'
-    );
+    assert.notEqual(await iconColor(page, page.locator('#items .resource-icon').first()), 'red');
 });
 
 test('a stale atlas discovers the replacement pack and reloads resource mappings', async (t) => {
@@ -1653,7 +1636,7 @@ test('a stale atlas discovers the replacement pack and reloads resource mappings
         await route.fulfill({ response });
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
+    await waitIconColor(page, page.locator('#items .resource-icon').first(), 'red');
     const requests = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     assert.equal(requests.length, 2);
     assert.ok(requests[1].path.includes('c'.repeat(64)));
@@ -1677,10 +1660,7 @@ test('failed atlas pages keep resources usable without repeated requests during 
         await (await refreshed).finished();
     }
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 1);
-    assert.equal(
-        await page.locator('#items .resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundImage),
-        'none'
-    );
+    assert.notEqual(await iconColor(page, page.locator('#items .resource-icon')), 'red');
 });
 
 test('late atlas responses cannot repaint another grid after navigation', async (t) => {
@@ -1694,10 +1674,7 @@ test('late atlas responses cannot repaint another grid after navigation', async 
     await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     await settleResponse(page, await started);
-    assert.equal(
-        await page.locator('#items .resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundImage),
-        'none'
-    );
+    assert.notEqual(await iconColor(page, page.locator('#items .resource-icon')), 'red');
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 1);
 });
 
@@ -1718,10 +1695,6 @@ test('visible atlas requests have bounded concurrency', async (t) => {
         icon: { page: i, x: 0, y: 0 }
     }));
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(
-        () =>
-            [...document.querySelectorAll('#items .resource-icon')].filter((icon) => icon.style.backgroundImage)
-                .length > 4
-    );
+    await waitIconColor(page, page.locator('#items .resource-icon').nth(4), 'red');
     assert.ok(options.maxActivePages > 1 && options.maxActivePages <= 4);
 });

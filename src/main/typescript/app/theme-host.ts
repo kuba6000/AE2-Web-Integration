@@ -62,6 +62,8 @@ export function mountTheme(
         };
     }
     const { crafting, cpus, settings } = application;
+    application.icons.animate(false);
+    onCleanup(() => application.icons.animate(false));
     const actions: ThemeApplication = {
         exportPlan: (request, signal) => application.exportPlan(request, AbortSignal.any([signal, controller.signal])),
         notifications: {
@@ -107,6 +109,7 @@ export function mountTheme(
             reload: application.serverSettings.reload
         },
         icons: {
+            animate: application.icons.animate,
             async resolve(references, metadata, signal) {
                 const result = await application.icons.resolve(
                     references,

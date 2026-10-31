@@ -48,7 +48,8 @@ public class ResourceDescription {
     public final @Nullable StableKey itemKey;
 
     /**
-     * Atlas location within this response's page table; null when not requested, unavailable, or absent from the pack.
+     * Static atlas location and optional animation reference within this response's icon tables;
+     * null when not requested, unavailable, or absent from the pack.
      */
     public final @Nullable IconMappings.Reference icon;
 
