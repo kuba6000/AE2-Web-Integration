@@ -246,7 +246,6 @@ export function createCrafting(
         windowTree: tree.moveWindow,
         focusTree: tree.focus,
         toggleTree: tree.toggle,
-        moreTree: tree.more,
         retryTree: tree.retry,
         invalidateIcons() {
             tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);

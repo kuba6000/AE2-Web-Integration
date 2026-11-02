@@ -15,14 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
-import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlanTree;
@@ -34,61 +31,6 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
     @AfterEach
     void clearPlans() {
         GridData.clearRuntimeState();
-    }
-
-    @Test
-    void pagesSharedDeclaredProducersWithExactDecimalQuantities() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(55);
-        AtomicInteger captures = new AtomicInteger();
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(captures)),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree first = request(grid, plan, "limit=1");
-        first.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject page = json(
-            first.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertEquals(
-            "READY",
-            page.get("state")
-                .getAsString());
-        assertEquals(
-            "9007199254740993",
-            page.getAsJsonObject("root")
-                .get("quantity")
-                .getAsString());
-        assertTrue(
-            page.getAsJsonObject("root")
-                .getAsJsonPrimitive("quantity")
-                .isString());
-        assertEquals(
-            1,
-            page.getAsJsonArray("children")
-                .size());
-        assertEquals(
-            1,
-            page.get("nextOffset")
-                .getAsInt());
-        String token = page.get("captureId")
-            .getAsString();
-        GetCraftingPlanTree second = request(grid, plan, "limit=1&offset=1&captureId=" + token);
-        second.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject remainder = json(
-            second.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertEquals(
-            token,
-            remainder.get("captureId")
-                .getAsString());
-        assertTrue(
-            remainder.get("nextOffset")
-                .isJsonNull());
-        assertEquals(1, captures.get());
     }
 
     @Test
@@ -128,7 +70,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
     }
 
     @Test
-    void oldCaptureIdIsRejectedBeforeReadingRecycledNodeIds() {
+    void oldCaptureIdIsRejectedBeforeCapturingReplacementPlan() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(58);
         AtomicInteger captures = new AtomicInteger();
         GridData data = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid));
@@ -153,7 +95,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                 new CraftingOptions(false, false),
                 false);
         assertEquals(plan, replacement);
-        GetCraftingPlanTree stale = request(grid, replacement, "kind=RESOURCE&id=99999&captureId=" + token);
+        GetCraftingPlanTree stale = request(grid, replacement, "captureId=" + token);
         stale.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
             "UPDATE_CHANGED",
@@ -162,7 +104,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                     .json())
                 .get("status")
                 .getAsString());
-        assertEquals(1, captures.get(), "Stale pages must not capture the replacement plan");
+        assertEquals(1, captures.get(), "Stale reads must not capture the replacement plan");
     }
 
     @Test
@@ -308,145 +250,6 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
     }
 
     @Test
-    void recipePagesListOnlyIngredientGroupsAndTheRecipeNodeCarriesItsDeclaredOutputs() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(62);
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture
-                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree request = request(grid, plan, "kind=RECIPE&id=0");
-        request.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject data = json(
-            request.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        JsonArray children = data.getAsJsonArray("children");
-        assertEquals(2, children.size());
-        for (JsonElement value : children) {
-            JsonObject child = value.getAsJsonObject();
-            assertEquals(
-                "INGREDIENT",
-                child.get("relation")
-                    .getAsString());
-            assertEquals(
-                "INGREDIENT",
-                child.getAsJsonObject("node")
-                    .get("kind")
-                    .getAsString());
-        }
-        JsonArray outputs = data.getAsJsonObject("node")
-            .getAsJsonArray("outputs");
-        assertEquals(3, outputs.size());
-        assertEquals(
-            0,
-            outputs.get(0)
-                .getAsJsonObject()
-                .get("resourceId")
-                .getAsInt());
-        assertEquals(
-            "64",
-            outputs.get(0)
-                .getAsJsonObject()
-                .get("quantity")
-                .getAsString());
-        assertTrue(
-            outputs.get(0)
-                .getAsJsonObject()
-                .get("primary")
-                .getAsBoolean());
-        assertFalse(
-            outputs.get(1)
-                .getAsJsonObject()
-                .get("primary")
-                .getAsBoolean());
-        assertTrue(
-            outputs.get(2)
-                .getAsJsonObject()
-                .get("primary")
-                .isJsonNull());
-        for (JsonElement value : outputs) resourceData(
-            data,
-            value.getAsJsonObject()
-                .get("resourceId")
-                .getAsInt());
-    }
-
-    @Test
-    void recipesReachedFromAResourceCarryTheirOutputsWhileOtherNodesDoNot() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(72);
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture
-                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree resource = request(grid, plan, "kind=RESOURCE&id=0");
-        resource.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject data = json(
-            resource.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertTrue(
-            data.getAsJsonObject("node")
-                .get("outputs")
-                .isJsonNull());
-        JsonObject recipe = data.getAsJsonArray("children")
-            .get(0)
-            .getAsJsonObject()
-            .getAsJsonObject("node");
-        assertEquals(
-            3,
-            recipe.getAsJsonArray("outputs")
-                .size());
-        resourceData(data, 1);
-        GetCraftingPlanTree group = request(grid, plan, "kind=INGREDIENT&id=0");
-        group.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject groupNode = json(
-            group.finishResponse()
-                .json())
-            .getAsJsonObject("data")
-            .getAsJsonObject("node");
-        assertTrue(
-            groupNode.get("outputs")
-                .isJsonNull());
-        assertEquals(
-            1,
-            groupNode.get("candidates")
-                .getAsInt());
-    }
-
-    @Test
-    void ingredientGroupsStateTheirDeclaredCandidateCountEvenWhenTheMissingFilterNarrowsThePage() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(73);
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture
-                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanTreeRequestTest::producedExample)),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree request = request(grid, plan, "kind=INGREDIENT&id=1&missingOnly=true");
-        request.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject data = json(
-            request.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertEquals(
-            2,
-            data.getAsJsonObject("node")
-                .get("candidates")
-                .getAsInt());
-        assertEquals(
-            1,
-            data.getAsJsonArray("children")
-                .size());
-    }
-
-    @Test
     void logoutAndWorldClosureBetweenCaptureAndSerializationFailClosed() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(63);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
@@ -483,236 +286,6 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                     .json())
                 .get("status")
                 .getAsString());
-    }
-
-    @Test
-    void pageLimitsAndCaptureTruncationRemainDistinct() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(64);
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(new AtomicInteger())),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree page = request(grid, plan, "limit=1");
-        page.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject data = json(
-            page.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertFalse(
-            data.get("partial")
-                .getAsBoolean());
-        assertFalse(
-            data.get("nextOffset")
-                .isJsonNull());
-        assertTrue(
-            data.getAsJsonArray("limits")
-                .size() == 0);
-        GetCraftingPlanTree invalid = request(grid, plan, "kind=RESOURCE&id=999");
-        invalid.runOnServerThread(TestGridFixtures.ae(grid));
-        assertEquals(
-            400,
-            invalid.finishResponse()
-                .httpStatus());
-    }
-
-    @Test
-    void missingOnlyFiltersBeforePagingAndIncludesStandaloneMissingResources() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(70);
-        AtomicInteger captures = new AtomicInteger();
-        IAECraftingJob job = CraftingPlanTreePreparationTest.job(() -> {
-            captures.incrementAndGet();
-            return missingExample();
-        });
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture.completedFuture(job),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree first = request(grid, plan, "kind=RECIPE&id=0&limit=1&missingOnly=true");
-        first.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject page = json(
-            first.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertTrue(
-            page.get("missingOnly")
-                .getAsBoolean());
-        assertTrue(
-            page.get("missingComplete")
-                .getAsBoolean());
-        assertEquals(
-            2,
-            page.get("missingResourceCount")
-                .getAsInt());
-        assertEquals(
-            1,
-            page.get("unlinkedMissingCount")
-                .getAsInt());
-        JsonObject child = page.getAsJsonArray("children")
-            .get(0)
-            .getAsJsonObject();
-        assertEquals(
-            "INGREDIENT",
-            child.get("relation")
-                .getAsString());
-        assertEquals(
-            1,
-            child.getAsJsonObject("node")
-                .get("id")
-                .getAsInt());
-        assertTrue(
-            page.get("nextOffset")
-                .isJsonNull());
-        String token = page.get("captureId")
-            .getAsString();
-        GetCraftingPlanTree detached = request(grid, plan, "kind=UNLINKED_MISSING&missingOnly=true&captureId=" + token);
-        detached.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject unlinked = json(
-            detached.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertEquals(
-            "MISSING_RESOURCE",
-            unlinked.getAsJsonArray("children")
-                .get(0)
-                .getAsJsonObject()
-                .get("relation")
-                .getAsString());
-        assertEquals(
-            "2",
-            resourceData(unlinked, 4).get("missingAmount")
-                .getAsString());
-        GetCraftingPlanTree leaf = request(grid, plan, "kind=RESOURCE&id=3&missingOnly=true");
-        leaf.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject missing = resourceData(
-            json(
-                leaf.finishResponse()
-                    .json())
-                .getAsJsonObject("data"),
-            3);
-        assertEquals(
-            "9007199254740993",
-            missing.get("missingAmount")
-                .getAsString());
-        assertTrue(
-            missing.getAsJsonPrimitive("missingAmount")
-                .isString());
-        GetCraftingPlanTree full = request(grid, plan, "kind=RECIPE&id=0&limit=1");
-        full.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject normal = json(
-            full.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertEquals(
-            "INGREDIENT",
-            normal.getAsJsonArray("children")
-                .get(0)
-                .getAsJsonObject()
-                .get("relation")
-                .getAsString());
-        assertEquals(
-            token,
-            normal.get("captureId")
-                .getAsString());
-        assertEquals(1, captures.get());
-    }
-
-    @Test
-    void incompleteMissingPagesExposeUnknownAbsenceRatherThanAnEmptyCompleteResult() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(71);
-        IAECraftingJob job = CraftingPlanTreePreparationTest.job(() -> {
-            CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(1, 1000);
-            int root = capture.addResource(
-                () -> TestGridFixtures.planOutput()
-                    .description());
-            capture.result(root, 1, true);
-            capture.addRecipe(1);
-            return capture.build();
-        });
-        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                CompletableFuture.completedFuture(job),
-                TestGridFixtures.planOutput(),
-                new CraftingOptions(false, false),
-                false);
-        GetCraftingPlanTree request = request(grid, plan, "missingOnly=true");
-        request.runOnServerThread(TestGridFixtures.ae(grid));
-        JsonObject page = json(
-            request.finishResponse()
-                .json())
-            .getAsJsonObject("data");
-        assertFalse(
-            page.get("missingComplete")
-                .getAsBoolean());
-        assertTrue(
-            page.get("partial")
-                .getAsBoolean());
-        assertEquals(
-            0,
-            page.get("missingResourceCount")
-                .getAsInt());
-        assertTrue(
-            resourceData(page, 0).get("missingAmount")
-                .isJsonNull());
-    }
-
-    private static JsonObject resourceData(JsonObject page, int id) {
-        for (JsonElement value : page.getAsJsonArray("resources")) {
-            JsonObject resource = value.getAsJsonObject();
-            if (resource.get("id")
-                .getAsInt() == id) return resource;
-        }
-        throw new AssertionError("Resource missing from response: " + id);
-    }
-
-    /** One recipe: a primary output, a byproduct and an output without designation; one single and one double group. */
-    private static CraftingRecipeCapture producedExample() {
-        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(40, 1000);
-        for (int i = 0; i < 4; i++) capture.addResource(
-            () -> TestGridFixtures.planOutput()
-                .description());
-        capture.result(0, 64, false);
-        int recipe = capture.addRecipe(2);
-        int single = capture.addIngredient(recipe, 1);
-        capture.addCandidate(single, 2, 3);
-        int pair = capture.addIngredient(recipe, 2);
-        capture.addCandidate(pair, 2, 1);
-        capture.addCandidate(pair, 3, 1);
-        capture.addOutput(recipe, 0, 64, true);
-        capture.addOutput(recipe, 1, 2, false);
-        capture.addOutput(recipe, 3, 5, null);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 3, 1);
-        capture.finishRecipe(recipe);
-        return capture.build();
-    }
-
-    private static CraftingRecipeCapture missingExample() {
-        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(80, 1000);
-        for (int i = 0; i < 5; i++) capture.addResource(
-            () -> TestGridFixtures.planOutput()
-                .description());
-        capture.result(0, 1, true);
-        int root = capture.addRecipe(1);
-        int healthy = capture.addIngredient(root, 1);
-        capture.addCandidate(healthy, 1, 1);
-        int relevant = capture.addIngredient(root, 1);
-        capture.addCandidate(relevant, 2, 1);
-        capture.addOutput(root, 0, 1, true);
-        capture.finishRecipe(root);
-        int stock = capture.addRecipe(1);
-        capture.addOutput(stock, 1, 1, true);
-        capture.finishRecipe(stock);
-        int intermediate = capture.addRecipe(1);
-        int leaf = capture.addIngredient(intermediate, 1);
-        capture.addCandidate(leaf, 3, 1);
-        capture.addOutput(intermediate, 2, 1, true);
-        capture.finishRecipe(intermediate);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 3, 9007199254740993L);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 4, 2);
-        return capture.build();
     }
 
     private static GetCraftingPlanTree request(TestGridFixtures.TestGrid grid, int plan, String query) {

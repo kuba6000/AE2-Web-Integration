@@ -153,7 +153,7 @@ export function createTreeExportDialog(
             // Only an aggregate tree is an approximation; a trace states per-occurrence amounts.
             if (tree.mode === 'AGGREGATE') notes.push(t('treeMissingPlanTotals'), t('treeExportApproximation'));
             if (tree.partial) notes.push(t('treeExportPartial'));
-            if (tree.totalRows > tree.rows.length || tree.cacheBounded) notes.push(t('treeExportWindow'));
+            if (tree.totalRows > tree.rows.length) notes.push(t('treeExportWindow'));
             if (!tree.missingComplete) notes.push(t('treeMissingIncomplete'));
             scene = {
                 layout: layoutCraftingTree(tree.rows),

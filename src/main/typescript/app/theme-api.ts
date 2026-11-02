@@ -111,7 +111,6 @@ export type ThemeApplication = {
         stopTreeExpansion(): void;
         showTree(visible: boolean): Promise<void>;
         toggleTree(key: string): Promise<void>;
-        moreTree(key: string): Promise<void>;
         retryTree(): Promise<void>;
         search(value: string): void;
         sort(value: Preferences['planSort']): void;

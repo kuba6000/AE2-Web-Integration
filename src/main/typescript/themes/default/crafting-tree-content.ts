@@ -23,8 +23,9 @@ export function craftingTreeContent(
     const number = (value: string) => BigInt(value).toLocaleString(language || 'en');
     const resource = row.node.resourceId != null ? state.resources[row.node.resourceId] : null;
     const reference = row.reference ? [t(interactive ? 'treeReference' : 'treeReferenceStatic')] : [];
-    const outputs = row.node.outputs?.length
-        ? `${t('treeOutputs')}: ${row.node.outputs
+    const recipe = row.node.recipeId != null ? state.recipes[row.node.recipeId] : null;
+    const outputs = recipe?.outputs.length
+        ? `${t('treeOutputs')}: ${recipe.outputs
               .map((output) => {
                   const name = plainMinecraftText(state.resources[output.resourceId]?.displayName ?? '?');
                   return `${name} ×${number(output.quantity)}${output.primary === false ? ` (${t('treeByproduct')})` : ''}`;
@@ -52,12 +53,23 @@ export function craftingTreeContent(
         };
     }
     if (row.node.kind === 'TASK') {
-        const inputs = row.node.inputs?.length
-            ? `${t('treeInputs')}: ${row.node.inputs
-                  .map(
-                      (input) =>
-                          `${plainMinecraftText(state.resources[input.resourceId]?.displayName ?? '?')} ×${number(input.quantity)}`
-                  )
+        const inputs = recipe?.inputs.length
+            ? `${t('treeInputs')}: ${recipe.inputs
+                  .map((group) => {
+                      const alternatives = group.candidates
+                          .map((candidate) => {
+                              const name = plainMinecraftText(
+                                  state.resources[candidate.resourceId]?.displayName ?? '?'
+                              );
+                              return candidate.quantity === null
+                                  ? `${name} (${t('treeUnknownQuantity')})`
+                                  : `${name} ×${number(candidate.quantity)}`;
+                          })
+                          .join(' / ');
+                      return group.multiplier && group.multiplier !== '1'
+                          ? `${alternatives} ×${number(group.multiplier)}`
+                          : alternatives;
+                  })
                   .join(', ')}`
             : null;
         const details = [
@@ -70,7 +82,7 @@ export function craftingTreeContent(
         ];
         return { title: t('treeRecipe'), details, icon: null, missing: false, reference: row.reference };
     }
-    const aggregateResource = row.node.kind === 'RESOURCE' ? state.resources[row.node.id] : null;
+    const aggregateResource = row.node.kind === 'RESOURCE' ? resource : null;
     const title =
         aggregateResource?.displayName ??
         t(

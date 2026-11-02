@@ -6,13 +6,17 @@ const { fixture, gridA, readyPlan, atlasFixture } = require('./fixtures.cjs');
 const node = (kind, id, extra = {}) => ({
     kind,
     id,
-    crafts: kind === 'RECIPE' ? '2' : null,
-    multiplier: kind === 'INGREDIENT' ? '1' : null,
-    complete: kind === 'RECIPE' ? true : null,
+    resourceId: null,
+    recipeId: null,
+    crafts: null,
+    multiplier: null,
+    complete: null,
     candidates: null,
-    outputs: null,
+    contribution: null,
+    children: [],
     ...extra
 });
+const edge = (relation, nodeId, quantity, missing = false) => ({ relation, nodeId, quantity, primary: null, missing });
 const names = ['Machine', 'Plate', 'Rod', 'Ore'];
 const resources = names.map((displayName, id) => ({
     id,
@@ -26,65 +30,54 @@ const resources = names.map((displayName, id) => ({
     icon: { page: 0, x: (id % 2) * 64, y: 0 },
     missingAmount: '0'
 }));
-const nodes = {
-    'RESOURCE:0': node('RESOURCE', 0),
-    'RESOURCE:1': node('RESOURCE', 1),
-    'RESOURCE:2': node('RESOURCE', 2),
-    'RESOURCE:3': node('RESOURCE', 3),
-    'RECIPE:0': node('RECIPE', 0, {
-        outputs: [
-            { resourceId: 0, quantity: '1', primary: true },
-            { resourceId: 1, quantity: '2', primary: false }
-        ]
-    }),
-    'INGREDIENT:0': node('INGREDIENT', 0, { candidates: 1 }),
-    'INGREDIENT:1': node('INGREDIENT', 1, { candidates: 2 })
-};
-const child = (relation, key, quantity) => ({ relation, node: nodes[key], quantity, primary: null });
-const adjacency = {
-    'RESOURCE:0': [child('DECLARED_OUTPUT', 'RECIPE:0', '1')],
-    'RECIPE:0': [child('INGREDIENT', 'INGREDIENT:0', null), child('INGREDIENT', 'INGREDIENT:1', null)],
-    'INGREDIENT:0': [child('DECLARED_ALTERNATIVE', 'RESOURCE:1', '3')],
-    'INGREDIENT:1': [
-        child('DECLARED_ALTERNATIVE', 'RESOURCE:2', '1'),
-        child('DECLARED_ALTERNATIVE', 'RESOURCE:3', '1')
-    ],
-    'RESOURCE:1': [],
-    'RESOURCE:2': [],
-    'RESOURCE:3': []
-};
 function tree(url) {
-    const header = {
-        state: 'READY',
-        mode: 'AGGREGATE',
-        captureId: 'capture',
-        root: { resourceId: 0, quantity: '1', simulated: false },
-        resources,
-        partial: false,
-        limits: [],
-        unplacedCount: 0,
-        unlinkedMissingCount: 0,
-        missingOnly: false,
-        missingComplete: true,
-        missingResourceCount: 0
-    };
-    const icons = url.searchParams.get('icons') === 'true' ? tree.icons : null;
-    const batch = url.searchParams.get('nodes');
-    if (batch) {
-        const pages = batch.split(',').map((token) => {
-            const key = token.split(':').slice(0, 2).join(':');
-            return { node: nodes[key], offset: 0, children: adjacency[key], nextOffset: null };
-        });
-        return { status: 'OK', icons, data: { ...header, pages } };
-    }
-    const key =
-        url.searchParams.get('kind') === 'ROOT'
-            ? 'RESOURCE:0'
-            : `${url.searchParams.get('kind')}:${url.searchParams.get('id')}`;
     return {
         status: 'OK',
-        icons,
-        data: { ...header, node: nodes[key], children: adjacency[key], nextOffset: null }
+        icons: url.searchParams.get('icons') === 'true' ? tree.icons : null,
+        data: {
+            state: 'READY',
+            mode: 'AGGREGATE',
+            captureId: 'capture',
+            root: { resourceId: 0, quantity: '1', simulated: false },
+            roots: [0],
+            resources,
+            recipes: [
+                {
+                    id: 0,
+                    inputs: [],
+                    outputs: [
+                        { resourceId: 0, quantity: '1', primary: true },
+                        { resourceId: 1, quantity: '2', primary: false }
+                    ]
+                }
+            ],
+            nodes: [
+                node('RESOURCE', 0, { resourceId: 0, children: [edge('DECLARED_OUTPUT', 4, '1')] }),
+                node('RESOURCE', 1, { resourceId: 1 }),
+                node('RESOURCE', 2, { resourceId: 2 }),
+                node('RESOURCE', 3, { resourceId: 3 }),
+                node('RECIPE', 4, {
+                    recipeId: 0,
+                    crafts: '2',
+                    complete: true,
+                    children: [edge('INGREDIENT', 5, null), edge('INGREDIENT', 6, null)]
+                }),
+                node('INGREDIENT', 5, {
+                    candidates: 1,
+                    multiplier: '1',
+                    children: [edge('DECLARED_ALTERNATIVE', 1, '3')]
+                }),
+                node('INGREDIENT', 6, {
+                    candidates: 2,
+                    multiplier: '1',
+                    children: [edge('DECLARED_ALTERNATIVE', 2, '1'), edge('DECLARED_ALTERNATIVE', 3, '1')]
+                })
+            ],
+            partial: false,
+            limits: [],
+            missingComplete: true,
+            missingResourceCount: 0
+        }
     };
 }
 
@@ -303,79 +296,54 @@ test('the PNG export paints the tree icons', async (t) => {
     assert.ok(colors.red > 0 && colors.green > 0, `both icons were painted: ${JSON.stringify(colors)}`);
 });
 
-// A TRACE plan: four machines, one from storage and three crafted from plates (two of the six missing) and rods.
-const traceNode = (kind, id, extra = {}) => ({
-    kind,
-    id,
-    crafts: null,
-    multiplier: null,
-    complete: null,
-    candidates: null,
-    outputs: null,
-    inputs: null,
-    resourceId: null,
-    contribution: null,
-    ...extra
-});
-const traceNodes = {
-    'REQUEST:0': traceNode('REQUEST', 0, { resourceId: 0 }),
-    'REQUEST:1': traceNode('REQUEST', 1, { resourceId: 1 }),
-    'REQUEST:2': traceNode('REQUEST', 2, { resourceId: 2 }),
-    'TASK:0': traceNode('TASK', 0, {
-        crafts: '3',
-        complete: true,
-        outputs: [{ resourceId: 0, quantity: '1', primary: true }],
-        inputs: [
-            { resourceId: 1, quantity: '2' },
-            { resourceId: 2, quantity: '1' }
-        ]
-    })
-};
-const leaf = (id, contribution, resourceId, quantity) => ({
-    relation: 'CONTRIBUTION',
-    node: traceNode('CONTRIBUTION', id, { resourceId, contribution }),
-    quantity,
-    primary: null
-});
-const traceLink = (relation, key, quantity) => ({ relation, node: traceNodes[key], quantity, primary: null });
-const traceAdjacency = {
-    'REQUEST:0': [leaf(0, 'STORAGE', 0, '1'), traceLink('CRAFT', 'TASK:0', '3')],
-    'TASK:0': [traceLink('CHILD_REQUEST', 'REQUEST:1', '6'), traceLink('CHILD_REQUEST', 'REQUEST:2', '3')],
-    'REQUEST:1': [leaf(1, 'MISSING', 1, '2'), leaf(2, 'STORAGE', 1, '4')],
-    'REQUEST:2': [leaf(3, 'STORAGE', 2, '3')]
-};
+// A TRACE plan: four machines, one from storage and three crafted from plates and rods.
 function traceTree(url) {
-    const header = {
-        state: 'READY',
-        mode: 'TRACE',
-        captureId: 'trace',
-        root: { resourceId: 0, quantity: '4', simulated: false },
-        resources,
-        partial: false,
-        limits: [],
-        unplacedCount: 0,
-        unlinkedMissingCount: 0,
-        missingOnly: false,
-        missingComplete: true,
-        missingResourceCount: 1
-    };
-    const icons = url.searchParams.get('icons') === 'true' ? traceTree.icons : null;
-    const batch = url.searchParams.get('nodes');
-    if (batch) {
-        const pages = batch.split(',').map((token) => {
-            const key = token.split(':').slice(0, 2).join(':');
-            return { node: traceNodes[key], offset: 0, children: traceAdjacency[key], nextOffset: null };
-        });
-        return { status: 'OK', icons, data: { ...header, pages } };
-    }
-    const key =
-        url.searchParams.get('kind') === 'ROOT'
-            ? 'REQUEST:0'
-            : `${url.searchParams.get('kind')}:${url.searchParams.get('id')}`;
     return {
         status: 'OK',
-        icons,
-        data: { ...header, node: traceNodes[key], children: traceAdjacency[key], nextOffset: null }
+        icons: url.searchParams.get('icons') === 'true' ? traceTree.icons : null,
+        data: {
+            state: 'READY',
+            mode: 'TRACE',
+            captureId: 'trace',
+            root: { resourceId: 0, quantity: '4', simulated: false },
+            roots: [0],
+            resources,
+            recipes: [
+                {
+                    id: 0,
+                    inputs: [
+                        { multiplier: '1', candidates: [{ resourceId: 1, quantity: '2' }] },
+                        { multiplier: '1', candidates: [{ resourceId: 2, quantity: '1' }] }
+                    ],
+                    outputs: [{ resourceId: 0, quantity: '1', primary: true }]
+                }
+            ],
+            nodes: [
+                node('REQUEST', 0, {
+                    resourceId: 0,
+                    children: [edge('CONTRIBUTION', 4, '1'), edge('CRAFT', 3, '3', true)]
+                }),
+                node('REQUEST', 1, {
+                    resourceId: 1,
+                    children: [edge('CONTRIBUTION', 5, '2', true), edge('CONTRIBUTION', 6, '4')]
+                }),
+                node('REQUEST', 2, { resourceId: 2, children: [edge('CONTRIBUTION', 7, '3')] }),
+                node('TASK', 3, {
+                    recipeId: 0,
+                    crafts: '3',
+                    complete: true,
+                    children: [edge('CHILD_REQUEST', 1, '6', true), edge('CHILD_REQUEST', 2, '3')]
+                }),
+                node('CONTRIBUTION', 4, { resourceId: 0, contribution: 'STORAGE' }),
+                node('CONTRIBUTION', 5, { resourceId: 1, contribution: 'MISSING' }),
+                node('CONTRIBUTION', 6, { resourceId: 1, contribution: 'STORAGE' }),
+                node('CONTRIBUTION', 7, { resourceId: 2, contribution: 'STORAGE' })
+            ],
+            partial: false,
+            limits: [],
+            missingComplete: true,
+            missingResourceCount: 1
+        }
     };
 }
 const openTrace = (t, viewport) => openTree(t, viewport, traceTree);

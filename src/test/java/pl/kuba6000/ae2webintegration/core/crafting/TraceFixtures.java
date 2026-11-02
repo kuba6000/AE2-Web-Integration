@@ -43,7 +43,7 @@ public final class TraceFixtures {
             trace.addResource(() -> descriptor(name));
         int machine = trace.addRequest(MACHINE, 4);
         trace.root(machine, false);
-        trace.addContribution(machine, ContributionKind.STORAGE, 1);
+        trace.addContribution(machine, ContributionKind.STORAGE, 1, MACHINE);
         int make = trace.addTask(3);
         trace.addCraft(machine, 3, make);
         trace.addOutput(make, MACHINE, 1, true);
@@ -58,7 +58,7 @@ public final class TraceFixtures {
         trace.addChildRequest(make, lubricant);
         trace.finishTask(make);
 
-        trace.addContribution(gears, ContributionKind.STORAGE, 2);
+        trace.addContribution(gears, ContributionKind.STORAGE, 2, GEAR);
         int cut = trace.addTask(3);
         trace.addCraft(gears, 4, cut);
         trace.addOutput(cut, GEAR, 2, true);
@@ -68,7 +68,7 @@ public final class TraceFixtures {
         trace.addChildRequest(cut, ingots);
         trace.finishTask(cut);
 
-        trace.addContribution(plates, ContributionKind.STORAGE, 1);
+        trace.addContribution(plates, ContributionKind.STORAGE, 1, PLATE);
         trace.addContribution(plates, ContributionKind.EMITTED, 2);
         int press = trace.addTask(3);
         trace.addCraft(plates, 3, press);
@@ -78,10 +78,10 @@ public final class TraceFixtures {
         trace.addChildRequest(press, pressed);
         trace.finishTask(press);
 
-        trace.addContribution(lubricant, ContributionKind.STORAGE, 3);
+        trace.addContribution(lubricant, ContributionKind.STORAGE, 3, LUBRICANT);
         trace.addContribution(ingots, ContributionKind.MISSING, 2);
         trace.addContribution(ingots, ContributionKind.UNKNOWN, 1);
-        trace.addContribution(pressed, ContributionKind.REUSED, 1);
+        trace.addContribution(pressed, ContributionKind.REUSED, 1, GEAR);
         trace.addCraft(pressed, 2, cut);
         return trace.build();
     }

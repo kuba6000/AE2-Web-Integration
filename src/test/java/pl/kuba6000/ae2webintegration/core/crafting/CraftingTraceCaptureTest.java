@@ -20,6 +20,51 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 class CraftingTraceCaptureTest {
 
     @Test
+    void contributionsPreserveKnownSourcesWithoutInventingUnknownIdentities() {
+        CraftingTraceCapture.Builder trace = new CraftingTraceCapture.Builder(50, 100);
+        int requested = trace.addResource(() -> TraceFixtures.descriptor("requested"));
+        int actual = trace.addResource(() -> TraceFixtures.descriptor("substitute"));
+        int request = trace.addRequest(requested, 8);
+        trace.addContribution(request, ContributionKind.STORAGE, 1, actual);
+        trace.addContribution(request, ContributionKind.STORAGE, 1);
+        trace.addContribution(request, ContributionKind.REUSED, 1);
+        trace.addContribution(request, ContributionKind.UNKNOWN, 1);
+        trace.addContribution(request, ContributionKind.EMITTED, 1);
+        trace.addContribution(request, ContributionKind.MISSING, 1);
+        int task = trace.addTask(1);
+        trace.addCraft(request, 2, task);
+        List<CraftingTraceCapture.Contribution> contributions = trace.build()
+            .contributions();
+        assertEquals(
+            Integer.valueOf(actual),
+            contributions.get(0)
+                .resourceId());
+        assertNull(
+            contributions.get(1)
+                .resourceId());
+        assertNull(
+            contributions.get(2)
+                .resourceId());
+        assertNull(
+            contributions.get(3)
+                .resourceId());
+        assertEquals(
+            Integer.valueOf(requested),
+            contributions.get(4)
+                .resourceId());
+        assertEquals(
+            Integer.valueOf(requested),
+            contributions.get(5)
+                .resourceId());
+        assertNull(
+            contributions.get(6)
+                .resourceId());
+        assertThrows(
+            IndexOutOfBoundsException.class,
+            () -> trace.addContribution(request, ContributionKind.STORAGE, 1, 99));
+    }
+
+    @Test
     void keepsRequestsContributionsAndTasksInTraversalOrderWithStableIds() {
         CraftingTraceCapture trace = TraceFixtures.gears();
         assertEquals(

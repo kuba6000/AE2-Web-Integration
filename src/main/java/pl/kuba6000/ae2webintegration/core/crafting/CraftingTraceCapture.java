@@ -72,7 +72,8 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
 
     /** The part of a request satisfied this way; task is non-null exactly for CRAFT. */
     @Desugar
-    public record Contribution(int requestId, @NotNull ContributionKind kind, long amount, @Nullable Integer task) {}
+    public record Contribution(int requestId, @NotNull ContributionKind kind, long amount, @Nullable Integer task,
+        @Nullable Integer resourceId) {}
 
     /** A selected pattern; complete once every declared input, output and child request was admitted. */
     @Desugar
@@ -146,8 +147,19 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
         /** A leaf contribution: STORAGE, EMITTED, MISSING, REUSED or UNKNOWN. Use addCraft for CRAFT. */
         public boolean addContribution(int requestId, @NotNull CraftingTraceCapture.ContributionKind kind,
             long amount) {
+            Integer resourceId = kind == ContributionKind.EMITTED || kind == ContributionKind.MISSING
+                ? requests.get(requestId)
+                    .resourceId()
+                : null;
+            return addContribution(requestId, kind, amount, resourceId);
+        }
+
+        /** A leaf contribution with the actual source resource, or null when it is unknown. */
+        public boolean addContribution(int requestId, @NotNull CraftingTraceCapture.ContributionKind kind, long amount,
+            @Nullable Integer resourceId) {
             if (kind == ContributionKind.CRAFT) throw new IllegalArgumentException("A craft needs its task");
-            return append(requestId, kind, amount, null);
+            if (resourceId != null) budget.resources.get(resourceId);
+            return append(requestId, kind, amount, null, resourceId);
         }
 
         /**
@@ -156,14 +168,15 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
          */
         public boolean addCraft(int requestId, long amount, int taskId) {
             tasks.get(taskId);
-            return append(requestId, ContributionKind.CRAFT, amount, taskId);
+            return append(requestId, ContributionKind.CRAFT, amount, taskId, null);
         }
 
-        private boolean append(int requestId, ContributionKind kind, long amount, @Nullable Integer task) {
+        private boolean append(int requestId, ContributionKind kind, long amount, @Nullable Integer task,
+            @Nullable Integer resourceId) {
             requests.get(requestId);
             requireNonNegative(amount);
             if (!budget.admit()) return false;
-            contributions.add(new Contribution(requestId, kind, amount, task));
+            contributions.add(new Contribution(requestId, kind, amount, task, resourceId));
             return true;
         }
 

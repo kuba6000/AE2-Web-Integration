@@ -147,3 +147,46 @@ test('cancellation after icon resolution never produces a PNG and releases resol
     assert.equal(disposed, true);
     assert.equal(env.canvases.length, 0);
 });
+
+test('PNG uses the contribution source identity and icon from the shared card content', async () => {
+    const { renderTreePng } = await import(moduleUrl);
+    const contentUrl = pathToFileURL(
+        path.resolve(__dirname, '../../build/generated/frontend/assets/web/themes/default/crafting-tree-content.js')
+    );
+    const { craftingTreeContent } = await import(contentUrl);
+    const icon = { page: 1, x: 0, y: 0 };
+    const card = craftingTreeContent(
+        {
+            key: 'CONTRIBUTION:1',
+            node: { kind: 'CONTRIBUTION', resourceId: 1, contribution: 'STORAGE' },
+            depth: 0,
+            reference: false,
+            quantity: '2',
+            relation: 'CONTRIBUTION'
+        },
+        { resources: { 0: { displayName: 'Requested' }, 1: { displayName: 'Substitute', icon } }, recipes: {} },
+        { common: (key) => key },
+        'en',
+        false
+    );
+    const snapshot = scene();
+    snapshot.layout.nodes = [snapshot.layout.nodes[0]];
+    snapshot.cards = [card];
+    const env = canvasEnvironment();
+    let resolved;
+    await renderTreePng(
+        snapshot,
+        settings,
+        style,
+        {
+            resolve: async (references) => {
+                resolved = references;
+                return { icons: new Map(), dispose() {} };
+            }
+        },
+        new AbortController().signal
+    );
+    assert.deepEqual(resolved, [icon]);
+    assert.ok(env.texts.includes('Substitute'));
+    assert.ok(!env.texts.includes('Requested'));
+});

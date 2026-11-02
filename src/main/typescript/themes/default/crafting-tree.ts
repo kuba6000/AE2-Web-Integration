@@ -209,28 +209,30 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             next.textContent = t('treeNext');
             previous.hidden = state.windowStart === 0;
             next.hidden = state.windowStart + state.rows.length >= state.totalRows;
-            retry.hidden = state.status !== 'ERROR' && !state.bounded;
+            retry.hidden = state.status !== 'ERROR';
             retry.disabled = state.expanding || !!state.loading;
             viewport.setAttribute('aria-label', t('treeNavigation'));
             message.textContent =
                 state.status === 'UNAVAILABLE'
                     ? t('treeUnavailable')
-                    : state.status === 'ERROR'
-                      ? `${t('treeError')} (${state.error})`
-                      : state.status === 'PREPARING' || state.status === 'CALCULATING' || state.status === 'IDLE'
-                        ? t('treePreparing')
-                        : [
-                              state.expanding
-                                  ? `${t('treeExpanding')} ${state.expandedNodes}`
-                                  : state.expandedComplete
-                                    ? t('treeExpandedComplete')
-                                    : '',
-                              state.partial ? t('treePartial') : '',
-                              state.cacheBounded ? t('treeCacheBounded') : state.bounded ? t('treeBounded') : '',
-                              state.root?.simulated ? t('treeSimulation') : ''
-                          ]
-                              .filter(Boolean)
-                              .join(' ');
+                    : state.status === 'TOO_LARGE'
+                      ? t('treeTooLarge')
+                      : state.status === 'ERROR'
+                        ? `${t('treeError')} (${state.error})`
+                        : state.status === 'PREPARING' || state.status === 'CALCULATING' || state.status === 'IDLE'
+                          ? t('treePreparing')
+                          : [
+                                state.expanding
+                                    ? `${t('treeExpanding')} ${state.expandedNodes}`
+                                    : state.expandedComplete
+                                      ? t('treeExpandedComplete')
+                                      : '',
+                                state.partial ? t('treePartial') : '',
+                                state.bounded ? t('treeBounded') : '',
+                                state.root?.simulated ? t('treeSimulation') : ''
+                            ]
+                                .filter(Boolean)
+                                .join(' ');
             // Only an aggregate tree is an approximation; a trace mirrors the native job.
             caveat.textContent =
                 state.mode === 'AGGREGATE'
@@ -243,11 +245,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                 state.missingResourceCount === 0
             )
                 message.textContent = t('treeNoMissing');
-            else if (state.missingOnly && !state.missingComplete)
+            else if (state.missingOnly && state.status === 'READY' && !state.missingComplete)
                 message.textContent += ' ' + t('treeMissingIncomplete');
             const active = document.activeElement as HTMLElement | null;
-            const focused = active?.dataset.treeKey ?? active?.dataset.treeMore;
-            const focusedMore = !!active?.dataset.treeMore;
+            const focused = active?.dataset.treeKey;
             const top = viewport.scrollTop,
                 left = viewport.scrollLeft;
             content.replaceChildren();
@@ -316,24 +317,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                         });
                     } else void application.crafting.toggleTree(row.key);
                 };
-                button.setAttribute(
-                    'aria-disabled',
-                    String(
-                        !leaf && !!state.loading && !state.pages[row.key] && !state.expanded[row.key] && !row.reference
-                    )
-                );
                 wrapper.append(button);
-                if (!row.reference && state.expanded[row.key] && state.pages[row.key]?.nextOffset != null) {
-                    const more = element('button', t('treeMore'), 'tree-more');
-                    more.type = 'button';
-                    more.dataset.treeMore = row.key;
-                    more.setAttribute(
-                        'aria-disabled',
-                        String(state.expanding || !!state.loading || state.cacheBounded)
-                    );
-                    more.onclick = () => void application.crafting.moreTree(row.key);
-                    wrapper.append(more);
-                }
                 content.append(wrapper);
             }
             content.style.width = `${width}px`;
@@ -343,19 +327,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             zoom(scale, true);
             icons.update(targets, state.icons);
             viewport.scrollTo(left, top);
-            if (focused) {
-                const control = focusedMore
-                    ? [...content.querySelectorAll<HTMLElement>('[data-tree-more]')].find(
-                          (node) => node.dataset.treeMore === focused
-                      )
-                    : null;
-                (
-                    control ??
-                    [...content.querySelectorAll<HTMLElement>('[data-tree-key]')].find(
-                        (node) => node.dataset.treeKey === focused
-                    )
-                )?.focus({ preventScroll: true });
-            }
+            if (focused)
+                [...content.querySelectorAll<HTMLElement>('[data-tree-key]')]
+                    .find((node) => node.dataset.treeKey === focused)
+                    ?.focus({ preventScroll: true });
         },
         dispose() {
             icons.dispose();

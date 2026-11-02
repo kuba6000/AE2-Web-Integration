@@ -97,7 +97,6 @@ export function mountTheme(
             windowTree: crafting.windowTree,
             focusTree: crafting.focusTree,
             toggleTree: crafting.toggleTree,
-            moreTree: crafting.moreTree,
             retryTree: crafting.retryTree,
             search: crafting.search,
             sort: crafting.sort,

@@ -4039,10 +4039,6 @@ button.toast:hover {
 .tree-card[data-kind='CONTRIBUTION'] {
     cursor: default;
 }
-.tree-more {
-    font-size: 11px;
-    margin-top: 2px;
-}
 .tree-lines {
     position: absolute;
     pointer-events: none;
