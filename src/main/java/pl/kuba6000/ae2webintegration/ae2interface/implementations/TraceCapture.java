@@ -37,7 +37,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
  * craft contribution is what the task produces of the node's item, crafts times its per-craft output; batch
  * rounding can make it exceed the request, and byproduct reuse out of the working inventory is not recorded
  * by the tree at all, so no REUSED contribution exists. Stored amounts count only what the job took from the
- * network; a fuzzy request can store a different item than it asked for, and a contribution cannot name it.
+ * network; a fuzzy request can store a different item than it asked for, so each storage contribution names
+ * the actual stack that was used.
  * <p>
  * A process that crafted nothing cannot be a task. Its children are normally untouched, but counters left by a
  * failed alternative would make the trace disagree with what {@code setJob} submits, so the trace is then
@@ -89,7 +90,7 @@ public final class TraceCapture {
         int request = occurrence.request();
         for (IAEItemStack used : node.web$getUsed()) {
             if (visitExceedsBudget()) return abandon();
-            if (!contribute(request, ContributionKind.STORAGE, used.getStackSize())) return false;
+            if (!stored(request, used)) return false;
         }
         if (!contribute(request, ContributionKind.EMITTED, node.web$getHowManyEmitted())) return false;
         for (CraftingTreeProcess process : node.web$getProcesses()) {
@@ -102,6 +103,15 @@ public final class TraceCapture {
             }
         }
         return contribute(request, ContributionKind.MISSING, node.web$getMissing());
+    }
+
+    private boolean stored(int request, @NotNull IAEItemStack stack) {
+        long amount = stack.getStackSize();
+        if (amount <= 0) return true;
+        if (!available()) return false;
+        int resourceId = resource(stack);
+        return resourceId >= 0 && available()
+            && capture.addContribution(request, ContributionKind.STORAGE, amount, resourceId);
     }
 
     /** Skips non-positive amounts: the tree keeps zeroed entries after resets and refunds. */
