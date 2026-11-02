@@ -72,7 +72,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
         }
 
         @Override
-        public synchronized void write(@NotNull byte[] values, int offset, int length) {
+        public synchronized void write(byte @NotNull [] values, int offset, int length) {
             if (length > limit - count) throw new SizeLimitExceeded();
             super.write(values, offset, length);
         }
