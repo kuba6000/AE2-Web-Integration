@@ -31,9 +31,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /**
  * Captures a normal-mode calculation as the job recorded it: every native request is a request, its non-zero
- * resolver entries are its contributions in native order, and each pattern task keeps its own craft count,
- * declared recipe and the child requests it issued. Requests and tasks are read once by identity, so a
- * task reached from several entries is one task. Amounts are the entries' own; nothing is apportioned.
+ * resolver entries identify contributing tasks, and each pattern task keeps its own craft count, declared
+ * recipe and the child requests it issued. Requests and tasks are read once by identity, so a task reached
+ * from several entries is one task. Amounts are the native entries' or extracted stacks'; nothing is apportioned.
  */
 public final class V2TraceCapture {
 
@@ -139,29 +139,26 @@ public final class V2TraceCapture {
     }
 
     /**
-     * An extraction task belongs to exactly one request and records each unit it removed either from the
-     * network or from byproducts of earlier crafts; the sums of those two lists equal the amounts of its
-     * resolver entries. The entries themselves do not say which source supplied them, so the task is read once
-     * and split by its own lists, byproducts first as the task takes them.
+     * An extraction task belongs to one request and records the actual stacks removed from the network and
+     * from byproducts. Refunds update those lists, so read the task once rather than assigning its lists to
+     * individual resolver entries. The lists have no combined order; retain each list's order, byproducts first.
      */
     private boolean extraction(int requestId, @NotNull ExtractItemTask<?> task) {
         if (!extractions.add(task)) return true;
-        long reused = total(task.removedFromByproducts);
-        if (reused < 0) return false;
-        long stored = total(task.removedFromSystem);
-        if (stored < 0) return false;
-        return (reused == 0 || leaf(requestId, ContributionKind.REUSED, reused))
-            && (stored == 0 || leaf(requestId, ContributionKind.STORAGE, stored));
+        return extracted(requestId, ContributionKind.REUSED, task.removedFromByproducts)
+            && extracted(requestId, ContributionKind.STORAGE, task.removedFromSystem);
     }
 
-    /** Sum of the list, or -1 when the scan budget ran out. */
-    private long total(@NotNull List<IAEStack<?>> removed) {
-        long total = 0;
+    private boolean extracted(int requestId, @NotNull ContributionKind kind, @NotNull List<IAEStack<?>> removed) {
         for (IAEStack<?> stack : removed) {
-            if (!visit()) return -1;
-            total = Math.addExact(total, stack.getStackSize());
+            if (!visit()) return false;
+            long amount = stack.getStackSize();
+            if (amount <= 0) continue;
+            int resourceId = resource(stack);
+            if (resourceId < 0 || !available() || !capture.addContribution(requestId, kind, amount, resourceId))
+                return false;
         }
-        return total;
+        return true;
     }
 
     private boolean readTask(@NotNull CraftFromPatternTask task) {
