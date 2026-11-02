@@ -32,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public final class RecipePlanCapture {
 
     /** The UEL tree is unshared and holds every candidate process, so visits far outnumber retained rows. */
-    private static final int SCAN_VISITS_PER_ENTRY = 50;
+    static final int SCAN_VISITS_PER_ENTRY = 50;
 
     private final CraftingRecipeCapture.Builder capture;
     private final long maxVisits;

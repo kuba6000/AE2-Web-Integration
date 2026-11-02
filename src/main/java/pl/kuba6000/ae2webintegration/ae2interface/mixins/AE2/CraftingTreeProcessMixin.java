@@ -3,8 +3,10 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 import appeng.api.networking.crafting.ICraftingPatternDetails;
+import appeng.api.storage.data.IAEItemStack;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.CraftingTreeProcess;
 import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
@@ -24,4 +26,8 @@ public abstract class CraftingTreeProcessMixin implements ICraftingTreeProcessDa
     @Override
     @Accessor("crafts")
     public abstract long web$getCrafts();
+
+    @Override
+    @Invoker("getAmountCrafted")
+    public abstract @NotNull IAEItemStack web$getAmountCrafted(@NotNull IAEItemStack what);
 }

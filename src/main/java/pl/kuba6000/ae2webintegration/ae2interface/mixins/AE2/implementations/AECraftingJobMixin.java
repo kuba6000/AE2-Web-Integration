@@ -15,7 +15,9 @@ import appeng.api.storage.data.IItemList;
 import appeng.crafting.CraftingJob;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.RecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.TraceCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -29,6 +31,13 @@ public interface AECraftingJobMixin extends IAECraftingJob {
     default @Nullable CraftingRecipeCapture web$captureRecipes(int maxEntries, int maxDescriptionCharacters) {
         if ((Object) this instanceof CraftingJob job)
             return RecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
+
+    @Override
+    default @Nullable CraftingTraceCapture web$captureTrace(int maxEntries, int maxDescriptionCharacters) {
+        if ((Object) this instanceof CraftingJob job)
+            return TraceCapture.capture(job, maxEntries, maxDescriptionCharacters);
         return null;
     }
 
