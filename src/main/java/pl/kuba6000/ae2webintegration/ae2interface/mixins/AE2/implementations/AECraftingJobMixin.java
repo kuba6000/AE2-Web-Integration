@@ -16,7 +16,9 @@ import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.LiteRecipePlanCapture;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2RecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2TraceCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -32,6 +34,14 @@ public interface AECraftingJobMixin extends IAECraftingJob {
             return LiteRecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
         if ((Object) this instanceof CraftingJobV2<?>job)
             return V2RecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
+
+    @Override
+    default @Nullable CraftingTraceCapture web$captureTrace(int maxEntries, int maxDescriptionCharacters) {
+        // Lite records only per-pattern totals, so it keeps the aggregate capture.
+        if ((Object) this instanceof CraftingJobV2<?>job)
+            return V2TraceCapture.capture(job, maxEntries, maxDescriptionCharacters);
         return null;
     }
 
