@@ -73,3 +73,94 @@ test('a candidate that stands in for its single-candidate group keeps the group 
     assert.ok(details.some((line) => line.startsWith('treePerTemplate') && line.endsWith('3')));
     assert.ok(details.some((line) => line.startsWith('treeMultiplier') && line.endsWith('8')));
 });
+
+const traceNode = (kind, id, extra = {}) =>
+    node(kind, id, { inputs: null, resourceId: null, contribution: null, ...extra });
+const traceState = {
+    resources: {
+        0: { displayName: 'Machine', missingAmount: null, icon: null },
+        2: { displayName: '§aGear', missingAmount: null, icon: { page: 0, x: 0, y: 0 } },
+        3: { displayName: 'Ingot', missingAmount: null, icon: null }
+    }
+};
+
+test('a trace request states its item and exact amount, with the item icon', async () => {
+    const { craftingTreeContent } = await import(moduleUrl);
+    const card = craftingTreeContent(
+        row(traceNode('REQUEST', 1, { resourceId: 2 }), { quantity: '9007199254740993', relation: 'CHILD_REQUEST' }),
+        traceState,
+        locale,
+        'en'
+    );
+    assert.equal(card.title, '§aGear');
+    assert.ok(card.details.some((line) => line.endsWith('9,007,199,254,740,993')));
+    assert.deepEqual(card.icon, { page: 0, x: 0, y: 0 });
+    assert.equal(card.missing, false);
+});
+
+test('each contribution leaf names how the request was met, with its own amount, and only a shortage is missing', async () => {
+    const { craftingTreeContent } = await import(moduleUrl);
+    const cards = Object.fromEntries(
+        ['STORAGE', 'EMITTED', 'MISSING', 'REUSED', 'UNKNOWN'].map((contribution) => [
+            contribution,
+            craftingTreeContent(
+                row(traceNode('CONTRIBUTION', 4, { resourceId: 3, contribution }), {
+                    quantity: '29',
+                    relation: 'CONTRIBUTION'
+                }),
+                traceState,
+                locale,
+                'en'
+            )
+        ])
+    );
+    // Each kind has its own wording and every leaf states its amount and what it is for.
+    assert.equal(new Set(Object.values(cards).map((card) => card.title.replace(/\s*\d+$/, ''))).size, 5);
+    for (const card of Object.values(cards)) {
+        assert.ok(card.title.endsWith('29'));
+        assert.ok(card.details.includes('Ingot'));
+    }
+    assert.deepEqual(
+        Object.entries(cards)
+            .filter(([, card]) => card.missing)
+            .map(([kind]) => kind),
+        ['MISSING']
+    );
+});
+
+test('a task card states the crafted amount, crafts, outputs with byproducts and declared inputs', async () => {
+    const { craftingTreeContent } = await import(moduleUrl);
+    const task = traceNode('TASK', 1, {
+        crafts: '3',
+        complete: true,
+        outputs: [
+            { resourceId: 2, quantity: '2', primary: true },
+            { resourceId: 0, quantity: '1', primary: false }
+        ],
+        inputs: [{ resourceId: 3, quantity: '1' }]
+    });
+    const card = craftingTreeContent(row(task, { quantity: '4', relation: 'CRAFT' }), traceState, locale, 'en');
+    const line = (key) => card.details.find((entry) => entry.startsWith(key));
+    assert.ok(line('treeCraftAmount').endsWith('4'));
+    assert.ok(line('treeCrafts').endsWith('3'));
+    const outputs = line('treeOutputs');
+    assert.ok(outputs.includes('Gear') && outputs.includes('Machine') && outputs.includes('treeByproduct'));
+    assert.ok(!outputs.includes('§'));
+    assert.ok(line('treeInputs').includes('Ingot'));
+    assert.ok(!card.details.some((entry) => entry.startsWith('treePartialNode')));
+    const shared = craftingTreeContent(
+        row(task, { quantity: '2', relation: 'CRAFT', reference: true }),
+        traceState,
+        locale,
+        'en'
+    );
+    assert.ok(shared.details.some((entry) => entry.startsWith('treeReference')));
+    assert.ok(shared.details.some((entry) => entry.startsWith('treeCraftAmount') && entry.endsWith('2')));
+    const incomplete = craftingTreeContent(
+        row({ ...task, complete: false }, { quantity: '4', relation: 'CRAFT' }),
+        traceState,
+        locale,
+        'en'
+    );
+    assert.ok(incomplete.details.some((entry) => entry.startsWith('treePartialNode')));
+});

@@ -266,7 +266,8 @@ const translations: Dictionaries = {
         treeNoMissing: 'The complete captured plan reports no missing resources.',
         treeMissingIncomplete: 'Missing information is incomplete; absence cannot be confirmed.',
         treeReferenceStatic: 'Shared or cyclic reference',
-        treeExportDeclared: 'Paths follow recipe declarations; actual input choices are unknown.',
+        treeExportApproximation:
+            'Approximation: recipes summed per pattern; stored and missing items only as plan totals, no per-branch split.',
         treeExportScope: 'Expanded nodes in this loaded window only — not the whole plan.',
         treeExportNodeCount: 'Exported nodes',
         treeMissingPlanTotals: 'Missing amounts are plan totals; repeated references are not added.',
@@ -291,8 +292,15 @@ const translations: Dictionaries = {
         treePartial: 'This capture is partial. Some dependencies were omitted by server limits.',
         treeBounded: 'Use Previous/Next loaded nodes or collapse branches to navigate this large view.',
         treeSimulation: 'This is a simulated plan with missing resources.',
-        treeDeclared:
-            'These are planned recipe inputs and outputs. AE2 does not report which substitute or how much stored material each branch uses.',
+        treeApproximation:
+            'This tree is an approximation. This game version reports only the recipes selected for each pattern, summed, and stored and missing items as plan totals, so it cannot show how items were split between branches or which substitute each branch uses.',
+        treeFromStorage: 'From storage',
+        treeEmitted: 'Emitted',
+        treeMissingLeaf: 'Missing',
+        treeReused: 'Reused',
+        treeUnknownSource: 'Unknown',
+        treeInputs: 'Inputs per craft',
+        treeCraftAmount: 'Crafted amount',
         treeResource: 'Resource',
         treeRecipe: 'Recipe',
         treeIngredient: 'Ingredient alternatives',
@@ -667,7 +675,8 @@ const translations: Dictionaries = {
         treeNoMissing: 'Pełny zapis planu nie zgłasza brakujących zasobów.',
         treeMissingIncomplete: 'Informacje o brakach są niepełne; nie można potwierdzić ich braku.',
         treeReferenceStatic: 'Wspólne lub cykliczne odwołanie',
-        treeExportDeclared: 'Ścieżki wynikają z deklaracji receptur; faktyczny wybór składników jest nieznany.',
+        treeExportApproximation:
+            'Przybliżenie: receptury zsumowane dla wzoru; zapasy i braki tylko jako sumy planu, bez podziału na gałęzie.',
         treeExportScope: 'Tylko rozwinięte węzły w bieżącym wczytanym oknie — nie cały plan.',
         treeExportNodeCount: 'Eksportowane węzły',
         treeMissingPlanTotals: 'Braki są sumami planu; powtórzone odwołania nie są dodawane.',
@@ -693,8 +702,15 @@ const translations: Dictionaries = {
         treeBounded:
             'Użyj poprzednich/następnych wczytanych węzłów lub zwiń gałęzie, aby poruszać się po dużym widoku.',
         treeSimulation: 'To symulowany plan z brakującymi zasobami.',
-        treeDeclared:
-            'To planowane składniki i wyniki receptur. AE2 nie podaje, który zamiennik ani ile surowców z magazynu wykorzystuje każda gałąź.',
+        treeApproximation:
+            'To drzewo jest przybliżeniem. Ta wersja gry podaje tylko receptury wybrane dla każdego wzoru, zsumowane, oraz zapasy i braki jako sumy planu, więc nie pokazuje podziału przedmiotów między gałęzie ani zamienników użytych w każdej z nich.',
+        treeFromStorage: 'Z magazynu',
+        treeEmitted: 'Emitowane',
+        treeMissingLeaf: 'Brakuje',
+        treeReused: 'Użyte ponownie',
+        treeUnknownSource: 'Nieznane',
+        treeInputs: 'Wejścia na craft',
+        treeCraftAmount: 'Wytworzona ilość',
         treeResource: 'Zasób',
         treeRecipe: 'Receptura',
         treeIngredient: 'Alternatywne składniki',

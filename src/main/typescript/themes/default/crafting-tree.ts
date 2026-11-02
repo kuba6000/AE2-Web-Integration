@@ -231,7 +231,11 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                           ]
                               .filter(Boolean)
                               .join(' ');
-            caveat.textContent = t('treeDeclared') + (state.missingOnly ? ' ' + t('treeMissingPaths') : '');
+            // Only an aggregate tree is an approximation; a trace mirrors the native job.
+            caveat.textContent =
+                state.mode === 'AGGREGATE'
+                    ? t('treeApproximation') + (state.missingOnly ? ' ' + t('treeMissingPaths') : '')
+                    : '';
             if (
                 state.missingOnly &&
                 state.status === 'READY' &&
@@ -279,9 +283,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                 const presentation = craftingTreeContent(row, state, locale, document.documentElement.lang);
                 const name = element('strong');
                 name.append(renderMinecraftText(presentation.title));
+                const leaf = row.node.kind === 'CONTRIBUTION';
                 const marker = element(
                     'span',
-                    row.reference ? '↪' : state.expanded[row.key] ? '−' : '+',
+                    row.reference ? '↪' : leaf ? '•' : state.expanded[row.key] ? '−' : '+',
                     'tree-marker'
                 );
                 const details = element('span', presentation.details.join(' · '), 'tree-details');
@@ -296,8 +301,10 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                     element('strong', name.textContent ?? ''),
                     element('span', details.textContent ?? '')
                 ]);
-                if (!row.reference) button.setAttribute('aria-expanded', String(!!state.expanded[row.key]));
+                button.dataset.kind = row.node.kind;
+                if (!row.reference && !leaf) button.setAttribute('aria-expanded', String(!!state.expanded[row.key]));
                 button.onclick = () => {
+                    if (leaf) return;
                     if (row.reference) {
                         application.crafting.focusTree(row.key);
                         requestAnimationFrame(() => {
@@ -311,7 +318,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                 };
                 button.setAttribute(
                     'aria-disabled',
-                    String(!!state.loading && !state.pages[row.key] && !state.expanded[row.key] && !row.reference)
+                    String(
+                        !leaf && !!state.loading && !state.pages[row.key] && !state.expanded[row.key] && !row.reference
+                    )
                 );
                 wrapper.append(button);
                 if (!row.reference && state.expanded[row.key] && state.pages[row.key]?.nextOffset != null) {

@@ -14,9 +14,13 @@ import java.util.function.LongSupplier;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceGraph;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
@@ -65,9 +69,11 @@ public final class CraftingPlanRegistry {
                 tree = preparation;
             }
             try {
-                CraftingRecipeCapture captured = plan.get()
-                    .web$captureRecipes(maxEntries, maxCharacters);
-                preparation.capture.complete(captured);
+                IAECraftingJob job = plan.get();
+                CraftingTraceCapture trace = job.web$captureTrace(maxEntries, maxCharacters);
+                preparation.capture.complete(
+                    trace != null && trace.root() != null ? new Captured(trace, null)
+                        : new Captured(null, job.web$captureRecipes(maxEntries, maxCharacters)));
             } catch (InterruptedException | ExecutionException | RuntimeException | Error failure) {
                 preparation.capture.completeExceptionally(failure);
                 throw failure;
@@ -82,12 +88,20 @@ public final class CraftingPlanRegistry {
 
     }
 
-    /** One detached capture and normalized graph shared by viewers of the exact retained entry. */
+    /** What a job could capture: its per-occurrence trace, else its recipe aggregate, else nothing. */
+    @Desugar
+    private record Captured(@Nullable CraftingTraceCapture trace, @Nullable CraftingRecipeCapture recipes) {}
+
+    /**
+     * One detached capture and normalized graph shared by viewers of the exact retained entry. A job that
+     * records a trace is shown as one; otherwise the aggregate recipe capture is used.
+     */
     public static final class TreePreparation {
 
         private final String id = UUID.randomUUID()
             .toString();
-        private final CompletableFuture<CraftingRecipeCapture> capture = new CompletableFuture<>();
+        private final CompletableFuture<Captured> capture = new CompletableFuture<>();
+        private @Nullable CraftingTraceGraph traceGraph;
         private @Nullable CraftingDependencyGraph graph;
 
         public @NotNull String id() {
@@ -98,14 +112,23 @@ public final class CraftingPlanRegistry {
             return capture.isDone();
         }
 
-        /** HTTP-worker only, after capture completion. Null is a stable unsupported capability. */
+        /** HTTP-worker only, after capture completion. Null when the capture is not a trace. */
+        public synchronized @Nullable CraftingTraceGraph traceGraph() {
+            Captured captured = completed();
+            if (traceGraph == null && captured.trace() != null) traceGraph = CraftingTraceGraph.from(captured.trace());
+            return traceGraph;
+        }
+
+        /** HTTP-worker only, after capture completion. Null when the capture is a trace or unsupported. */
         public synchronized @Nullable CraftingDependencyGraph graph() {
-            if (!capture.isDone()) throw new IllegalStateException("Capture is still pending");
-            if (graph == null) {
-                CraftingRecipeCapture captured = capture.getNow(null);
-                if (captured != null) graph = CraftingDependencyGraph.from(captured);
-            }
+            Captured captured = completed();
+            if (graph == null && captured.recipes() != null) graph = CraftingDependencyGraph.from(captured.recipes());
             return graph;
+        }
+
+        private Captured completed() {
+            if (!capture.isDone()) throw new IllegalStateException("Capture is still pending");
+            return capture.getNow(null);
         }
     }
 

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.TraceFixtures;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -123,6 +126,65 @@ class CraftingPlanTreePreparationTest {
         assertThrows(CompletionException.class, preparation::graph);
     }
 
+    @Test
+    void aJobWithATraceIsPreparedAsATraceAndNeverReadsItsAggregate() throws Exception {
+        AtomicInteger traces = new AtomicInteger();
+        CraftingPlanRegistry registry = new CraftingPlanRegistry(System::nanoTime);
+        int id = registry.add(CompletableFuture.completedFuture(traceJob(() -> {
+            traces.incrementAndGet();
+            return TraceFixtures.gears();
+        }, () -> { throw new AssertionError("The aggregate is only the fallback"); })),
+            TestGridFixtures.planOutput(),
+            new CraftingOptions(false, false),
+            false);
+        CraftingPlanRegistry.Entry entry = registry.find(id);
+        assertNotNull(entry);
+        CraftingPlanRegistry.TreePreparation preparation = entry.captureTree(20, 1000);
+        assertSame(preparation, entry.captureTree(20, 1000));
+        assertNotNull(preparation);
+        assertSame(preparation.traceGraph(), preparation.traceGraph());
+        assertNull(preparation.graph());
+        assertEquals(1, traces.get());
+    }
+
+    @Test
+    void aJobWithoutAUsableTraceFallsBackToTheAggregateOnTheSamePreparation() throws Exception {
+        CraftingTraceCapture.Builder noRoot = new CraftingTraceCapture.Builder(0, 10);
+        noRoot.addResource(() -> TraceFixtures.descriptor("unreachable"));
+        for (Supplier<CraftingTraceCapture> trace : Arrays
+            .<Supplier<CraftingTraceCapture>>asList(() -> null, noRoot::build)) {
+            AtomicInteger aggregates = new AtomicInteger();
+            CraftingPlanRegistry registry = new CraftingPlanRegistry(System::nanoTime);
+            int id = registry.add(CompletableFuture.completedFuture(traceJob(trace, () -> {
+                aggregates.incrementAndGet();
+                return example();
+            })), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+            CraftingPlanRegistry.Entry entry = registry.find(id);
+            assertNotNull(entry);
+            CraftingPlanRegistry.TreePreparation preparation = entry.captureTree(20, 1000);
+            assertNotNull(preparation);
+            assertNull(preparation.traceGraph());
+            assertNotNull(preparation.graph());
+            assertEquals(1, aggregates.get());
+        }
+    }
+
+    @Test
+    void aJobWithNeitherCaptureIsUnavailableInBothModes() throws Exception {
+        CraftingPlanRegistry registry = new CraftingPlanRegistry(System::nanoTime);
+        int id = registry.add(
+            CompletableFuture.completedFuture(traceJob(() -> null, () -> null)),
+            TestGridFixtures.planOutput(),
+            new CraftingOptions(false, false),
+            false);
+        CraftingPlanRegistry.Entry entry = registry.find(id);
+        assertNotNull(entry);
+        CraftingPlanRegistry.TreePreparation preparation = entry.captureTree(20, 1000);
+        assertNotNull(preparation);
+        assertNull(preparation.traceGraph());
+        assertNull(preparation.graph());
+    }
+
     static IAECraftingJob job(AtomicInteger captures) {
         return job(() -> {
             captures.incrementAndGet();
@@ -146,6 +208,11 @@ class CraftingPlanTreePreparationTest {
     }
 
     static IAECraftingJob job(Supplier<CraftingRecipeCapture> capture) {
+        return traceJob(() -> null, capture);
+    }
+
+    /** A job that offers a trace and an aggregate capture, as a native job supporting both would. */
+    static IAECraftingJob traceJob(Supplier<CraftingTraceCapture> trace, Supplier<CraftingRecipeCapture> recipes) {
         return new IAECraftingJob() {
 
             public boolean web$isSimulation() {
@@ -161,7 +228,11 @@ class CraftingPlanTreePreparationTest {
             }
 
             public CraftingRecipeCapture web$captureRecipes(int entries, int characters) {
-                return capture.get();
+                return recipes.get();
+            }
+
+            public CraftingTraceCapture web$captureTrace(int entries, int characters) {
+                return trace.get();
             }
         };
     }

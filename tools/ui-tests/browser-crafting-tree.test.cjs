@@ -56,6 +56,7 @@ const adjacency = {
 function tree(url) {
     const header = {
         state: 'READY',
+        mode: 'AGGREGATE',
         captureId: 'capture',
         root: { resourceId: 0, quantity: '1', simulated: false },
         resources,
@@ -87,11 +88,11 @@ function tree(url) {
     };
 }
 
-async function openTree(t, viewport = { width: 1280, height: 900 }) {
+async function openTree(t, viewport = { width: 1280, height: 900 }, source = tree) {
     const { page, options, base } = await fixture(t, '', { viewport }, { mockClock: false });
     await atlasFixture(page, options);
-    tree.icons = options.icons;
-    options.tree = tree;
+    source.icons = options.icons;
+    options.tree = source;
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], icon: { page: 0, x: 0, y: 0 } }] };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Tree', exact: true }).click();
@@ -300,4 +301,147 @@ test('the PNG export paints the tree icons', async (t) => {
         return { red, green };
     }, bytes.toString('base64'));
     assert.ok(colors.red > 0 && colors.green > 0, `both icons were painted: ${JSON.stringify(colors)}`);
+});
+
+// A TRACE plan: four machines, one from storage and three crafted from plates (two of the six missing) and rods.
+const traceNode = (kind, id, extra = {}) => ({
+    kind,
+    id,
+    crafts: null,
+    multiplier: null,
+    complete: null,
+    candidates: null,
+    outputs: null,
+    inputs: null,
+    resourceId: null,
+    contribution: null,
+    ...extra
+});
+const traceNodes = {
+    'REQUEST:0': traceNode('REQUEST', 0, { resourceId: 0 }),
+    'REQUEST:1': traceNode('REQUEST', 1, { resourceId: 1 }),
+    'REQUEST:2': traceNode('REQUEST', 2, { resourceId: 2 }),
+    'TASK:0': traceNode('TASK', 0, {
+        crafts: '3',
+        complete: true,
+        outputs: [{ resourceId: 0, quantity: '1', primary: true }],
+        inputs: [
+            { resourceId: 1, quantity: '2' },
+            { resourceId: 2, quantity: '1' }
+        ]
+    })
+};
+const leaf = (id, contribution, resourceId, quantity) => ({
+    relation: 'CONTRIBUTION',
+    node: traceNode('CONTRIBUTION', id, { resourceId, contribution }),
+    quantity,
+    primary: null
+});
+const traceLink = (relation, key, quantity) => ({ relation, node: traceNodes[key], quantity, primary: null });
+const traceAdjacency = {
+    'REQUEST:0': [leaf(0, 'STORAGE', 0, '1'), traceLink('CRAFT', 'TASK:0', '3')],
+    'TASK:0': [traceLink('CHILD_REQUEST', 'REQUEST:1', '6'), traceLink('CHILD_REQUEST', 'REQUEST:2', '3')],
+    'REQUEST:1': [leaf(1, 'MISSING', 1, '2'), leaf(2, 'STORAGE', 1, '4')],
+    'REQUEST:2': [leaf(3, 'STORAGE', 2, '3')]
+};
+function traceTree(url) {
+    const header = {
+        state: 'READY',
+        mode: 'TRACE',
+        captureId: 'trace',
+        root: { resourceId: 0, quantity: '4', simulated: false },
+        resources,
+        partial: false,
+        limits: [],
+        unplacedCount: 0,
+        unlinkedMissingCount: 0,
+        missingOnly: false,
+        missingComplete: true,
+        missingResourceCount: 1
+    };
+    const icons = url.searchParams.get('icons') === 'true' ? traceTree.icons : null;
+    const batch = url.searchParams.get('nodes');
+    if (batch) {
+        const pages = batch.split(',').map((token) => {
+            const key = token.split(':').slice(0, 2).join(':');
+            return { node: traceNodes[key], offset: 0, children: traceAdjacency[key], nextOffset: null };
+        });
+        return { status: 'OK', icons, data: { ...header, pages } };
+    }
+    const key =
+        url.searchParams.get('kind') === 'ROOT'
+            ? 'REQUEST:0'
+            : `${url.searchParams.get('kind')}:${url.searchParams.get('id')}`;
+    return {
+        status: 'OK',
+        icons,
+        data: { ...header, node: traceNodes[key], children: traceAdjacency[key], nextOffset: null }
+    };
+}
+const openTrace = (t, viewport) => openTree(t, viewport, traceTree);
+const caveatText = (page) => page.locator('.tree-caveat').evaluate((element) => element.textContent.trim());
+async function exportScope(page) {
+    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    return (await dialog.locator('p').first().textContent()).trim();
+}
+
+test('a trace shows requests, leaves and a task card like the in-game tree and makes no approximation claim', async (t) => {
+    const page = await openTrace(t);
+    await card(page, 'Machine').first().waitFor();
+    await expand(page, 'Recipe');
+    await card(page, 'Plate').first().waitFor();
+    await card(page, 'Rod').first().waitFor();
+    const task = await card(page, 'Recipe').locator('.tree-details').textContent();
+    assert.match(task, /Machine/);
+    assert.match(task, /Plate/);
+    assert.match(task, /Rod/);
+    assert.match(task, /3/);
+    await expand(page, 'Plate');
+    await page.locator('.tree-card[data-kind="CONTRIBUTION"]').nth(2).waitFor();
+    const leaves = await page.locator('.tree-card[data-kind="CONTRIBUTION"]').evaluateAll((cards) =>
+        cards.map((element) => ({
+            title: element.querySelector('strong').textContent,
+            missing: element.dataset.missing,
+            expandable: element.hasAttribute('aria-expanded')
+        }))
+    );
+    assert.equal(leaves.length, 3);
+    assert.ok(leaves.every((entry) => /\d/.test(entry.title) && !entry.expandable));
+    assert.deepEqual(
+        leaves.map((entry) => entry.missing),
+        ['false', 'true', 'false']
+    );
+    assert.equal(new Set(leaves.map((entry) => entry.title)).size, 3, 'each kind and amount reads differently');
+    assert.equal(await caveatText(page), '');
+    assert.equal(await page.locator('.tree-caveat').isVisible(), false);
+});
+
+test('only an aggregate tree states that it is an approximation, on screen and in the PNG export notes', async (t) => {
+    const aggregate = await openTree(t);
+    await aggregate.locator('.tree-card').first().waitFor();
+    assert.notEqual(await caveatText(aggregate), '');
+    assert.equal(await aggregate.locator('.tree-caveat').isVisible(), true);
+    const aggregateNotes = await exportScope(aggregate);
+    const trace = await openTrace(t);
+    await trace.locator('.tree-card').first().waitFor();
+    const traceNotes = await exportScope(trace);
+    assert.ok(traceNotes.length > 0);
+    assert.ok(
+        aggregateNotes.length > traceNotes.length,
+        'the aggregate export adds notes that a trace export does not'
+    );
+    assert.ok(aggregateNotes.startsWith(traceNotes.slice(0, 20)), 'both exports share the scope notes');
+});
+
+test('the trace tree exports to PNG with its leaves and cards', async (t) => {
+    const page = await openTrace(t);
+    await expand(page, 'Recipe');
+    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    const download = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
+    const bytes = await fs.readFile(await (await download).path());
+    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+    assert.ok(bytes.length > 1000);
 });

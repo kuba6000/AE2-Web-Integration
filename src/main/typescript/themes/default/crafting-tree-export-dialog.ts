@@ -148,10 +148,10 @@ export function createTreeExportDialog(
             const notes = [
                 t('treeExportScope'),
                 `${t('treeExportNodeCount')}: ${locale.number(tree.rows.length)}`,
-                tree.missingOnly ? t('treeMissingOnly') : t('treeAllDependencies'),
-                t('treeMissingPlanTotals'),
-                t('treeExportDeclared')
+                tree.missingOnly ? t('treeMissingOnly') : t('treeAllDependencies')
             ];
+            // Only an aggregate tree is an approximation; a trace states per-occurrence amounts.
+            if (tree.mode === 'AGGREGATE') notes.push(t('treeMissingPlanTotals'), t('treeExportApproximation'));
             if (tree.partial) notes.push(t('treeExportPartial'));
             if (tree.totalRows > tree.rows.length || tree.cacheBounded) notes.push(t('treeExportWindow'));
             if (!tree.missingComplete) notes.push(t('treeMissingIncomplete'));

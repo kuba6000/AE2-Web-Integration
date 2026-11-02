@@ -830,3 +830,205 @@ test('expand all collapses single-candidate groups too', async () => {
     );
     nodeExtras = {};
 });
+
+/**
+ * An in-memory TRACE plan, worked by hand: the machine request is half stored, half crafted by task 0, whose
+ * gear request is crafted by task 1; task 1 also serves the later gear request R5, so it is shared.
+ */
+const traceNode = (kind, id, extra = {}) => ({
+    kind,
+    id,
+    crafts: null,
+    multiplier: null,
+    complete: null,
+    candidates: null,
+    outputs: null,
+    inputs: null,
+    resourceId: null,
+    contribution: null,
+    ...extra
+});
+const traceResources = ['Machine', 'Plate', 'Gear', 'Ingot'].map((displayName, id) => ({
+    id,
+    displayName,
+    icon: null,
+    missingAmount: null
+}));
+const requestLink = (id, resourceId, quantity) => ({
+    relation: 'CHILD_REQUEST',
+    node: traceNode('REQUEST', id, { resourceId }),
+    quantity
+});
+const leafLink = (id, contribution, quantity, resourceId) => ({
+    relation: 'CONTRIBUTION',
+    node: traceNode('CONTRIBUTION', id, { resourceId, contribution }),
+    quantity
+});
+const craftLink = (task, quantity) => ({
+    relation: 'CRAFT',
+    node: traceNode('TASK', task, { crafts: '3', complete: true }),
+    quantity
+});
+const traceAdjacency = {
+    'REQUEST:0': [leafLink(0, 'STORAGE', '1', 0), craftLink(0, '3')],
+    'TASK:0': [requestLink(1, 2, '6'), requestLink(2, 1, '6')],
+    'REQUEST:1': [leafLink(2, 'STORAGE', '2', 2), craftLink(1, '4')],
+    'REQUEST:2': [leafLink(4, 'EMITTED', '2', 1)],
+    'TASK:1': [requestLink(4, 3, '3'), requestLink(5, 2, '3')],
+    'REQUEST:4': [leafLink(8, 'MISSING', '2', 3), leafLink(9, 'UNKNOWN', '1', 3)],
+    'REQUEST:5': [leafLink(10, 'REUSED', '1', 2), craftLink(1, '2')]
+};
+const traceMissing = {
+    'REQUEST:0': [craftLink(0, '3')],
+    'TASK:0': [requestLink(1, 2, '6')],
+    'REQUEST:1': [craftLink(1, '4')],
+    'TASK:1': [requestLink(4, 3, '3'), requestLink(5, 2, '3')],
+    'REQUEST:4': [leafLink(8, 'MISSING', '2', 3)],
+    'REQUEST:5': [craftLink(1, '2')]
+};
+function traceServer() {
+    const requests = [];
+    const adjacencyOf = (query, key) => (query.missingOnly ? traceMissing : traceAdjacency)[key] ?? [];
+    const nodeFor = (key) => {
+        const [kind, id] = key.split(':');
+        return kind === 'REQUEST'
+            ? traceNode('REQUEST', Number(id), { resourceId: Number(id) === 0 ? 0 : 2 })
+            : traceNode(kind, Number(id), { crafts: '3', complete: true });
+    };
+    const envelope = (query, body) => ({
+        data: {
+            state: 'READY',
+            mode: 'TRACE',
+            captureId: 'trace',
+            root: { resourceId: 0, quantity: '4', simulated: false },
+            partial: false,
+            limits: [],
+            unplacedCount: 0,
+            unlinkedMissingCount: 0,
+            missingOnly: !!query.missingOnly,
+            missingComplete: true,
+            missingResourceCount: 1,
+            resources: traceResources,
+            ...body
+        },
+        icons: null
+    });
+    return {
+        requests,
+        api: {
+            planTree: async (_g, _p, query) => {
+                requests.push({ batch: false, query });
+                const key = query.kind === 'ROOT' ? 'REQUEST:0' : `${query.kind}:${query.id}`;
+                const all = adjacencyOf(query, key);
+                const end = Math.min(all.length, query.offset + query.limit);
+                return envelope(query, {
+                    node: nodeFor(key),
+                    children: all.slice(query.offset, end),
+                    nextOffset: end < all.length ? end : null
+                });
+            },
+            planTreeBatch: async (_g, _p, query) => {
+                requests.push({ batch: true, query });
+                const queue = query.nodes.split(',').map((token) => token.split(':').slice(0, 2).join(':'));
+                const seen = new Set(queue);
+                const pages = [];
+                let budget = query.rows;
+                while (budget > 0 && queue.length) {
+                    const key = queue.shift();
+                    const children = adjacencyOf(query, key);
+                    pages.push({ node: nodeFor(key), offset: 0, children, nextOffset: null });
+                    budget -= Math.max(1, children.length);
+                    for (const next of children.map((child) => `${child.node.kind}:${child.node.id}`))
+                        if (!next.startsWith('CONTRIBUTION:') && !seen.has(next)) {
+                            seen.add(next);
+                            queue.push(next);
+                        }
+                }
+                return envelope(query, { pages });
+            }
+        }
+    };
+}
+const requestedKeys = (server) =>
+    server.requests.flatMap((request) =>
+        request.batch
+            ? request.query.nodes.split(',').map((token) => token.split(':').slice(0, 2).join(':'))
+            : [`${request.query.kind}:${request.query.id}`]
+    );
+
+test('a trace is shown as such, expands to every occurrence once and renders a shared task as a reference', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const server = traceServer();
+    const tree = createCraftingTree(server.api, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    assert.equal(tree.state.mode, 'TRACE');
+    assert.equal(tree.state.rows[0].key, 'REQUEST:0');
+    assert.equal(tree.state.rows[0].quantity, '4');
+    await tree.expandAll();
+    assert.equal(tree.state.expandedComplete, true);
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.key),
+        [
+            'REQUEST:0',
+            'CONTRIBUTION:0',
+            'TASK:0',
+            'REQUEST:1',
+            'CONTRIBUTION:2',
+            'TASK:1',
+            'REQUEST:4',
+            'CONTRIBUTION:8',
+            'CONTRIBUTION:9',
+            'REQUEST:5',
+            'CONTRIBUTION:10',
+            'TASK:1',
+            'REQUEST:2',
+            'CONTRIBUTION:4'
+        ]
+    );
+    const shared = tree.state.rows.filter((row) => row.key === 'TASK:1');
+    assert.deepEqual(
+        shared.map((row) => [row.reference, row.quantity]),
+        [
+            [false, '4'],
+            [true, '2']
+        ]
+    );
+    // Leaves are answers, not nodes to open: no page is ever requested for one, and they cannot be toggled.
+    assert.ok(requestedKeys(server).every((key) => !key.startsWith('CONTRIBUTION:')));
+    const before = server.requests.length;
+    await tree.toggle('CONTRIBUTION:8');
+    assert.equal(server.requests.length, before);
+    assert.equal(tree.state.expanded['CONTRIBUTION:8'], undefined);
+    tree.dispose();
+});
+
+test('missing-only on a trace reveals the paths to missing leaves and never tries to open a leaf', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const server = traceServer();
+    const tree = createCraftingTree(server.api, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    const opened = server.requests.length;
+    await tree.setMissingOnly(true);
+    assert.equal(tree.state.mode, 'TRACE');
+    assert.ok(server.requests.slice(opened).every((request) => request.query.missingOnly));
+    assert.ok(tree.state.rows.some((row) => row.key === 'CONTRIBUTION:8'));
+    assert.ok(tree.state.rows.every((row) => row.key !== 'CONTRIBUTION:0' && row.key !== 'REQUEST:3'));
+    assert.ok(requestedKeys(server).every((key) => !key.startsWith('CONTRIBUTION:')));
+    assert.equal(tree.state.canRevealMissing, false);
+    tree.dispose();
+});
+
+test('the mode of the latest response is kept until the tree is reset', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const server = traceServer();
+    const tree = createCraftingTree(server.api, () => {});
+    tree.reset('grid', 1);
+    assert.equal(tree.state.mode, null);
+    await tree.show(true);
+    assert.equal(tree.state.mode, 'TRACE');
+    tree.reset('grid', 2);
+    assert.equal(tree.state.mode, null);
+    tree.dispose();
+});

@@ -1,9 +1,15 @@
 import type { Api, ApiFailure } from './api.js';
 import type { IconAnimation, IconMetadata, ResourceDescription } from './api-types.js';
 
-export type TreeKind = 'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED' | 'UNLINKED_MISSING';
+export type TreeKind =
+    'RESOURCE' | 'RECIPE' | 'INGREDIENT' | 'UNPLACED' | 'UNLINKED_MISSING' | 'REQUEST' | 'TASK' | 'CONTRIBUTION';
+/** TRACE: the native job recorded every request and what satisfied it. AGGREGATE: recipes summed per pattern, plan totals only. */
+export type TreeMode = 'TRACE' | 'AGGREGATE';
+export type TreeContribution = 'STORAGE' | 'EMITTED' | 'MISSING' | 'REUSED' | 'UNKNOWN';
 /** An output a recipe declares, per craft; primary is false for a byproduct and null when not retained. */
 export type TreeOutput = { resourceId: number; quantity: string; primary: boolean | null };
+/** An input a TRACE task declares, per craft. */
+export type TreeInput = { resourceId: number; quantity: string };
 export type TreeNode = {
     kind: TreeKind;
     id: number;
@@ -12,11 +18,25 @@ export type TreeNode = {
     complete: boolean | null;
     /** Declared candidate count of an ingredient group, whatever the missing-only filter leaves in its page. */
     candidates: number | null;
-    /** Declared outputs of a recipe. */
+    /** Declared outputs of a recipe or TRACE task. */
     outputs: TreeOutput[] | null;
+    /** Declared inputs of a TRACE task. */
+    inputs: TreeInput[] | null;
+    /** The requested resource of a TRACE request or contribution. */
+    resourceId: number | null;
+    /** What satisfied the request, for a TRACE contribution leaf. */
+    contribution: TreeContribution | null;
 };
 export type TreeChild = {
-    relation: 'DECLARED_OUTPUT' | 'INGREDIENT' | 'DECLARED_ALTERNATIVE' | 'UNPLACED' | 'MISSING_RESOURCE';
+    relation:
+        | 'DECLARED_OUTPUT'
+        | 'INGREDIENT'
+        | 'DECLARED_ALTERNATIVE'
+        | 'UNPLACED'
+        | 'MISSING_RESOURCE'
+        | 'CONTRIBUTION'
+        | 'CRAFT'
+        | 'CHILD_REQUEST';
     primary: boolean | null;
     node: TreeNode;
     quantity: string | null;
@@ -44,6 +64,7 @@ export type TreeResource = ResourceDescription & { missingAmount: string | null 
 export type TreePage = {
     captureId: string | null;
     state: 'CALCULATING' | 'PREPARING' | 'UNAVAILABLE' | 'READY';
+    mode: TreeMode | null;
     root: { resourceId: number; quantity: string; simulated: boolean } | null;
     node: TreeNode | null;
     children: TreeChild[];
@@ -78,6 +99,7 @@ export type TreeState = {
     captureId: string | null;
     visible: boolean;
     status: TreePage['state'] | 'IDLE' | 'ERROR';
+    mode: TreeMode | null;
     root: TreePage['root'];
     nodes: Record<string, TreeNode>;
     resources: Record<number, TreeResource>;
@@ -112,8 +134,13 @@ const syntheticNode: TreeNode = {
     multiplier: null,
     complete: null,
     candidates: null,
-    outputs: null
+    outputs: null,
+    inputs: null,
+    resourceId: null,
+    contribution: null
 };
+/** A contribution answers a request outright, so it has no children to load. */
+const expandable = (node: Pick<TreeNode, 'kind'>) => node.kind !== 'CONTRIBUTION';
 const VISIBLE_LIMIT = 300;
 const CACHE_LIMIT = 3000;
 // One batched response carries at most this many child rows; the server accepts up to twice as many.
@@ -134,6 +161,7 @@ export function createCraftingTree(
         captureId: null,
         visible: false,
         status: 'IDLE',
+        mode: null,
         root: null,
         nodes: {},
         resources: {},
@@ -267,7 +295,7 @@ export function createCraftingTree(
             state.status === 'READY' &&
             !state.cacheBounded &&
             rows.length < VISIBLE_LIMIT &&
-            rows.some((row) => !row.reference && !state.expanded[row.key]);
+            rows.some((row) => !row.reference && expandable(row.node) && !state.expanded[row.key]);
         state.revision = ++revision;
         changed();
     }
@@ -324,6 +352,7 @@ export function createCraftingTree(
     function applyHeader(page: Omit<TreePage, 'node' | 'children' | 'nextOffset'>, icons: IconMetadata | null) {
         state.captureId = page.captureId ?? null;
         state.status = page.state;
+        state.mode = page.mode ?? null;
         state.root = page.root;
         state.partial = page.partial;
         state.limits = page.limits;
@@ -537,7 +566,9 @@ export function createCraftingTree(
             count++
         ) {
             if (version !== generation) return;
-            const row = state.rows.find((candidate) => !candidate.reference && !state.expanded[candidate.key]);
+            const row = state.rows.find(
+                (candidate) => !candidate.reference && expandable(candidate.node) && !state.expanded[candidate.key]
+            );
             if (!row) return;
             state.expanded[row.key] = true;
             // The batch also loads the paths below the row, so the next steps usually open cached pages.
@@ -560,6 +591,7 @@ export function createCraftingTree(
             const key = stack.pop()!;
             if (seen.has(key)) continue;
             seen.add(key);
+            if (state.nodes[key] && !expandable(state.nodes[key])) continue;
             state.expanded[key] = true;
             const page = state.pages[key];
             if (!page || page.nextOffset !== null) pending.push({ key, offset: page?.nextOffset ?? 0 });
@@ -673,6 +705,7 @@ export function createCraftingTree(
             else publish();
         },
         async toggle(key: string) {
+            if (state.nodes[key] && !expandable(state.nodes[key])) return;
             if (state.expanding) stop();
             state.expandedComplete = false;
             if (state.expanded[key]) {

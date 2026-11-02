@@ -10,7 +10,10 @@ export function layoutCraftingTree(rows: readonly LayoutRow[]) {
         RECIPE: 208,
         INGREDIENT: 176,
         UNPLACED: 208,
-        UNLINKED_MISSING: 208
+        UNLINKED_MISSING: 208,
+        REQUEST: 240,
+        TASK: 208,
+        CONTRIBUTION: 176
     };
     const positions: TreePosition[] = [];
     const ancestors: { depth: number; index: number }[] = [];

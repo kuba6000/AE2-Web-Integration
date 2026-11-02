@@ -1,12 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.crafting;
 
 import java.math.BigInteger;
-import java.util.AbstractList;
 import java.util.ArrayDeque;
 import java.util.List;
-import java.util.RandomAccess;
-import java.util.function.IntPredicate;
-import java.util.function.IntUnaryOperator;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -259,11 +255,11 @@ public final class CraftingDependencyGraph {
                 if (amounts[resource] != null && amounts[resource].signum() > 0 && !reachableResources[resource])
                     unlinkedRows[unlinkedCount++] = resource;
             }
-            unlinked = new RowIds(unlinkedRows, 0, unlinkedCount);
+            unlinked = new Adjacency.RowIds(unlinkedRows, 0, unlinkedCount);
             int[] unplacedRows = new int[unplacedRecipes.size()];
             int unplacedCount = 0;
             for (int recipe : unplacedRecipes) if (relevantRecipes[recipe]) unplacedRows[unplacedCount++] = recipe;
-            unplaced = new RowIds(unplacedRows, 0, unplacedCount);
+            unplaced = new Adjacency.RowIds(unplacedRows, 0, unplacedCount);
         }
     }
 
@@ -302,55 +298,6 @@ public final class CraftingDependencyGraph {
         for (int recipe = 0; recipe < seenRecipes.length; recipe++) {
             if (!seenRecipes[recipe]) unplaced[count++] = recipe;
         }
-        return new RowIds(unplaced, 0, count);
-    }
-
-    /** Stores one row ID per relationship, with contiguous immutable ranges for each source. */
-    private static final class Adjacency {
-
-        private final int[] offsets;
-        private final int[] rows;
-
-        private Adjacency(int sources, int count, IntUnaryOperator sourceOf) {
-            this(sources, count, sourceOf, row -> true);
-        }
-
-        private Adjacency(int sources, int count, IntUnaryOperator sourceOf, IntPredicate include) {
-            offsets = new int[sources + 1];
-            for (int row = 0; row < count; row++) if (include.test(row)) offsets[sourceOf.applyAsInt(row) + 1]++;
-            for (int source = 1; source < offsets.length; source++) offsets[source] += offsets[source - 1];
-            rows = new int[offsets[sources]];
-            int[] next = offsets.clone();
-            for (int row = 0; row < count; row++) if (include.test(row)) rows[next[sourceOf.applyAsInt(row)]++] = row;
-        }
-
-        private List<Integer> rowsFor(int source) {
-            return new RowIds(rows, offsets[source], offsets[source + 1]);
-        }
-    }
-
-    /** A view avoids copying a high-degree neighborhood on every expansion. */
-    private static final class RowIds extends AbstractList<Integer> implements RandomAccess {
-
-        private final int[] rows;
-        private final int start;
-        private final int end;
-
-        private RowIds(int[] rows, int start, int end) {
-            this.rows = rows;
-            this.start = start;
-            this.end = end;
-        }
-
-        @Override
-        public Integer get(int index) {
-            if (index < 0 || index >= size()) throw new IndexOutOfBoundsException("Adjacency index out of range");
-            return rows[start + index];
-        }
-
-        @Override
-        public int size() {
-            return end - start;
-        }
+        return new Adjacency.RowIds(unplaced, 0, count);
     }
 }

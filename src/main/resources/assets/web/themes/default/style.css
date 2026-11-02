@@ -3967,7 +3967,8 @@ button.toast:hover {
     margin: 0;
     font-size: 12px;
 }
-.tree-message:empty {
+.tree-message:empty,
+.tree-caveat:empty {
     display: none;
 }
 .tree-viewport {
@@ -4034,6 +4035,9 @@ button.toast:hover {
 }
 .tree-card[data-reference='true'] {
     border-style: dashed;
+}
+.tree-card[data-kind='CONTRIBUTION'] {
+    cursor: default;
 }
 .tree-more {
     font-size: 11px;
