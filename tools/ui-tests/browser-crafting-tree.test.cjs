@@ -125,6 +125,44 @@ test('tree cards show their resource icons and a recipe lists its outputs on its
     assert.match(details, /Machine/);
 });
 
+test('a visible resource icon stays painted while a branch opens and closes', async (t) => {
+    const page = await openTree(t);
+    const machine = card(page, 'Machine').first();
+    await machine.locator('.resource-icon').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => {
+        const icon = [...document.querySelectorAll('.tree-card')]
+            .find((item) => item.querySelector('strong')?.textContent === 'Machine')
+            ?.querySelector('.resource-icon');
+        return icon && getComputedStyle(icon).backgroundImage !== 'none';
+    });
+    await page.evaluate(() => {
+        window.treeIconSamples = [];
+        const sample = () => {
+            const icon = [...document.querySelectorAll('.tree-card')]
+                .find((item) => item.querySelector('strong')?.textContent === 'Machine')
+                ?.querySelector('.resource-icon');
+            window.treeIconSamples.push(!!icon && getComputedStyle(icon).backgroundImage !== 'none');
+        };
+        const observer = new MutationObserver(sample);
+        observer.observe(document.querySelector('.tree-content'), { attributes: true, childList: true, subtree: true });
+        window.stopTreeIconSamples = () => {
+            observer.disconnect();
+            sample();
+            return window.treeIconSamples;
+        };
+        sample();
+    });
+    await expand(page, 'Recipe');
+    await card(page, 'Recipe').first().click();
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.tree-card')].some(
+            (item) => item.querySelector('strong')?.textContent === 'Recipe' && item.ariaExpanded === 'false'
+        )
+    );
+    const samples = await page.evaluate(() => window.stopTreeIconSamples());
+    assert.ok(samples.every(Boolean), `resource icon remained painted: ${samples}`);
+});
+
 test('a recipe has only ingredient children and a single-candidate group shows its candidate directly', async (t) => {
     const page = await openTree(t);
     await openRecipe(page);

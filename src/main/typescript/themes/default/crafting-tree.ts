@@ -62,6 +62,42 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
     ])
         button.type = 'button';
     const icons = application.icons.observe(viewport, paintResourceIcon);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('tree-lines');
+    svg.setAttribute('aria-hidden', 'true');
+    content.append(svg);
+    type Row = ThemeState['crafting']['tree']['rows'][number];
+    function createCard(row: Row) {
+        const wrapper = element('div', '', 'tree-row');
+        const button = element('button', '', 'tree-card slot-frame');
+        button.type = 'button';
+        const marker = element('span', '', 'tree-marker');
+        const name = element('strong');
+        const details = element('span', '', 'tree-details');
+        const card = { wrapper, button, marker, name, details, row, icon: null as HTMLSpanElement | null, title: '' };
+        button.append(marker, name, details);
+        wrapper.append(button);
+        tooltip.bind(button, () => [
+            element('strong', name.textContent ?? ''),
+            element('span', details.textContent ?? '')
+        ]);
+        button.onclick = () => {
+            const current = card.row;
+            if (current.node.kind === 'CONTRIBUTION') return;
+            if (current.reference) {
+                application.crafting.focusTree(current.key);
+                requestAnimationFrame(() => {
+                    const target = [...content.querySelectorAll<HTMLElement>('[data-tree-key]')].find(
+                        (entry) => entry.dataset.treeKey === current.key && entry.dataset.reference === 'false'
+                    );
+                    target?.scrollIntoView({ block: 'center', inline: 'center' });
+                    target?.focus({ preventScroll: true });
+                });
+            } else void application.crafting.toggleTree(current.key);
+        };
+        return card;
+    }
+    const cards = new Map<string, ReturnType<typeof createCard>>();
     let scale = 1,
         width = 300,
         height = 120,
@@ -251,15 +287,15 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             const focused = active?.dataset.treeKey;
             const top = viewport.scrollTop,
                 left = viewport.scrollLeft;
-            content.replaceChildren();
+            svg.replaceChildren();
             const targets = [];
             const layout = layoutCraftingTree(state.rows);
             width = layout.width;
             height = layout.height;
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.classList.add('tree-lines');
-            svg.setAttribute('aria-hidden', 'true');
-            content.append(svg);
+            const identities: string[] = [];
+            const occurrences = new Map<string, number>();
+            const currentCards: ReturnType<typeof createCard>[] = [];
+            const retained = new Set<string>();
             for (let index = 0; index < state.rows.length; index++) {
                 const row = state.rows[index];
                 const position = layout.nodes[index];
@@ -272,53 +308,64 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
                     line.setAttribute('d', `M${px} ${py} V${y - 16} H${x + position.width / 2} V${y}`);
                     svg.append(line);
                 }
-                const wrapper = element('div', '', 'tree-row');
+                // A node can occur more than once through shared edges or a cycle. Distinguish each
+                // occurrence by its visible parent and matching siblings, not its changing row index.
+                const parent = position.parent === null ? `depth:${row.depth}` : identities[position.parent];
+                const base = `${parent}/${row.key}:${row.group?.id ?? ''}:${row.relation ?? ''}`;
+                const occurrence = occurrences.get(base) ?? 0;
+                occurrences.set(base, occurrence + 1);
+                const identity = `${base}:${occurrence}`;
+                identities.push(identity);
+                retained.add(identity);
+                let card = cards.get(identity);
+                if (!card) {
+                    card = createCard(row);
+                    cards.set(identity, card);
+                }
+                currentCards.push(card);
+                card.row = row;
+                const { wrapper, button, marker, name, details } = card;
                 wrapper.style.width = `${position.width}px`;
                 wrapper.style.left = `${x}px`;
                 wrapper.style.top = `${y}px`;
                 wrapper.style.setProperty('--tree-indent', `${Math.min(row.depth, 6) * 12}px`);
-                const button = element('button', '', 'tree-card slot-frame');
-                button.type = 'button';
                 button.dataset.treeKey = row.key;
                 button.dataset.reference = String(row.reference);
                 const presentation = craftingTreeContent(row, state, locale, document.documentElement.lang);
-                const name = element('strong');
-                name.append(renderMinecraftText(presentation.title));
-                const leaf = row.node.kind === 'CONTRIBUTION';
-                const marker = element(
-                    'span',
-                    row.reference ? '↪' : leaf ? '•' : state.expanded[row.key] ? '−' : '+',
-                    'tree-marker'
-                );
-                const details = element('span', presentation.details.join(' · '), 'tree-details');
-                button.dataset.missing = String(presentation.missing);
-                button.append(marker);
-                if (presentation.icon) {
-                    button.append(createResourceIcon());
-                    targets.push({ element: button, icon: presentation.icon });
+                if (card.title !== presentation.title) {
+                    card.title = presentation.title;
+                    name.replaceChildren(renderMinecraftText(presentation.title));
                 }
-                button.append(name, details);
-                tooltip.bind(button, () => [
-                    element('strong', name.textContent ?? ''),
-                    element('span', details.textContent ?? '')
-                ]);
+                const leaf = row.node.kind === 'CONTRIBUTION';
+                marker.textContent = row.reference ? '↪' : leaf ? '•' : state.expanded[row.key] ? '−' : '+';
+                details.textContent = presentation.details.join(' · ');
+                button.dataset.missing = String(presentation.missing);
+                if (presentation.icon) {
+                    if (!card.icon) {
+                        card.icon = createResourceIcon();
+                        button.insertBefore(card.icon, name);
+                    }
+                    targets.push({ element: button, icon: presentation.icon });
+                } else if (card.icon) {
+                    card.icon.remove();
+                    card.icon = null;
+                }
                 button.dataset.kind = row.node.kind;
                 if (!row.reference && !leaf) button.setAttribute('aria-expanded', String(!!state.expanded[row.key]));
-                button.onclick = () => {
-                    if (leaf) return;
-                    if (row.reference) {
-                        application.crafting.focusTree(row.key);
-                        requestAnimationFrame(() => {
-                            const target = [...content.querySelectorAll<HTMLElement>('[data-tree-key]')].find(
-                                (entry) => entry.dataset.treeKey === row.key && entry.dataset.reference === 'false'
-                            );
-                            target?.scrollIntoView({ block: 'center', inline: 'center' });
-                            target?.focus({ preventScroll: true });
-                        });
-                    } else void application.crafting.toggleTree(row.key);
-                };
-                wrapper.append(button);
-                content.append(wrapper);
+                else button.removeAttribute('aria-expanded');
+            }
+            for (const [identity, card] of cards) {
+                if (retained.has(identity)) continue;
+                card.wrapper.remove();
+                cards.delete(identity);
+            }
+            // Insert additions in preorder without moving the cards already in the correct order.
+            let following: ChildNode | null = null;
+            for (let index = currentCards.length - 1; index >= 0; index--) {
+                const wrapper = currentCards[index].wrapper;
+                if (wrapper.parentNode !== content || wrapper.nextSibling !== following)
+                    content.insertBefore(wrapper, following);
+                following = wrapper;
             }
             content.style.width = `${width}px`;
             content.style.height = `${height}px`;
@@ -327,13 +374,18 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: T
             zoom(scale, true);
             icons.update(targets, state.icons);
             viewport.scrollTo(left, top);
-            if (focused)
-                [...content.querySelectorAll<HTMLElement>('[data-tree-key]')]
-                    .find((node) => node.dataset.treeKey === focused)
-                    ?.focus({ preventScroll: true });
+            if (focused && document.activeElement !== active) {
+                const target = active?.isConnected
+                    ? active
+                    : [...content.querySelectorAll<HTMLElement>('[data-tree-key]')].find(
+                          (node) => node.dataset.treeKey === focused
+                      );
+                target?.focus({ preventScroll: true });
+            }
         },
         dispose() {
             icons.dispose();
+            cards.clear();
             root.remove();
         }
     };
