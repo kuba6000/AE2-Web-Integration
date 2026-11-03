@@ -1,7 +1,11 @@
+import { planExportAmounts } from './plan-export-content.js';
 import type { Plan, IconMetadata, PlanItem, IconReference } from './api-types.js';
 import type { ReadonlyData } from './theme-api.js';
 import type { createIconLoader, DrawableIcon } from './icons.js';
-import { parseMinecraftText, plainMinecraftText, type TextStyle } from './minecraft-text.js';
+import { plainMinecraftText, type TextStyle } from './minecraft-text.js';
+import { exportTextRuns } from './export-text.js';
+import type { SvgFont } from './svg-export.js';
+import { renderPlanSvg } from './plan-export-svg.js';
 import { selectPlanResources } from './resource-helpers.js';
 import {
     planExportLayout,
@@ -26,6 +30,7 @@ export type PlanExportStyle = {
     metricGap: number;
     usageColors: string[];
     fontFamily: string;
+    fonts?: readonly SvgFont[];
     fontSize: number;
     foreground: string;
     background: string;
@@ -62,7 +67,8 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
         );
         let layout = planExportLayout(rows.length, settings, request.grid, style.geometry);
         if (!layout) throw new Error('empty');
-        while (layout && !planExportFits(layout)) layout = smallerPlanExportLayout(layout, style.geometry);
+        while (settings.format === 'png' && layout && !planExportFits(layout))
+            layout = smallerPlanExportLayout(layout, style.geometry);
         if (!layout) throw new Error('too-large');
         const font = `${style.fontSize}px ${style.fontFamily}`;
         const fonts = Promise.all([
@@ -82,6 +88,12 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
         if (outputIcon) references.push(outputIcon);
         const resolved = await loader.resolve(references, request.icons as IconMetadata | null, signal);
         try {
+            if (settings.format === 'svg') {
+                const blob = await renderPlanSvg(request, rows, layout, resolved.icons, signal);
+                signal.throwIfAborted();
+                downloadPlan(blob, request, 'svg');
+                return layout;
+            }
             while (layout) {
                 signal.throwIfAborted();
                 if (!planExportFits(layout)) {
@@ -163,21 +175,7 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
                         layout = smallerPlanExportLayout(layout, style.geometry);
                         continue;
                     }
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    const name =
-                        plainMinecraftText(request.plan.finalOutput.displayName)
-                            .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-                            .slice(0, 100)
-                            .replace(/[. ]+$/, '') || 'crafting';
-                    const now = new Date();
-                    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-                    link.download = `${name}-plan-${stamp}.png`;
-                    document.body.append(link);
-                    link.click();
-                    link.remove();
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    downloadPlan(blob, request, 'png');
                     return layout;
                 } finally {
                     canvas.width = 0;
@@ -189,6 +187,24 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
             resolved.dispose();
         }
     };
+}
+
+function downloadPlan(blob: Blob, request: PlanExportRequest, format: PlanExportSettings['format']) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const name =
+        plainMinecraftText(request.plan.finalOutput.displayName)
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+            .slice(0, 100)
+            .replace(/[. ]+$/, '') || 'crafting';
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    link.download = `${name}-plan-${stamp}.${format}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function prepareCanvas(canvas: HTMLCanvasElement, layout: Pick<PlanExportLayout, 'width' | 'height'>) {
@@ -213,34 +229,10 @@ export function drawText(
     style: Pick<PlanExportStyle, 'fontFamily' | 'foreground' | 'textColors'>,
     size: number
 ) {
-    if (width <= 0) return;
-    const segments = parseMinecraftText(text);
-    const font = (segment: TextStyle) =>
-        `${segment.italic ? 'italic ' : ''}${segment.bold ? 'bold ' : ''}${size}px ${style.fontFamily}`;
-    let total = 0;
-    for (const segment of segments) {
-        ctx.font = font(segment);
-        total += ctx.measureText(segment.text).width;
-    }
-    const truncated = total > width;
-    ctx.font = `${size}px ${style.fontFamily}`;
-    const limit = width - (truncated ? ctx.measureText('…').width : 0);
-    let used = 0;
-    for (const segment of segments) {
-        ctx.font = font(segment);
-        ctx.fillStyle = segment.color ? (style.textColors[segment.color] ?? style.foreground) : style.foreground;
-        let part = '';
-        for (const char of segment.text) {
-            if (used + ctx.measureText(part + char).width > limit) break;
-            part += char;
-        }
-        ctx.fillText(part, x + used, y);
-        used += ctx.measureText(part).width;
-        if (part !== segment.text) break;
-    }
-    if (truncated && width > 0) {
-        ctx.fillStyle = style.foreground;
-        ctx.fillText('…', x + used, y);
+    for (const run of exportTextRuns(ctx, text, width, style, size)) {
+        ctx.font = run.font;
+        ctx.fillStyle = run.color;
+        ctx.fillText(run.text, x + run.offset, y);
     }
 }
 
@@ -282,20 +274,7 @@ function drawTile(
             style.iconSize,
             style.iconSize
         );
-    const amounts: { value: string; label: string; usage?: string }[] = [];
-    for (const field of ['missing', 'requested', 'steps', 'stored'] as const) {
-        if (!settings[field] || row[field] <= 0) continue;
-        amounts.push({
-            value: request.number(row[field]),
-            label: request.labels[field],
-            usage:
-                field === 'stored' && settings.usage && row.usedPercent > 0
-                    ? ` (${Math.round(row.usedPercent * 100)}%)`
-                    : undefined
-        });
-    }
-    if (!settings.stored && settings.usage && row.stored > 0 && row.usedPercent > 0)
-        amounts.push({ value: `${Math.round(row.usedPercent * 100)}%`, label: request.labels.usage });
+    const amounts = planExportAmounts(row, request);
     const line = style.metricLineHeight + style.metricGap;
     const blockHeight = Math.max(0, amounts.length * line - style.metricGap);
     let y = settings.name ? height - style.padding - style.borderWidth - blockHeight : (height - blockHeight) / 2;

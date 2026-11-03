@@ -6,9 +6,11 @@ import type { craftingTreeContent } from './crafting-tree-content.js';
 import type { layoutCraftingTree } from './crafting-tree-layout.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
+import type { SvgFont } from '../../app/svg-export.js';
+export { renderTreeSvg } from './crafting-tree-export-svg.js';
 import type { TerminalDisplay } from './web-settings.js';
 
-export type TreePngScene = {
+export type TreeExportScene = {
     layout: ReturnType<typeof layoutCraftingTree>;
     display: TerminalDisplay;
     cards: ReturnType<typeof craftingTreeContent>[];
@@ -16,9 +18,13 @@ export type TreePngScene = {
     title: string;
     scope: string[];
 };
-export type TreePngSettings = Pick<PlanExportSettings, 'scale' | 'icon' | 'name' | 'colors' | 'background'>;
-export type TreePngStyle = {
+export type TreeExportSettings = Pick<
+    PlanExportSettings,
+    'format' | 'scale' | 'icon' | 'name' | 'colors' | 'background'
+>;
+export type TreeExportStyle = {
     fontFamily: string;
+    fonts?: readonly SvgFont[];
     foreground: string;
     background: string;
     tile: string;
@@ -28,16 +34,20 @@ export type TreePngStyle = {
 };
 
 /** Image bounds cover all expanded nodes, independent of zoom or viewport clipping. */
-export function treePngSize(scene: TreePngScene, requestedScale: number) {
+export function treeSvgSize(scene: TreeExportScene, scale: number) {
     const header = 48 + scene.scope.length * 22;
+    return {
+        width: Math.ceil(Math.max(720, scene.layout.width) * scale),
+        height: Math.ceil((scene.layout.height + header) * scale),
+        scale,
+        header
+    };
+}
+
+export function treePngSize(scene: TreeExportScene, requestedScale: number) {
     for (const scale of [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25]) {
         if (scale > requestedScale) continue;
-        const size = {
-            width: Math.ceil(Math.max(720, scene.layout.width) * scale),
-            height: Math.ceil((scene.layout.height + header) * scale),
-            scale,
-            header
-        };
+        const size = treeSvgSize(scene, scale);
         if (planExportFits(size)) return size;
     }
     return null;
@@ -45,9 +55,9 @@ export function treePngSize(scene: TreePngScene, requestedScale: number) {
 
 /** Renders detached diagram data only; cancellation releases the canvas and resolved atlas bitmaps. */
 export async function renderTreePng(
-    scene: TreePngScene,
-    settings: TreePngSettings,
-    style: TreePngStyle,
+    scene: TreeExportScene,
+    settings: TreeExportSettings,
+    style: TreeExportStyle,
     icons: ThemeApplication['icons'],
     signal: AbortSignal
 ) {

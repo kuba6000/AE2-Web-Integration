@@ -80,3 +80,10 @@ test('PNG allocation budget permits 64 megapixels while limiting either side', a
     assert.equal(planExportFits({ ...layout, width: 16384, height: 4096 }), true);
     assert.equal(planExportFits({ ...layout, width: 16385, height: 1 }), false);
 });
+
+test('export format preference defaults to PNG and accepts only supported formats', async () => {
+    const { readPlanExportSettings } = await exporter;
+    assert.equal(readPlanExportSettings(() => null).format, 'png');
+    assert.equal(readPlanExportSettings((key) => (key === 'planExport.format' ? 'svg' : null)).format, 'svg');
+    assert.equal(readPlanExportSettings((key) => (key === 'planExport.format' ? 'invalid' : null)).format, 'png');
+});

@@ -1,5 +1,6 @@
 import type { ThemeState, PlanExportStyle, PlanExportSettings } from '../../app/theme-api.js';
 import { element } from './dom.js';
+import { svgFonts } from './svg-fonts.js';
 
 export function planExportStyle(
     root: HTMLElement,
@@ -86,6 +87,7 @@ export function planExportStyle(
         iconSize: icons ? Number.parseFloat(getComputedStyle(icon).width) : 0,
         iconLeft: icons ? Number.parseFloat(getComputedStyle(icon).left) : 0,
         fontFamily: computed.fontFamily,
+        fonts: svgFonts(computed.fontFamily),
         fontSize: Number.parseFloat(getComputedStyle(name).fontSize),
         labelFontSize: Number.parseFloat(metricStyle.fontSize),
         quantityFontSize: Number.parseFloat(getComputedStyle(quantity).fontSize),

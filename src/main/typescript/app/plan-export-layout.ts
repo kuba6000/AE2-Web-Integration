@@ -1,6 +1,7 @@
 import type { JsonValue } from './storage.js';
 
 export type PlanExportSettings = {
+    format: 'png' | 'svg';
     scale: number;
     icon: boolean;
     name: boolean;
@@ -20,6 +21,7 @@ export type PlanExportSettings = {
     ratio: string;
 };
 export const defaultPlanExportSettings: Readonly<PlanExportSettings> = {
+    format: 'png',
     scale: 1,
     icon: true,
     name: true,
@@ -96,6 +98,7 @@ export function planExportLayout(
 export function readPlanExportSettings(get: (key: string) => JsonValue): PlanExportSettings {
     const result = { ...defaultPlanExportSettings };
     const choices: Partial<Record<keyof PlanExportSettings, readonly JsonValue[]>> = {
+        format: ['png', 'svg'],
         scale: [0.5, 1, 1.5, 2, 3, 4],
         numbers: ['short', 'full'],
         sort: ['name', 'quantity', 'steps'],

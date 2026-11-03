@@ -313,11 +313,11 @@ test('dragging from empty space across the cards selects no text', async (t) => 
     assert.equal(await page.evaluate(() => getSelection().toString()), '');
 });
 
-test('the PNG export paints the tree icons', async (t) => {
+test('tree export offers PNG and SVG with the current tree icons', async (t) => {
     const page = await openTree(t);
     await openRecipe(page);
-    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    await page.getByRole('button', { name: 'Export current tree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree', exact: true });
     const download = page.waitForEvent('download');
     await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
     const bytes = await fs.readFile(await (await download).path());
@@ -339,6 +339,26 @@ test('the PNG export paints the tree icons', async (t) => {
         return { red, green };
     }, bytes.toString('base64'));
     assert.ok(colors.red > 0 && colors.green > 0, `both icons were painted: ${JSON.stringify(colors)}`);
+    await dialog.getByRole('combobox', { name: 'Format', exact: true }).selectOption('svg');
+    const vectorDownload = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download SVG', exact: true }).click();
+    const svg = await fs.readFile(await (await vectorDownload).path(), 'utf8');
+    const vector = await page.evaluate(async (xml) => {
+        const parsed = new DOMParser().parseFromString(xml, 'image/svg+xml');
+        const image = new Image();
+        image.src = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml' }));
+        await image.decode();
+        URL.revokeObjectURL(image.src);
+        return {
+            errors: parsed.querySelectorAll('parsererror').length,
+            text: parsed.documentElement.textContent,
+            width: image.naturalWidth,
+            images: parsed.querySelectorAll('image').length
+        };
+    }, svg);
+    assert.equal(vector.errors, 0);
+    assert.ok(vector.width > 0 && vector.text.includes('Machine') && vector.text.includes('Plate'));
+    assert.ok(vector.images > 0);
 });
 
 // A TRACE plan: four machines, one from storage and three crafted from plates and rods.
@@ -484,8 +504,8 @@ test('tree artwork is centered and overlapping controls remain visible in each d
 });
 
 async function exportScope(page) {
-    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    await page.getByRole('button', { name: 'Export current tree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree', exact: true });
     return (await dialog.locator('p').first().textContent()).trim();
 }
 
@@ -541,8 +561,8 @@ test('only an aggregate tree states that it is an approximation, on screen and i
 test('the trace tree exports to PNG with its leaves and cards', async (t) => {
     const page = await openTrace(t);
     await expand(page, 'Recipe');
-    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    await page.getByRole('button', { name: 'Export current tree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree', exact: true });
     const download = page.waitForEvent('download');
     await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
     const bytes = await fs.readFile(await (await download).path());
@@ -571,8 +591,8 @@ test('compact tree keeps a clicked task anchored and shows resource, source, and
     await plate.click();
     assert.ok(await page.locator('.tree-card[data-missing="true"] .tree-symbol').count());
     assert.match(await plate.getAttribute('aria-label'), /Plate/);
-    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    await page.getByRole('button', { name: 'Export current tree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree', exact: true });
     const download = page.waitForEvent('download');
     await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
     const bytes = await fs.readFile(await (await download).path());

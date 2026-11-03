@@ -506,6 +506,31 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void bundledFontLicensesAreAvailableForStandaloneImageExports() throws Exception {
+        startApi();
+        for (String family : new String[] { "monocraft", "lato" }) {
+            String path = "/assets/web/themes/default/fonts/" + family + "/LICENSE";
+            HttpURLConnection license = connection(path, null);
+            Response content = read(license);
+            assertEquals(HttpURLConnection.HTTP_OK, content.status());
+            assertEquals("text/plain; charset=UTF-8", license.getHeaderField("Content-Type"));
+            assertTrue(
+                content.body()
+                    .contains("SIL OPEN FONT LICENSE"));
+            assertTrue(
+                content.body()
+                    .contains("Copyright"));
+            HttpURLConnection head = connection(path, null);
+            head.setRequestMethod("HEAD");
+            assertEquals(HttpURLConnection.HTTP_OK, head.getResponseCode());
+            assertEquals(
+                content.body()
+                    .getBytes(StandardCharsets.UTF_8).length,
+                head.getContentLength());
+        }
+    }
+
+    @Test
     void browserAssetsSupportHeadAndRejectWritesMissingFilesAndPrivateResources() throws Exception {
         startApi();
         HttpURLConnection get = connection("/assets/web/http-test.mjs", null);

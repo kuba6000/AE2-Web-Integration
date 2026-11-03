@@ -94,8 +94,10 @@ export function createPlanExportDialog(
         count.setAttribute('aria-invalid', String(invalidCount));
         style = planExportStyle(dialog, effectiveSettings(), snapshot!, !!metadata && settings.icon);
         let layout = currentLayout();
-        while (layout && !planExportFits(layout)) layout = smallerPlanExportLayout(layout, style.geometry);
+        while (settings.format === 'png' && layout && !planExportFits(layout))
+            layout = smallerPlanExportLayout(layout, style.geometry);
         submit.disabled = !layout || !!operation;
+        submit.textContent = `${locale.t('exportDownload')} ${settings.format.toUpperCase()}`;
         if (axis.value === 'square' && layout) count.value = String(layout.columns);
         gridLabel.textContent = t(axis.value === 'rows' ? 'exportRows' : 'exportColumns');
         if (!layout) {
@@ -105,7 +107,7 @@ export function createPlanExportDialog(
             message.textContent = '';
             return;
         }
-        readout.textContent = `${locale.number(layout.width)} × ${locale.number(layout.height)} px · ${locale.number((layout.width * layout.height) / 1_000_000)} MP · ${t('exportRatio')}: ${planExportRatio(layout.width, layout.height)}`;
+        readout.textContent = `${locale.number(layout.width)} × ${locale.number(layout.height)} px${settings.format === 'png' ? ` · ${locale.number((layout.width * layout.height) / 1_000_000)} MP` : ''} · ${t('exportRatio')}: ${planExportRatio(layout.width, layout.height)}`;
         message.textContent = layout.scale < settings.scale ? t('exportScaleReduced', { scale: layout.scale }) : '';
     }
     function translate(key: string) {
@@ -178,6 +180,7 @@ export function createPlanExportDialog(
         fields.replaceChildren();
         fields.inert = false;
         const geometry = fieldset('exportGrid');
+        select(geometry, 'format', 'exportFormat', ['png', 'svg']);
         axis = element('select');
         for (const value of ['square', 'columns', 'rows']) {
             const option = element('option', locale.t(`export${value[0].toUpperCase()}${value.slice(1)}`));

@@ -94,6 +94,8 @@ public final class WebHandler implements HttpHandler {
             contentType = "font/woff2";
         } else if (path.endsWith(".svg")) {
             contentType = "image/svg+xml";
+        } else if (path.endsWith("/LICENSE")) {
+            contentType = "text/plain; charset=UTF-8";
         } else {
             contentType = null;
         }

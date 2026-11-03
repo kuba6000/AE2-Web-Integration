@@ -4,15 +4,18 @@ import { craftingTreeContent } from './crafting-tree-content.js';
 import { layoutCraftingTree } from './crafting-tree-layout.js';
 import {
     renderTreePng,
+    renderTreeSvg,
+    treeSvgSize,
     treePngSize,
-    type TreePngScene,
-    type TreePngSettings,
-    type TreePngStyle
+    type TreeExportScene,
+    type TreeExportSettings,
+    type TreeExportStyle
 } from './crafting-tree-export.js';
 import { readPlanExportSettings } from '../../app/plan-export-layout.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import type { ThemeApplication, ThemeSettings } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
+import { svgFonts } from './svg-fonts.js';
 
 export function createTreeExportDialog(
     application: ThemeApplication,
@@ -37,9 +40,9 @@ export function createTreeExportDialog(
     dialog.append(heading, scope, fields, readout, message, download);
     document.body.append(dialog);
     let operation: AbortController | null = null;
-    let scene: TreePngScene | null = null;
-    let settings: TreePngSettings;
-    let style: TreePngStyle;
+    let scene: TreeExportScene | null = null;
+    let settings: TreeExportSettings;
+    let style: TreeExportStyle;
     let locale: Translator;
     let display: TerminalDisplay = 'names';
     let opener: HTMLElement | null = null;
@@ -76,9 +79,14 @@ export function createTreeExportDialog(
         opener?.focus({ preventScroll: true });
     });
     function refresh() {
-        const size = scene ? treePngSize(scene, settings.scale) : null;
+        const size = scene
+            ? settings.format === 'svg'
+                ? treeSvgSize(scene, settings.scale)
+                : treePngSize(scene, settings.scale)
+            : null;
         readout.textContent = size ? `${size.width} × ${size.height} px` : locale.t('exportTooLarge');
         download.disabled = !size || !!operation;
+        download.textContent = `${locale.t('exportDownload')} ${settings.format.toUpperCase()}`;
     }
     function toggle(key: 'icon' | 'name' | 'colors', label: string) {
         const input = element('input');
@@ -101,7 +109,13 @@ export function createTreeExportDialog(
         fields.inert = true;
         download.disabled = true;
         message.textContent = locale.t('exportProgress');
-        void renderTreePng(snapshot, captured, style, application.icons, controller.signal)
+        void (captured.format === 'svg' ? renderTreeSvg : renderTreePng)(
+            snapshot,
+            captured,
+            style,
+            application.icons,
+            controller.signal
+        )
             .then((result) => {
                 if (controller.signal.aborted || !current()) return;
                 const url = URL.createObjectURL(result.blob);
@@ -112,7 +126,7 @@ export function createTreeExportDialog(
                         .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
                         .slice(0, 80)
                         .replace(/[. ]+$/, '') || 'crafting';
-                link.download = `${name}-tree-${Date.now()}.png`;
+                link.download = `${name}-tree-${Date.now()}.${captured.format}`;
                 document.body.append(link);
                 link.click();
                 link.remove();
@@ -171,7 +185,7 @@ export function createTreeExportDialog(
                     const card = craftingTreeContent(row, tree, locale, document.documentElement.lang);
                     return { ...card, icon: card.icon ? { ...card.icon } : null };
                 }),
-                // The PNG is a still image, so animation sequences are not part of the snapshot.
+                // Both export formats are still images; animation sequences are not part of the snapshot.
                 icons: tree.icons
                     ? {
                           packId: tree.icons.packId,
@@ -187,6 +201,7 @@ export function createTreeExportDialog(
             const value = (name: string) => computed.getPropertyValue(name).trim();
             style = {
                 fontFamily: computed.fontFamily,
+                fonts: svgFonts(computed.fontFamily),
                 foreground: value('--surface-text'),
                 background: value('--panel'),
                 tile: value('--slot'),
@@ -195,6 +210,20 @@ export function createTreeExportDialog(
                 textColors: {}
             };
             fields.replaceChildren();
+            const formatLabel = element('label');
+            const format = element('select');
+            for (const value of ['png', 'svg']) {
+                const option = element('option', value.toUpperCase());
+                option.value = value;
+                format.append(option);
+            }
+            format.value = settings.format;
+            formatLabel.append(element('span', locale.t('exportFormat')), format);
+            fields.append(formatLabel);
+            format.onchange = () => {
+                settings.format = format.value as 'png' | 'svg';
+                refresh();
+            };
             const sizeLabel = element('label');
             const size = element('select');
             for (const amount of [0.5, 1, 1.5, 2, 3, 4]) {
