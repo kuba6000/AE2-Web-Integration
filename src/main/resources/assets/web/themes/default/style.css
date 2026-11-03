@@ -48,6 +48,12 @@
     --control-edge-dark: #373737;
     --slot-edge-dark: #373737;
     --slot-edge-light: #fff;
+    --tree-recipe: #a9b8c5;
+    --tree-recipe-border: #486175;
+    --tree-missing: #6b3030;
+    --tree-missing-border: #e34444;
+    --tree-missing-text: #fff4f4;
+    --tree-blocked: #ffd54a;
     --terminal-title: #404040;
     --text: #34333b;
     --muted: #63616d;
@@ -81,6 +87,8 @@
     --slot: #393842;
     --slot-edge-dark: #25232b;
     --slot-edge-light: #625d6e;
+    --tree-recipe: #344654;
+    --tree-recipe-border: #8daabd;
     --terminal-title: #eeeaf4;
     --text: #eeeaf4;
     --muted: #c0bacd;
@@ -108,6 +116,8 @@
         --slot: #393842;
         --slot-edge-dark: #25232b;
         --slot-edge-light: #625d6e;
+        --tree-recipe: #344654;
+        --tree-recipe-border: #8daabd;
         --terminal-title: #eeeaf4;
         --text: #eeeaf4;
         --muted: #c0bacd;
@@ -3958,10 +3968,6 @@ button.toast:hover {
 .tree-controls button {
     min-width: 40px;
 }
-.tree-controls button[aria-pressed='true'] {
-    outline: 2px solid var(--accent);
-    outline-offset: -3px;
-}
 .tree-message,
 .tree-caveat {
     margin: 0;
@@ -4006,7 +4012,10 @@ button.toast:hover {
 }
 .tree-card {
     --resource-icon-size: 24px;
+    --tree-fill: var(--slot);
+    --tree-frame: var(--slot-edge-light);
 
+    background: var(--tree-fill);
     height: 100%;
     overflow: hidden;
     width: 100%;
@@ -4137,6 +4146,17 @@ button.toast:hover {
     stroke-width: 1;
     opacity: 0.5;
 }
+.tree-lines path[data-shortage='BLOCKED'],
+.tree-lines path[data-shortage='MISSING'] {
+    stroke-width: 2;
+    opacity: 1;
+}
+.tree-lines path[data-shortage='BLOCKED'] {
+    stroke: var(--tree-blocked);
+}
+.tree-lines path[data-shortage='MISSING'] {
+    stroke: var(--tree-missing-border);
+}
 @media (width <= 700px) {
     .tree-space,
     .tree-content {
@@ -4208,10 +4228,28 @@ button.toast:hover {
     outline: 2px solid var(--accent);
     outline-offset: -3px;
 }
+.tree-card[data-recipe='true'] {
+    --tree-fill: var(--tree-recipe);
+    --tree-frame: var(--tree-recipe-border);
+
+    background: var(--tree-fill);
+    border-color: var(--tree-frame);
+    box-shadow:
+        inset 0 0 0 2px var(--tree-fill),
+        inset 0 0 0 3px var(--tree-frame);
+}
+.tree-card[data-blocked='true'] {
+    --tree-frame: var(--tree-blocked);
+
+    border-color: var(--tree-frame);
+}
 .tree-card[data-missing='true'] {
-    background: #6b3030;
-    border-color: #ef8e8e;
-    color: #fff4f4;
+    --tree-fill: var(--tree-missing);
+    --tree-frame: var(--tree-missing-border);
+
+    background: var(--tree-fill);
+    border-color: var(--tree-frame);
+    color: var(--tree-missing-text);
 }
 @media (width <= 600px) {
     .plan-view-tools {

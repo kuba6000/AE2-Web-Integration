@@ -49,8 +49,9 @@ history when they are no longer present in storage.
 After calculating a plan, choose **Export** at the bottom left of the plan in the default theme
 (the image icon on mobile). Choose PNG or SVG, the grid layout, tile contents, ordering and background.
 The export includes the full plan independently of the current search and works without an icon pack.
-The tree view also offers both formats and exports the currently expanded branches with the active
-missing-resource filter. SVG files include their icons and font and stay sharp when zoomed; very large
+The tree view also offers both formats and exports its currently expanded branches. Use **Focus missing**
+to expand shortage paths and fold healthy branches. Affected recipes keep all their immediate ingredients visible.
+SVG files include their icons and font and stay sharp when zoomed; very large
 PNG images use a lower resolution to fit. Export settings are remembered for the next export.
 
 ## Compatibility

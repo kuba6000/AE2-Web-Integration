@@ -26,6 +26,7 @@ const row = (value, extra = {}) => ({
     reference: false,
     quantity: null,
     relation: null,
+    shortage: 'NONE',
     ...extra
 });
 const state = {
@@ -61,7 +62,12 @@ test('task and recipe cards show craft count without repeating recipe ingredient
 
 test('resource and contribution cards use the actual resource identity, including unknown sources', async () => {
     const { craftingTreeContent } = await import(moduleUrl);
-    const material = craftingTreeContent(row(node('RESOURCE', 9, { resourceId: 1 })), state, locale, 'en');
+    const material = craftingTreeContent(
+        row(node('RESOURCE', 9, { resourceId: 1 }), { shortage: 'MISSING' }),
+        state,
+        locale,
+        'en'
+    );
     assert.equal(material.title, '§aGear');
     assert.equal(material.missing, true);
     const source = craftingTreeContent(
@@ -102,4 +108,18 @@ test('a single-candidate group retains its multiplier and per-template amount', 
     );
     assert.ok(card.details.some((line) => line.startsWith('treePerTemplate') && line.endsWith('3')));
     assert.ok(card.details.some((line) => line.startsWith('treeMultiplier') && line.endsWith('8')));
+});
+
+test('shortage reflects each occurrence rather than resource totals', async () => {
+    const { craftingTreeContent } = await import(moduleUrl);
+    const value = node('REQUEST', 9, { resourceId: 1 });
+    for (const [shortage, missing, blocked] of [
+        ['NONE', false, false],
+        ['BLOCKED', false, true],
+        ['MISSING', true, false]
+    ]) {
+        const card = craftingTreeContent(row(value, { shortage }), state, locale, 'en');
+        assert.equal(card.missing, missing);
+        assert.equal(card.blocked, blocked);
+    }
 });

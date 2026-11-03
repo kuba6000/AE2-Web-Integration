@@ -61,7 +61,7 @@ function document() {
     };
 }
 
-test('one capture supports local expansion and missing-path filtering, including shared references', async () => {
+test('one capture supports focus and local expansion, including shared references', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const calls = [];
     const tree = createCraftingTree(
@@ -80,14 +80,12 @@ test('one capture supports local expansion and missing-path filtering, including
     assert.equal(calls.length, 1);
     assert.equal(tree.state.rows.filter((row) => row.node.id === 2).length, 2);
     assert.equal(tree.state.rows.findLast((row) => row.node.id === 2).reference, true);
-    const fullExpansion = { ...tree.state.expanded };
-    await tree.setMissingOnly(true);
+    await tree.focusMissing();
     assert.equal(calls.length, 1);
     assert.ok(tree.state.rows.some((row) => row.node.id === 5));
-    assert.ok(tree.state.rows.every((row) => row.node.id !== 1));
-    await tree.setMissingOnly(false);
-    assert.deepEqual(tree.state.expanded, fullExpansion);
-    assert.equal(calls.length, 1);
+    assert.ok(tree.state.rows.some((row) => row.node.id === 1));
+    await tree.expandAll();
+    assert.equal(tree.state.expandedComplete, true);
     tree.dispose();
 });
 
@@ -241,7 +239,7 @@ test('large captures expand locally and expose every expanded row', async () => 
     tree.dispose();
 });
 
-test('missing roots, including synthetic groups, require relevant edges or a positive missing amount', async () => {
+test('focus retains roots without shortages alongside synthetic shortage roots', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.roots = [0, 6, 7];
@@ -251,19 +249,10 @@ test('missing roots, including synthetic groups, require relevant edges or a pos
     const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
-    await tree.setMissingOnly(true);
+    await tree.focusMissing();
     assert.deepEqual(
         tree.state.rows.map((row) => row.node.id),
-        [6, 5]
-    );
-    await tree.setMissingOnly(false);
-    data.resources[0].missingAmount = '1';
-    await tree.show(false);
-    await tree.show(true);
-    await tree.setMissingOnly(true);
-    assert.deepEqual(
-        tree.state.rows.map((row) => row.node.id),
-        [0, 6, 5]
+        [0, 6, 5, 7]
     );
     tree.dispose();
 });
@@ -302,7 +291,7 @@ test('too-large and partial captures remain explicit without polling', async () 
     tree.dispose();
 });
 
-test('selecting missing paths during preparation reveals them when the capture arrives', async () => {
+test('focus during loading is a no-op', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     let finish;
     const tree = createCraftingTree(
@@ -316,17 +305,15 @@ test('selecting missing paths during preparation reveals them when the capture a
     );
     tree.reset('grid', 1);
     const loading = tree.show(true);
-    await tree.setMissingOnly(true);
+    await tree.focusMissing();
     finish({ data: document(), icons: null });
     await loading;
-    assert.ok(tree.state.rows.some((row) => row.node.id === 5));
-    assert.ok(tree.state.rows.every((row) => row.node.id !== 1));
-    await tree.setMissingOnly(false);
+    assert.ok(tree.state.rows.every((row) => row.node.id !== 5));
     assert.ok(tree.state.rows.some((row) => row.node.id === 1));
     tree.dispose();
 });
 
-test('a preparing response with the eventual capture ID initializes and reveals its first ready document', async () => {
+test('a preparing capture initializes its first ready document after focus is ignored', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     let calls = 0;
     const tree = createCraftingTree(
@@ -351,11 +338,10 @@ test('a preparing response with the eventual capture ID initializes and reveals 
     tree.reset('grid', 1);
     await tree.show(true);
     assert.equal(tree.state.captureId, 'capture');
-    await tree.setMissingOnly(true);
+    await tree.focusMissing();
     await tree.retry();
     assert.equal(tree.state.status, 'READY');
-    assert.ok(tree.state.rows.some((row) => row.node.id === 5));
-    await tree.setMissingOnly(false);
+    assert.ok(tree.state.rows.every((row) => row.node.id !== 5));
     assert.ok(tree.state.rows.some((row) => row.node.id === 1));
     await new Promise((resolve) => setTimeout(resolve, 1100));
     assert.equal(calls, 2);
@@ -371,24 +357,6 @@ test('reset then reopening the same retained capture initializes its root again'
     tree.reset('grid', 1);
     await tree.show(true);
     assert.ok(tree.state.rows.some((row) => row.node.id === 1));
-    tree.dispose();
-});
-
-test('switching filters retains each view’s own expansion choices', async () => {
-    const { createCraftingTree } = await import(moduleUrl);
-    const tree = createCraftingTree({ planTree: async () => ({ data: document(), icons: null }) }, () => {});
-    tree.reset('grid', 1);
-    await tree.show(true);
-    await tree.expandAll();
-    const full = { ...tree.state.expanded };
-    await tree.setMissingOnly(true);
-    await tree.toggle(tree.state.rows.find((row) => row.node.id === 2).key);
-    const missing = { ...tree.state.expanded };
-    await tree.setMissingOnly(false);
-    assert.deepEqual(tree.state.expanded, full);
-    await tree.setMissingOnly(true);
-    assert.deepEqual(tree.state.expanded, missing);
-    assert.ok(tree.state.rows.every((row) => row.node.id !== 5));
     tree.dispose();
 });
 
@@ -474,4 +442,77 @@ test('separate requests for the same resource expand while shared nodes and cycl
     assert.equal(shared.cycle, false);
     assert.equal(shared.referenceTarget, task.key);
     tree.dispose();
+});
+
+test('focus preserves healthy siblings and marks occurrence shortage without fetching', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    let calls = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async () => {
+                calls++;
+                return { data: document(), icons: null };
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.focusMissing();
+    assert.equal(calls, 1);
+    assert.equal(tree.state.rows.find((row) => row.node.id === 1).shortage, 'NONE');
+    assert.equal(tree.state.rows.find((row) => row.node.id === 3).shortage, 'MISSING');
+    assert.equal(tree.state.rows.find((row) => row.node.id === 2).shortage, 'BLOCKED');
+    tree.dispose();
+});
+
+test('focus folds healthy descendants, allows reopening, and can be cancelled on a long shortage path', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.nodes[2].children.push(edge(6, 'CHILD_REQUEST', '1'));
+    data.nodes.push(node(6, 'REQUEST', { children: [edge(7, 'CONTRIBUTION', '1')] }));
+    data.nodes.push(node(7, 'CONTRIBUTION', { contribution: 'STORAGE' }));
+    let calls = 0;
+    const tree = createCraftingTree(
+        {
+            planTree: async () => {
+                calls++;
+                return { data, icons: null };
+            }
+        },
+        () => {}
+    );
+    tree.reset('grid', 1);
+    await tree.show(true);
+    await tree.focusMissing();
+    const healthy = tree.state.rows.find((row) => row.node.id === 6);
+    assert.ok(healthy);
+    assert.equal(
+        tree.state.rows.some((row) => row.node.id === 7),
+        false
+    );
+    await tree.toggle(healthy.key);
+    assert.ok(tree.state.rows.some((row) => row.node.id === 7));
+    await tree.focusMissing();
+    await tree.expandAll();
+    assert.ok(tree.state.rows.some((row) => row.node.id === 7));
+    assert.equal(calls, 1);
+    tree.dispose();
+
+    const long = document();
+    long.nodes = Array.from({ length: 1000 }, (_, i) =>
+        node(i, 'REQUEST', {
+            children: i < 999 ? [edge(i + 1, 'CHILD_REQUEST', '1', true)] : []
+        })
+    );
+    const other = createCraftingTree({ planTree: async () => ({ data: long, icons: null }) }, () => {});
+    other.reset('grid', 1);
+    await other.show(true);
+    const pending = other.focusMissing();
+    other.stopExpansion();
+    await pending;
+    assert.equal(other.state.expanding, false);
+    assert.equal(other.state.expandedComplete, false);
+    assert.ok(other.state.rows.length < 1000);
+    other.dispose();
 });

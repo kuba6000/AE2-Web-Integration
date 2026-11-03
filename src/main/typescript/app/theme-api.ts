@@ -102,8 +102,7 @@ export type ThemeApplication = {
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
     readonly crafting: {
-        missingTree(value: boolean): Promise<void>;
-        revealMissingTree(): Promise<void>;
+        focusMissingTree(): Promise<void>;
         expandAllTree(): Promise<void>;
         collapseAllTree(): void;
         stopTreeExpansion(): void;

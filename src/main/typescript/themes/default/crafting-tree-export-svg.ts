@@ -9,6 +9,7 @@ import {
     type TreeExportStyle
 } from './crafting-tree-export.js';
 import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
+import { treeCardPaint, treeConnectionColor, treeConnectionOrder } from './crafting-tree-paint.js';
 
 /** Standalone vector diagram; only individual item crops use a small raster surface. */
 export async function renderTreeSvg(
@@ -46,32 +47,34 @@ export async function renderTreeSvg(
             body.push(svgText(ctx, line, 16, 40 + index * 22, size.width / size.scale - 32, style, 12))
         );
         body.push(`<g transform="translate(0 ${size.header})">`);
-        for (let index = 0; index < scene.layout.nodes.length; index++) {
+        const connectionOrder = treeConnectionOrder(scene.cards);
+        for (let offset = 0; offset < connectionOrder.length; offset++) {
+            const index = connectionOrder[offset];
             signal.throwIfAborted();
             const node = scene.layout.nodes[index];
             if (node.parent !== null) {
                 const parent = scene.layout.nodes[node.parent];
                 body.push(
-                    `<path d="M${parent.x + parent.width / 2} ${parent.y + parent.height}V${node.y - 16}H${node.x + node.width / 2}V${node.y}" fill="none" stroke="${escapeSvg(style.border)}" stroke-width="2"/>`
+                    `<path d="M${parent.x + parent.width / 2} ${parent.y + parent.height}V${node.y - 16}H${node.x + node.width / 2}V${node.y}" fill="none" stroke="${escapeSvg(treeConnectionColor(scene.cards[index], style, settings.colors))}" stroke-width="2"/>`
                 );
             }
-            if (index % 256 === 255) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            if (offset % 256 === 255) await new Promise<void>((resolve) => setTimeout(resolve, 0));
         }
         const compact = scene.display === 'icons';
         for (let index = 0; index < scene.cards.length; index++) {
             signal.throwIfAborted();
             const card = scene.cards[index];
             const node = scene.layout.nodes[index];
+            const paint = treeCardPaint(card, style, settings.colors);
+            const cardStyle = { ...style, foreground: paint.foreground };
             body.push(
-                rect(
-                    node.x,
-                    node.y,
-                    node.width,
-                    node.height,
-                    settings.colors && card.missing ? style.missing : style.tile
-                ),
-                `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" fill="none" stroke="${escapeSvg(style.border)}" stroke-width="2"${card.reference ? ' stroke-dasharray="5 3"' : ''}/>`
+                rect(node.x, node.y, node.width, node.height, paint.fill),
+                `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" fill="none" stroke="${escapeSvg(paint.border)}" stroke-width="2"${card.reference ? ' stroke-dasharray="5 3"' : ''}/>`
             );
+            if (paint.inset)
+                body.push(
+                    `<rect x="${node.x + 4}" y="${node.y + 4}" width="${node.width - 8}" height="${node.height - 8}" fill="none" stroke="${escapeSvg(paint.border)}" stroke-width="1"/>`
+                );
             const hasResource =
                 settings.icon && scene.display !== 'names' && (compact ? card.hasResource : !!card.icon);
             const icon = hasResource && card.icon ? resolved.icons.get(card.icon) : undefined;
@@ -82,7 +85,7 @@ export async function renderTreeSvg(
             const glyph = (text: string, x: number, y: number, width: number, fontSize: number) => {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                body.push(svgText(ctx, text, x, y, width, style, fontSize));
+                body.push(svgText(ctx, text, x, y, width, cardStyle, fontSize));
                 ctx.textAlign = 'start';
                 ctx.textBaseline = 'top';
             };
@@ -111,11 +114,11 @@ export async function renderTreeSvg(
             if (compact) {
                 if (card.count)
                     body.push(
-                        svgText(ctx, card.count, node.x + 4, node.y + node.height - 14, node.width - 8, style, 11)
+                        svgText(ctx, card.count, node.x + 4, node.y + node.height - 14, node.width - 8, cardStyle, 11)
                     );
             } else {
                 if (settings.name)
-                    body.push(svgText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, style, 13));
+                    body.push(svgText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, cardStyle, 13));
                 const lineHeight = Math.min(14, 68 / Math.max(1, card.details.length));
                 for (const [lineIndex, line] of card.details.entries()) {
                     ctx.font = `11px ${style.fontFamily}`;
@@ -130,7 +133,7 @@ export async function renderTreeSvg(
                             node.x + 40,
                             node.y + 34 + lineIndex * lineHeight,
                             node.width - 48,
-                            style,
+                            cardStyle,
                             fontSize
                         )
                     );

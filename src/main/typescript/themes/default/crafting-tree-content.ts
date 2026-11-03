@@ -12,7 +12,7 @@ const contributionLabels: Record<TreeContribution, string> = {
 
 export type TreeSymbol = 'craft' | 'storage' | 'emitted' | 'missing' | 'reused' | 'unknown';
 
-/** Screen and PNG share the same resource, amount, and source presentation. */
+/** The screen and exports share the same resource, amount, and source presentation. */
 export function craftingTreeContent(
     row: ReadonlyData<TreeRow>,
     state: ReadonlyData<TreeState>,
@@ -44,7 +44,8 @@ export function craftingTreeContent(
             hasResource: false,
             symbol: 'craft' as TreeSymbol,
             count: compact(row.node.crafts),
-            missing: false,
+            missing: row.shortage === 'MISSING',
+            blocked: row.shortage === 'BLOCKED',
             reference: row.reference
         };
     }
@@ -59,7 +60,8 @@ export function craftingTreeContent(
             hasResource: !!resource,
             symbol,
             count: compact(row.quantity),
-            missing: source === 'MISSING',
+            missing: row.shortage === 'MISSING',
+            blocked: row.shortage === 'BLOCKED',
             reference: row.reference
         };
     }
@@ -95,7 +97,8 @@ export function craftingTreeContent(
         hasResource: !!resource,
         symbol: null,
         count: compact(row.quantity),
-        missing,
+        missing: row.shortage === 'MISSING',
+        blocked: row.shortage === 'BLOCKED',
         reference: row.reference
     };
 }

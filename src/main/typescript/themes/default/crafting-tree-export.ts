@@ -9,6 +9,7 @@ import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
 import type { SvgFont } from '../../app/svg-export.js';
 export { renderTreeSvg } from './crafting-tree-export-svg.js';
 import type { TerminalDisplay } from './web-settings.js';
+import { treeCardPaint, treeConnectionColor, treeConnectionOrder, type TreePalette } from './crafting-tree-paint.js';
 
 export type TreeExportScene = {
     layout: ReturnType<typeof layoutCraftingTree>;
@@ -22,14 +23,10 @@ export type TreeExportSettings = Pick<
     PlanExportSettings,
     'format' | 'scale' | 'icon' | 'name' | 'colors' | 'background'
 >;
-export type TreeExportStyle = {
+export type TreeExportStyle = TreePalette & {
     fontFamily: string;
     fonts?: readonly SvgFont[];
-    foreground: string;
     background: string;
-    tile: string;
-    border: string;
-    missing: string;
     textColors: Record<string, string>;
 };
 
@@ -114,8 +111,10 @@ export async function renderTreePng(
                 ctx.translate(0, size.header);
                 ctx.strokeStyle = style.border;
                 ctx.lineWidth = 2;
-                for (const position of scene.layout.nodes) {
+                for (const index of treeConnectionOrder(scene.cards)) {
+                    const position = scene.layout.nodes[index];
                     if (position.parent === null) continue;
+                    ctx.strokeStyle = treeConnectionColor(scene.cards[index], style, settings.colors);
                     const parent = scene.layout.nodes[position.parent];
                     ctx.beginPath();
                     ctx.moveTo(parent.x + parent.width / 2, parent.y + parent.height);
@@ -128,11 +127,19 @@ export async function renderTreePng(
                     const card = scene.cards[index];
                     const node = scene.layout.nodes[index];
                     const compact = scene.display === 'icons';
-                    ctx.fillStyle = settings.colors && card.missing ? style.missing : style.tile;
+                    const paint = treeCardPaint(card, style, settings.colors);
+                    const cardStyle = { ...style, foreground: paint.foreground };
+                    ctx.fillStyle = paint.fill;
+                    ctx.strokeStyle = paint.border;
                     ctx.fillRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash(card.reference ? [5, 3] : []);
                     ctx.strokeRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash([]);
+                    if (paint.inset) {
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(node.x + 4, node.y + 4, node.width - 8, node.height - 8);
+                        ctx.lineWidth = 2;
+                    }
                     const hasResource =
                         settings.icon && scene.display !== 'names' && (compact ? card.hasResource : !!card.icon);
                     const icon = hasResource && card.icon ? resolved.icons.get(card.icon) : undefined;
@@ -154,7 +161,7 @@ export async function renderTreePng(
                     else if (hasResource) {
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        drawText(ctx, '?', iconX + iconSize / 2, iconY + iconSize / 2, iconSize, style, 24);
+                        drawText(ctx, '?', iconX + iconSize / 2, iconY + iconSize / 2, iconSize, cardStyle, 24);
                         ctx.textAlign = 'start';
                         ctx.textBaseline = 'top';
                     }
@@ -175,17 +182,25 @@ export async function renderTreePng(
                                 ] ?? '';
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
-                            drawText(ctx, glyph, x + size / 2, y + size / 2, size, style, size - 2);
+                            drawText(ctx, glyph, x + size / 2, y + size / 2, size, cardStyle, size - 2);
                             ctx.textAlign = 'start';
                             ctx.textBaseline = 'top';
                         }
                     }
                     if (compact) {
                         if (card.count)
-                            drawText(ctx, card.count, node.x + 4, node.y + node.height - 14, node.width - 8, style, 11);
+                            drawText(
+                                ctx,
+                                card.count,
+                                node.x + 4,
+                                node.y + node.height - 14,
+                                node.width - 8,
+                                cardStyle,
+                                11
+                            );
                     } else {
                         if (settings.name)
-                            drawText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, style, 13);
+                            drawText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, cardStyle, 13);
                         const lines = card.details;
                         const lineHeight = Math.min(14, 68 / Math.max(1, lines.length));
                         for (const [lineIndex, line] of lines.entries()) {
@@ -200,7 +215,7 @@ export async function renderTreePng(
                                 node.x + 40,
                                 node.y + 34 + lineIndex * lineHeight,
                                 node.width - 48,
-                                style,
+                                cardStyle,
                                 fontSize
                             );
                         }

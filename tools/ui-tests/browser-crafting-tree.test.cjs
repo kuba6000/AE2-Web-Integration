@@ -414,6 +414,94 @@ function traceTree(url) {
 const openTrace = (t, viewport) => openTree(t, viewport, traceTree);
 const caveatText = (page) => page.locator('.tree-caveat').evaluate((element) => element.textContent.trim());
 
+test('shortage focus keeps healthy ingredients and paints shortage trails and recipe frames in both exports', async (t) => {
+    const page = await openTrace(t);
+    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    const rodSource = page.locator('.tree-card[data-kind="CONTRIBUTION"]', {
+        has: page.locator('strong', { hasText: /^Rod$/ })
+    });
+    await rodSource.waitFor();
+    await page.getByRole('button', { name: 'Focus missing', exact: true }).click();
+    const rod = page.locator('.tree-card[data-kind="REQUEST"]', { has: page.locator('strong', { hasText: /^Rod$/ }) });
+    await rod.waitFor();
+    assert.equal(await rod.getAttribute('aria-expanded'), 'false');
+    assert.equal(await rodSource.count(), 0, 'healthy ingredient stays, its healthy source is folded');
+    const plateSources = page.locator('.tree-card[data-kind="CONTRIBUTION"]', {
+        has: page.locator('strong', { hasText: /^Plate$/ })
+    });
+    assert.equal(await plateSources.count(), 2, 'mixed missing and stored sources both stay visible');
+    const paint = await page.locator('.plan-tree').evaluate((root) => ({
+        lines: [...root.querySelectorAll('.tree-lines path')].map((line) => getComputedStyle(line).stroke),
+        item: getComputedStyle(root.querySelector('.tree-card[data-kind="REQUEST"]')).backgroundColor,
+        recipe: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).backgroundColor,
+        recipeBorder: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).borderTopColor
+    }));
+    assert.ok(paint.lines.includes('rgb(255, 213, 74)'), 'upstream connections are yellow');
+    assert.ok(paint.lines.includes('rgb(227, 68, 68)'), 'direct shortage connections are red');
+    assert.equal(paint.recipeBorder, 'rgb(255, 213, 74)');
+    assert.notEqual(paint.item, paint.recipe, 'recipe background differs without changing the graph geometry');
+    await rod.click();
+    await rodSource.waitFor();
+    await page.getByRole('button', { name: 'Export current tree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree', exact: true });
+    const files = {};
+    for (const format of ['png', 'svg']) {
+        await dialog.getByRole('combobox', { name: 'Format', exact: true }).selectOption(format);
+        const pending = page.waitForEvent('download');
+        await dialog.getByRole('button', { name: `Download ${format.toUpperCase()}`, exact: true }).click();
+        files[format] = (await fs.readFile(await (await pending).path())).toString('base64');
+    }
+    const rendered = await page.evaluate(async ({ png, svg }) => {
+        const xml = new TextDecoder().decode(Uint8Array.from(atob(svg), (char) => char.charCodeAt(0)));
+        const parsed = new DOMParser().parseFromString(xml, 'image/svg+xml');
+        const red = [...parsed.querySelectorAll('path')].find((path) => path.getAttribute('stroke') === '#e34444');
+        if (!red) return { redPath: false };
+        const [x, y, endY] = red
+            .getAttribute('d')
+            .match(/-?\d+(?:\.\d+)?/g)
+            .map(Number);
+        const [, header] = red.parentElement
+            .getAttribute('transform')
+            .match(/-?\d+(?:\.\d+)?/g)
+            .map(Number);
+        const colors = [];
+        for (const [type, data] of [
+            ['image/png', png],
+            ['image/svg+xml', svg]
+        ]) {
+            const image = new Image();
+            image.src = `data:${type};base64,${data}`;
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0);
+            colors.push([...ctx.getImageData(Math.round(x), Math.round(header + (y + endY) / 2), 1, 1).data]);
+        }
+        return { redPath: true, colors };
+    }, files);
+    assert.equal(rendered.redPath, true);
+    assert.deepEqual(
+        rendered.colors,
+        [
+            [227, 68, 68, 255],
+            [227, 68, 68, 255]
+        ],
+        'a later healthy sibling must not paint over the shared red shortage stem'
+    );
+    await dialog.getByRole('checkbox', { name: 'Missing-resource colors', exact: true }).uncheck();
+    const plainDownload = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download SVG', exact: true }).click();
+    const plainXml = await fs.readFile(await (await plainDownload).path(), 'utf8');
+    const plain = await page.evaluate((xml) => {
+        const parsed = new DOMParser().parseFromString(xml, 'image/svg+xml');
+        return [...parsed.querySelectorAll('path, rect')].map((shape) => shape.getAttribute('stroke'));
+    }, plainXml);
+    assert.ok(!plain.includes('#e34444') && !plain.includes('#ffd54a'), 'status colors can be disabled for export');
+    assert.ok(new Set(plain.filter(Boolean)).size > 1, 'the recipe frame remains distinct without shortage colors');
+});
+
 test('tree artwork is centered and overlapping controls remain visible in each display mode', async (t) => {
     const failures = [];
     for (const display of ['icons', 'both', 'names']) {

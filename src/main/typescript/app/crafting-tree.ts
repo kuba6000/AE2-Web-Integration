@@ -55,7 +55,9 @@ export type TreeDocument = {
     missingComplete: boolean;
     missingResourceCount: number;
 };
+export type TreeShortage = 'NONE' | 'BLOCKED' | 'MISSING';
 export type TreeRow = {
+    shortage: TreeShortage;
     key: string;
     node: TreeNode;
     depth: number;
@@ -82,12 +84,10 @@ export type TreeState = {
     rows: TreeRow[];
     partial: boolean;
     limits: string[];
-    missingOnly: boolean;
     missingComplete: boolean;
     missingResourceCount: number;
     loading: string | null;
     error: string | null;
-    canRevealMissing: boolean;
     expanding: boolean;
     expandedComplete: boolean;
     expandedNodes: number;
@@ -95,16 +95,14 @@ export type TreeState = {
 };
 
 const expandable = (node: TreeNode) => node.kind !== 'CONTRIBUTION';
-const REVEAL_STEPS = 12;
 const EXPANSION_CHUNK = 256;
 
-/** One plan-owned capture; all navigation and missing-path filtering use its local graph. */
+/** One plan-owned capture; all navigation and shortage focus use its local graph. */
 export function createCraftingTree(
     api: Pick<Api, 'planTree'>,
     changed: () => void,
     iconsEnabled: () => boolean = () => true
 ) {
-    let missingOnly = false;
     const fresh = (): TreeState => ({
         captureId: null,
         visible: false,
@@ -120,12 +118,10 @@ export function createCraftingTree(
         rows: [],
         partial: false,
         limits: [],
-        missingOnly,
         missingComplete: false,
         missingResourceCount: 0,
         loading: null,
         error: null,
-        canRevealMissing: false,
         expanding: false,
         expandedComplete: false,
         expandedNodes: 0,
@@ -135,11 +131,8 @@ export function createCraftingTree(
     let target: { grid: string; plan: string | number } | null = null;
     let byId: Record<number, TreeNode> = {};
     let roots: number[] = [];
+    let shortages: Record<number, TreeShortage> = {};
     let readyCaptureId: string | null = null;
-    let fullExpansion: Record<string, boolean> | null = null;
-    let missingExpansion: Record<string, boolean> | null = null;
-    let fullComplete = false;
-    let missingExpandedComplete = false;
     let generation = 0;
     let revision = 0;
     let expansionRun = 0;
@@ -164,29 +157,12 @@ export function createCraftingTree(
         Object.assign(state, fresh(), { visible });
         byId = {};
         roots = [];
+        shortages = {};
         readyCaptureId = null;
-        fullExpansion = null;
-        missingExpansion = null;
-        fullComplete = false;
-        missingExpandedComplete = false;
-    }
-    function children(node: TreeNode) {
-        return missingOnly ? node.children.filter((child) => child.missing) : node.children;
-    }
-    function visibleRoots() {
-        if (!missingOnly) return [...roots];
-        return roots.filter((id) => {
-            const node = byId[id];
-            if (!node) return false;
-            const resource = node.resourceId != null ? state.resources[node.resourceId] : null;
-            return (
-                (resource?.missingAmount != null && BigInt(resource.missingAmount) > 0n) || children(node).length > 0
-            );
-        });
     }
     function singleCandidate(node: TreeNode) {
         if (node.kind !== 'INGREDIENT' || node.candidates !== 1) return null;
-        const available = children(node);
+        const available = node.children;
         return available.length === 1 ? available[0] : null;
     }
     type PendingRow = Omit<TreeRow, 'reference' | 'cycle' | 'referenceTarget'>;
@@ -195,13 +171,13 @@ export function createCraftingTree(
         return `root:${index}`;
     }
     function rootVisits(): Visit[] {
-        const visible = new Set(visibleRoots());
         const stack: Visit[] = [];
         for (let index = roots.length - 1; index >= 0; index--) {
             const node = byId[roots[index]];
-            if (!node || !visible.has(node.id)) continue;
+            if (!node) continue;
             stack.push({
                 row: {
+                    shortage: shortages[node.id],
                     key: rootKey(index),
                     node,
                     depth: 0,
@@ -237,7 +213,6 @@ export function createCraftingTree(
         const links = row.node.children;
         for (let index = links.length - 1; index >= 0; index--) {
             const child = links[index];
-            if (missingOnly && !child.missing) continue;
             const node = byId[child.nodeId];
             if (!node) continue;
             const only = ancestors.has(node.id) || seen.has(node.id) ? null : singleCandidate(node);
@@ -246,6 +221,12 @@ export function createCraftingTree(
             const edge = only ?? child;
             stack.push({
                 row: {
+                    shortage:
+                        shortages[shown.id] === 'MISSING'
+                            ? 'MISSING'
+                            : child.missing || only?.missing || shortages[shown.id] === 'BLOCKED'
+                              ? 'BLOCKED'
+                              : 'NONE',
                     key: `edge:${row.node.id}:${index}`,
                     node: shown,
                     depth: row.depth + 1,
@@ -276,13 +257,6 @@ export function createCraftingTree(
         }
         state.rows = rows;
         state.nodes = nodes;
-        state.canRevealMissing =
-            missingOnly &&
-            state.status === 'READY' &&
-            rows.some(
-                (row) =>
-                    !row.reference && expandable(row.node) && !state.expanded[row.key] && children(row.node).length > 0
-            );
         state.revision = ++revision;
         changed();
     }
@@ -293,10 +267,6 @@ export function createCraftingTree(
         if (!sameCapture) {
             state.expanded = {};
             state.expandedComplete = false;
-            fullExpansion = null;
-            missingExpansion = null;
-            fullComplete = false;
-            missingExpandedComplete = false;
         }
         state.captureId = document.captureId ?? null;
         state.status = document.state;
@@ -312,10 +282,24 @@ export function createCraftingTree(
         state.recipes = Object.fromEntries(document.recipes.map((recipe) => [recipe.id, recipe]));
         byId = Object.fromEntries(document.nodes.map((node) => [node.id, node]));
         roots = document.roots;
+        shortages = {};
+        for (const node of document.nodes) {
+            const direct =
+                (node.kind === 'CONTRIBUTION' && node.contribution === 'MISSING') ||
+                (node.kind === 'REQUEST' &&
+                    node.children.some(
+                        (edge) =>
+                            byId[edge.nodeId]?.kind === 'CONTRIBUTION' && byId[edge.nodeId]?.contribution === 'MISSING'
+                    )) ||
+                (node.kind === 'RESOURCE' &&
+                    node.resourceId != null &&
+                    state.resources[node.resourceId]?.missingAmount != null &&
+                    BigInt(state.resources[node.resourceId].missingAmount!) > 0n);
+            shortages[node.id] = direct ? 'MISSING' : node.children.some((edge) => edge.missing) ? 'BLOCKED' : 'NONE';
+        }
         if (!sameCapture && roots.length && byId[roots[0]]) {
             const key = rootKey(0);
             state.expanded[key] = true;
-            if (missingOnly) fullExpansion = { [key]: true };
         }
     }
     async function load() {
@@ -328,7 +312,6 @@ export function createCraftingTree(
         state.error = null;
         publish();
         let restart = false;
-        let reveal = false;
         try {
             const response = await api.planTree(
                 target.grid,
@@ -340,7 +323,6 @@ export function createCraftingTree(
                 controller.signal
             );
             if (version !== generation) return;
-            reveal = missingOnly && response.data.state === 'READY' && readyCaptureId !== response.data.captureId;
             applyDocument(response.data, response.icons);
             if (state.status === 'PREPARING' || state.status === 'CALCULATING')
                 timer = setTimeout(() => void load(), 1000);
@@ -364,32 +346,17 @@ export function createCraftingTree(
                 state.loading = null;
                 publish();
                 if (restart) await load();
-                else if (reveal) await revealMissing();
             }
         }
     }
-    async function revealMissing() {
-        if (state.expanding) return;
-        for (let count = 0; count < REVEAL_STEPS && state.canRevealMissing; count++) {
-            const row = state.rows.find(
-                (candidate) =>
-                    !candidate.reference &&
-                    expandable(candidate.node) &&
-                    !state.expanded[candidate.key] &&
-                    children(candidate.node).length > 0
-            );
-            if (!row) break;
-            state.expanded[row.key] = true;
-            publish();
-        }
-    }
-    async function expandAll() {
+    async function expand(focus = false) {
         if (!state.visible || state.status !== 'READY' || state.expanding) return;
         cancelExpansion();
         const run = expansionRun;
         state.expanding = true;
         state.expandedComplete = false;
         state.expandedNodes = 0;
+        if (focus) state.expanded = {};
         const stack = rootVisits();
         const ancestors = new Set<number>();
         const seen = new Map<number, string>();
@@ -407,13 +374,15 @@ export function createCraftingTree(
                     state.expandedNodes++;
                     count++;
                     if (reference || !expandable(row.node)) continue;
+                    if (focus && row.shortage === 'NONE' && !['TASK', 'RECIPE', 'INGREDIENT'].includes(row.node.kind))
+                        continue;
                     state.expanded[row.key] = true;
                     descend(stack, row, ancestors, seen);
                 }
                 publish();
                 if (stack.length) await new Promise<void>((resolve) => setTimeout(resolve, 0));
             }
-            if (run === expansionRun && !stack.length) state.expandedComplete = true;
+            if (run === expansionRun && !stack.length && !focus) state.expandedComplete = true;
         } finally {
             if (run === expansionRun) {
                 state.expanding = false;
@@ -423,8 +392,8 @@ export function createCraftingTree(
     }
     return {
         state,
-        revealMissing,
-        expandAll,
+        focusMissing: () => expand(true),
+        expandAll: () => expand(),
         stopExpansion() {
             cancelExpansion();
             publish();
@@ -435,40 +404,13 @@ export function createCraftingTree(
             state.expanded = {};
             publish();
         },
-        async setMissingOnly(value: boolean) {
-            if (value === missingOnly) return;
-            const wasComplete = state.expandedComplete;
-            cancelExpansion();
-            const firstMissingView = value && missingExpansion === null;
-            if (value) {
-                fullExpansion = state.expanded;
-                fullComplete = wasComplete;
-                state.expanded = missingExpansion ?? {};
-                state.expandedComplete = missingExpandedComplete;
-                if (firstMissingView && roots.length && byId[roots[0]]) state.expanded[rootKey(0)] = true;
-            } else {
-                missingExpansion = state.expanded;
-                missingExpandedComplete = wasComplete;
-                state.expanded = fullExpansion ?? {};
-                state.expandedComplete = fullComplete;
-                fullExpansion = null;
-            }
-            missingOnly = value;
-            state.missingOnly = value;
-            publish();
-            if (firstMissingView) await revealMissing();
-        },
         reset(grid: string | null, plan: string | number | null) {
             stop();
-            missingOnly = false;
             Object.assign(state, fresh());
             byId = {};
             roots = [];
+            shortages = {};
             readyCaptureId = null;
-            fullExpansion = null;
-            missingExpansion = null;
-            fullComplete = false;
-            missingExpandedComplete = false;
             target = grid !== null && plan !== null ? { grid, plan } : null;
         },
         async show(visible: boolean) {

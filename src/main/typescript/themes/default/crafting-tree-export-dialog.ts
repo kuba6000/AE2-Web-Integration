@@ -46,7 +46,7 @@ export function createTreeExportDialog(
     let locale: Translator;
     let display: TerminalDisplay = 'names';
     let opener: HTMLElement | null = null;
-    let origin: { route: string; captureId: string | null; missingOnly: boolean } | null = null;
+    let origin: { route: string; captureId: string | null } | null = null;
     const routeKey = () => {
         const route = application.state.route;
         return route.view === 'plan' ? `${route.gridKey}/${route.planId}` : '';
@@ -55,7 +55,6 @@ export function createTreeExportDialog(
         !!origin &&
         routeKey() === origin.route &&
         application.state.crafting.tree.captureId === origin.captureId &&
-        application.state.crafting.tree.missingOnly === origin.missingOnly &&
         application.state.crafting.tree.visible &&
         application.state.crafting.tree.status === 'READY' &&
         !application.state.crafting.mutation;
@@ -163,12 +162,8 @@ export function createTreeExportDialog(
             const t = locale.common;
             const tree = state.tree;
             settings = readPlanExportSettings((key) => store.get(key));
-            origin = { route: routeKey(), captureId: tree.captureId, missingOnly: tree.missingOnly };
-            const notes = [
-                t('treeExportScope'),
-                `${t('treeExportNodeCount')}: ${locale.number(tree.rows.length)}`,
-                tree.missingOnly ? t('treeMissingOnly') : t('treeAllDependencies')
-            ];
+            origin = { route: routeKey(), captureId: tree.captureId };
+            const notes = [t('treeExportScope'), `${t('treeExportNodeCount')}: ${locale.number(tree.rows.length)}`];
             // Only an aggregate tree is an approximation; a trace states per-occurrence amounts.
             if (tree.mode === 'AGGREGATE') {
                 if (tree.rootKind !== 'REQUEST') notes.push(t('treeMissingPlanTotals'));
@@ -206,7 +201,12 @@ export function createTreeExportDialog(
                 background: value('--panel'),
                 tile: value('--slot'),
                 border: value('--slot-edge-light'),
-                missing: '#6b3030',
+                missing: value('--tree-missing'),
+                missingBorder: value('--tree-missing-border'),
+                missingText: value('--tree-missing-text'),
+                blocked: value('--tree-blocked'),
+                recipe: value('--tree-recipe'),
+                recipeBorder: value('--tree-recipe-border'),
                 textColors: {}
             };
             fields.replaceChildren();

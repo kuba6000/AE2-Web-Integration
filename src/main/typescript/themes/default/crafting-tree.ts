@@ -9,6 +9,7 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import type { ThemeApplication, ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
+import { treeConnectionOrder } from './crafting-tree-paint.js';
 
 /** Pan and zoom diagram with an ordinary button outline on narrow screens. */
 export function createCraftingTreeView(application: ThemeApplication, tooltip: CraftingTooltipPresenter) {
@@ -19,10 +20,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
     const zoomIn = element('button', '+');
     const fit = element('button', '⊡');
     const retry = element('button');
-    const reveal = element('button');
     const expandAll = element('button');
     const collapseAll = element('button');
-    const missingOnly = element('button');
+    const focusMissing = element('button');
     const stopExpansion = element('button');
     const message = element('p', '', 'tree-message');
     const caveat = element('p', '', 'tree-caveat');
@@ -32,9 +32,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
     const content = element('div', '', 'tree-content');
     space.append(content);
     viewport.append(space);
-    bar.append(out, reset, zoomIn, fit, expandAll, collapseAll, missingOnly, stopExpansion, retry, reveal);
+    bar.append(out, reset, zoomIn, fit, expandAll, collapseAll, focusMissing, stopExpansion, retry);
     root.append(bar, message, caveat, viewport);
-    for (const button of [out, reset, zoomIn, fit, expandAll, collapseAll, missingOnly, stopExpansion, retry, reveal])
+    for (const button of [out, reset, zoomIn, fit, expandAll, collapseAll, focusMissing, stopExpansion, retry])
         button.type = 'button';
     const icons = application.icons.observe(viewport, paintResourceIcon);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -144,8 +144,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
     expandAll.onclick = () => void application.crafting.expandAllTree();
     collapseAll.onclick = () => application.crafting.collapseAllTree();
     stopExpansion.onclick = () => application.crafting.stopTreeExpansion();
-    missingOnly.onclick = () => void application.crafting.missingTree(!application.state.crafting.tree.missingOnly);
-    reveal.onclick = () => void application.crafting.revealMissingTree();
+    focusMissing.onclick = () => void application.crafting.focusMissingTree();
     retry.onclick = () => void application.crafting.retryTree();
     // The narrow layout is an ordinary outline: it has nothing to zoom and its wheel scrolls the page.
     function changeOutline() {
@@ -222,9 +221,8 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 revision = -1;
                 return;
             }
-            missingOnly.textContent = nextLocale.common('treeMissingOnly');
-            missingOnly.setAttribute('aria-pressed', String(state.missingOnly));
-            missingOnly.disabled = busy;
+            focusMissing.textContent = nextLocale.common('treeFocusMissing');
+            focusMissing.disabled = busy || state.status !== 'READY' || state.expanding;
             if (revision === state.revision && locale === nextLocale && lastDisplay === display) return;
             if (captureId !== state.captureId) {
                 for (const card of cards.values()) card.wrapper.remove();
@@ -248,9 +246,6 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             expandAll.disabled = state.status !== 'READY' || state.expanding || state.expandedComplete;
             collapseAll.disabled = !state.rows.length;
             stopExpansion.disabled = !state.expanding;
-            reveal.textContent = t('treeRevealMissing');
-            reveal.hidden = !state.missingOnly;
-            reveal.disabled = state.expanding || !!state.loading || !state.canRevealMissing;
             retry.hidden = state.status !== 'ERROR';
             retry.disabled = state.expanding || !!state.loading;
             viewport.setAttribute('aria-label', t('treeNavigation'));
@@ -277,17 +272,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             // Only an aggregate tree is an approximation; a trace mirrors the native job.
             caveat.textContent =
                 state.mode === 'AGGREGATE'
-                    ? t(state.rootKind === 'REQUEST' ? 'treeOrderedApproximation' : 'treeApproximation') +
-                      (state.missingOnly ? ' ' + t('treeMissingPaths') : '')
+                    ? t(state.rootKind === 'REQUEST' ? 'treeOrderedApproximation' : 'treeApproximation')
                     : '';
-            if (
-                state.missingOnly &&
-                state.status === 'READY' &&
-                state.missingComplete &&
-                state.missingResourceCount === 0
-            )
-                message.textContent = t('treeNoMissing');
-            else if (state.missingOnly && state.status === 'READY' && !state.missingComplete)
+            if (state.status === 'READY' && !state.missingComplete)
                 message.textContent += ' ' + t('treeMissingIncomplete');
             const active = document.activeElement as HTMLElement | null;
             const focused = active?.dataset.treeKey;
@@ -300,18 +287,13 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             height = layout.height;
             const currentCards: ReturnType<typeof createCard>[] = [];
             const retained = new Set<string>();
+            const presentations = state.rows.map((row) =>
+                craftingTreeContent(row, state, locale!, document.documentElement.lang)
+            );
             for (let index = 0; index < state.rows.length; index++) {
                 const row = state.rows[index];
                 const position = layout.nodes[index];
                 const { x, y } = position;
-                if (position.parent !== null) {
-                    const parent = layout.nodes[position.parent];
-                    const px = parent.x + parent.width / 2,
-                        py = parent.y + parent.height;
-                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    line.setAttribute('d', `M${px} ${py} V${y - 16} H${x + position.width / 2} V${y}`);
-                    svg.append(line);
-                }
                 const identity = row.key;
                 retained.add(identity);
                 let card = cards.get(identity);
@@ -329,7 +311,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 wrapper.style.setProperty('--tree-indent', `${Math.min(row.depth, 6) * 12}px`);
                 button.dataset.treeKey = row.key;
                 button.dataset.reference = String(row.reference);
-                const presentation = craftingTreeContent(row, state, locale, document.documentElement.lang);
+                const presentation = presentations[index];
                 if (card.title !== presentation.title) {
                     card.title = presentation.title;
                     name.replaceChildren(renderMinecraftText(presentation.title));
@@ -357,6 +339,8 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                     [plainMinecraftText(presentation.title), ...presentation.details].join(' · ')
                 );
                 button.dataset.missing = String(presentation.missing);
+                button.dataset.blocked = String(presentation.blocked);
+                button.dataset.recipe = String(presentation.symbol === 'craft');
                 if (display !== 'names' && (presentation.icon || (display === 'icons' && card.resource))) {
                     if (!card.icon) {
                         card.icon = createResourceIcon();
@@ -371,6 +355,20 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 button.dataset.kind = row.node.kind;
                 if (!row.reference && !leaf) button.setAttribute('aria-expanded', String(!!state.expanded[row.key]));
                 else button.removeAttribute('aria-expanded');
+            }
+            for (const index of treeConnectionOrder(presentations)) {
+                const position = layout.nodes[index];
+                if (position.parent === null) continue;
+                const parent = layout.nodes[position.parent];
+                const px = parent.x + parent.width / 2,
+                    py = parent.y + parent.height;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                line.setAttribute(
+                    'd',
+                    `M${px} ${py} V${position.y - 16} H${position.x + position.width / 2} V${position.y}`
+                );
+                line.dataset.shortage = state.rows[index].shortage;
+                svg.append(line);
             }
             for (const [identity, card] of cards) {
                 if (retained.has(identity)) continue;

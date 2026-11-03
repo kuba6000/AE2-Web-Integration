@@ -12,6 +12,11 @@ const style = {
     tile: '#222',
     border: '#ccc',
     missing: '#600',
+    missingBorder: '#f66',
+    missingText: '#fff4f4',
+    blocked: '#dd0',
+    recipe: '#456',
+    recipeBorder: '#789',
     textColors: {}
 };
 const settings = { scale: 1, name: true, icon: true, colors: true, background: 'theme' };
@@ -25,8 +30,15 @@ const scene = () => ({
         ]
     },
     cards: [
-        { title: 'Root', details: [], icon: null, missing: false, reference: false },
-        { title: 'Offscreen material', details: ['9007199254740993'], icon: null, missing: true, reference: true }
+        { title: 'Root', details: [], icon: null, missing: false, blocked: false, reference: false },
+        {
+            title: 'Offscreen material',
+            details: ['9007199254740993'],
+            icon: null,
+            missing: true,
+            blocked: false,
+            reference: true
+        }
     ],
     icons: null,
     display: 'both',
@@ -170,6 +182,7 @@ test('PNG uses the contribution source identity and icon from the shared card co
         {
             key: 'CONTRIBUTION:1',
             node: { kind: 'CONTRIBUTION', resourceId: 1, contribution: 'STORAGE' },
+            shortage: 'NONE',
             depth: 0,
             reference: false,
             quantity: '2',
@@ -222,6 +235,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
             symbol: 'craft',
             count: '3',
             missing: false,
+            blocked: false,
             reference: false
         },
         {
@@ -232,6 +246,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
             symbol: 'storage',
             count: '2',
             missing: false,
+            blocked: false,
             reference: false
         }
     ];
@@ -243,7 +258,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
         { resolve: async () => ({ icons: new Map(), dispose() {} }) },
         new AbortController().signal
     );
-    assert.ok(env.cards.every(([, , width, height]) => width === 64 && height === 64));
+    assert.equal(env.cards.filter(([, , width, height]) => width === 64 && height === 64).length, 2);
     assert.ok(env.texts.includes('3') && env.texts.includes('2'));
     assert.ok(env.images.length >= 2, 'craft and storage symbols are painted');
 });
@@ -275,6 +290,7 @@ test('PNG centers main artwork and paints source badges over the item', async ()
                 hasResource: false,
                 symbol: 'craft',
                 missing: false,
+                blocked: false,
                 reference: false
             },
             {
@@ -284,6 +300,7 @@ test('PNG centers main artwork and paints source badges over the item', async ()
                 hasResource: true,
                 symbol: 'storage',
                 missing: false,
+                blocked: false,
                 reference: false
             }
         ];
@@ -342,6 +359,7 @@ test('PNG centers source glyphs with and without resource artwork', async () => 
             {
                 key: contribution,
                 node: { kind: 'CONTRIBUTION', resourceId, contribution },
+                shortage: contribution === 'MISSING' ? 'MISSING' : 'NONE',
                 depth: 0,
                 reference: false,
                 quantity: '1',

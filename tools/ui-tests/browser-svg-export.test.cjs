@@ -25,6 +25,11 @@ test('tree SVG is standalone with shared icons, safe styled text and bounds beyo
             tile: '#45454e',
             border: '#94909f',
             missing: '#6b3030',
+            missingBorder: '#f66',
+            missingText: '#fff4f4',
+            blocked: '#dd0',
+            recipe: '#456',
+            recipeBorder: '#789',
             textColors: { red: '#ff5555' },
             fonts: ['normal', 'bold'].map((weight) => ({
                 family: 'Monocraft',
@@ -58,6 +63,7 @@ test('tree SVG is standalone with shared icons, safe styled text and bounds beyo
                     symbol: 'storage',
                     count: '2',
                     missing: false,
+                    blocked: false,
                     reference: false
                 },
                 {
@@ -68,6 +74,7 @@ test('tree SVG is standalone with shared icons, safe styled text and bounds beyo
                     symbol: 'missing',
                     count: '1',
                     missing: true,
+                    blocked: false,
                     reference: false
                 }
             ]
