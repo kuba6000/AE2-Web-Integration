@@ -4012,6 +4012,7 @@ button.toast:hover {
     width: 100%;
     min-height: 0;
     display: grid;
+    position: relative;
     grid-template-columns: 24px 1fr;
     text-align: left;
     gap: 4px;
@@ -4024,12 +4025,19 @@ button.toast:hover {
     text-overflow: ellipsis;
     -webkit-line-clamp: 2;
 }
+.tree-card .resource-icon,
+.tree-symbol {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+}
 .tree-card .resource-icon {
-    grid-column: 1;
-    grid-row: 2;
-    align-self: start;
+    z-index: 1;
 }
 .tree-marker {
+    position: relative;
+    z-index: 3;
     grid-column: 1;
     grid-row: 1;
 }
@@ -4042,8 +4050,7 @@ button.toast:hover {
 }
 
 .tree-symbol {
-    grid-column: 1;
-    grid-row: 2;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4059,22 +4066,21 @@ button.toast:hover {
     height: 100%;
 }
 .tree-card:has(.resource-icon) .tree-symbol {
-    grid-column: 1;
-    grid-row: 2;
-    align-self: end;
-    justify-self: end;
+    top: calc(50% - 17px);
+    left: 4px;
+    transform: none;
     width: 14px;
     height: 14px;
     background: var(--slot);
 }
 .tree-amount {
     display: none;
+    z-index: 3;
 }
 .plan-tree[data-display='icons'] .tree-card {
     --resource-icon-size: 32px;
 
     display: block;
-    position: relative;
     padding: 4px;
 }
 .plan-tree[data-display='icons'] .tree-card strong,
@@ -4083,24 +4089,18 @@ button.toast:hover {
 }
 .plan-tree[data-display='icons'] .tree-card .resource-icon,
 .plan-tree[data-display='icons'] .tree-symbol {
-    position: absolute;
-    top: 8px;
-    left: 15px;
+    top: 50%;
+    left: 50%;
     width: 32px;
     height: 32px;
-}
-.plan-tree[data-display='icons'] .tree-card .resource-icon:not(.resource-icon-ready)::after {
-    content: '?';
-    display: block;
-    text-align: center;
-    font-size: 24px;
-    line-height: 32px;
+    transform: translate(-50%, -50%);
 }
 .plan-tree[data-display='icons'] .tree-card:has(.resource-icon) .tree-symbol {
     top: 5px;
     left: 4px;
     width: 16px;
     height: 16px;
+    transform: none;
 }
 .plan-tree[data-display='icons'] .tree-marker {
     position: absolute;

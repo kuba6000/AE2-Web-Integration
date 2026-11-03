@@ -35,6 +35,7 @@ const scene = () => ({
 });
 function canvasEnvironment() {
     const texts = [],
+        textDraws = [],
         images = [],
         cards = [],
         canvases = [];
@@ -58,7 +59,10 @@ function canvasEnvironment() {
         measureText(text) {
             return { width: (text.length * Number(this.font.match(/([\d.]+)px/)?.[1] || 11)) / 2 };
         },
-        fillText: (text) => texts.push(text)
+        fillText(text, x, y) {
+            texts.push(text);
+            textDraws.push({ text, x, y, align: this.textAlign, baseline: this.textBaseline });
+        }
     };
     global.Image = class {
         async decode() {}
@@ -76,7 +80,7 @@ function canvasEnvironment() {
             return canvas;
         }
     };
-    return { texts, images, cards, canvases };
+    return { texts, textDraws, images, cards, canvases };
 }
 test('PNG paints every node in the snapshot including offscreen nodes and exact quantities, then releases canvas/icons', async () => {
     const { renderTreePng } = await import(moduleUrl);
@@ -214,6 +218,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
             title: 'Recipe',
             details: ['Crafts: 3'],
             icon: null,
+            hasResource: false,
             symbol: 'craft',
             count: '3',
             missing: false,
@@ -223,6 +228,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
             title: 'Plate',
             details: ['Storage: 2'],
             icon: null,
+            hasResource: true,
             symbol: 'storage',
             count: '2',
             missing: false,
@@ -240,4 +246,153 @@ test('compact PNG retains small node geometry, counts and source symbols', async
     assert.ok(env.cards.every(([, , width, height]) => width === 64 && height === 64));
     assert.ok(env.texts.includes('3') && env.texts.includes('2'));
     assert.ok(env.images.length >= 2, 'craft and storage symbols are painted');
+});
+
+test('PNG centers main artwork and paints source badges over the item', async () => {
+    const { renderTreePng } = await import(moduleUrl);
+    const icon = { page: 0, x: 0, y: 0 };
+    const bitmap = {};
+    const failures = [];
+    for (const display of ['icons', 'both', 'names']) {
+        const compact = display === 'icons';
+        const width = compact ? 64 : 240;
+        const height = compact ? 64 : 108;
+        const snapshot = scene();
+        snapshot.display = display;
+        snapshot.layout = {
+            width: 640,
+            height: 400,
+            nodes: [
+                { x: 16, y: 16, width, height, parent: null },
+                { x: 320, y: 200, width, height, parent: null }
+            ]
+        };
+        snapshot.cards = [
+            {
+                title: 'Recipe',
+                details: [],
+                icon: null,
+                hasResource: false,
+                symbol: 'craft',
+                missing: false,
+                reference: false
+            },
+            {
+                title: 'Plate',
+                details: [],
+                icon,
+                hasResource: true,
+                symbol: 'storage',
+                missing: false,
+                reference: false
+            }
+        ];
+        const env = canvasEnvironment();
+        await renderTreePng(
+            snapshot,
+            settings,
+            style,
+            {
+                resolve: async () => ({
+                    icons: new Map([[icon, { image: bitmap, x: 0, y: 0, width: 64, height: 64 }]]),
+                    dispose() {}
+                })
+            },
+            new AbortController().signal
+        );
+        const checkCenter = (image, tile) => {
+            const [x, y, imageWidth, imageHeight] = image.slice(-4);
+            const expectedSize = compact ? 32 : 24;
+            if (
+                imageWidth !== expectedSize ||
+                imageHeight !== expectedSize ||
+                y + imageHeight / 2 !== tile.y + tile.height / 2 ||
+                (compact && x + imageWidth / 2 !== tile.x + tile.width / 2)
+            )
+                failures.push(`${display} artwork bounds: ${image.slice(-4)}`);
+        };
+        checkCenter(env.images[0], snapshot.layout.nodes[0]);
+        if (display === 'names') checkCenter(env.images[1], snapshot.layout.nodes[1]);
+        else {
+            const itemIndex = env.images.findIndex(([image]) => image === bitmap);
+            checkCenter(env.images[itemIndex], snapshot.layout.nodes[1]);
+            const [x, y, size] = env.images.at(-1).slice(-4);
+            const [itemX, itemY] = env.images[itemIndex].slice(-4);
+            if (
+                env.images.length - 1 <= itemIndex ||
+                x >= itemX ||
+                y >= itemY ||
+                x + size <= itemX ||
+                y + size <= itemY
+            )
+                failures.push(`${display} source badge does not overlap the item's upper-left corner`);
+        }
+    }
+    assert.deepEqual(failures, []);
+});
+
+test('PNG centers source glyphs with and without resource artwork', async () => {
+    const { renderTreePng } = await import(moduleUrl);
+    const contentUrl = pathToFileURL(
+        path.resolve(__dirname, '../../build/generated/frontend/assets/web/themes/default/crafting-tree-content.js')
+    );
+    const { craftingTreeContent } = await import(contentUrl);
+    const source = (resourceId, contribution) =>
+        craftingTreeContent(
+            {
+                key: contribution,
+                node: { kind: 'CONTRIBUTION', resourceId, contribution },
+                depth: 0,
+                reference: false,
+                quantity: '1',
+                relation: 'CONTRIBUTION'
+            },
+            { resources: { 1: { displayName: 'Missing', icon: null } }, recipes: {} },
+            { common: (key) => key },
+            'en'
+        );
+    const snapshot = scene();
+    snapshot.display = 'icons';
+    snapshot.layout = {
+        width: 192,
+        height: 140,
+        nodes: [
+            { x: 16, y: 16, width: 64, height: 64, parent: null },
+            { x: 112, y: 16, width: 64, height: 64, parent: null }
+        ]
+    };
+    snapshot.cards = [source(1, 'MISSING'), source(null, 'UNKNOWN')];
+    const glyphs = [];
+    for (const [display, showIcons] of [
+        ['icons', true],
+        ['icons', false],
+        ['both', true]
+    ]) {
+        snapshot.display = display;
+        for (const node of snapshot.layout.nodes) node.height = display === 'icons' ? 64 : 108;
+        const env = canvasEnvironment();
+        await renderTreePng(
+            snapshot,
+            { ...settings, icon: showIcons },
+            style,
+            { resolve: async () => ({ icons: new Map(), dispose() {} }) },
+            new AbortController().signal
+        );
+        glyphs.push(env.textDraws.filter(({ text }) => text === '?' || text === '!'));
+    }
+    assert.deepEqual(glyphs, [
+        [
+            { text: '?', x: 48, y: 48, align: 'center', baseline: 'middle' },
+            { text: '!', x: 30, y: 31, align: 'center', baseline: 'middle' },
+            { text: '?', x: 144, y: 48, align: 'center', baseline: 'middle' }
+        ],
+        [
+            { text: '!', x: 48, y: 48, align: 'center', baseline: 'middle' },
+            { text: '?', x: 144, y: 48, align: 'center', baseline: 'middle' }
+        ],
+        [
+            { text: '!', x: 38, y: 70, align: 'center', baseline: 'middle' },
+            { text: '?', x: 134, y: 70, align: 'center', baseline: 'middle' }
+        ]
+    ]);
 });

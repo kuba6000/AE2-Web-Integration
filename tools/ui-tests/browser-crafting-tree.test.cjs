@@ -393,6 +393,96 @@ function traceTree(url) {
 }
 const openTrace = (t, viewport) => openTree(t, viewport, traceTree);
 const caveatText = (page) => page.locator('.tree-caveat').evaluate((element) => element.textContent.trim());
+
+test('tree artwork is centered and overlapping controls remain visible in each display mode', async (t) => {
+    const failures = [];
+    for (const display of ['icons', 'both', 'names']) {
+        const page = await openTree(t, { width: 1280, height: 900 }, traceTree, display);
+        const root = card(page, 'Machine').first();
+        const task = card(page, 'Recipe').first();
+        const storage = page.locator('.tree-card[data-kind="CONTRIBUTION"]').first();
+        await task.locator('.tree-symbol svg').waitFor();
+        if (display !== 'names') await storage.locator('.resource-icon-ready').waitFor();
+
+        const centered = async (target, selector, horizontal = false) => {
+            const tile = await target.boundingBox();
+            const artwork = await target.locator(selector).boundingBox();
+            const deltaX = artwork.x + artwork.width / 2 - tile.x - tile.width / 2;
+            const deltaY = artwork.y + artwork.height / 2 - tile.y - tile.height / 2;
+            if (Math.abs(deltaY) > 0.5 || (horizontal && Math.abs(deltaX) > 0.5))
+                failures.push(`${display} ${selector} center offset: ${deltaX}, ${deltaY}`);
+        };
+        await centered(task, '.tree-symbol', display === 'icons');
+        if (display === 'names') await centered(storage, '.tree-symbol');
+        else {
+            await centered(root, '.resource-icon', display === 'icons');
+            await centered(storage, '.resource-icon', display === 'icons');
+
+            // Deliberately place controls over opaque fixture artwork so the pixels prove the paint order.
+            await storage.locator('.tree-symbol').evaluate((element) => (element.style.backgroundColor = '#02111f'));
+            await root.evaluate((element) => {
+                const marker = element.querySelector('.tree-marker');
+                Object.assign(marker.style, {
+                    position: 'absolute',
+                    left: '20px',
+                    right: 'auto',
+                    top: element.closest('.plan-tree').dataset.display === 'icons' ? '19px' : '42px',
+                    backgroundColor: '#123456'
+                });
+                const amount = element.querySelector('.tree-amount');
+                Object.assign(amount.style, {
+                    left: '30px',
+                    right: 'auto',
+                    top: '35px',
+                    bottom: 'auto',
+                    backgroundColor: '#563412'
+                });
+            });
+
+            const paintedAboveIcon = async (target, selector, color) => {
+                const screenshot = (await target.screenshot()).toString('base64');
+                const intersection = await target.evaluate((element, overlaySelector) => {
+                    const tile = element.getBoundingClientRect();
+                    const icon = element.querySelector('.resource-icon').getBoundingClientRect();
+                    const overlay = element.querySelector(overlaySelector).getBoundingClientRect();
+                    return {
+                        left: Math.ceil(Math.max(icon.left, overlay.left) - tile.left),
+                        right: Math.floor(Math.min(icon.right, overlay.right) - tile.left),
+                        top: Math.ceil(Math.max(icon.top, overlay.top) - tile.top),
+                        bottom: Math.floor(Math.min(icon.bottom, overlay.bottom) - tile.top)
+                    };
+                }, selector);
+                const painted = await page.evaluate(
+                    async ({ data, bounds, rgb }) => {
+                        const image = await createImageBitmap(
+                            await (await fetch(`data:image/png;base64,${data}`)).blob()
+                        );
+                        const canvas = document.createElement('canvas');
+                        canvas.width = image.width;
+                        canvas.height = image.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(image, 0, 0);
+                        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                        for (let y = bounds.top; y < bounds.bottom; y++) {
+                            for (let x = bounds.left; x < bounds.right; x++) {
+                                const offset = (y * canvas.width + x) * 4;
+                                if (rgb.every((value, index) => pixels[offset + index] === value)) return true;
+                            }
+                        }
+                        return false;
+                    },
+                    { data: screenshot, bounds: intersection, rgb: color }
+                );
+                if (!painted) failures.push(`${display} ${selector} is not visible over the resource icon`);
+            };
+            await paintedAboveIcon(storage, '.tree-symbol', [2, 17, 31]);
+            await paintedAboveIcon(root, '.tree-marker', [18, 52, 86]);
+            if (display === 'icons') await paintedAboveIcon(root, '.tree-amount', [86, 52, 18]);
+        }
+    }
+    assert.deepEqual(failures, []);
+});
+
 async function exportScope(page) {
     await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });

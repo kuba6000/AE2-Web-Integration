@@ -123,13 +123,12 @@ export async function renderTreePng(
                     ctx.setLineDash(card.reference ? [5, 3] : []);
                     ctx.strokeRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash([]);
-                    const icon =
-                        card.icon && settings.icon && scene.display !== 'names'
-                            ? resolved.icons.get(card.icon)
-                            : undefined;
-                    const iconX = node.x + (compact ? 15 : 8);
-                    const iconY = node.y + (compact ? 8 : 34);
+                    const hasResource =
+                        settings.icon && scene.display !== 'names' && (compact ? card.hasResource : !!card.icon);
+                    const icon = hasResource && card.icon ? resolved.icons.get(card.icon) : undefined;
                     const iconSize = compact ? 32 : 24;
+                    const iconX = node.x + (compact ? (node.width - iconSize) / 2 : 10);
+                    const iconY = node.y + (node.height - iconSize) / 2;
                     if (icon)
                         ctx.drawImage(
                             icon.image,
@@ -142,12 +141,21 @@ export async function renderTreePng(
                             iconSize,
                             iconSize
                         );
-                    else if (compact && card.symbol !== 'craft') drawText(ctx, '?', iconX, iconY, iconSize, style, 24);
+                    else if (hasResource) {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        drawText(ctx, '?', iconX + iconSize / 2, iconY + iconSize / 2, iconSize, style, 24);
+                        ctx.textAlign = 'start';
+                        ctx.textBaseline = 'top';
+                    }
                     if (card.symbol) {
-                        const hasResource = !!icon || (compact && card.symbol !== 'craft');
                         const size = hasResource ? (compact ? 16 : 14) : iconSize;
-                        const x = hasResource ? node.x + 4 : iconX;
-                        const y = hasResource ? node.y + (compact ? 5 : 44) : iconY;
+                        const x = hasResource ? node.x + 6 : iconX;
+                        const y = hasResource ? node.y + (compact ? 7 : node.height / 2 - 17) : iconY;
+                        if (hasResource) {
+                            ctx.fillStyle = style.tile;
+                            ctx.fillRect(x, y, size, size);
+                        }
                         const image = symbols.get(card.symbol);
                         if (image) ctx.drawImage(image, x, y, size, size);
                         else {
@@ -155,7 +163,11 @@ export async function renderTreePng(
                                 ({ reused: '↻', missing: '!', emitted: '↑', unknown: '?' } as Record<string, string>)[
                                     card.symbol
                                 ] ?? '';
-                            drawText(ctx, glyph, x, y, size, style, size - 2);
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            drawText(ctx, glyph, x + size / 2, y + size / 2, size, style, size - 2);
+                            ctx.textAlign = 'start';
+                            ctx.textBaseline = 'top';
                         }
                     }
                     if (compact) {
