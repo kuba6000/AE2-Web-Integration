@@ -5,9 +5,12 @@ import type { ThemeApplication } from '../../app/theme-api.js';
 import type { craftingTreeContent } from './crafting-tree-content.js';
 import type { layoutCraftingTree } from './crafting-tree-layout.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
+import type { TerminalDisplay } from './web-settings.js';
 
 export type TreePngScene = {
     layout: ReturnType<typeof layoutCraftingTree>;
+    display: TerminalDisplay;
     cards: ReturnType<typeof craftingTreeContent>[];
     icons: IconMetadata | null;
     title: string;
@@ -24,7 +27,7 @@ export type TreePngStyle = {
     textColors: Record<string, string>;
 };
 
-/** Image bounds cover the complete selected window, independent of current zoom or viewport clipping. */
+/** Image bounds cover all expanded nodes, independent of zoom or viewport clipping. */
 export function treePngSize(scene: TreePngScene, requestedScale: number) {
     const header = 48 + scene.scope.length * 22;
     for (const scale of [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25]) {
@@ -60,9 +63,22 @@ export async function renderTreePng(
         if (signal.aborted) abort();
     });
     signal.throwIfAborted();
-    const references = settings.icon ? scene.cards.flatMap((card) => (card.icon ? [card.icon] : [])) : [];
+    const references =
+        settings.icon && scene.display !== 'names' ? scene.cards.flatMap((card) => (card.icon ? [card.icon] : [])) : [];
     const resolved = await icons.resolve(references, scene.icons, signal);
+    const symbols = new Map<string, HTMLImageElement>();
     try {
+        for (const [name, svg] of [
+            ['craft', craftingHammer],
+            ['storage', terminalIcons.stored]
+        ]) {
+            if (!scene.cards.some((card) => card.symbol === name)) continue;
+            const image = new Image();
+            image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+            await image.decode();
+            signal.throwIfAborted();
+            symbols.set(name, image);
+        }
         while (size) {
             signal.throwIfAborted();
             const canvas = document.createElement('canvas');
@@ -92,7 +108,7 @@ export async function renderTreePng(
                     if (position.parent === null) continue;
                     const parent = scene.layout.nodes[position.parent];
                     ctx.beginPath();
-                    ctx.moveTo(parent.x + parent.width / 2, parent.y + 108);
+                    ctx.moveTo(parent.x + parent.width / 2, parent.y + parent.height);
                     ctx.lineTo(parent.x + parent.width / 2, position.y - 16);
                     ctx.lineTo(position.x + position.width / 2, position.y - 16);
                     ctx.lineTo(position.x + position.width / 2, position.y);
@@ -101,12 +117,19 @@ export async function renderTreePng(
                 for (let index = 0; index < scene.cards.length; index++) {
                     const card = scene.cards[index];
                     const node = scene.layout.nodes[index];
+                    const compact = scene.display === 'icons';
                     ctx.fillStyle = settings.colors && card.missing ? style.missing : style.tile;
-                    ctx.fillRect(node.x, node.y, node.width, 108);
+                    ctx.fillRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash(card.reference ? [5, 3] : []);
-                    ctx.strokeRect(node.x, node.y, node.width, 108);
+                    ctx.strokeRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash([]);
-                    const icon = card.icon && settings.icon ? resolved.icons.get(card.icon) : undefined;
+                    const icon =
+                        card.icon && settings.icon && scene.display !== 'names'
+                            ? resolved.icons.get(card.icon)
+                            : undefined;
+                    const iconX = node.x + (compact ? 15 : 8);
+                    const iconY = node.y + (compact ? 8 : 34);
+                    const iconSize = compact ? 32 : 24;
                     if (icon)
                         ctx.drawImage(
                             icon.image,
@@ -114,31 +137,51 @@ export async function renderTreePng(
                             icon.y,
                             icon.width,
                             icon.height,
-                            node.x + 8,
-                            node.y + 8,
-                            24,
-                            24
+                            iconX,
+                            iconY,
+                            iconSize,
+                            iconSize
                         );
-                    const left = node.x + (icon ? 40 : 8);
-                    const width = node.width - (icon ? 48 : 16);
-                    if (settings.name) drawText(ctx, card.title, left, node.y + 8, width, style, 13);
-                    const lines = card.details;
-                    const lineHeight = Math.min(14, 68 / Math.max(1, lines.length));
-                    for (const [lineIndex, line] of lines.entries()) {
-                        ctx.font = `11px ${style.fontFamily}`;
-                        const fontSize = Math.min(
-                            11,
-                            (11 * (node.width - 16)) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
-                        );
-                        drawText(
-                            ctx,
-                            line,
-                            node.x + 8,
-                            node.y + 34 + lineIndex * lineHeight,
-                            node.width - 16,
-                            style,
-                            fontSize
-                        );
+                    else if (compact && card.symbol !== 'craft') drawText(ctx, '?', iconX, iconY, iconSize, style, 24);
+                    if (card.symbol) {
+                        const hasResource = !!icon || (compact && card.symbol !== 'craft');
+                        const size = hasResource ? (compact ? 16 : 14) : iconSize;
+                        const x = hasResource ? node.x + 4 : iconX;
+                        const y = hasResource ? node.y + (compact ? 5 : 44) : iconY;
+                        const image = symbols.get(card.symbol);
+                        if (image) ctx.drawImage(image, x, y, size, size);
+                        else {
+                            const glyph =
+                                ({ reused: '↻', missing: '!', emitted: '↑', unknown: '?' } as Record<string, string>)[
+                                    card.symbol
+                                ] ?? '';
+                            drawText(ctx, glyph, x, y, size, style, size - 2);
+                        }
+                    }
+                    if (compact) {
+                        if (card.count)
+                            drawText(ctx, card.count, node.x + 4, node.y + node.height - 14, node.width - 8, style, 11);
+                    } else {
+                        if (settings.name)
+                            drawText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, style, 13);
+                        const lines = card.details;
+                        const lineHeight = Math.min(14, 68 / Math.max(1, lines.length));
+                        for (const [lineIndex, line] of lines.entries()) {
+                            ctx.font = `11px ${style.fontFamily}`;
+                            const fontSize = Math.min(
+                                11,
+                                (11 * (node.width - 48)) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
+                            );
+                            drawText(
+                                ctx,
+                                line,
+                                node.x + 40,
+                                node.y + 34 + lineIndex * lineHeight,
+                                node.width - 48,
+                                style,
+                                fontSize
+                            );
+                        }
                     }
                     if (index % 32 === 31) {
                         await new Promise<void>((resolve) => setTimeout(resolve, 0));

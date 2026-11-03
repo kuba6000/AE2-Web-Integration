@@ -1,4 +1,5 @@
 import { element } from './dom.js';
+import type { TerminalDisplay } from './web-settings.js';
 import { craftingTreeContent } from './crafting-tree-content.js';
 import { layoutCraftingTree } from './crafting-tree-layout.js';
 import {
@@ -40,6 +41,7 @@ export function createTreeExportDialog(
     let settings: TreePngSettings;
     let style: TreePngStyle;
     let locale: Translator;
+    let display: TerminalDisplay = 'names';
     let opener: HTMLElement | null = null;
     let origin: { route: string; captureId: string | null; missingOnly: boolean } | null = null;
     const routeKey = () => {
@@ -136,6 +138,9 @@ export function createTreeExportDialog(
             });
     };
     return {
+        setDisplay(value: TerminalDisplay) {
+            display = value;
+        },
         open(source: HTMLElement, translator: Translator) {
             const state = application.state.crafting;
             if (state.tree.status !== 'READY' || !state.tree.rows.length) return;
@@ -151,14 +156,19 @@ export function createTreeExportDialog(
                 tree.missingOnly ? t('treeMissingOnly') : t('treeAllDependencies')
             ];
             // Only an aggregate tree is an approximation; a trace states per-occurrence amounts.
-            if (tree.mode === 'AGGREGATE') notes.push(t('treeMissingPlanTotals'), t('treeExportApproximation'));
+            if (tree.mode === 'AGGREGATE') {
+                if (tree.rootKind !== 'REQUEST') notes.push(t('treeMissingPlanTotals'));
+                notes.push(
+                    t(tree.rootKind === 'REQUEST' ? 'treeExportOrderedApproximation' : 'treeExportApproximation')
+                );
+            }
             if (tree.partial) notes.push(t('treeExportPartial'));
-            if (tree.totalRows > tree.rows.length) notes.push(t('treeExportWindow'));
             if (!tree.missingComplete) notes.push(t('treeMissingIncomplete'));
             scene = {
-                layout: layoutCraftingTree(tree.rows),
+                layout: layoutCraftingTree(tree.rows, display),
+                display,
                 cards: tree.rows.map((row) => {
-                    const card = craftingTreeContent(row, tree, locale, document.documentElement.lang, false);
+                    const card = craftingTreeContent(row, tree, locale, document.documentElement.lang);
                     return { ...card, icon: card.icon ? { ...card.icon } : null };
                 }),
                 // The PNG is a still image, so animation sequences are not part of the snapshot.
@@ -200,7 +210,7 @@ export function createTreeExportDialog(
                 refresh();
             };
             toggle('icon', t('treeExportIcons'));
-            toggle('name', t('name'));
+            if (display !== 'icons') toggle('name', t('name'));
             toggle('colors', t('treeExportColors'));
             const background = element('input');
             background.type = 'checkbox';

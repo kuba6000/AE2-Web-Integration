@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.crafting.AggregateTreeReconstruction;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
@@ -36,14 +37,21 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 /** Builds one response from an immutable, detached capture and an optional icon-pack snapshot. */
 final class CraftingTreeDocument {
 
+    private static final int MAX_RECONSTRUCTED_ENTRIES = 20_000;
+
     private CraftingTreeDocument() {}
 
     static Response from(CraftingDependencyGraph graph, @Nullable IconPack pack, String captureId) {
+        CraftingTraceCapture reconstructed = AggregateTreeReconstruction
+            .from(graph.capture(), MAX_RECONSTRUCTED_ENTRIES);
+        if (reconstructed != null)
+            return new TraceProjection(CraftingTraceGraph.from(reconstructed), pack, Mode.AGGREGATE)
+                .document(captureId);
         return new AggregateProjection(graph, pack).document(captureId);
     }
 
     static Response from(CraftingTraceGraph graph, @Nullable IconPack pack, String captureId) {
-        return new TraceProjection(graph, pack).document(captureId);
+        return new TraceProjection(graph, pack, Mode.TRACE).document(captureId);
     }
 
     @Desugar
@@ -258,12 +266,14 @@ final class CraftingTreeDocument {
 
         private final CraftingTraceGraph graph;
         private final CraftingTraceCapture capture;
+        private final Mode mode;
         private final int taskOffset;
         private final int contributionOffset;
 
-        private TraceProjection(CraftingTraceGraph graph, @Nullable IconPack pack) {
+        private TraceProjection(CraftingTraceGraph graph, @Nullable IconPack pack, Mode mode) {
             super(pack);
             this.graph = graph;
+            this.mode = mode;
             capture = graph.capture();
             taskOffset = capture.requests()
                 .size();
@@ -391,7 +401,7 @@ final class CraftingTreeDocument {
                 .get(request);
             return response(
                 captureId,
-                Mode.TRACE,
+                mode,
                 new Root(root.resourceId(), Long.toString(root.amount()), capture.simulated()),
                 capture.limits(),
                 graph.missingComplete(),

@@ -10,7 +10,8 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Navigation through a captured trace: a request lists its contributions, a task lists the requests it
  * issued. Local capture IDs are the node references; a task serving several requests is one node reached
- * from each of them, never copied. Every list is a row view in native order, without copying.
+ * from each of them, never copied. Every list is a row view in capture order, without copying.
+ * Native traces preserve native order; reconstructed aggregate views follow their documented convention.
  */
 public final class CraftingTraceGraph {
 
@@ -82,7 +83,7 @@ public final class CraftingTraceGraph {
         return root;
     }
 
-    /** Contribution-row IDs of the request, in native order. */
+    /** Contribution-row IDs of the request, in capture order. */
     public @NotNull List<Integer> contributions(int requestId) {
         return contributions.rowsFor(requestId);
     }
@@ -97,7 +98,7 @@ public final class CraftingTraceGraph {
         return outputs.rowsFor(taskId);
     }
 
-    /** Child-request row IDs of the task, in native order. */
+    /** Child-request row IDs of the task, in capture order. */
     public @NotNull List<Integer> taskRequests(int taskId) {
         return taskRequests.rowsFor(taskId);
     }

@@ -60,6 +60,8 @@ export type TreeRow = {
     node: TreeNode;
     depth: number;
     reference: boolean;
+    cycle: boolean;
+    referenceTarget: string | null;
     quantity: string | null;
     relation: TreeChild['relation'] | null;
     /** The single-candidate ingredient group represented directly by this row. */
@@ -71,6 +73,7 @@ export type TreeState = {
     status: TreeDocument['state'] | 'IDLE' | 'ERROR';
     mode: TreeMode | null;
     root: TreeDocument['root'];
+    rootKind: TreeKind | null;
     nodes: Record<string, TreeNode>;
     resources: Record<number, TreeResource>;
     recipes: Record<number, TreeRecipe>;
@@ -84,19 +87,14 @@ export type TreeState = {
     missingResourceCount: number;
     loading: string | null;
     error: string | null;
-    bounded: boolean;
     canRevealMissing: boolean;
     expanding: boolean;
     expandedComplete: boolean;
     expandedNodes: number;
-    windowStart: number;
-    totalRows: number;
     revision: number;
 };
 
-const keyOf = (node: TreeNode) => `${node.kind}:${node.id}`;
 const expandable = (node: TreeNode) => node.kind !== 'CONTRIBUTION';
-const VISIBLE_LIMIT = 300;
 const REVEAL_STEPS = 12;
 const EXPANSION_CHUNK = 256;
 
@@ -113,6 +111,7 @@ export function createCraftingTree(
         status: 'IDLE',
         mode: null,
         root: null,
+        rootKind: null,
         nodes: {},
         resources: {},
         recipes: {},
@@ -126,13 +125,10 @@ export function createCraftingTree(
         missingResourceCount: 0,
         loading: null,
         error: null,
-        bounded: false,
         canRevealMissing: false,
         expanding: false,
         expandedComplete: false,
         expandedNodes: 0,
-        windowStart: 0,
-        totalRows: 0,
         revision: 0
     });
     const state = fresh();
@@ -144,7 +140,6 @@ export function createCraftingTree(
     let missingExpansion: Record<string, boolean> | null = null;
     let fullComplete = false;
     let missingExpandedComplete = false;
-    let projection: TreeRow[] = [];
     let generation = 0;
     let revision = 0;
     let expansionRun = 0;
@@ -174,7 +169,6 @@ export function createCraftingTree(
         missingExpansion = null;
         fullComplete = false;
         missingExpandedComplete = false;
-        projection = [];
     }
     function children(node: TreeNode) {
         return missingOnly ? node.children.filter((child) => child.missing) : node.children;
@@ -195,58 +189,96 @@ export function createCraftingTree(
         const available = children(node);
         return available.length === 1 ? available[0] : null;
     }
-    function publish() {
-        const seen = new Set<number>();
-        const rows: TreeRow[] = [];
-        const stack: Omit<TreeRow, 'reference'>[] = [];
-        const visible = visibleRoots();
-        for (let index = visible.length - 1; index >= 0; index--) {
-            const node = byId[visible[index]];
-            if (!node) continue;
+    type PendingRow = Omit<TreeRow, 'reference' | 'cycle' | 'referenceTarget'>;
+    type Visit = { row: PendingRow } | { exit: number[] };
+    function rootKey(index: number) {
+        return `root:${index}`;
+    }
+    function rootVisits(): Visit[] {
+        const visible = new Set(visibleRoots());
+        const stack: Visit[] = [];
+        for (let index = roots.length - 1; index >= 0; index--) {
+            const node = byId[roots[index]];
+            if (!node || !visible.has(node.id)) continue;
             stack.push({
-                key: keyOf(node),
-                node,
-                depth: 0,
-                quantity: visible[index] === roots[0] ? (state.root?.quantity ?? null) : null,
-                relation:
-                    node.kind === 'UNPLACED' ? 'UNPLACED' : node.kind === 'UNLINKED_MISSING' ? 'MISSING_RESOURCE' : null
+                row: {
+                    key: rootKey(index),
+                    node,
+                    depth: 0,
+                    quantity: index === 0 ? (state.root?.quantity ?? null) : null,
+                    relation:
+                        node.kind === 'UNPLACED'
+                            ? 'UNPLACED'
+                            : node.kind === 'UNLINKED_MISSING'
+                              ? 'MISSING_RESOURCE'
+                              : null
+                }
             });
         }
-        while (stack.length) {
-            const row = stack.pop()!;
-            const reference = seen.has(row.node.id);
-            rows.push({ ...row, reference });
-            if (reference) continue;
-            seen.add(row.node.id);
-            if (!state.expanded[row.key]) continue;
-            const links = children(row.node);
-            for (let index = links.length - 1; index >= 0; index--) {
-                const child = links[index];
-                const node = byId[child.nodeId];
-                if (!node) continue;
-                const only = singleCandidate(node);
-                const shown = only ? byId[only.nodeId] : node;
-                if (!shown) continue;
-                const edge = only ?? child;
-                stack.push({
-                    key: keyOf(shown),
+        return stack;
+    }
+    function visit(stack: Visit[], ancestors: Set<number>, seen: Map<number, string>, row: PendingRow) {
+        const cycle =
+            ancestors.has(row.node.id) ||
+            (row.group !== undefined && (ancestors.has(row.group.id) || row.group.id === row.node.id));
+        const target = seen.get(row.node.id) ?? (row.group ? seen.get(row.group.id) : undefined);
+        const reference = cycle || target !== undefined;
+        if (!reference) {
+            const ids = row.group ? [row.group.id, row.node.id] : [row.node.id];
+            for (const id of ids) {
+                ancestors.add(id);
+                seen.set(id, row.key);
+            }
+            stack.push({ exit: ids });
+        }
+        return { reference, cycle, referenceTarget: target ?? null };
+    }
+    function descend(stack: Visit[], row: PendingRow, ancestors: Set<number>, seen: Map<number, string>) {
+        const links = row.node.children;
+        for (let index = links.length - 1; index >= 0; index--) {
+            const child = links[index];
+            if (missingOnly && !child.missing) continue;
+            const node = byId[child.nodeId];
+            if (!node) continue;
+            const only = ancestors.has(node.id) || seen.has(node.id) ? null : singleCandidate(node);
+            const shown = only ? byId[only.nodeId] : node;
+            if (!shown) continue;
+            const edge = only ?? child;
+            stack.push({
+                row: {
+                    key: `edge:${row.node.id}:${index}`,
                     node: shown,
                     depth: row.depth + 1,
                     quantity: edge.quantity,
                     relation: edge.relation,
                     ...(only ? { group: node } : {})
-                });
-            }
+                }
+            });
         }
-        projection = rows;
-        state.windowStart = Math.min(state.windowStart, Math.max(0, rows.length - 1));
-        state.rows = rows.slice(state.windowStart, state.windowStart + VISIBLE_LIMIT);
-        state.totalRows = rows.length;
-        state.bounded = rows.length > VISIBLE_LIMIT;
+    }
+    function publish() {
+        const rows: TreeRow[] = [];
+        const nodes: Record<string, TreeNode> = {};
+        const stack = rootVisits();
+        const ancestors = new Set<number>();
+        const seen = new Map<number, string>();
+        while (stack.length) {
+            const item = stack.pop()!;
+            if ('exit' in item) {
+                for (const id of item.exit) ancestors.delete(id);
+                continue;
+            }
+            const row = item.row;
+            const { reference, cycle, referenceTarget } = visit(stack, ancestors, seen, row);
+            rows.push({ ...row, reference, cycle, referenceTarget });
+            nodes[row.key] = row.node;
+            if (!reference && state.expanded[row.key]) descend(stack, row, ancestors, seen);
+        }
+        state.rows = rows;
+        state.nodes = nodes;
         state.canRevealMissing =
             missingOnly &&
             state.status === 'READY' &&
-            rows.length < VISIBLE_LIMIT &&
             rows.some(
                 (row) =>
                     !row.reference && expandable(row.node) && !state.expanded[row.key] && children(row.node).length > 0
@@ -261,7 +293,6 @@ export function createCraftingTree(
         if (!sameCapture) {
             state.expanded = {};
             state.expandedComplete = false;
-            state.windowStart = 0;
             fullExpansion = null;
             missingExpansion = null;
             fullComplete = false;
@@ -271,6 +302,7 @@ export function createCraftingTree(
         state.status = document.state;
         state.mode = document.mode ?? null;
         state.root = document.root ?? null;
+        state.rootKind = document.nodes.find((node) => node.id === document.roots[0])?.kind ?? null;
         state.partial = document.partial;
         state.limits = document.limits;
         state.missingComplete = document.missingComplete;
@@ -279,10 +311,9 @@ export function createCraftingTree(
         state.resources = Object.fromEntries(document.resources.map((resource) => [resource.id, resource]));
         state.recipes = Object.fromEntries(document.recipes.map((recipe) => [recipe.id, recipe]));
         byId = Object.fromEntries(document.nodes.map((node) => [node.id, node]));
-        state.nodes = Object.fromEntries(document.nodes.map((node) => [keyOf(node), node]));
         roots = document.roots;
         if (!sameCapture && roots.length && byId[roots[0]]) {
-            const key = keyOf(byId[roots[0]]);
+            const key = rootKey(0);
             state.expanded[key] = true;
             if (missingOnly) fullExpansion = { [key]: true };
         }
@@ -340,7 +371,7 @@ export function createCraftingTree(
     async function revealMissing() {
         if (state.expanding) return;
         for (let count = 0; count < REVEAL_STEPS && state.canRevealMissing; count++) {
-            const row = projection.find(
+            const row = state.rows.find(
                 (candidate) =>
                     !candidate.reference &&
                     expandable(candidate.node) &&
@@ -359,22 +390,26 @@ export function createCraftingTree(
         state.expanding = true;
         state.expandedComplete = false;
         state.expandedNodes = 0;
-        const seen = new Set<number>();
-        const stack = visibleRoots().reverse();
+        const stack = rootVisits();
+        const ancestors = new Set<number>();
+        const seen = new Map<number, string>();
         publish();
         try {
             while (stack.length && run === expansionRun && state.visible) {
-                for (let count = 0; count < EXPANSION_CHUNK && stack.length; count++) {
-                    const id = stack.pop()!;
-                    const node = byId[id];
-                    if (!node || seen.has(id)) continue;
-                    seen.add(id);
-                    if (!expandable(node)) continue;
-                    state.expanded[keyOf(node)] = true;
-                    const links = children(node);
-                    for (let index = links.length - 1; index >= 0; index--) stack.push(links[index].nodeId);
+                for (let count = 0; count < EXPANSION_CHUNK && stack.length;) {
+                    const item = stack.pop()!;
+                    if ('exit' in item) {
+                        for (const id of item.exit) ancestors.delete(id);
+                        continue;
+                    }
+                    const row = item.row;
+                    const { reference } = visit(stack, ancestors, seen, row);
+                    state.expandedNodes++;
+                    count++;
+                    if (reference || !expandable(row.node)) continue;
+                    state.expanded[row.key] = true;
+                    descend(stack, row, ancestors, seen);
                 }
-                state.expandedNodes = seen.size;
                 publish();
                 if (stack.length) await new Promise<void>((resolve) => setTimeout(resolve, 0));
             }
@@ -398,7 +433,6 @@ export function createCraftingTree(
             cancelExpansion();
             state.expandedComplete = false;
             state.expanded = {};
-            state.windowStart = 0;
             publish();
         },
         async setMissingOnly(value: boolean) {
@@ -411,7 +445,7 @@ export function createCraftingTree(
                 fullComplete = wasComplete;
                 state.expanded = missingExpansion ?? {};
                 state.expandedComplete = missingExpandedComplete;
-                if (firstMissingView && roots.length && byId[roots[0]]) state.expanded[keyOf(byId[roots[0]])] = true;
+                if (firstMissingView && roots.length && byId[roots[0]]) state.expanded[rootKey(0)] = true;
             } else {
                 missingExpansion = state.expanded;
                 missingExpandedComplete = wasComplete;
@@ -421,28 +455,8 @@ export function createCraftingTree(
             }
             missingOnly = value;
             state.missingOnly = value;
-            state.windowStart = 0;
             publish();
             if (firstMissingView) await revealMissing();
-        },
-        moveWindow(direction: number) {
-            state.windowStart = Math.max(
-                0,
-                Math.min(state.totalRows - 1, state.windowStart + Math.sign(direction) * VISIBLE_LIMIT)
-            );
-            publish();
-        },
-        focus(key: string | null) {
-            const index =
-                key === null
-                    ? 0
-                    : Math.max(
-                          0,
-                          projection.findIndex((row) => row.key === key && !row.reference)
-                      );
-            if (key !== null && index >= state.windowStart && index < state.windowStart + VISIBLE_LIMIT) return;
-            state.windowStart = Math.floor(index / VISIBLE_LIMIT) * VISIBLE_LIMIT;
-            publish();
         },
         reset(grid: string | null, plan: string | number | null) {
             stop();
@@ -455,7 +469,6 @@ export function createCraftingTree(
             missingExpansion = null;
             fullComplete = false;
             missingExpandedComplete = false;
-            projection = [];
             target = grid !== null && plan !== null ? { grid, plan } : null;
         },
         async show(visible: boolean) {
@@ -471,7 +484,7 @@ export function createCraftingTree(
         },
         async toggle(key: string) {
             const node = state.nodes[key];
-            if (!node || !expandable(node)) return;
+            if (!node || !expandable(node) || state.rows.some((row) => row.key === key && row.reference)) return;
             cancelExpansion();
             state.expandedComplete = false;
             state.expanded[key] = !state.expanded[key];

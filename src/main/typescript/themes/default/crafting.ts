@@ -1,3 +1,4 @@
+import type { TerminalDisplay } from './web-settings.js';
 import { createTreeExportDialog } from './crafting-tree-export-dialog.js';
 import { createCraftingTreeView } from './crafting-tree.js';
 import { createCraftingDialog } from './crafting-dialog.js';
@@ -182,7 +183,8 @@ export function createCraftingView(
         open: dialog.open,
         order: dialog.order,
 
-        render(terminal: ThemeState, locale: Translator, enabled: boolean) {
+        render(terminal: ThemeState, locale: Translator, display: TerminalDisplay) {
+            const enabled = display !== 'names';
             const { route, crafting: state } = terminal;
             dialog.render(terminal, enabled);
             const nextRoute = route.view === 'plan' ? `${route.gridKey}/${route.planId}` : '';
@@ -200,7 +202,8 @@ export function createCraftingView(
                 panel.clearIcons();
                 return;
             }
-            tree.render(state.tree, locale, !!state.mutation);
+            tree.render(state.tree, locale, !!state.mutation, display);
+            treeExporter.setDisplay(display);
             scroll.hidden = state.tree.visible;
             searchLabel.hidden = state.tree.visible;
             sortGroup.hidden = state.tree.visible;

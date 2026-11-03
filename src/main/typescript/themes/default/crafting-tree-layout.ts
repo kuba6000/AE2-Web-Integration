@@ -1,10 +1,12 @@
 import type { TreeKind } from '../../app/crafting-tree.js';
+import type { TerminalDisplay } from './web-settings.js';
 
 type LayoutRow = { readonly depth: number; readonly node: { readonly kind: TreeKind } };
 export type TreePosition = { x: number; y: number; width: number; height: number; parent: number | null };
 
-/** Lay out only the bounded visible preorder: leaf rows provide space, ancestors share their span. */
-export function layoutCraftingTree(rows: readonly LayoutRow[]) {
+/** Preorder leaf columns keep earlier branches fixed as later branches open. */
+export function layoutCraftingTree(rows: readonly LayoutRow[], display: TerminalDisplay = 'both') {
+    const compact = display === 'icons';
     const widths: Record<TreeKind, number> = {
         RESOURCE: 240,
         RECIPE: 208,
@@ -15,6 +17,10 @@ export function layoutCraftingTree(rows: readonly LayoutRow[]) {
         TASK: 208,
         CONTRIBUTION: 176
     };
+    const column = compact ? 64 : 240;
+    const cardHeight = compact ? 64 : 108;
+    const stepX = column + 32;
+    const stepY = cardHeight + 40;
     const positions: TreePosition[] = [];
     const ancestors: { depth: number; index: number }[] = [];
     const children: number[][] = rows.map(() => []);
@@ -26,27 +32,24 @@ export function layoutCraftingTree(rows: readonly LayoutRow[]) {
         const level = parent === null ? 0 : levels[parent] + 1;
         levels.push(level);
         if (parent !== null) children[parent].push(index);
-        const width = widths[row.node.kind];
-        positions.push({ x: 0, y: 0, width, height: 136, parent });
+        const width = compact ? column : widths[row.node.kind];
+        positions.push({ x: 0, y: 16 + level * stepY, width, height: cardHeight, parent });
         ancestors.push({ depth: row.depth, index });
     }
     let nextLeaf = 16;
-    let height = 152;
+    let height = cardHeight + 32;
     for (const [index, position] of positions.entries()) {
-        position.y = 16 + levels[index] * 168;
         height = Math.max(height, position.y + position.height + 16);
         if (children[index].length === 0) {
-            position.x = nextLeaf + (240 - position.width) / 2;
-            nextLeaf += 272;
+            position.x = nextLeaf + (column - position.width) / 2;
+            nextLeaf += stepX;
         }
     }
     for (let index = positions.length - 1; index >= 0; index--) {
-        const descendants = children[index];
-        if (descendants.length) {
-            const first = positions[descendants[0]];
-            const last = positions[descendants[descendants.length - 1]];
-            positions[index].x = (first.x + first.width / 2 + last.x + last.width / 2) / 2 - positions[index].width / 2;
+        if (children[index].length) {
+            const first = positions[children[index][0]];
+            positions[index].x = first.x + (first.width - positions[index].width) / 2;
         }
     }
-    return { nodes: positions, width: Math.max(272, nextLeaf), height };
+    return { nodes: positions, width: Math.max(column + 32, nextLeaf - stepX + column + 16), height };
 }

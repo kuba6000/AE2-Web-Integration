@@ -15,14 +15,15 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
- * Detached per-occurrence trace of a completed calculation, as the native job recorded it. Every
- * requested occurrence of a resource is a request; the native job's answers to it are its contributions,
- * in native order. A craft contribution points at a task: a selected pattern with its craft count and
+ * Detached per-occurrence requests, contributions and tasks. Native captures preserve the job's
+ * recorded order; an aggregate visualization may instead reconstruct this shape by a deterministic
+ * allocation convention. The caller retains the provenance. A craft contribution points at a task:
+ * a selected pattern with its craft count and
  * declared per-craft inputs and outputs, whose child requests are the ingredients it asked for. One task
  * may serve several requests; each such request keeps its own amount on its craft contribution.
  * Resource, request, contribution, task, input, output and child-request IDs index their tables. Amounts
  * are native units: requested/contributed totals for requests and contributions, per craft for inputs and
- * outputs. Nothing is split or inferred beyond what the native job recorded.
+ * outputs.
  * A null root means the trace did not reach its first request; such a capture is not a ready web plan.
  */
 @Desugar
@@ -50,7 +51,7 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
         return Collections.unmodifiableList(new ArrayList<>(values));
     }
 
-    /** How the native job satisfied part of a request. CRAFT carries a task; the others are leaves. */
+    /** How part of a request was satisfied. CRAFT carries a task; the others are leaves. */
     public enum ContributionKind {
         /** Taken from the network's stored items. */
         STORAGE,
@@ -86,7 +87,7 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
     @Desugar
     public record Output(int taskId, int resourceId, long amount, @Nullable Boolean primary) {}
 
-    /** A request the task issued for one of its ingredients, in native order. */
+    /** A request for one of the task's ingredients, in capture order. */
     @Desugar
     public record TaskRequest(int taskId, int requestId) {}
 
@@ -94,8 +95,9 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
      * Single-threaded capture sink with the {@link CraftingRecipeCapture.Builder} discipline: every
      * appended row consumes one entry, descriptions consume UTF-16 characters, a rejected add returns -1 or
      * false and closes the capture, and traversal stops there. IDs are plan-local, in append order.
-     * Emit in native traversal order: a request, then its contributions in order; a craft needs its task to
-     * exist (addTask) before addCraft, and a child request to exist before addChildRequest.
+     * Emit in traversal order: a request, then its contributions in order; a craft needs its task to
+     * exist (addTask) before addCraft, and a child request to exist before addChildRequest. Native
+     * captures retain the native order; reconstructed captures use their documented convention.
      */
     public static final class Builder {
 

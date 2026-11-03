@@ -243,8 +243,6 @@ export function createCrafting(
         expandAllTree: tree.expandAll,
         collapseAllTree: tree.collapseAll,
         stopTreeExpansion: tree.stopExpansion,
-        windowTree: tree.moveWindow,
-        focusTree: tree.focus,
         toggleTree: tree.toggle,
         retryTree: tree.retry,
         invalidateIcons() {

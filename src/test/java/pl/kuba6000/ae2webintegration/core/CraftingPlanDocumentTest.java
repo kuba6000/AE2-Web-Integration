@@ -162,6 +162,116 @@ class CraftingPlanDocumentTest extends GridTestScope {
     }
 
     @Test
+    void aggregateAllocatesStockBeforeCraftingAndMarksOnlyTheShortagePath() {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(603);
+        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture
+                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanDocumentTest::shared)),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        JsonObject data = read(grid, plan);
+        assertEquals(
+            "AGGREGATE",
+            data.get("mode")
+                .getAsString());
+        Map<Integer, JsonObject> nodes = nodes(data);
+        JsonObject root = nodes.get(
+            data.getAsJsonArray("roots")
+                .get(0)
+                .getAsInt());
+        assertEquals(
+            "REQUEST",
+            root.get("kind")
+                .getAsString());
+        JsonObject task = childNode(nodes, root, 0);
+        JsonArray requests = task.getAsJsonArray("children");
+        assertFalse(
+            requests.get(0)
+                .getAsJsonObject()
+                .get("missing")
+                .getAsBoolean());
+        assertTrue(
+            requests.get(1)
+                .getAsJsonObject()
+                .get("missing")
+                .getAsBoolean());
+        JsonObject first = childNode(nodes, task, 0);
+        JsonObject second = childNode(nodes, task, 1);
+        assertEquals(
+            1,
+            first.getAsJsonArray("children")
+                .size());
+        assertContribution(nodes, first, 0, "STORAGE", "6", 1);
+        assertContribution(nodes, second, 0, "STORAGE", "2", 1);
+        JsonObject craft = second.getAsJsonArray("children")
+            .get(1)
+            .getAsJsonObject();
+        assertEquals(
+            "4",
+            craft.get("quantity")
+                .getAsString());
+        JsonObject inner = childNode(nodes, childNode(nodes, second, 1), 0);
+        assertContribution(nodes, inner, 0, "MISSING", "8", 2);
+        assertEquals(data, read(grid, plan));
+    }
+
+    @Test
+    void ambiguousAggregateKeepsEveryDeclaredAlternativeAndMissingSummary() {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(604);
+        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture
+                    .completedFuture(CraftingPlanTreePreparationTest.job(CraftingPlanDocumentTest::ambiguous)),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        JsonObject data = read(grid, plan);
+        assertEquals(
+            "AGGREGATE",
+            data.get("mode")
+                .getAsString());
+        assertEquals(
+            1,
+            data.get("missingResourceCount")
+                .getAsInt());
+        Map<Integer, JsonObject> nodes = nodes(data);
+        JsonObject root = nodes.get(
+            data.getAsJsonArray("roots")
+                .get(0)
+                .getAsInt());
+        assertEquals(
+            "RESOURCE",
+            root.get("kind")
+                .getAsString());
+        JsonObject group = childNode(nodes, childNode(nodes, root, 0), 0);
+        assertEquals(
+            "INGREDIENT",
+            group.get("kind")
+                .getAsString());
+        assertEquals(
+            2,
+            group.getAsJsonArray("children")
+                .size());
+        assertEquals(
+            1,
+            childNode(nodes, group, 0).get("resourceId")
+                .getAsInt());
+        assertEquals(
+            2,
+            childNode(nodes, group, 1).get("resourceId")
+                .getAsInt());
+        assertEquals(
+            "1",
+            data.getAsJsonArray("resources")
+                .get(1)
+                .getAsJsonObject()
+                .get("missingAmount")
+                .getAsString());
+    }
+
+    @Test
     void traceKeepsActualSourcesSharedTasksAndPerConnectionAmounts() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(601);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
@@ -328,6 +438,72 @@ class CraftingPlanDocumentTest extends GridTestScope {
         capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 1, 5);
         capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 4, 6);
         return capture.build();
+    }
+
+    private static CraftingRecipeCapture shared() {
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(100, 1000);
+        for (String name : new String[] { "product", "shared", "raw" })
+            capture.addResource(() -> TraceFixtures.descriptor(name));
+        capture.result(0, 1, true);
+        int product = capture.addRecipe(1);
+        for (int i = 0; i < 2; i++) {
+            int group = capture.addIngredient(product, 1);
+            capture.addCandidate(group, 1, 6);
+        }
+        capture.addOutput(product, 0, 1, true);
+        capture.finishRecipe(product);
+        int intermediate = capture.addRecipe(4);
+        int input = capture.addIngredient(intermediate, 1);
+        capture.addCandidate(input, 2, 2);
+        capture.addOutput(intermediate, 1, 1, true);
+        capture.finishRecipe(intermediate);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.INITIAL, 1, 8);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 2, 8);
+        return capture.build();
+    }
+
+    private static CraftingRecipeCapture ambiguous() {
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(100, 1000);
+        for (String name : new String[] { "product", "first", "second" })
+            capture.addResource(() -> TraceFixtures.descriptor(name));
+        capture.result(0, 1, true);
+        int recipe = capture.addRecipe(1);
+        int group = capture.addIngredient(recipe, 1);
+        capture.addCandidate(group, 1, 1);
+        capture.addCandidate(group, 2, 1);
+        capture.addOutput(recipe, 0, 1, true);
+        capture.finishRecipe(recipe);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 1, 1);
+        return capture.build();
+    }
+
+    private static JsonObject childNode(Map<Integer, JsonObject> nodes, JsonObject parent, int index) {
+        return nodes.get(
+            parent.getAsJsonArray("children")
+                .get(index)
+                .getAsJsonObject()
+                .get("nodeId")
+                .getAsInt());
+    }
+
+    private static void assertContribution(Map<Integer, JsonObject> nodes, JsonObject request, int index, String kind,
+        String quantity, int resource) {
+        JsonObject edge = request.getAsJsonArray("children")
+            .get(index)
+            .getAsJsonObject();
+        assertEquals(
+            quantity,
+            edge.get("quantity")
+                .getAsString());
+        JsonObject contribution = childNode(nodes, request, index);
+        assertEquals(
+            kind,
+            contribution.get("contribution")
+                .getAsString());
+        assertEquals(
+            resource,
+            contribution.get("resourceId")
+                .getAsInt());
     }
 
     private static Map<Integer, JsonObject> nodes(JsonObject data) {

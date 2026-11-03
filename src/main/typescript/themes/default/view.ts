@@ -139,6 +139,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         workspace.classList.toggle('product-icons-enabled', effectiveDisplay !== 'names');
         notices.render(state, locale, effectiveDisplay === 'names');
         resourceTerminal.render(state, locale, effectiveDisplay);
+        craftingView.render(state, locale, effectiveDisplay);
     }
 
     function render(next: ThemeState, hint?: 'cpu-timing') {
@@ -165,7 +166,6 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         renderDisplay();
         homeView.render(state, locale);
         renderNetworks();
-        craftingView.render(state, locale, effectiveDisplay !== 'names');
         tooltips.refresh();
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);

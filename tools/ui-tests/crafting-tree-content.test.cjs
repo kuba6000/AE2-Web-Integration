@@ -46,25 +46,17 @@ const state = {
     }
 };
 
-test('task and recipe cards use shared recipe declarations and preserve occurrence amounts', async () => {
+test('task and recipe cards show craft count without repeating recipe ingredients or outputs', async () => {
     const { craftingTreeContent } = await import(moduleUrl);
-    const task = node('TASK', 8, { recipeId: 4, crafts: '3', complete: false });
-    const card = craftingTreeContent(row(task, { quantity: '4', relation: 'CRAFT' }), state, locale, 'en');
-    const line = (key) => card.details.find((entry) => entry.startsWith(key));
-    assert.ok(line('treeOutputs').includes('9,007,199,254,740,993'));
-    assert.ok(line('treeOutputs').includes('Machine') && line('treeOutputs').includes('treeByproduct'));
-    assert.ok(line('treeInputs').includes('Ingot'));
-    assert.ok(line('treeCraftAmount').endsWith('4'));
-    assert.ok(line('treeCrafts').endsWith('3'));
-    assert.ok(line('treePartialNode'));
-    const shared = craftingTreeContent(
-        row({ ...task, id: 9 }, { quantity: '2', relation: 'CRAFT' }),
-        state,
-        locale,
-        'en'
-    );
-    assert.ok(shared.details.some((entry) => entry.startsWith('treeCraftAmount') && entry.endsWith('2')));
-    assert.ok(shared.details.some((entry) => entry.startsWith('treeOutputs') && entry.includes('Gear')));
+    for (const kind of ['TASK', 'RECIPE']) {
+        const task = node(kind, 8, { recipeId: 4, crafts: '3', complete: false });
+        const card = craftingTreeContent(row(task, { quantity: '4', relation: 'CRAFT' }), state, locale, 'en');
+        assert.equal(card.symbol, 'craft');
+        assert.equal(card.count, '3');
+        assert.ok(card.details.some((line) => line.startsWith('treeCrafts') && line.endsWith('3')));
+        assert.ok(card.details.some((line) => line.startsWith('treePartialNode')));
+        assert.ok(!card.details.some((line) => /Ingot|Gear|Machine|treeInputs|treeOutputs/.test(line)));
+    }
 });
 
 test('resource and contribution cards use the actual resource identity, including unknown sources', async () => {
@@ -81,14 +73,18 @@ test('resource and contribution cards use the actual resource identity, includin
         locale,
         'en'
     );
-    assert.ok(source.details.includes('Ingot'));
+    assert.equal(source.title, 'Ingot');
+    assert.equal(source.symbol, 'storage');
+    assert.equal(source.count, '29');
+    assert.ok(source.details.some((line) => line.includes('treeFromStorage') && line.includes('29')));
     const unknown = craftingTreeContent(
         row(node('CONTRIBUTION', 11, { contribution: 'STORAGE' }), { quantity: '29', relation: 'CONTRIBUTION' }),
         state,
         locale,
         'en'
     );
-    assert.deepEqual(unknown.details, []);
+    assert.equal(unknown.title, 'treeResource');
+    assert.ok(unknown.details.some((line) => line.includes('treeFromStorage')));
     assert.equal(unknown.icon, null);
 });
 

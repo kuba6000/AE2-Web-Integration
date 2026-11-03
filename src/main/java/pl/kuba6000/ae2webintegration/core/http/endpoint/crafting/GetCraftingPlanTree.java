@@ -41,10 +41,12 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
  * Read the complete detached dependency graph of a retained crafting plan. Capture is lazy and shared
- * by viewers. AGGREGATE describes possible recipe dependencies, not selected materials; TRACE reflects
- * the native job's requests and contributions. Node and recipe identifiers are local to the capture.
+ * by viewers. AGGREGATE may assign captured totals to an ordered visualization, or show recipe
+ * declarations when allocation is uncertain. TRACE reflects the native job's requests and contributions.
+ * The aggregate order is a display convention, not a native execution trace.
+ * Node and recipe identifiers are local to the capture.
  * Quantities are decimal strings. Recipe quantities are per craft; child quantities belong to the link.
- * Missing flags identify captured paths to missing resources, not a material allocation.
+ * Missing flags identify paths to missing resources in the selected representation.
  *
  * @pathParam gridKey Persistent network identifier.
  * @pathParam planId Retained crafting plan identifier.

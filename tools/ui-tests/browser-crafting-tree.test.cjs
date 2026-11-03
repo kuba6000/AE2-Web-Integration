@@ -81,9 +81,13 @@ function tree(url) {
     };
 }
 
-async function openTree(t, viewport = { width: 1280, height: 900 }, source = tree) {
+async function openTree(t, viewport = { width: 1280, height: 900 }, source = tree, display = 'both') {
     const { page, options, base } = await fixture(t, '', { viewport }, { mockClock: false });
     await atlasFixture(page, options);
+    await page.addInitScript(
+        (terminalDisplay) => localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ terminalDisplay })),
+        display
+    );
     source.icons = options.icons;
     options.tree = source;
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], icon: { page: 0, x: 0, y: 0 } }] };
@@ -110,7 +114,7 @@ async function openRecipe(page) {
     await card(page, 'Plate').first().waitFor();
 }
 
-test('tree cards show their resource icons and a recipe lists its outputs on its own card', async (t) => {
+test('tree cards show resource icons and recipes show only their craft count', async (t) => {
     const page = await openTree(t);
     await openRecipe(page);
     const icon = page.locator('.tree-card .resource-icon').first();
@@ -121,8 +125,8 @@ test('tree cards show their resource icons and a recipe lists its outputs on its
     const cardBox = await card(page, 'Machine').first().boundingBox();
     assert.ok(box.x >= cardBox.x && box.x + box.width <= cardBox.x + cardBox.width, 'icon stays inside its card');
     const details = await card(page, 'Recipe').locator('.tree-details').textContent();
-    assert.match(details, /Plate/);
-    assert.match(details, /Machine/);
+    assert.match(details, /2/);
+    assert.doesNotMatch(details, /Plate|Machine/);
 });
 
 test('a visible resource icon stays painted while a branch opens and closes', async (t) => {
@@ -282,9 +286,12 @@ test('dragging pans the diagram without selecting text or pressing the card it s
     assert.equal(await target.getAttribute('aria-expanded'), 'true', 'the drag did not collapse the recipe');
     assert.equal(await viewport.evaluate((element) => element.dataset.dragging ?? null), null);
     const again = await target.boundingBox();
-    await page.mouse.move(again.x + 20, again.y + 20);
+    const viewportBox = await viewport.boundingBox();
+    const clickX = Math.max(again.x + 20, viewportBox.x + 8);
+    const clickY = Math.max(again.y + 20, viewportBox.y + 8);
+    await page.mouse.move(clickX, clickY);
     await page.mouse.down();
-    await page.mouse.move(again.x + 22, again.y + 21);
+    await page.mouse.move(clickX + 2, clickY + 1);
     await page.mouse.up();
     await page.waitForFunction(() =>
         [...document.querySelectorAll('.tree-card')].some(
@@ -399,9 +406,7 @@ test('a trace shows requests, leaves and a task card like the in-game tree and m
     await card(page, 'Plate').first().waitFor();
     await card(page, 'Rod').first().waitFor();
     const task = await card(page, 'Recipe').locator('.tree-details').textContent();
-    assert.match(task, /Machine/);
-    assert.match(task, /Plate/);
-    assert.match(task, /Rod/);
+    assert.doesNotMatch(task, /Machine|Plate|Rod/);
     assert.match(task, /3/);
     await expand(page, 'Plate');
     await page.locator('.tree-card[data-kind="CONTRIBUTION"]').nth(2).waitFor();
@@ -413,12 +418,15 @@ test('a trace shows requests, leaves and a task card like the in-game tree and m
         }))
     );
     assert.equal(leaves.length, 3);
-    assert.ok(leaves.every((entry) => /\d/.test(entry.title) && !entry.expandable));
+    assert.ok(leaves.every((entry) => !entry.expandable));
     assert.deepEqual(
         leaves.map((entry) => entry.missing),
         ['false', 'true', 'false']
     );
-    assert.equal(new Set(leaves.map((entry) => entry.title)).size, 3, 'each kind and amount reads differently');
+    assert.deepEqual(
+        leaves.map((entry) => entry.title),
+        ['Machine', 'Plate', 'Plate']
+    );
     assert.equal(await caveatText(page), '');
     assert.equal(await page.locator('.tree-caveat').isVisible(), false);
 });
@@ -450,4 +458,75 @@ test('the trace tree exports to PNG with its leaves and cards', async (t) => {
     const bytes = await fs.readFile(await (await download).path());
     assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
     assert.ok(bytes.length > 1000);
+});
+
+test('compact tree keeps a clicked task anchored and shows resource, source, and craft icons', async (t) => {
+    const page = await openTree(t, { width: 1280, height: 900 }, traceTree, 'icons');
+    const task = card(page, 'Recipe').first();
+    const before = await task.boundingBox();
+    assert.ok(before.width <= 72 && before.height <= 72, `compact task: ${JSON.stringify(before)}`);
+    const root = card(page, 'Machine').first();
+    const rootBox = await root.boundingBox();
+    assert.ok(rootBox.width <= 72 && rootBox.height <= 72);
+    const storage = page.locator('.tree-card[data-kind="CONTRIBUTION"]').first();
+    assert.ok(await storage.locator('.tree-symbol svg').count());
+    assert.ok(await task.locator('.tree-symbol svg').count());
+    await task.click();
+    const after = await task.boundingBox();
+    assert.ok(
+        Math.abs(before.x - after.x) < 1 && Math.abs(before.y - after.y) < 1,
+        `task moved: ${JSON.stringify([before, after])}`
+    );
+    const plate = card(page, 'Plate').first();
+    await plate.click();
+    assert.ok(await page.locator('.tree-card[data-missing="true"] .tree-symbol').count());
+    assert.match(await plate.getAttribute('aria-label'), /Plate/);
+    await page.getByRole('button', { name: 'Export current tree as PNG', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current tree as PNG', exact: true });
+    const download = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
+    const bytes = await fs.readFile(await (await download).path());
+    const symbolColors = await page.evaluate(async (data) => {
+        const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let hammer = 0,
+            storage = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+            if (pixels[i] === 167 && pixels[i + 1] === 179 && pixels[i + 2] === 183) hammer++;
+            if (pixels[i] === 161 && pixels[i + 1] === 107 && pixels[i + 2] === 59) storage++;
+        }
+        return { hammer, storage };
+    }, bytes.toString('base64'));
+    assert.ok(
+        symbolColors.hammer && symbolColors.storage,
+        `PNG includes both source symbols: ${JSON.stringify(symbolColors)}`
+    );
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.tree-controls button')].some(
+            (button) => button.textContent === 'Expand all' && button.disabled
+        )
+    );
+    await page.getByRole('button', { name: 'Fit visible nodes', exact: true }).click();
+    const beforeCollapse = await root.boundingBox();
+    await root.click();
+    const afterCollapse = await root.boundingBox();
+    assert.ok(
+        Math.abs(beforeCollapse.x - afterCollapse.x) < 1 && Math.abs(beforeCollapse.y - afterCollapse.y) < 1,
+        `root moved: ${JSON.stringify([beforeCollapse, afterCollapse])}`
+    );
+});
+
+test('compact mobile outline starts at the viewport edge with its root visible', async (t) => {
+    const page = await openTree(t, { width: 600, height: 900 }, traceTree, 'icons');
+    const viewport = await page.locator('.tree-viewport').boundingBox();
+    const root = await card(page, 'Machine').first().boundingBox();
+    assert.ok(root.x >= viewport.x && root.x < viewport.x + 30, JSON.stringify({ viewport, root }));
+    assert.ok(root.y >= viewport.y && root.y < viewport.y + 30, JSON.stringify({ viewport, root }));
 });

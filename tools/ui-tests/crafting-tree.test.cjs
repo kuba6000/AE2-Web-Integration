@@ -201,7 +201,7 @@ test('reset aborts an in-flight response and fences a late result', async () => 
     tree.dispose();
 });
 
-test('large captures expand locally beyond 3,000 nodes while rendering a 300-row window', async () => {
+test('large captures expand locally and expose every expanded row', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes = [
@@ -235,11 +235,8 @@ test('large captures expand locally beyond 3,000 nodes while rendering a 300-row
     await tree.expandAll();
     assert.equal(tree.state.expandedComplete, true);
     assert.equal(tree.state.expandedNodes, 3401);
-    assert.equal(tree.state.totalRows, 3401);
-    assert.equal(tree.state.rows.length, 300);
-    tree.moveWindow(1);
-    assert.equal(tree.state.windowStart, 300);
-    assert.equal(tree.state.rows[0].node.id, 300);
+    assert.equal(tree.state.rows.length, 3401);
+    assert.equal(tree.state.rows.at(-1).node.id, 3400);
     assert.equal(requests, 1);
     tree.dispose();
 });
@@ -385,7 +382,7 @@ test('switching filters retains each view’s own expansion choices', async () =
     await tree.expandAll();
     const full = { ...tree.state.expanded };
     await tree.setMissingOnly(true);
-    await tree.toggle('TASK:2');
+    await tree.toggle(tree.state.rows.find((row) => row.node.id === 2).key);
     const missing = { ...tree.state.expanded };
     await tree.setMissingOnly(false);
     assert.deepEqual(tree.state.expanded, full);
@@ -413,7 +410,7 @@ test('a single-candidate ingredient displays its resource directly and repeated 
     });
     tree.reset('grid', 1);
     await tree.show(true);
-    await tree.toggle('RECIPE:1');
+    await tree.toggle(tree.state.rows.find((row) => row.node.id === 1).key);
     assert.deepEqual(
         tree.state.rows.map((row) => row.node.id),
         [0, 1, 4, 4]
@@ -428,12 +425,11 @@ test('a single-candidate ingredient displays its resource directly and repeated 
     tree.dispose();
 });
 
-test('a reference outside the current window can focus its original node', async () => {
+test('shared nodes link to their original occurrence across a large expanded plane', async () => {
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes = [
         node(0, 'REQUEST', {
-            resourceId: 0,
             children: [
                 ...Array.from({ length: 350 }, (_, i) => edge(i + 1, 'CHILD_REQUEST', '1')),
                 edge(10, 'CHILD_REQUEST', '2')
@@ -444,13 +440,38 @@ test('a reference outside the current window can focus its original node', async
     const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
     tree.reset('grid', 1);
     await tree.show(true);
-    tree.moveWindow(1);
-    assert.ok(tree.state.rows.some((row) => row.node.id === 10 && row.reference));
-    tree.focus('REQUEST:10');
-    assert.equal(tree.state.windowStart, 0);
-    assert.ok(tree.state.rows.some((row) => row.node.id === 10 && !row.reference));
-    const revision = tree.state.revision;
-    tree.focus('REQUEST:10');
-    assert.equal(tree.state.revision, revision);
+    const matches = tree.state.rows.filter((row) => row.node.id === 10);
+    assert.equal(matches.length, 2);
+    assert.equal(matches[1].referenceTarget, matches[0].key);
+    assert.equal(matches[1].cycle, false);
+    tree.dispose();
+});
+
+test('separate requests for the same resource expand while shared nodes and cycles are identified', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.nodes = [
+        node(0, 'REQUEST', { children: [edge(1, 'CHILD_REQUEST', '1'), edge(3, 'CHILD_REQUEST', '2')] }),
+        node(1, 'REQUEST', { resourceId: 1, children: [edge(2, 'CRAFT', '1')] }),
+        node(2, 'TASK', { children: [edge(1, 'CHILD_REQUEST', '1')] }),
+        node(3, 'REQUEST', { resourceId: 1, children: [edge(2, 'CRAFT', '2')] })
+    ];
+    const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    const siblings = tree.state.rows.filter((row) => row.node.resourceId === 1);
+    assert.equal(siblings.length, 2);
+    assert.ok(siblings.every((row) => !row.reference));
+    assert.notEqual(siblings[0].key, siblings[1].key);
+    await tree.toggle(siblings[0].key);
+    const task = tree.state.rows.find((row) => row.node.id === 2);
+    await tree.toggle(task.key);
+    const cycle = tree.state.rows.find((row) => row.node.id === 1 && row.depth === 3);
+    assert.equal(cycle.cycle, true);
+    await tree.toggle(siblings[1].key);
+    const shared = tree.state.rows.findLast((row) => row.node.id === 2);
+    assert.equal(shared.reference, true);
+    assert.equal(shared.cycle, false);
+    assert.equal(shared.referenceTarget, task.key);
     tree.dispose();
 });

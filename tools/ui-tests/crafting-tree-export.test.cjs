@@ -29,11 +29,13 @@ const scene = () => ({
         { title: 'Offscreen material', details: ['9007199254740993'], icon: null, missing: true, reference: true }
     ],
     icons: null,
+    display: 'both',
     title: 'Plan',
-    scope: ['Loaded expanded window only', 'Partial capture']
+    scope: ['All expanded nodes', 'Partial capture']
 });
 function canvasEnvironment() {
     const texts = [],
+        images = [],
         cards = [],
         canvases = [];
     const context = {
@@ -49,12 +51,17 @@ function canvasEnvironment() {
         lineTo() {},
         stroke() {},
         setLineDash() {},
-        drawImage() {},
+        drawImage(...args) {
+            images.push(args);
+        },
         strokeRect: (...args) => cards.push(args),
         measureText(text) {
             return { width: (text.length * Number(this.font.match(/([\d.]+)px/)?.[1] || 11)) / 2 };
         },
         fillText: (text) => texts.push(text)
+    };
+    global.Image = class {
+        async decode() {}
     };
     global.document = {
         fonts: { load: async () => [] },
@@ -69,7 +76,7 @@ function canvasEnvironment() {
             return canvas;
         }
     };
-    return { texts, cards, canvases };
+    return { texts, images, cards, canvases };
 }
 test('PNG paints every node in the snapshot including offscreen nodes and exact quantities, then releases canvas/icons', async () => {
     const { renderTreePng } = await import(moduleUrl);
@@ -93,7 +100,7 @@ test('PNG paints every node in the snapshot including offscreen nodes and exact 
     assert.equal(env.cards.length, 2);
     assert.ok(env.cards.some(([x, y]) => x === 4200 && y === 4200));
     assert.ok(env.texts.includes('9007199254740993'));
-    assert.ok(env.texts.includes('Loaded expanded window only'));
+    assert.ok(env.texts.includes('All expanded nodes'));
     assert.ok(env.texts.includes('Partial capture'));
     assert.ok(env.canvases.every((canvas) => canvas.width === 0 && canvas.height === 0));
     assert.equal(disposed, true);
@@ -166,8 +173,7 @@ test('PNG uses the contribution source identity and icon from the shared card co
         },
         { resources: { 0: { displayName: 'Requested' }, 1: { displayName: 'Substitute', icon } }, recipes: {} },
         { common: (key) => key },
-        'en',
-        false
+        'en'
     );
     const snapshot = scene();
     snapshot.layout.nodes = [snapshot.layout.nodes[0]];
@@ -189,4 +195,49 @@ test('PNG uses the contribution source identity and icon from the shared card co
     assert.deepEqual(resolved, [icon]);
     assert.ok(env.texts.includes('Substitute'));
     assert.ok(!env.texts.includes('Requested'));
+});
+
+test('compact PNG retains small node geometry, counts and source symbols', async () => {
+    const { renderTreePng } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.display = 'icons';
+    snapshot.layout = {
+        width: 192,
+        height: 192,
+        nodes: [
+            { x: 16, y: 16, width: 64, height: 64, parent: null },
+            { x: 112, y: 112, width: 64, height: 64, parent: 0 }
+        ]
+    };
+    snapshot.cards = [
+        {
+            title: 'Recipe',
+            details: ['Crafts: 3'],
+            icon: null,
+            symbol: 'craft',
+            count: '3',
+            missing: false,
+            reference: false
+        },
+        {
+            title: 'Plate',
+            details: ['Storage: 2'],
+            icon: null,
+            symbol: 'storage',
+            count: '2',
+            missing: false,
+            reference: false
+        }
+    ];
+    const env = canvasEnvironment();
+    await renderTreePng(
+        snapshot,
+        settings,
+        style,
+        { resolve: async () => ({ icons: new Map(), dispose() {} }) },
+        new AbortController().signal
+    );
+    assert.ok(env.cards.every(([, , width, height]) => width === 64 && height === 64));
+    assert.ok(env.texts.includes('3') && env.texts.includes('2'));
+    assert.ok(env.images.length >= 2, 'craft and storage symbols are painted');
 });

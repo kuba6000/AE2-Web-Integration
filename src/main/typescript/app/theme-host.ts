@@ -94,8 +94,6 @@ export function mountTheme(
             expandAllTree: crafting.expandAllTree,
             collapseAllTree: crafting.collapseAllTree,
             stopTreeExpansion: crafting.stopTreeExpansion,
-            windowTree: crafting.windowTree,
-            focusTree: crafting.focusTree,
             toggleTree: crafting.toggleTree,
             retryTree: crafting.retryTree,
             search: crafting.search,
