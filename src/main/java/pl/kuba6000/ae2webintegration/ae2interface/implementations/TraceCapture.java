@@ -165,15 +165,21 @@ public final class TraceCapture {
                 .keySet()) {
                 if (visitExceedsBudget()) return false;
                 ICraftingTreeNodeData node = nodeData(child);
-                if (node.web$getMissing() > 0 || node.web$getHowManyEmitted() > 0) return false;
-                for (IAEItemStack used : node.web$getUsed()) {
-                    if (visitExceedsBudget() || used.getStackSize() > 0) return false;
-                }
+                if (!nodeHoldsNoCounters(node)) return false;
                 for (CraftingTreeProcess next : node.web$getProcesses()) {
                     if (visitExceedsBudget()) return false;
                     stack.push(processData(next));
                 }
             }
+        }
+        return true;
+    }
+
+    /** Includes the shared scan budget when reading the node's used stacks. */
+    private boolean nodeHoldsNoCounters(@NotNull ICraftingTreeNodeData node) {
+        if (node.web$getMissing() > 0 || node.web$getHowManyEmitted() > 0) return false;
+        for (IAEItemStack used : node.web$getUsed()) {
+            if (visitExceedsBudget() || used.getStackSize() > 0) return false;
         }
         return true;
     }
