@@ -547,3 +547,30 @@ test('expansion reports progress without moving displayed rows until completion 
     assert.equal(tree.state.expandedComplete, true);
     tree.dispose();
 });
+
+test('manual toggle during expansion follows the displayed folds and supersedes pending work', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.nodes = Array.from({ length: 1800 }, (_, id) =>
+        node(id, 'REQUEST', { children: id < 1799 ? [edge(id + 1, 'CHILD_REQUEST', '1')] : [] })
+    );
+    const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    const collapsed = tree.state.rows.find((row) => row.node.id === 1).key;
+    const pending = tree.expandAll();
+    assert.equal(!!tree.state.expanded[collapsed], false);
+    await tree.toggle(collapsed);
+    await pending;
+    assert.equal(tree.state.expanding, false);
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.node.id),
+        [0, 1, 2]
+    );
+    await tree.toggle(collapsed);
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.node.id),
+        [0, 1]
+    );
+    tree.dispose();
+});

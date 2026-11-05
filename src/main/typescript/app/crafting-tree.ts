@@ -136,11 +136,14 @@ export function createCraftingTree(
     let generation = 0;
     let revision = 0;
     let expansionRun = 0;
+    let pendingExpanded: TreeState['expanded'] | null = null;
     let request: AbortController | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    function cancelExpansion() {
+    function cancelExpansion(keepProgress = false) {
         expansionRun++;
+        if (keepProgress && pendingExpanded) state.expanded = pendingExpanded;
+        pendingExpanded = null;
         if (state.expanding) state.expandedComplete = false;
         state.expanding = false;
     }
@@ -356,7 +359,9 @@ export function createCraftingTree(
         state.expanding = true;
         state.expandedComplete = false;
         state.expandedNodes = 0;
-        if (focus) state.expanded = {};
+        // Keep the visible folds authoritative until completion or an explicit Stop.
+        const expanded = focus ? {} : { ...state.expanded };
+        pendingExpanded = expanded;
         const stack = rootVisits();
         const ancestors = new Set<number>();
         const seen = new Map<number, string>();
@@ -376,7 +381,7 @@ export function createCraftingTree(
                     if (reference || !expandable(row.node)) continue;
                     if (focus && row.shortage === 'NONE' && !['TASK', 'RECIPE', 'INGREDIENT'].includes(row.node.kind))
                         continue;
-                    state.expanded[row.key] = true;
+                    expanded[row.key] = true;
                     descend(stack, row, ancestors, seen);
                 }
                 // Keep the displayed plane stable; publish its final (or stopped) folds once.
@@ -386,6 +391,8 @@ export function createCraftingTree(
             if (run === expansionRun && !stack.length && !focus) state.expandedComplete = true;
         } finally {
             if (run === expansionRun) {
+                state.expanded = expanded;
+                pendingExpanded = null;
                 state.expanding = false;
                 publish();
             }
@@ -396,7 +403,7 @@ export function createCraftingTree(
         focusMissing: () => expand(true),
         expandAll: () => expand(),
         stopExpansion() {
-            cancelExpansion();
+            cancelExpansion(true);
             publish();
         },
         collapseAll() {
