@@ -11,6 +11,8 @@ import java.util.Map;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
@@ -39,27 +41,11 @@ public final class AggregateTreeReconstruction {
         }
     }
 
-    private static final class Input {
+    @Desugar
+    private record Input(int resource, long amount) {}
 
-        final int resource;
-        final long amount;
-
-        Input(int resource, long amount) {
-            this.resource = resource;
-            this.amount = amount;
-        }
-    }
-
-    private static final class Producer {
-
-        final int recipe;
-        final long amount;
-
-        Producer(int recipe, long amount) {
-            this.recipe = recipe;
-            this.amount = amount;
-        }
-    }
+    @Desugar
+    private record Producer(int recipe, long amount) {}
 
     private static final class Recipe {
 

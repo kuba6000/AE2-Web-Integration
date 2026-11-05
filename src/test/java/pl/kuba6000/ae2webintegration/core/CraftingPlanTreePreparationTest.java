@@ -143,6 +143,7 @@ class CraftingPlanTreePreparationTest {
         assertSame(preparation, entry.captureTree(20, 1000));
         assertNotNull(preparation);
         assertSame(preparation.traceGraph(), preparation.traceGraph());
+        assertTrue(preparation.isNativeTrace());
         assertNull(preparation.graph());
         assertEquals(1, traces.get());
     }
@@ -183,6 +184,39 @@ class CraftingPlanTreePreparationTest {
         assertNotNull(preparation);
         assertNull(preparation.traceGraph());
         assertNull(preparation.graph());
+    }
+
+    @Test
+    void aggregatePresentationIsSharedWithoutClaimingNativeTraceProvenance() throws Exception {
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(20, 1000);
+        int resource = capture.addResource(
+            () -> TestGridFixtures.planOutput()
+                .description());
+        capture.result(resource, 6, false);
+        int recipe = capture.addRecipe(2);
+        capture.addOutput(recipe, resource, 3, true);
+        capture.finishRecipe(recipe);
+        CraftingPlanRegistry registry = new CraftingPlanRegistry(System::nanoTime);
+        int id = registry.add(
+            CompletableFuture.completedFuture(job(capture::build)),
+            TestGridFixtures.planOutput(),
+            new CraftingOptions(false, false),
+            false);
+        CraftingPlanRegistry.Entry entry = registry.find(id);
+        assertNotNull(entry);
+        CraftingPlanRegistry.TreePreparation preparation = entry.captureTree(20, 1000);
+        assertNotNull(preparation);
+        var graph = preparation.traceGraph();
+        assertNotNull(graph);
+        assertSame(graph, preparation.traceGraph());
+        assertNull(preparation.graph());
+        assertFalse(preparation.isNativeTrace());
+        assertEquals(
+            6,
+            graph.capture()
+                .requests()
+                .get(0)
+                .amount());
     }
 
     static IAECraftingJob job(AtomicInteger captures) {

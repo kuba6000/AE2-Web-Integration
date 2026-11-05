@@ -11,7 +11,6 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.crafting.AggregateTreeReconstruction;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
@@ -37,21 +36,14 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 /** Builds one response from an immutable, detached capture and an optional icon-pack snapshot. */
 final class CraftingTreeDocument {
 
-    private static final int MAX_RECONSTRUCTED_ENTRIES = 20_000;
-
     private CraftingTreeDocument() {}
 
     static Response from(CraftingDependencyGraph graph, @Nullable IconPack pack, String captureId) {
-        CraftingTraceCapture reconstructed = AggregateTreeReconstruction
-            .from(graph.capture(), MAX_RECONSTRUCTED_ENTRIES);
-        if (reconstructed != null)
-            return new TraceProjection(CraftingTraceGraph.from(reconstructed), pack, Mode.AGGREGATE)
-                .document(captureId);
         return new AggregateProjection(graph, pack).document(captureId);
     }
 
-    static Response from(CraftingTraceGraph graph, @Nullable IconPack pack, String captureId) {
-        return new TraceProjection(graph, pack, Mode.TRACE).document(captureId);
+    static Response from(CraftingTraceGraph graph, @Nullable IconPack pack, String captureId, Mode mode) {
+        return new TraceProjection(graph, pack, mode).document(captureId);
     }
 
     @Desugar
@@ -120,15 +112,7 @@ final class CraftingTreeDocument {
         }
 
         private Response document(String captureId) {
-            for (int id = 0; id < capture.resources()
-                .size(); id++)
-                resources.add(
-                    new Resource(
-                        id,
-                        capture.resources()
-                            .get(id),
-                        mappings,
-                        graph.missingAmount(id)));
+            addResources();
             boolean[] missingOutputs = new boolean[capture.outputs()
                 .size()];
             boolean[] missingGroups = new boolean[capture.ingredients()
@@ -144,6 +128,32 @@ final class CraftingTreeDocument {
             for (int id = 0; id < capture.ingredients()
                 .size(); id++) mark(missingCandidates, graph.alternatives(id, true));
             mark(missingUnplaced, graph.unplacedRecipes(true));
+            addResourceNodes(missingOutputs);
+            addRecipeNodes(missingGroups);
+            addIngredientNodes(missingCandidates);
+            Root root = addRoots(missingUnplaced);
+            return response(
+                captureId,
+                Mode.AGGREGATE,
+                root,
+                capture.limits(),
+                graph.missingComplete(),
+                graph.missingResourceCount());
+        }
+
+        private void addResources() {
+            for (int id = 0; id < capture.resources()
+                .size(); id++)
+                resources.add(
+                    new Resource(
+                        id,
+                        capture.resources()
+                            .get(id),
+                        mappings,
+                        graph.missingAmount(id)));
+        }
+
+        private void addResourceNodes(boolean[] missingOutputs) {
             for (int id = 0; id < capture.resources()
                 .size(); id++) {
                 List<Child> children = new ArrayList<>();
@@ -160,6 +170,9 @@ final class CraftingTreeDocument {
                 }
                 nodes.add(new Node(id, Kind.RESOURCE, id, null, null, null, null, null, null, children));
             }
+        }
+
+        private void addRecipeNodes(boolean[] missingGroups) {
             for (int id = 0; id < capture.recipes()
                 .size(); id++) {
                 List<Child> children = new ArrayList<>();
@@ -198,6 +211,9 @@ final class CraftingTreeDocument {
                         null,
                         children));
             }
+        }
+
+        private void addIngredientNodes(boolean[] missingCandidates) {
             for (int id = 0; id < capture.ingredients()
                 .size(); id++) {
                 List<Child> children = new ArrayList<>();
@@ -228,6 +244,9 @@ final class CraftingTreeDocument {
                         null,
                         children));
             }
+        }
+
+        private @Nullable Root addRoots(boolean[] missingUnplaced) {
             CraftingRecipeCapture.Amount result = graph.root();
             Root root = result == null ? null
                 : new Root(result.resourceId(), Long.toString(result.amount()), capture.simulated());
@@ -252,13 +271,7 @@ final class CraftingTreeDocument {
                 nodes.add(new Node(id, Kind.UNLINKED_MISSING, null, null, null, null, null, null, null, children));
                 roots.add(id);
             }
-            return response(
-                captureId,
-                Mode.AGGREGATE,
-                root,
-                capture.limits(),
-                graph.missingComplete(),
-                graph.missingResourceCount());
+            return root;
         }
     }
 
@@ -282,6 +295,32 @@ final class CraftingTreeDocument {
         }
 
         private Response document(String captureId) {
+            addResources();
+            boolean[] missingContributions = new boolean[capture.contributions()
+                .size()];
+            boolean[] missingRequests = new boolean[capture.taskRequests()
+                .size()];
+            for (int id = 0; id < capture.requests()
+                .size(); id++) mark(missingContributions, graph.contributions(id, true));
+            for (int id = 0; id < capture.tasks()
+                .size(); id++) mark(missingRequests, graph.taskRequests(id, true));
+            addRequestNodes(missingContributions);
+            addTaskNodes(missingRequests);
+            addContributionNodes();
+            int request = graph.root();
+            roots.add(request);
+            CraftingTraceCapture.Request root = capture.requests()
+                .get(request);
+            return response(
+                captureId,
+                mode,
+                new Root(root.resourceId(), Long.toString(root.amount()), capture.simulated()),
+                capture.limits(),
+                graph.missingComplete(),
+                graph.missingResourceCount());
+        }
+
+        private void addResources() {
             for (int id = 0; id < capture.resources()
                 .size(); id++)
                 resources.add(
@@ -291,14 +330,9 @@ final class CraftingTreeDocument {
                             .get(id),
                         mappings,
                         graph.missingAmount(id)));
-            boolean[] missingContributions = new boolean[capture.contributions()
-                .size()];
-            boolean[] missingRequests = new boolean[capture.taskRequests()
-                .size()];
-            for (int id = 0; id < capture.requests()
-                .size(); id++) mark(missingContributions, graph.contributions(id, true));
-            for (int id = 0; id < capture.tasks()
-                .size(); id++) mark(missingRequests, graph.taskRequests(id, true));
+        }
+
+        private void addRequestNodes(boolean[] missingContributions) {
             for (int id = 0; id < capture.requests()
                 .size(); id++) {
                 List<Child> children = new ArrayList<>();
@@ -329,6 +363,9 @@ final class CraftingTreeDocument {
                         null,
                         children));
             }
+        }
+
+        private void addTaskNodes(boolean[] missingRequests) {
             for (int id = 0; id < capture.tasks()
                 .size(); id++) {
                 List<InputGroup> inputs = new ArrayList<>();
@@ -378,6 +415,9 @@ final class CraftingTreeDocument {
                         null,
                         children));
             }
+        }
+
+        private void addContributionNodes() {
             for (int row = 0; row < capture.contributions()
                 .size(); row++) {
                 CraftingTraceCapture.Contribution contribution = capture.contributions()
@@ -395,17 +435,6 @@ final class CraftingTreeDocument {
                         contribution.kind(),
                         Collections.emptyList()));
             }
-            int request = graph.root();
-            roots.add(request);
-            CraftingTraceCapture.Request root = capture.requests()
-                .get(request);
-            return response(
-                captureId,
-                mode,
-                new Root(root.resourceId(), Long.toString(root.amount()), capture.simulated()),
-                capture.limits(),
-                graph.missingComplete(),
-                graph.missingResourceCount());
         }
     }
 

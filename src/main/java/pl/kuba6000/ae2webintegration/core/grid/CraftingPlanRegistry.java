@@ -17,6 +17,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.crafting.AggregateTreeReconstruction;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
@@ -98,6 +99,9 @@ public final class CraftingPlanRegistry {
      */
     public static final class TreePreparation {
 
+        private static final int MAX_RECONSTRUCTED_ENTRIES = 20_000;
+
+        private boolean prepared;
         private final String id = UUID.randomUUID()
             .toString();
         private final CompletableFuture<Captured> capture = new CompletableFuture<>();
@@ -112,18 +116,32 @@ public final class CraftingPlanRegistry {
             return capture.isDone();
         }
 
-        /** HTTP-worker only, after capture completion. Null when the capture is not a trace. */
+        /** HTTP-worker only. Native trace or reconstructed aggregate occurrence view, shared by viewers. */
         public synchronized @Nullable CraftingTraceGraph traceGraph() {
-            Captured captured = completed();
-            if (traceGraph == null && captured.trace() != null) traceGraph = CraftingTraceGraph.from(captured.trace());
+            prepare();
             return traceGraph;
         }
 
-        /** HTTP-worker only, after capture completion. Null when the capture is a trace or unsupported. */
+        /** HTTP-worker only. Declaration fallback when occurrence reconstruction is unavailable. */
         public synchronized @Nullable CraftingDependencyGraph graph() {
-            Captured captured = completed();
-            if (graph == null && captured.recipes() != null) graph = CraftingDependencyGraph.from(captured.recipes());
+            prepare();
             return graph;
+        }
+
+        /** Provenance remains native only when the adapter supplied an actual trace. */
+        public boolean isNativeTrace() {
+            return completed().trace() != null;
+        }
+
+        private void prepare() {
+            if (prepared) return;
+            Captured captured = completed();
+            CraftingTraceCapture trace = captured.trace();
+            if (trace == null && captured.recipes() != null)
+                trace = AggregateTreeReconstruction.from(captured.recipes(), MAX_RECONSTRUCTED_ENTRIES);
+            if (trace != null) traceGraph = CraftingTraceGraph.from(trace);
+            else if (captured.recipes() != null) graph = CraftingDependencyGraph.from(captured.recipes());
+            prepared = true;
         }
 
         private Captured completed() {

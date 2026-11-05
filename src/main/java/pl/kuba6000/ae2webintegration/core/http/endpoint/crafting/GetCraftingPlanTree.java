@@ -251,7 +251,11 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 else {
                     IconPack pack = icons ? CoreEngine.getIconPack() : null;
                     body = trace == null ? CraftingTreeDocument.from(aggregate, pack, preparation.id())
-                        : CraftingTreeDocument.from(trace, pack, preparation.id());
+                        : CraftingTreeDocument.from(
+                            trace,
+                            pack,
+                            preparation.id(),
+                            preparation.isNativeTrace() ? Mode.TRACE : Mode.AGGREGATE);
                 }
             }
             ApiResponse response;
