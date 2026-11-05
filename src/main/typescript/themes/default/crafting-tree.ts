@@ -223,7 +223,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             }
             focusMissing.textContent = nextLocale.common('treeFocusMissing');
             focusMissing.disabled = busy || state.status !== 'READY' || state.expanding;
-            if (revision === state.revision && locale === nextLocale && lastDisplay === display) return;
+            const unchanged = revision === state.revision && locale === nextLocale && lastDisplay === display;
             if (captureId !== state.captureId) {
                 for (const card of cards.values()) card.wrapper.remove();
                 cards.clear();
@@ -276,6 +276,8 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                     : '';
             if (state.status === 'READY' && !state.missingComplete)
                 message.textContent += ' ' + t('treeMissingIncomplete');
+            // Expansion progress changes controls, not the displayed graph.
+            if (unchanged) return;
             const active = document.activeElement as HTMLElement | null;
             const focused = active?.dataset.treeKey;
             const top = viewport.scrollTop,

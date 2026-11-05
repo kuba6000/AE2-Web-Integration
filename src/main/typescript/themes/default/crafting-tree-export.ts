@@ -1,3 +1,4 @@
+import { loadExportFonts } from '../../app/export-text.js';
 import { prepareCanvas, drawText } from '../../app/plan-export.js';
 import { planExportFits, type PlanExportSettings } from '../../app/plan-export-layout.js';
 import type { IconMetadata } from '../../app/api-types.js';
@@ -62,14 +63,7 @@ export async function renderTreePng(
     if (!scene.cards.length) throw new Error('empty');
     let size = treePngSize(scene, settings.scale);
     if (!size) throw new Error('too-large');
-    const fonts = document.fonts.load(`13px ${style.fontFamily}`);
-    await new Promise<void>((resolve, reject) => {
-        const abort = () => reject(signal.reason);
-        signal.addEventListener('abort', abort, { once: true });
-        fonts.then(() => resolve(), reject).finally(() => signal.removeEventListener('abort', abort));
-        if (signal.aborted) abort();
-    });
-    signal.throwIfAborted();
+    await loadExportFonts(style.fontFamily, signal);
     const references =
         settings.icon && scene.display !== 'names' ? scene.cards.flatMap((card) => (card.icon ? [card.icon] : [])) : [];
     const resolved = await icons.resolve(references, scene.icons, signal);

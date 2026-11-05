@@ -80,7 +80,7 @@ export type TreeState = {
     resources: Record<number, TreeResource>;
     recipes: Record<number, TreeRecipe>;
     icons: IconMetadata | null;
-    expanded: Record<string, boolean>;
+    expanded: Partial<Record<string, boolean>>;
     rows: TreeRow[];
     partial: boolean;
     limits: string[];
@@ -360,7 +360,7 @@ export function createCraftingTree(
         const stack = rootVisits();
         const ancestors = new Set<number>();
         const seen = new Map<number, string>();
-        publish();
+        changed();
         try {
             while (stack.length && run === expansionRun && state.visible) {
                 for (let count = 0; count < EXPANSION_CHUNK && stack.length;) {
@@ -379,7 +379,8 @@ export function createCraftingTree(
                     state.expanded[row.key] = true;
                     descend(stack, row, ancestors, seen);
                 }
-                publish();
+                // Keep the displayed plane stable; publish its final (or stopped) folds once.
+                changed();
                 if (stack.length) await new Promise<void>((resolve) => setTimeout(resolve, 0));
             }
             if (run === expansionRun && !stack.length && !focus) state.expandedComplete = true;

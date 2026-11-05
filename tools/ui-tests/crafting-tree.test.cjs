@@ -516,3 +516,34 @@ test('focus folds healthy descendants, allows reopening, and can be cancelled on
     assert.ok(other.state.rows.length < 1000);
     other.dispose();
 });
+
+test('expansion reports progress without moving displayed rows until completion or Stop', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.nodes = Array.from({ length: 1800 }, (_, id) =>
+        node(id, 'REQUEST', { children: id < 1799 ? [edge(id + 1, 'CHILD_REQUEST', '1')] : [] })
+    );
+    const progress = [];
+    const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {
+        if (tree.state.expanding) progress.push(tree.state.expandedNodes);
+    });
+    tree.reset('grid', 1);
+    await tree.show(true);
+    const before = tree.state.rows.map((row) => row.node.id);
+    const pending = tree.expandAll();
+    assert.ok(progress.some((count) => count > 0));
+    assert.deepEqual(
+        tree.state.rows.map((row) => row.node.id),
+        before
+    );
+    tree.stopExpansion();
+    await pending;
+    assert.ok(tree.state.rows.length > before.length);
+    assert.ok(tree.state.rows.length < data.nodes.length);
+    assert.equal(tree.state.expanding, false);
+    assert.equal(tree.state.expandedComplete, false);
+    await tree.expandAll();
+    assert.equal(tree.state.rows.length, data.nodes.length);
+    assert.equal(tree.state.expandedComplete, true);
+    tree.dispose();
+});

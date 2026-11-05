@@ -12,6 +12,19 @@ const contributionLabels: Record<TreeContribution, string> = {
 
 export type TreeSymbol = 'craft' | 'storage' | 'emitted' | 'missing' | 'reused' | 'unknown';
 
+// One active locale is enough for all cards and exports, without retaining arbitrary locale caches.
+let formatting: { language: string; full: Intl.NumberFormat; compact: Intl.NumberFormat } | undefined;
+function numberFormats(language: string) {
+    language ||= 'en';
+    if (formatting?.language !== language)
+        formatting = {
+            language,
+            full: new Intl.NumberFormat(language),
+            compact: new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 1 })
+        };
+    return formatting;
+}
+
 /** The screen and exports share the same resource, amount, and source presentation. */
 export function craftingTreeContent(
     row: ReadonlyData<TreeRow>,
@@ -20,13 +33,9 @@ export function craftingTreeContent(
     language: string
 ) {
     const t = locale.common;
-    const number = (value: string) => BigInt(value).toLocaleString(language || 'en');
-    const compact = (value: string | null) =>
-        value === null
-            ? ''
-            : new Intl.NumberFormat(language || 'en', { notation: 'compact', maximumFractionDigits: 1 }).format(
-                  BigInt(value)
-              );
+    const formats = numberFormats(language);
+    const number = (value: string) => formats.full.format(BigInt(value));
+    const compact = (value: string | null) => (value === null ? '' : formats.compact.format(BigInt(value)));
     const resource = row.node.resourceId != null ? state.resources[row.node.resourceId] : null;
     const reference = row.reference ? [t(row.cycle ? 'treeCycle' : 'treeShared')] : [];
     if (row.node.kind === 'TASK' || row.node.kind === 'RECIPE') {
