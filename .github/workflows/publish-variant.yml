@@ -1,18 +1,39 @@
 name: Release tagged build
 
 on:
-  push:
-    tags: ['*']
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      directory:
+        required: true
+        type: string
+      minecraft:
+        required: true
+        type: string
+      loader:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+      notes_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   build:
+    defaults:
+      run:
+        working-directory: ${{ inputs.directory }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
@@ -20,12 +41,12 @@ jobs:
     outputs:
       snapshot: ${{ steps.notes.outputs.snapshot }}
     env:
-      VERSION: ${{ github.ref_name }}
+      VERSION: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
+          ref: ${{ inputs.sha }}
           persist-credentials: false
 
       - name: Prepare shared release description
@@ -33,22 +54,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 .github/scripts/release_notes.py \
-            --tag "$VERSION" --minecraft '1.20.1' --loader 'forge' \
-            --repository "$GITHUB_REPOSITORY" --output build/release/notes.md \
+          git fetch --no-tags origin "${{ inputs.notes_sha }}"
+          python3 ../.github/scripts/release_notes.py \
+            --tag "$VERSION" --minecraft "${{ inputs.minecraft }}" --loader "${{ inputs.loader }}" \
+            --repository "$GITHUB_REPOSITORY" --output "${{ inputs.directory }}/build/release/notes.md" --notes-source-ref "${{ inputs.notes_sha }}" \
             --github-output "$GITHUB_OUTPUT"
-
-      - name: Set up Node.js for frontend compilation
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: |
+            8
             17
             21
+            25
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -62,15 +85,15 @@ jobs:
 
       - name: Stage verified production JAR and description
         run: |
-          python3 .github/scripts/release_bundle.py stage \
+          python3 ../.github/scripts/release_bundle.py stage \
             --manifest build/release/manifest.json --metadata build/release/metadata.json \
             --output build/release/bundle
           cat build/release/notes.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: release-1.20.1
-          path: build/release/bundle/
+          name: release-${{ inputs.directory }}
+          path: ${{ inputs.directory }}/build/release/bundle/
           if-no-files-found: error
           retention-days: 14
 
@@ -84,10 +107,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: release-1.20.1
+          name: release-${{ inputs.directory }}
           path: release-bundle
       - name: Create or verify GitHub release
         env:
@@ -97,6 +121,9 @@ jobs:
             --bundle release-bundle --repository "$GITHUB_REPOSITORY" --publish
 
   portals:
+    defaults:
+      run:
+        working-directory: ${{ inputs.directory }}
     needs: build
     if: >-
       github.repository == 'kuba6000/AE2-Web-Integration' &&
@@ -109,9 +136,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      VERSION: ${{ github.ref_name }}
+      VERSION: ${{ inputs.tag }}
     steps:
       - name: Check portal credentials
+        working-directory: ${{ github.workspace }}
         id: portal
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -134,26 +162,28 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.portal.outputs.enabled == 'true'
         with:
-          submodules: recursive
+          ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: steps.portal.outputs.enabled == 'true'
         with:
-          name: release-1.20.1
-          path: release-bundle
+          name: release-${{ inputs.directory }}
+          path: ${{ inputs.directory }}/release-bundle
       - name: Verify immutable release bundle
         if: steps.portal.outputs.enabled == 'true'
         id: bundle
         run: |
-          python3 .github/scripts/release_bundle.py export \
+          python3 ../.github/scripts/release_bundle.py export \
             --bundle release-bundle --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         if: steps.portal.outputs.enabled == 'true'
         with:
           distribution: temurin
           java-version: |
+            8
             17
             21
+            25
       - uses: gradle/actions/setup-gradle@v4
         if: steps.portal.outputs.enabled == 'true'
       - name: Publish to Modrinth

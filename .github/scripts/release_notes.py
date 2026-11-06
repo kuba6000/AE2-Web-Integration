@@ -68,7 +68,9 @@ def previous_tag(checkout, current, minecraft, loader):
             continue
         if (tag_minecraft, tag_loader) == (minecraft, loader) and "snapshot" not in tag.lower():
             candidates.setdefault(commit, tag)
-    for commit in git(checkout, "rev-list", "--first-parent", anchor).splitlines():
+    history = git(checkout, "rev-list", "--first-parent", anchor).splitlines()
+    history += git(checkout, "rev-list", "--topo-order", anchor).splitlines()
+    for commit in history:
         if commit in candidates:
             return candidates[commit], anchor
     return None, anchor
@@ -77,6 +79,12 @@ def previous_tag(checkout, current, minecraft, loader):
 def generated_notes(args, checkout, previous, anchor):
     if args.changelog_file:
         return (checkout / args.changelog_file).read_text(encoding="utf-8")
+    # Legacy adapter tags live on imported ancestry. Preserve the full migration-range notes once;
+    # after both ends use the monorepo layout, omit changes affecting only other adapters.
+    if previous and git(checkout, "ls-tree", "--format=%(objecttype)", previous, "--", "core") == "tree":
+        paths = ["core/", f"{args.loader}-{args.minecraft}/", ".github/", "gradle/", "README.md"]
+        return "## Changes\n\n" + git(checkout, "log", "--first-parent", "--format=- %s (%h)",
+                                       f"{previous}..{anchor}", "--", *paths)
     if not previous:
         return "## Changes\n\n" + git(checkout, "log", "--first-parent", "--format=- %s (%h)", anchor, "--")
     payload = {"tag_name": args.tag, "target_commitish": anchor, "previous_tag_name": previous}

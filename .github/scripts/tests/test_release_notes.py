@@ -305,6 +305,40 @@ print(json.dumps({'body': 'Generated notes for ' + payload['tag_name'] + ' since
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.metadata()["previous_tag"], "1.9.0-forge-1.7.10")
 
+    def test_imported_adapter_history_supplies_legacy_baseline(self):
+        branch = self.git("branch", "--show-current")
+        self.git("checkout", "-b", "adapter")
+        self.commit()
+        self.git("tag", "1.9.0-forge-1.7.10")
+        self.git("checkout", branch)
+        self.commit()
+        self.git("-c", "user.name=Release Test", "-c", "user.email=release-test@example.invalid",
+                 "-c", "commit.gpgsign=false", "merge", "--no-ff", "adapter", "-m", "Import adapter")
+        self.git("tag", "2.0.0-forge-1.7.10")
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.metadata()["previous_tag"], "1.9.0-forge-1.7.10")
+
+    def test_monorepo_notes_exclude_other_adapter_only_changes(self):
+        self.write("core/source.txt", "baseline")
+        self.git("add", "core")
+        self.commit()
+        self.git("tag", "1.9.0-forge-1.7.10")
+        self.write("forge-1.7.10/source.txt", "own")
+        self.git("add", "forge-1.7.10")
+        self.commit()
+        own = f"Fixture {self.commit_number}"
+        self.write("neoforge-1.21.1/source.txt", "other")
+        self.git("add", "neoforge-1.21.1")
+        self.commit()
+        other = f"Fixture {self.commit_number}"
+        self.git("tag", "2.0.0-forge-1.7.10")
+        result = self.run_cli(online=True, environment=self.fake_gh("import sys;sys.exit(9)"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        notes = (self.checkout / "build/release/notes.md").read_text(encoding="utf-8")
+        self.assertIn(own, notes)
+        self.assertNotIn(other, notes)
+
     def test_prerelease_authored_intro_and_common_crlf_are_optional_and_preserved(self):
         (self.write("release-notes/common.md", "")).write_bytes("Common: zażółć.\r\n".encode("utf-8"))
         self.write("release-notes/2.0.0-beta.1.md", "Beta introduction.\n")
