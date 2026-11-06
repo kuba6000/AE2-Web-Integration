@@ -174,6 +174,11 @@ export function createCrafting(
                 reading = false;
                 changed();
                 if (!readFailed && planIcons === null) void refresh();
+                if (!readFailed && route.view === 'plan' && route.tree) {
+                    // Discovery failures clear the tree target; only an empty controller needs restoring.
+                    if (state.tree.status === 'IDLE') tree.reset(current.gridKey, current.planId);
+                    if (!state.tree.visible) void tree.show(true);
+                }
             }
         }
     }
@@ -237,7 +242,9 @@ export function createCrafting(
     }
     const actions = {
         state,
-        showTree: tree.show,
+        async showTree(visible: boolean) {
+            if (route.view === 'plan') navigateToPlan(route.gridKey, route.planId, visible);
+        },
         focusMissingTree: tree.focusMissing,
         expandAllTree: tree.expandAll,
         collapseAllTree: tree.collapseAll,
@@ -272,6 +279,16 @@ export function createCrafting(
             return !!activePlan;
         },
         route(next: Route) {
+            if (
+                next.view === 'plan' &&
+                route.view === 'plan' &&
+                next.gridKey === route.gridKey &&
+                next.planId === route.planId
+            ) {
+                route = next;
+                if (state.tree.visible !== !!next.tree) void tree.show(!!next.tree);
+                return;
+            }
             generation++;
             request?.abort();
             reading = false;
@@ -302,6 +319,7 @@ export function createCrafting(
             }
             handoff = null;
             if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) activePlan = null;
+            if (next.view === 'plan' && next.tree && activePlan) void tree.show(true);
         },
         refresh,
         block(error: string | null) {

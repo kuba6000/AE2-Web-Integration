@@ -4,7 +4,7 @@ export type Route =
     | { view: 'tracking'; gridKey: string; itemKey: string }
     | { view: 'cpus'; gridKey: string; cpuKey: string | null }
     | { view: 'history'; gridKey: string; entryId: string | null }
-    | { view: 'plan'; gridKey: string; planId: string };
+    | { view: 'plan'; gridKey: string; planId: string; tree?: boolean };
 
 export function readRoute(): Route {
     const hash = location.hash.replace(/^#/, '');
@@ -52,10 +52,15 @@ export function readRoute(): Route {
             // Malformed URL encoding falls through to the missing-route view.
         }
     }
-    const plan = /^\/grids\/([^/]+)\/plans\/([1-9]\d*)$/.exec(hash);
+    const plan = /^\/grids\/([^/]+)\/plans\/([1-9]\d*)(\/tree)?$/.exec(hash);
     if (plan) {
         try {
-            return { view: 'plan', gridKey: decodeURIComponent(plan[1]), planId: plan[2] };
+            return {
+                view: 'plan',
+                gridKey: decodeURIComponent(plan[1]),
+                planId: plan[2],
+                ...(plan[3] ? { tree: true } : {})
+            };
         } catch {
             // Malformed URL encoding falls through to the missing-route view.
         }
@@ -71,8 +76,8 @@ export function readRoute(): Route {
     return { view: 'missing', gridKey: null };
 }
 
-export function navigateToPlan(gridKey: string, planId: string | number) {
-    location.hash = `/grids/${encodeURIComponent(gridKey)}/plans/${planId}`;
+export function navigateToPlan(gridKey: string, planId: string | number, tree = false) {
+    location.hash = `/grids/${encodeURIComponent(gridKey)}/plans/${planId}${tree ? '/tree' : ''}`;
 }
 
 export function cpuHref(gridKey: string | null, cpuKey: string | null = null) {
