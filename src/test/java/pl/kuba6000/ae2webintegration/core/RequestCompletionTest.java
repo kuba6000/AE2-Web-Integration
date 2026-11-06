@@ -58,10 +58,8 @@ class RequestCompletionTest {
     }
 
     @Test
-    void serverReadinessDoesNotPublishOrReplaceAFinalResponse() throws Exception {
+    void timeoutCompletionCannotBeReplacedByALateResponse() throws Exception {
         TestRequest request = new TestRequest();
-        request.captured();
-        request.awaitServerStage(1, TimeUnit.SECONDS);
         assertThrows(TimeoutException.class, () -> request.awaitCompletion(0, TimeUnit.SECONDS));
         request.failIfPending(ApiStatus.TIMEOUT);
         request.respond("late page");
@@ -71,7 +69,7 @@ class RequestCompletionTest {
                 .httpStatus());
         TestRequest rejected = new TestRequest();
         rejected.failIfPending(ApiStatus.SERVER_BUSY);
-        rejected.awaitServerStage(1, TimeUnit.SECONDS);
+        rejected.awaitCompletion(1, TimeUnit.SECONDS);
         assertEquals(
             ApiStatus.SERVER_BUSY.httpStatus(),
             rejected.finishResponse()
@@ -82,10 +80,6 @@ class RequestCompletionTest {
 
         @Override
         public void handle() {}
-
-        void captured() {
-            readyForWorker();
-        }
 
         void reject(Object data) {
             deny(ApiStatus.BAD_PARAM, data);

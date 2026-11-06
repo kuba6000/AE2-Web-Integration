@@ -9,6 +9,10 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.GZIPInputStream;
@@ -43,6 +47,9 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
     private final AtomicBoolean serverThreadStalled = new AtomicBoolean();
     private final AtomicInteger captures = new AtomicInteger();
     private int plan;
+    private final ExecutorService gameThread = Executors.newSingleThreadExecutor();
+    private volatile CountDownLatch tickEntered;
+    private volatile CountDownLatch tickRelease;
 
     @BeforeEach
     void start() throws Exception {
@@ -65,7 +72,34 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
             return null;
         }, exchange -> false, request -> {
             serverStages.incrementAndGet();
-            if (!serverThreadStalled.get()) request.runOnServerThread(AE2Controller.AE2Interface);
+            if (serverThreadStalled.get()) return;
+            try {
+                gameThread.submit(() -> {
+                    if (tickEntered != null) {
+                        tickEntered.countDown();
+                        try {
+                            assertTrue(tickRelease.await(5, TimeUnit.SECONDS));
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread()
+                                .interrupt();
+                            throw new AssertionError(interrupted);
+                        }
+                    }
+                    request.runOnServerThread(AE2Controller.AE2Interface);
+                    // The tick publishes completion; the document is assembled by the HTTP consumer.
+                    assertTrue(
+                        new JsonParser().parse(
+                            request.getResponse()
+                                .json())
+                            .getAsJsonObject()
+                            .get("data")
+                            .isJsonNull());
+                })
+                    .get(5, TimeUnit.SECONDS);
+                request.awaitCompletion(5, TimeUnit.SECONDS);
+            } catch (Exception failure) {
+                throw new IllegalStateException(failure);
+            }
         });
         router.register(GetCraftingPlanTree.class);
         server.createContext("/api", router);
@@ -74,29 +108,54 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
 
     @AfterEach
     void stop() {
+        if (tickRelease != null) tickRelease.countDown();
+        gameThread.shutdownNow();
         if (server != null) server.stop(0);
         AE2Controller.AE2Interface = previousAe;
         GridData.clearRuntimeState();
     }
 
     @Test
-    void capturedGraphIsServedWhileTheServerThreadIsUnavailable() throws Exception {
+    void cachedGraphStillDispatchesAndCannotSucceedWithoutTheServerTick() throws Exception {
         JsonObject first = get("", 200, "OK");
         String captureId = data(first).get("captureId")
             .getAsString();
         assertEquals(1, serverStages.get());
-        serverThreadStalled.set(true);
         JsonObject next = get("captureId=" + captureId, 200, "OK");
-        assertEquals(
-            "READY",
-            data(next).get("state")
-                .getAsString());
         assertEquals(
             captureId,
             data(next).get("captureId")
                 .getAsString());
         assertEquals(1, captures.get());
-        assertEquals(1, serverStages.get(), "A captured graph must not wait for the server thread");
+        assertEquals(2, serverStages.get());
+        serverThreadStalled.set(true);
+        get("captureId=" + captureId, 503, "TIMEOUT");
+        assertEquals(3, serverStages.get());
+        assertEquals(1, captures.get());
+
+    }
+
+    @Test
+    void cachedHttpResponseWaitsForItsServerTick() throws Exception {
+        get("", 200, "OK");
+        tickEntered = new CountDownLatch(1);
+        tickRelease = new CountDownLatch(1);
+        ExecutorService client = Executors.newSingleThreadExecutor();
+        try {
+            var response = client.submit(() -> get("", 200, "OK"));
+            assertTrue(tickEntered.await(5, TimeUnit.SECONDS));
+            assertFalse(response.isDone());
+            tickRelease.countDown();
+            assertEquals(
+                "READY",
+                data(response.get(5, TimeUnit.SECONDS)).get("state")
+                    .getAsString());
+            assertEquals(1, captures.get());
+            assertEquals(2, serverStages.get());
+        } finally {
+            tickRelease.countDown();
+            client.shutdownNow();
+        }
     }
 
     @Test
@@ -164,7 +223,7 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
                 .getAsString());
         assertEquals(3, serverStages.get());
         get(calculating, "", 200, "OK");
-        assertEquals(3, serverStages.get());
+        assertEquals(4, serverStages.get());
     }
 
     @Test

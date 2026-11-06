@@ -178,22 +178,6 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         return true;
     }
 
-    /** Captured data, entry ownership and access snapshots are safe to read on the HTTP worker. */
-    @Override
-    public boolean serveWithoutServerStage() {
-        IAEGrid live = CoreEngine.GRID_IDENTITIES.getGrid(gridKey);
-        if (!GridAccess.allows(live, context.getPrincipal())) return false;
-        GridData data = GridData.find(gridKey);
-        CraftingPlanRegistry.Entry found = data == null ? null : data.getJob(planId);
-        CraftingPlanRegistry.TreePreparation captured = found == null ? null : found.tree();
-        if (captured == null || !captured.isCaptured()) return false;
-        grid = live;
-        gridData = data;
-        entry = found;
-        preparation = captured;
-        return true;
-    }
-
     @Override
     protected void handle(IAEGrid grid) {
         if (grid == null) {
@@ -217,7 +201,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
         }
         try {
             preparation = entry.captureTree(MAX_CAPTURE_ENTRIES, MAX_DESCRIPTION_CHARACTERS);
-            readyForWorker();
+            done();
         } catch (InterruptedException interrupted) {
             Thread.currentThread()
                 .interrupt();
@@ -230,16 +214,13 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
 
     @Override
     public ApiResponse finishResponse() {
-        if (isResponseComplete() || entry == null) return getResponse();
+        ApiResponse completed = getResponse();
+        if (completed.httpStatus() != HttpURLConnection.HTTP_OK || entry == null) return completed;
         ApiStatus failure = accessFailure();
-        if (failure != null) {
-            deny(failure);
-            return getResponse();
-        }
+        if (failure != null) return ApiResponse.error(failure);
         try {
             if (expectedCaptureId != null && (preparation == null || !expectedCaptureId.equals(preparation.id()))) {
-                deny(ApiStatus.UPDATE_CHANGED);
-                return getResponse();
+                return ApiResponse.error(ApiStatus.UPDATE_CHANGED);
             }
             Response body;
             if (preparation == null) body = state(State.CALCULATING);
@@ -265,13 +246,11 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
                 response = ApiResponse.bounded(HttpURLConnection.HTTP_OK, state(State.TOO_LARGE), MAX_RESPONSE_BYTES);
             }
             failure = accessFailure();
-            if (failure == null) respondPrepared(response);
-            else deny(failure);
+            return failure == null ? response : ApiResponse.error(failure);
         } catch (RuntimeException unexpected) {
             LOG.error("Failed to prepare crafting dependency document", unexpected);
-            deny(ApiStatus.INTERNAL_ERROR);
+            return ApiResponse.error(ApiStatus.INTERNAL_ERROR);
         }
-        return getResponse();
     }
 
     private @Nullable ApiStatus accessFailure() {

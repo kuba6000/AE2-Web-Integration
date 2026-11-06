@@ -185,9 +185,8 @@ public final class ApiRouter implements HttpHandler {
             IRequest request = selected.factory()
                 .get();
             if (request.init(context)) {
-                if (request instanceof ISyncedRequest synced) {
-                    if (!synced.serveWithoutServerStage()) dispatch.accept(synced);
-                } else((IAsyncRequest) request).handle();
+                if (request instanceof ISyncedRequest synced) dispatch.accept(synced);
+                else((IAsyncRequest) request).handle();
             }
             if (request instanceof LiveEventsRequest events && events.startStream()) return;
             response = request instanceof ISyncedRequest synced ? synced.finishResponse() : request.getResponse();

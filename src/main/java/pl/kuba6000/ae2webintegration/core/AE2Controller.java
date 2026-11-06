@@ -407,7 +407,7 @@ public class AE2Controller {
             return true;
         }
         try {
-            request.awaitServerStage(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             requests.remove(request);
             request.failIfPending(ApiStatus.TIMEOUT);

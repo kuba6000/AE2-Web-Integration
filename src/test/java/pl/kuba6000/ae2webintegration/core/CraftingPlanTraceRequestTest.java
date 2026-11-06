@@ -64,12 +64,11 @@ class CraftingPlanTraceRequestTest extends GridTestScope {
     }
 
     @Test
-    void aCapturedTraceIsServedWithoutTheServerStageAndKeepsItsCaptureIdentity() {
+    void aCapturedTraceSurvivesRepeatedServerDispatchWithTheSameCaptureIdentity() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(409);
         AtomicInteger captures = new AtomicInteger();
         int plan = addTrace(grid, TraceFixtures::gears, captures);
         GetCraftingPlanTree uncaptured = request(grid, plan, "");
-        assertFalse(uncaptured.serveWithoutServerStage());
         uncaptured.runOnServerThread(TestGridFixtures.ae(grid));
         String captureId = json(
             uncaptured.finishResponse()
@@ -78,7 +77,7 @@ class CraftingPlanTraceRequestTest extends GridTestScope {
             .get("captureId")
             .getAsString();
         GetCraftingPlanTree later = request(grid, plan, "captureId=" + captureId);
-        assertTrue(later.serveWithoutServerStage());
+        later.runOnServerThread(TestGridFixtures.ae(grid));
         JsonObject data = json(
             later.finishResponse()
                 .json())

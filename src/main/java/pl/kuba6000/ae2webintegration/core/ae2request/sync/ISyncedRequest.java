@@ -3,8 +3,6 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import pl.kuba6000.ae2webintegration.core.IServerThreadTask;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
@@ -25,22 +23,7 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     protected IAEGrid grid = null;
     protected GridData gridData = null;
 
-    /** Waits for the native stage or an already final denial/failure. */
-    public final void awaitServerStage(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
-        awaitServerReadiness(timeout, unit);
-    }
-
-    /**
-     * HTTP worker, before server-thread dispatch. Return true only when every read this request needs is
-     * stored, detached data whose access checks are safe off the server thread; the router then skips the
-     * native stage and {@link #finishResponse()} completes the request on the worker. The default always
-     * takes the server stage.
-     */
-    public boolean serveWithoutServerStage() {
-        return false;
-    }
-
-    /** Runs on the HTTP worker after bounded native dispatch. Ordinary requests are already complete. */
+    /** HTTP-only finalization after the handler completes on the server thread; never bypasses dispatch. */
     public ApiResponse finishResponse() {
         return getResponse();
     }
