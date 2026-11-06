@@ -95,7 +95,7 @@ export type TreeState = {
 };
 
 const expandable = (node: TreeNode) => node.kind !== 'CONTRIBUTION';
-const EXPANSION_CHUNK = 256;
+const EXPANSION_SLICE_MILLIS = 8;
 
 /** One plan-owned capture; all navigation and shortage focus use its local graph. */
 export function createCraftingTree(
@@ -363,9 +363,11 @@ export function createCraftingTree(
         const ancestors = new Set<number>();
         const seen = new Map<number, string>();
         changed();
+        let channel: MessageChannel | undefined;
         try {
             while (stack.length && run === expansionRun && state.visible) {
-                for (let count = 0; count < EXPANSION_CHUNK && stack.length;) {
+                const deadline = performance.now() + EXPANSION_SLICE_MILLIS;
+                while (stack.length && performance.now() < deadline) {
                     const item = stack.pop()!;
                     if ('exit' in item) {
                         for (const id of item.exit) ancestors.delete(id);
@@ -374,7 +376,6 @@ export function createCraftingTree(
                     const row = item.row;
                     const { reference } = visit(stack, ancestors, seen, row);
                     state.expandedNodes++;
-                    count++;
                     if (reference || !expandable(row.node)) continue;
                     if (focus && row.shortage === 'NONE' && !['TASK', 'RECIPE', 'INGREDIENT'].includes(row.node.kind))
                         continue;
@@ -383,10 +384,18 @@ export function createCraftingTree(
                 }
                 // Keep the displayed plane stable; publish its final (or stopped) folds once.
                 changed();
-                if (stack.length) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                if (stack.length && run === expansionRun && state.visible)
+                    await new Promise<void>((resolve) => {
+                        // A posted task yields to browser input without nested timer clamping.
+                        channel ??= new MessageChannel();
+                        channel.port1.onmessage = () => resolve();
+                        channel.port2.postMessage(null);
+                    });
             }
             if (run === expansionRun && !stack.length && !focus) state.expandedComplete = true;
         } finally {
+            channel?.port1.close();
+            channel?.port2.close();
             if (run === expansionRun) {
                 state.expanded = expanded;
                 pendingExpanded = null;

@@ -199,7 +199,9 @@ test('reset aborts an in-flight response and fences a late result', async () => 
     tree.dispose();
 });
 
-test('large captures expand locally and expose every expanded row', async () => {
+test('large captures expand locally and expose every expanded row', async (t) => {
+    let clock = 0;
+    t.mock.method(performance, 'now', () => clock++);
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes = [
@@ -466,7 +468,9 @@ test('focus preserves healthy siblings and marks occurrence shortage without fet
     tree.dispose();
 });
 
-test('focus folds healthy descendants, allows reopening, and can be cancelled on a long shortage path', async () => {
+test('focus folds healthy descendants, allows reopening, and can be cancelled on a long shortage path', async (t) => {
+    let clock = 0;
+    t.mock.method(performance, 'now', () => clock++);
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes[2].children.push(edge(6, 'CHILD_REQUEST', '1'));
@@ -517,7 +521,9 @@ test('focus folds healthy descendants, allows reopening, and can be cancelled on
     other.dispose();
 });
 
-test('expansion reports progress without moving displayed rows until completion or Stop', async () => {
+test('expansion reports progress without moving displayed rows until completion or Stop', async (t) => {
+    let clock = 0;
+    t.mock.method(performance, 'now', () => clock++);
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes = Array.from({ length: 1800 }, (_, id) =>
@@ -548,7 +554,9 @@ test('expansion reports progress without moving displayed rows until completion 
     tree.dispose();
 });
 
-test('manual toggle during expansion follows the displayed folds and supersedes pending work', async () => {
+test('manual toggle during expansion follows the displayed folds and supersedes pending work', async (t) => {
+    let clock = 0;
+    t.mock.method(performance, 'now', () => clock++);
     const { createCraftingTree } = await import(moduleUrl);
     const data = document();
     data.nodes = Array.from({ length: 1800 }, (_, id) =>
@@ -592,4 +600,24 @@ test('overflowing missing amounts retain red resources while unknown absence sta
     assert.equal(tree.state.rows.find((row) => row.node.id === 0).shortage, 'MISSING');
     assert.equal(tree.state.rows.find((row) => row.node.id === 1).shortage, 'NONE');
     tree.dispose();
+});
+
+test('expansion that fits within one time slice completes without idle pauses', async (t) => {
+    t.mock.method(performance, 'now', () => 0);
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.nodes = Array.from({ length: 1000 }, (_, id) =>
+        node(id, 'REQUEST', { children: id < 999 ? [edge(id + 1, 'CHILD_REQUEST', '1')] : [] })
+    );
+    const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    const pending = tree.expandAll();
+    try {
+        assert.equal(tree.state.expandedComplete, true);
+        assert.equal(tree.state.rows.length, data.nodes.length);
+    } finally {
+        tree.dispose();
+        await pending;
+    }
 });
