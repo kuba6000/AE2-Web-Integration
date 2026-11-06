@@ -91,7 +91,8 @@ export function svgText(
     style: ExportTextStyle,
     size: number
 ): string {
-    const anchor = ctx.textAlign === 'center' ? 'middle' : 'start';
+    const anchor =
+        ctx.textAlign === 'center' ? 'middle' : ctx.textAlign === 'right' || ctx.textAlign === 'end' ? 'end' : 'start';
     return exportTextRuns(ctx, text, width, style, size)
         .map((run) => {
             ctx.font = run.font;

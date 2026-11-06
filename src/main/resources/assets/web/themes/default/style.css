@@ -48,8 +48,8 @@
     --control-edge-dark: #373737;
     --slot-edge-dark: #373737;
     --slot-edge-light: #fff;
-    --tree-recipe: #a9b8c5;
-    --tree-recipe-border: #486175;
+    --tree-recipe: #c1c4c8;
+    --tree-recipe-border: #7e8791;
     --tree-missing: #6b3030;
     --tree-missing-border: #e34444;
     --tree-missing-text: #fff4f4;
@@ -87,8 +87,8 @@
     --slot: #393842;
     --slot-edge-dark: #25232b;
     --slot-edge-light: #625d6e;
-    --tree-recipe: #344654;
-    --tree-recipe-border: #8daabd;
+    --tree-recipe: #45434e;
+    --tree-recipe-border: #777984;
     --terminal-title: #eeeaf4;
     --text: #eeeaf4;
     --muted: #c0bacd;
@@ -116,8 +116,8 @@
         --slot: #393842;
         --slot-edge-dark: #25232b;
         --slot-edge-light: #625d6e;
-        --tree-recipe: #344654;
-        --tree-recipe-border: #8daabd;
+        --tree-recipe: #45434e;
+        --tree-recipe-border: #777984;
         --terminal-title: #eeeaf4;
         --text: #eeeaf4;
         --muted: #c0bacd;
@@ -4011,7 +4011,7 @@ button.toast:hover {
     min-height: 0;
 }
 .tree-card {
-    --resource-icon-size: 24px;
+    --resource-icon-size: 32px;
     --tree-fill: var(--slot);
     --tree-frame: var(--slot-edge-light);
 
@@ -4020,52 +4020,69 @@ button.toast:hover {
     overflow: hidden;
     width: 100%;
     min-height: 0;
-    display: grid;
+    display: block;
     position: relative;
-    grid-template-columns: 24px 1fr;
     text-align: left;
-    gap: 4px;
     padding: 8px;
 }
-.tree-card strong {
-    grid-column: 2;
-    grid-row: 1;
+.tree-card strong,
+.tree-details {
+    position: absolute;
+    left: 12px;
+    right: 16px;
     overflow: hidden;
     text-overflow: ellipsis;
-    -webkit-line-clamp: 2;
+    line-height: 18px;
+}
+.tree-card strong {
+    top: 10px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.tree-details {
+    top: 30px;
+    font-size: 11px;
+    line-height: 14px;
+    overflow-wrap: anywhere;
+    max-height: 28px;
+}
+.tree-card[data-recipe='true'] .tree-details {
+    max-height: 14px;
+}
+.tree-card:has(.resource-icon, .tree-symbol:not([hidden])) strong,
+.tree-card:has(.resource-icon, .tree-symbol:not([hidden])) .tree-details {
+    left: 56px;
+}
+.tree-card:has(.resource-icon):has(.tree-symbol:not([hidden])) strong,
+.tree-card:has(.resource-icon):has(.tree-symbol:not([hidden])) .tree-details {
+    right: 34px;
 }
 .tree-card .resource-icon,
 .tree-symbol {
     position: absolute;
     top: 50%;
-    left: 8px;
+    left: 12px;
     transform: translateY(-50%);
 }
 .tree-card .resource-icon {
     z-index: 1;
 }
 .tree-marker {
-    position: relative;
+    position: absolute;
+    top: 1px;
+    right: 4px;
     z-index: 3;
-    grid-column: 1;
-    grid-row: 1;
+    line-height: 1;
 }
-.tree-details {
-    grid-column: 2;
-    grid-row: 2;
-    font-size: 11px;
-    overflow-wrap: anywhere;
-    -webkit-line-clamp: 4;
-}
-
 .tree-symbol {
     z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     font-weight: bold;
+    background: transparent;
 }
 .tree-symbol[hidden] {
     display: none;
@@ -4075,12 +4092,10 @@ button.toast:hover {
     height: 100%;
 }
 .tree-card:has(.resource-icon) .tree-symbol {
-    top: calc(50% - 17px);
-    left: 4px;
-    transform: none;
-    width: 14px;
-    height: 14px;
-    background: var(--slot);
+    right: 8px;
+    left: auto;
+    width: 18px;
+    height: 18px;
 }
 .tree-amount {
     display: none;
@@ -4184,12 +4199,6 @@ button.toast:hover {
     display: none;
 }
 
-.tree-card strong,
-.tree-details {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
 @media (width <= 700px) {
     .tree-row {
         width: auto !important;
@@ -4197,7 +4206,7 @@ button.toast:hover {
     }
     .tree-card {
         height: auto;
-        min-height: 84px;
+        min-height: 72px;
     }
     .plan-tree[data-display='icons'] .tree-card {
         height: 64px;
@@ -4234,9 +4243,7 @@ button.toast:hover {
 
     background: var(--tree-fill);
     border-color: var(--tree-frame);
-    box-shadow:
-        inset 0 0 0 2px var(--tree-fill),
-        inset 0 0 0 3px var(--tree-frame);
+    box-shadow: none;
 }
 .tree-card[data-blocked='true'] {
     --tree-frame: var(--tree-blocked);

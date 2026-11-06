@@ -1,3 +1,4 @@
+import { treeCardGeometry } from './crafting-tree-layout.js';
 import type { ThemeApplication } from '../../app/theme-api.js';
 import { createSvgAssets, escapeSvg, svgText } from '../../app/svg-export.js';
 import { loadExportFonts } from '../../app/export-text.js';
@@ -71,16 +72,11 @@ export async function renderTreeSvg(
                 rect(node.x, node.y, node.width, node.height, paint.fill),
                 `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" fill="none" stroke="${escapeSvg(paint.border)}" stroke-width="2"${card.reference ? ' stroke-dasharray="5 3"' : ''}/>`
             );
-            if (paint.inset)
-                body.push(
-                    `<rect x="${node.x + 4}" y="${node.y + 4}" width="${node.width - 8}" height="${node.height - 8}" fill="none" stroke="${escapeSvg(paint.border)}" stroke-width="1"/>`
-                );
             const hasResource =
                 settings.icon && scene.display !== 'names' && (compact ? card.hasResource : !!card.icon);
             const icon = hasResource && card.icon ? resolved.icons.get(card.icon) : undefined;
-            const iconSize = compact ? 32 : 24;
-            const iconX = node.x + (compact ? (node.width - iconSize) / 2 : 10);
-            const iconY = node.y + (node.height - iconSize) / 2;
+            const geometry = treeCardGeometry(node, compact, hasResource, !!card.symbol);
+            const { iconSize, iconX, iconY } = geometry;
             const id = icon && assets.iconId(icon);
             const glyph = (text: string, x: number, y: number, width: number, fontSize: number) => {
                 ctx.textAlign = 'center';
@@ -92,10 +88,7 @@ export async function renderTreeSvg(
             if (id) body.push(`<use href="#${id}" transform="translate(${iconX} ${iconY}) scale(${iconSize / 64})"/>`);
             else if (hasResource) glyph('?', iconX + iconSize / 2, iconY + iconSize / 2, iconSize, 24);
             if (card.symbol) {
-                const sourceSize = hasResource ? (compact ? 16 : 14) : iconSize;
-                const x = hasResource ? node.x + 6 : iconX;
-                const y = hasResource ? node.y + (compact ? 7 : node.height / 2 - 17) : iconY;
-                if (hasResource) body.push(rect(x, y, sourceSize, sourceSize, style.tile));
+                const { symbolSize: sourceSize, symbolX: x, symbolY: y } = geometry;
                 if (card.symbol === 'craft' || card.symbol === 'storage')
                     body.push(
                         `<use href="#source-${card.symbol}" x="${x}" y="${y}" width="${sourceSize}" height="${sourceSize}"/>`
@@ -112,27 +105,38 @@ export async function renderTreeSvg(
                     );
             }
             if (compact) {
+                ctx.textAlign = 'right';
                 if (card.count)
                     body.push(
-                        svgText(ctx, card.count, node.x + 4, node.y + node.height - 14, node.width - 8, cardStyle, 11)
+                        svgText(
+                            ctx,
+                            card.count,
+                            node.x + node.width - 4,
+                            node.y + node.height - 14,
+                            node.width - 8,
+                            cardStyle,
+                            11
+                        )
                     );
+                ctx.textAlign = 'start';
             } else {
                 if (settings.name)
-                    body.push(svgText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, cardStyle, 13));
-                const lineHeight = Math.min(14, 68 / Math.max(1, card.details.length));
-                for (const [lineIndex, line] of card.details.entries()) {
+                    body.push(svgText(ctx, card.title, geometry.textX, node.y + 10, geometry.textWidth, cardStyle, 13));
+                const lineHeight = 14;
+                const lines = card.details.slice(0, Math.floor((node.height - 36) / lineHeight));
+                for (const [lineIndex, line] of lines.entries()) {
                     ctx.font = `11px ${style.fontFamily}`;
                     const fontSize = Math.min(
                         11,
-                        (11 * (node.width - 48)) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
+                        (11 * geometry.textWidth) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
                     );
                     body.push(
                         svgText(
                             ctx,
                             line,
-                            node.x + 40,
-                            node.y + 34 + lineIndex * lineHeight,
-                            node.width - 48,
+                            geometry.textX,
+                            node.y + 30 + lineIndex * lineHeight,
+                            geometry.textWidth,
                             cardStyle,
                             fontSize
                         )

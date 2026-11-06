@@ -263,7 +263,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
     assert.ok(env.images.length >= 2, 'craft and storage symbols are painted');
 });
 
-test('PNG centers main artwork and paints source badges over the item', async () => {
+test('PNG centers artwork and separates source badges in text mode', async () => {
     const { renderTreePng } = await import(moduleUrl);
     const icon = { page: 0, x: 0, y: 0 };
     const bitmap = {};
@@ -319,7 +319,7 @@ test('PNG centers main artwork and paints source badges over the item', async ()
         );
         const checkCenter = (image, tile) => {
             const [x, y, imageWidth, imageHeight] = image.slice(-4);
-            const expectedSize = compact ? 32 : 24;
+            const expectedSize = 32;
             if (
                 imageWidth !== expectedSize ||
                 imageHeight !== expectedSize ||
@@ -335,14 +335,10 @@ test('PNG centers main artwork and paints source badges over the item', async ()
             checkCenter(env.images[itemIndex], snapshot.layout.nodes[1]);
             const [x, y, size] = env.images.at(-1).slice(-4);
             const [itemX, itemY] = env.images[itemIndex].slice(-4);
-            if (
-                env.images.length - 1 <= itemIndex ||
-                x >= itemX ||
-                y >= itemY ||
-                x + size <= itemX ||
-                y + size <= itemY
-            )
-                failures.push(`${display} source badge does not overlap the item's upper-left corner`);
+            if (compact) {
+                if (!(x < itemX && y < itemY && x + size > itemX && y + size > itemY))
+                    failures.push('compact source badge should remain near the upper-left corner');
+            } else if (x <= itemX + 32) failures.push('text-mode source badge overlaps the resource icon');
         }
     }
     assert.deepEqual(failures, []);
@@ -401,7 +397,7 @@ test('PNG centers source glyphs with and without resource artwork', async () => 
     assert.deepEqual(glyphs, [
         [
             { text: '?', x: 48, y: 48, align: 'center', baseline: 'middle' },
-            { text: '!', x: 30, y: 31, align: 'center', baseline: 'middle' },
+            { text: '!', x: 28, y: 29, align: 'center', baseline: 'middle' },
             { text: '?', x: 144, y: 48, align: 'center', baseline: 'middle' }
         ],
         [
@@ -409,8 +405,87 @@ test('PNG centers source glyphs with and without resource artwork', async () => 
             { text: '?', x: 144, y: 48, align: 'center', baseline: 'middle' }
         ],
         [
-            { text: '!', x: 38, y: 70, align: 'center', baseline: 'middle' },
-            { text: '?', x: 134, y: 70, align: 'center', baseline: 'middle' }
+            { text: '!', x: 44, y: 70, align: 'center', baseline: 'middle' },
+            { text: '?', x: 140, y: 70, align: 'center', baseline: 'middle' }
         ]
     ]);
+});
+
+test('compact counts align to the right card edge in PNG and SVG', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.display = 'icons';
+    snapshot.layout = { width: 96, height: 96, nodes: [{ x: 16, y: 16, width: 64, height: 64, parent: null }] };
+    snapshot.cards = [{ title: 'Plate', details: [], count: '120', symbol: null, icon: null }];
+    const env = canvasEnvironment();
+    const icons = { resolve: async () => ({ icons: new Map(), dispose() {} }) };
+    await renderTreePng(snapshot, { ...settings, icon: false }, style, icons, new AbortController().signal);
+    const count = env.textDraws.find((entry) => entry.text === '120');
+    assert.equal(count.align, 'right');
+    assert.ok(count.x > 70 && count.x < 80);
+    const result = await renderTreeSvg(
+        snapshot,
+        { ...settings, icon: false },
+        style,
+        icons,
+        new AbortController().signal
+    );
+    assert.match(await result.blob.text(), /<text[^>]*text-anchor="end"[^>]*>120<\/text>/);
+});
+
+test('truncated compact counts keep their ellipsis inside the right edge in both formats', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.display = 'icons';
+    snapshot.layout = { width: 96, height: 96, nodes: [{ x: 16, y: 16, width: 64, height: 64, parent: null }] };
+    snapshot.cards = [
+        { title: 'Plate', details: [], count: '123456789012345678901234567890', symbol: null, icon: null }
+    ];
+    const env = canvasEnvironment();
+    const icons = { resolve: async () => ({ icons: new Map(), dispose() {} }) };
+    await renderTreePng(snapshot, { ...settings, icon: false }, style, icons, new AbortController().signal);
+    const runs = env.textDraws.filter((entry) => entry.align === 'right');
+    assert.ok(runs.some((run) => run.text === '…'));
+    assert.ok(runs.every((run) => run.x <= 76));
+    const result = await renderTreeSvg(
+        snapshot,
+        { ...settings, icon: false },
+        style,
+        icons,
+        new AbortController().signal
+    );
+    const text = await result.blob.text();
+    const svgRuns = [...text.matchAll(/<text x="([^"]+)"[^>]*text-anchor="end"[^>]*>([^<]*)<\/text>/g)];
+    assert.ok(svgRuns.some((run) => run[2] === '…'));
+    assert.ok(svgRuns.every((run) => Number(run[1]) <= 76));
+});
+
+test('small recipe exports keep details readable instead of overlapping extra lines', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.display = 'both';
+    snapshot.layout = { width: 192, height: 100, nodes: [{ x: 16, y: 16, width: 160, height: 56, parent: null }] };
+    snapshot.cards = [
+        {
+            title: 'Recipe',
+            details: ['Craft count: 12', 'Shared reference', 'Partial recipe'],
+            icon: null,
+            symbol: null
+        }
+    ];
+    const env = canvasEnvironment();
+    const icons = { resolve: async () => ({ icons: new Map(), dispose() {} }) };
+    await renderTreePng(snapshot, { ...settings, icon: false }, style, icons, new AbortController().signal);
+    assert.ok(env.texts.includes('Craft count: 12'));
+    assert.ok(!env.texts.includes('Shared reference'));
+    const result = await renderTreeSvg(
+        snapshot,
+        { ...settings, icon: false },
+        style,
+        icons,
+        new AbortController().signal
+    );
+    const text = await result.blob.text();
+    assert.match(text, /Craft count: 12/);
+    assert.doesNotMatch(text, /Shared reference|Partial recipe/);
 });

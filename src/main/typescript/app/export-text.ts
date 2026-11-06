@@ -49,6 +49,18 @@ export function exportTextRuns(
         if (part !== segment.text) break;
     }
     if (truncated) runs.push({ text: '…', offset: used, font: ctx.font, color: style.foreground, ...last });
+    // Each draw call aligns a single run; shift its anchor to align the entire formatted group.
+    const alignment = ctx.textAlign === 'center' ? 0.5 : ctx.textAlign === 'right' || ctx.textAlign === 'end' ? 1 : 0;
+    if (alignment && runs.length) {
+        const widths = runs.map((run) => {
+            ctx.font = run.font;
+            return ctx.measureText(run.text).width;
+        });
+        const totalWidth = widths.reduce((sum, value) => sum + value, 0);
+        runs.forEach((run, index) => {
+            run.offset += alignment * (widths[index] - totalWidth);
+        });
+    }
     return runs;
 }
 

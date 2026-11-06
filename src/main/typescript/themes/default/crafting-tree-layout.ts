@@ -9,16 +9,16 @@ export function layoutCraftingTree(rows: readonly LayoutRow[], display: Terminal
     const compact = display === 'icons';
     const widths: Record<TreeKind, number> = {
         RESOURCE: 240,
-        RECIPE: 208,
+        RECIPE: 160,
         INGREDIENT: 176,
         UNPLACED: 208,
         UNLINKED_MISSING: 208,
         REQUEST: 240,
-        TASK: 208,
-        CONTRIBUTION: 176
+        TASK: 160,
+        CONTRIBUTION: 240
     };
     const column = compact ? 64 : 240;
-    const cardHeight = compact ? 64 : 108;
+    const cardHeight = compact ? 64 : 72;
     const stepX = column + 32;
     const stepY = cardHeight + 40;
     const positions: TreePosition[] = [];
@@ -32,8 +32,10 @@ export function layoutCraftingTree(rows: readonly LayoutRow[], display: Terminal
         const level = parent === null ? 0 : levels[parent] + 1;
         levels.push(level);
         if (parent !== null) children[parent].push(index);
-        const width = compact ? column : widths[row.node.kind];
-        positions.push({ x: 0, y: 16 + level * stepY, width, height: cardHeight, parent });
+        const recipe = row.node.kind === 'TASK' || row.node.kind === 'RECIPE';
+        const width = compact ? column : widths[row.node.kind] - (display === 'names' && !recipe ? 24 : 0);
+        const height = !compact && recipe ? 56 : cardHeight;
+        positions.push({ x: 0, y: 16 + level * stepY, width, height, parent });
         ancestors.push({ depth: row.depth, index });
     }
     let nextLeaf = 16;
@@ -52,4 +54,17 @@ export function layoutCraftingTree(rows: readonly LayoutRow[], display: Terminal
         }
     }
     return { nodes: positions, width: Math.max(column + 32, nextLeaf - stepX + column + 16), height };
+}
+
+/** Shared card artwork/text bounds for both image formats. */
+export function treeCardGeometry(node: TreePosition, compact: boolean, resource: boolean, symbol: boolean) {
+    const iconSize = 32;
+    const iconX = node.x + (compact ? (node.width - iconSize) / 2 : 12);
+    const iconY = node.y + (node.height - iconSize) / 2;
+    const symbolSize = resource ? (compact ? 16 : 18) : 32;
+    const symbolX = resource ? node.x + (compact ? 4 : node.width - symbolSize - 8) : iconX;
+    const symbolY = resource && compact ? node.y + 5 : node.y + (node.height - symbolSize) / 2;
+    const textX = node.x + (resource || symbol ? 56 : 12);
+    const textWidth = node.width - (textX - node.x) - (resource && symbol ? 34 : 16);
+    return { iconSize, iconX, iconY, symbolSize, symbolX, symbolY, textX, textWidth };
 }

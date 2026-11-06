@@ -1,3 +1,4 @@
+import { treeCardGeometry } from './crafting-tree-layout.js';
 import { loadExportFonts } from '../../app/export-text.js';
 import { prepareCanvas, drawText } from '../../app/plan-export.js';
 import { planExportFits, type PlanExportSettings } from '../../app/plan-export-layout.js';
@@ -129,17 +130,11 @@ export async function renderTreePng(
                     ctx.setLineDash(card.reference ? [5, 3] : []);
                     ctx.strokeRect(node.x, node.y, node.width, node.height);
                     ctx.setLineDash([]);
-                    if (paint.inset) {
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(node.x + 4, node.y + 4, node.width - 8, node.height - 8);
-                        ctx.lineWidth = 2;
-                    }
                     const hasResource =
                         settings.icon && scene.display !== 'names' && (compact ? card.hasResource : !!card.icon);
                     const icon = hasResource && card.icon ? resolved.icons.get(card.icon) : undefined;
-                    const iconSize = compact ? 32 : 24;
-                    const iconX = node.x + (compact ? (node.width - iconSize) / 2 : 10);
-                    const iconY = node.y + (node.height - iconSize) / 2;
+                    const geometry = treeCardGeometry(node, compact, hasResource, !!card.symbol);
+                    const { iconSize, iconX, iconY } = geometry;
                     if (icon)
                         ctx.drawImage(
                             icon.image,
@@ -160,13 +155,7 @@ export async function renderTreePng(
                         ctx.textBaseline = 'top';
                     }
                     if (card.symbol) {
-                        const size = hasResource ? (compact ? 16 : 14) : iconSize;
-                        const x = hasResource ? node.x + 6 : iconX;
-                        const y = hasResource ? node.y + (compact ? 7 : node.height / 2 - 17) : iconY;
-                        if (hasResource) {
-                            ctx.fillStyle = style.tile;
-                            ctx.fillRect(x, y, size, size);
-                        }
+                        const { symbolSize: size, symbolX: x, symbolY: y } = geometry;
                         const image = symbols.get(card.symbol);
                         if (image) ctx.drawImage(image, x, y, size, size);
                         else {
@@ -182,33 +171,35 @@ export async function renderTreePng(
                         }
                     }
                     if (compact) {
+                        ctx.textAlign = 'right';
                         if (card.count)
                             drawText(
                                 ctx,
                                 card.count,
-                                node.x + 4,
+                                node.x + node.width - 4,
                                 node.y + node.height - 14,
                                 node.width - 8,
                                 cardStyle,
                                 11
                             );
+                        ctx.textAlign = 'start';
                     } else {
                         if (settings.name)
-                            drawText(ctx, card.title, node.x + 40, node.y + 8, node.width - 48, cardStyle, 13);
-                        const lines = card.details;
-                        const lineHeight = Math.min(14, 68 / Math.max(1, lines.length));
+                            drawText(ctx, card.title, geometry.textX, node.y + 10, geometry.textWidth, cardStyle, 13);
+                        const lines = card.details.slice(0, Math.floor((node.height - 36) / 14));
+                        const lineHeight = 14;
                         for (const [lineIndex, line] of lines.entries()) {
                             ctx.font = `11px ${style.fontFamily}`;
                             const fontSize = Math.min(
                                 11,
-                                (11 * (node.width - 48)) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
+                                (11 * geometry.textWidth) / Math.max(1, ctx.measureText(plainMinecraftText(line)).width)
                             );
                             drawText(
                                 ctx,
                                 line,
-                                node.x + 40,
-                                node.y + 34 + lineIndex * lineHeight,
-                                node.width - 48,
+                                geometry.textX,
+                                node.y + 30 + lineIndex * lineHeight,
+                                geometry.textWidth,
                                 cardStyle,
                                 fontSize
                             );

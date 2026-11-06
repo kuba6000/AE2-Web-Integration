@@ -25,8 +25,7 @@ export function treeCardPaint(card: Card, palette: TreePalette, colors: boolean)
               : recipe
                 ? palette.recipeBorder
                 : palette.border,
-        foreground: missing ? palette.missingText : palette.foreground,
-        inset: recipe
+        foreground: missing ? palette.missingText : palette.foreground
     };
 }
 
