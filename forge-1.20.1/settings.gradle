@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 rootProject.name = "${mod_id}"
 
 include ':core'
+
+project(':core').projectDir = file('../core')

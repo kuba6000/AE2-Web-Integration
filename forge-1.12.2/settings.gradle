@@ -30,3 +30,5 @@ blowdryerSetup {
 rootProject.name = rootProject.projectDir.getName()
 
 include ':core'
+
+project(':core').projectDir = file('../core')

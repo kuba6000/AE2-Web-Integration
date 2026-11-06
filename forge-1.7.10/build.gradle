@@ -4,6 +4,8 @@ plugins {
     id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
+apply from: '../gradle/adapter-version.gradle'
+
 apply from: 'icon-generator.gradle'
 
 apply from: 'gradle/idea-settings.gradle'

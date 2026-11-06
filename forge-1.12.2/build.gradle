@@ -29,7 +29,6 @@ plugins {
     id 'com.gtnewhorizons.retrofuturagradle' version '2.0.6'
     id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
     id 'com.diffplug.spotless' version '8.10.2' apply false
-    id 'com.palantir.git-version' version '3.0.0' apply false
     id 'com.gradleup.shadow' version '9.6.1' apply false
     id 'org.jetbrains.kotlin.jvm' version '1.8.0' apply false
     id 'org.jetbrains.kotlin.kapt' version '1.8.0' apply false
@@ -247,10 +246,6 @@ if (enableSpotless.toBoolean()) {
     }
 }
 
-// Git version checking, also checking for if this is a submodule
-if (project.file('.git/HEAD').isFile() || project.file('.git').isFile()) {
-    apply plugin: 'com.palantir.git-version'
-}
 
 // Shadowing
 if (usesShadowedDependencies.toBoolean()) {
@@ -300,28 +295,13 @@ tasks.withType(ScalaCompile).configureEach {
 
 // Configure Minecraft
 
-// Try to gather mod version from git tags if version is not manually specified
-if (System.getenv('VERSION')) {
-    modVersion = System.getenv('VERSION')
-}
-if (!modVersion) {
-    try {
-        modVersion = gitVersion()
-    } catch (Exception ignored) {
-        out.style(Style.Failure).text(
-                "Mod version could not be determined! Property 'modVersion' is not set, and either git is not installed or no git tags exist.\n" +
-                        "Either specify a mod version in 'gradle.properties', or create at least one tag in git for this project."
-        )
-        modVersion = 'NO-GIT-TAG-SET'
-    }
-}
-
-if (includeMCVersionJar.toBoolean()){
-    version = "${minecraftVersion}-${modVersion}"
-}
-else {
+if (!System.getenv('VERSION') && modVersion) {
     version = modVersion
+} else {
+    apply from: '../gradle/adapter-version.gradle'
 }
+modVersion = version.toString()
+if (includeMCVersionJar.toBoolean()) version = "${minecraftVersion}-${modVersion}"
 
 group = modGroup
 

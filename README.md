@@ -20,7 +20,7 @@ generates item icons from your modpack and resource packs.
 
 [📖 Installation guide](https://ae2web.kuba6000.pl/get-started) · [🔧 API documentation](https://ae2web.kuba6000.pl/docs/)
 
-![Terminal with item icons, pinned resources and a flow tooltip](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/terminal.webp)
+![Terminal with item icons, pinned resources and a flow tooltip](core/docs/images/gallery/terminal.webp)
 
 ## Current features
 
@@ -85,27 +85,27 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 
 **Crafting plan and CPU selection**
 
-![Calculated crafting plan with CPU selection](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/crafting-plan.webp)
+![Calculated crafting plan with CPU selection](core/docs/images/gallery/crafting-plan.webp)
 
 **Live CPU view**
 
-![Crafting CPU progress and resource states](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/cpu.webp)
+![Crafting CPU progress and resource states](core/docs/images/gallery/cpu.webp)
 
 **Resource history**
 
-![Resource history with stock, input, output and net flow](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/tracking.webp)
+![Resource history with stock, input, output and net flow](core/docs/images/gallery/tracking.webp)
 
 **Completed and cancelled crafts**
 
-![Saved crafting history](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/history.webp)
+![Saved crafting history](core/docs/images/gallery/history.webp)
 
 **Discord notification**
 
-![Discord notification with a crafting result card](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/discord-notification.webp)
+![Discord notification with a crafting result card](core/docs/images/gallery/discord-notification.webp)
 
 **Mobile terminal**
 
-<img width="360" alt="Terminal with item icons and pagination on a phone" src="https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/core/docs/images/gallery/mobile.webp" />
+<img width="360" alt="Terminal with item icons and pagination on a phone" src="core/docs/images/gallery/mobile.webp" />
 
 </details>
 
@@ -357,7 +357,7 @@ location / {
 
 ### Hosting through another web server
 
-The [`tools/php-proxy`](https://github.com/kuba6000/AE2-Web-Integration/tree/core/tools/php-proxy) directory contains a PHP reverse proxy that serves
+The [`tools/php-proxy`](core/tools/php-proxy) directory contains a PHP reverse proxy that serves
 the mod's website, assets and API through an existing web server.
 
 ## Telemetry
@@ -380,43 +380,36 @@ The singleplayer owner can use these commands without cheats; on a dedicated ser
 
 ### Repository architecture
 
-The [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) branch contains the shared,
-version-independent logic: the HTTP server, web API, authentication, configuration
-definitions, crafting and tracking logic, Discord integration, and the web assets.
+The shared `core/` directory contains the HTTP server, web API, authentication, configuration,
+crafting and tracking logic, Discord integration and web assets. It is not a standalone Minecraft mod.
+The adapter directories provide Minecraft/loader lifecycle hooks, Mixins and AE2 conversions.
 
-The Minecraft-version branches are thin adapters around that shared core. They contain only the code that has
-to know about a specific Minecraft version, mod loader, or AE2 API: lifecycle hooks, config and command wiring,
-Mixins, and conversions between AE2 objects and the interfaces understood by core.
-
-| Branch | Purpose |
+| Directory | Target |
 | --- | --- |
-| [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) | Shared, version-independent logic and this documentation. **It is not a standalone Minecraft mod.** |
-| [`1.21.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.21.1) | NeoForge 1.21.1 adapter |
-| [`1.20.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.20.1) | Forge 1.20.1 adapter |
-| [`1.12.2`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.12.2) | Forge 1.12.2 adapter for AE2 UEL |
-| [`1.7.10`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.7.10) | Forge 1.7.10 adapter for GTNH |
+| `core/` | Shared implementation and frontend |
+| `forge-1.7.10/` | GTNH |
+| `forge-1.12.2/` | AE2 UEL |
+| `forge-1.20.1/` | Forge 1.20.1 |
+| `neoforge-1.21.1/` | NeoForge 1.21.1 |
 
-Each version branch includes `core` as a Git submodule pinned to a tested commit and packages it into the final
-mod JAR. Shared behavior should normally be changed on `core`; a version branch should only contain the adapter
-needed to make that behavior work on its Minecraft and AE2 version.
+Each adapter packages the same local core sources. Shared code must remain independent of
+Minecraft and loader APIs. Each build keeps its own Gradle wrapper and Java toolchain.
 
 ### Building and checking
 
-Use a Minecraft-version branch to build an installable mod JAR. Initialize its submodules before
-building:
+Run the wrapper from the chosen adapter directory to build an installable mod:
 
 ```shell
-git submodule update --init --recursive
+cd forge-1.7.10
 ./gradlew build
 ```
 
-The shared core can be checked independently with `./gradlew test spotlessCheck`.
-
+Run `./gradlew test spotlessCheck` from `core/` to check shared Java code independently.
 Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `PATH`, alongside
-the JDK required by the branch. Gradle installs the locked frontend dependencies, compiles TypeScript,
-and packages the JavaScript output. Node.js and npm are not required to run the finished mod.
+the JDK required by the adapter. Gradle installs locked frontend dependencies and compiles TypeScript.
+Node.js and npm are not required to run the finished mod.
 
-See [frontend development](https://github.com/kuba6000/AE2-Web-Integration/blob/core/tools/ui-tests/README.md) for frontend commands and browser tests.
+See [frontend development](core/tools/ui-tests/README.md) for frontend commands and browser tests.
 
 ### API and custom themes
 
@@ -424,9 +417,9 @@ The web API is available under `/api/` on your Minecraft server. See the
 [API documentation](https://ae2web.kuba6000.pl/docs/); send requests to your own server, not the
 documentation host.
 
-- [OpenAPI generator](https://github.com/kuba6000/AE2-Web-Integration/blob/core/tools/openapi-doclet/README.md) — generate the API specification from endpoint
+- [OpenAPI generator](core/tools/openapi-doclet/README.md) — generate the API specification from endpoint
   annotations and Javadocs.
-- [Theme author guide](https://github.com/kuba6000/AE2-Web-Integration/blob/core/docs/themes/README.md) — theme contracts, development tools and the example project.
+- [Theme author guide](core/docs/themes/README.md) — theme contracts, development tools and the example project.
 
 ## License
 
@@ -435,12 +428,12 @@ Bundled third-party libraries and assets retain their own licenses:
 
 | Component | Author / source | License |
 | --- | --- | --- |
-| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](https://github.com/kuba6000/AE2-Web-Integration/blob/core/LICENSE) |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
 | Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
 | Configuration library (bundled in Minecraft 1.7.10 and 1.12.2 builds) | [NightConfig 3.6.4, TheElectronWill and contributors](https://github.com/TheElectronWill/night-config/tree/v3.6.4) | [LGPL-3.0](https://github.com/TheElectronWill/night-config/blob/v3.6.4/LICENSE) |
-| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
-| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
-| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
+| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
+| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
 
 ### Third-Party Game Assets
 

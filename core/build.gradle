@@ -11,7 +11,7 @@ buildscript {
 
 plugins {
     id 'java-library'
-    // Deliberately no version: when this module is included as a submodule of an integration branch that
+    // Deliberately no version: when this module is included by a Minecraft adapter that
     // branch already has spotless on the classpath (8.10.2 on every branch) and Gradle rejects
     // a version request in that case. Standalone builds get the version from settings.gradle.
     id 'com.diffplug.spotless' apply false
@@ -22,7 +22,7 @@ plugins {
 // The rules are the shared GTNH config, vendored here the same way the modern integration branches vendor
 // it, so the whole project formats identically. Applied only when core is the root project: the branches
 // pin different engine versions (modern eclipse 4.31, legacy 4.19 via Blowdryer), so letting a parent
-// build format this submodule would rewrite it back and forth depending on which worktree it sits in.
+// build format shared core would rewrite it back and forth depending on which worktree it sits in.
 if (project == rootProject) {
     apply plugin: 'org.jetbrains.gradle.plugin.idea-ext'
     apply from: 'gradle/idea-settings.gradle'
@@ -344,7 +344,7 @@ configurations.create('iconPackElements') {
     outgoing.artifact(iconPackJar)
 }
 
-// This submodule is pure Java (no Minecraft/Forge references).
+// This module is pure Java (no Minecraft/Forge references).
 // Mark outgoing artifacts as already deobfuscated so RFG does not
 // attempt to run DependencyDeobfuscationTransform on this jar.
 configurations.configureEach {

@@ -8,35 +8,13 @@ plugins {
     alias libs.plugins.shadow
     alias libs.plugins.spotless
     alias libs.plugins.lombok
-    id 'com.palantir.git-version' version '4.0.0' apply false // 0.13.0 is the last jvm8 supporting version
     id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
 }
 
 group = maven_group
-// Formats the mod version to include the loader, Minecraft version, and '-SNAPSHOT-<timestamp>' if enabled.
+apply from: '../gradle/adapter-version.gradle'
+mod_version = version.toString()
 
-if (project.file('.git/HEAD').isFile() || project.file('.git').isFile()) {
-    apply plugin: 'com.palantir.git-version'
-}
-
-String identifiedVersion
-String versionOverride = System.getenv("VERSION") ?: null
-try {
-    identifiedVersion = versionOverride == null ? gitVersion() : versionOverride
-}
-catch (Exception ignored) {
-    logger.warn(
-        'This mod must be version controlled by Git AND the repository must provide at least one tag,\n' +
-            'or the VERSION override must be set! (Do NOT download from GitHub using the ZIP option, instead\n' +
-            'clone the repository)'
-    )
-    versionOverride = 'NO-GIT-TAG-SET'
-    identifiedVersion = versionOverride
-}
-
-mod_version = identifiedVersion
-
-version = "${mod_version}"
 boolean isCI = System.getenv("CI") != null
 
 java {
