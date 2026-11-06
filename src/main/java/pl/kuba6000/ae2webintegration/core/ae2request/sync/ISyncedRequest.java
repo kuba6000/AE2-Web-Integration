@@ -8,6 +8,7 @@ import pl.kuba6000.ae2webintegration.core.IServerThreadTask;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -21,6 +22,11 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     protected List<GridAccess.View> grids = Collections.emptyList();
     protected IAEGrid grid = null;
     protected GridData gridData = null;
+
+    /** HTTP-only finalization after the handler completes on the server thread; never bypasses dispatch. */
+    public ApiResponse finishResponse() {
+        return getResponse();
+    }
 
     protected void handle(IAEGrid grid) {}
 

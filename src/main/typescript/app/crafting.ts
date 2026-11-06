@@ -1,3 +1,5 @@
+import { createCraftingTree } from './crafting-tree.js';
+import type { TreeState } from './crafting-tree.js';
 import type { Plan, CpuInfo, StoredResource, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
@@ -16,6 +18,7 @@ export type PlanMetadata = {
 export type Mutation = 'create' | 'submit' | 'delete';
 export type PlanSort = Preferences['planSort'];
 export type CraftingState = {
+    tree: TreeState;
     search: string;
     sort: PlanSort;
     descending: boolean;
@@ -41,7 +44,9 @@ export function createCrafting(
     preferences: ReturnType<typeof createPreferences>,
     notify: Notify
 ) {
+    const tree = createCraftingTree(api, changed, iconsEnabled);
     const state: CraftingState = {
+        tree: tree.state,
         search: '',
         sort: preferences.values.planSort,
         descending: preferences.values.planSortOrder === 'descending',
@@ -157,6 +162,7 @@ export function createCrafting(
             state.cpuIcons = null;
             state.selectedCpu = '';
             if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
+                tree.reset(null, null);
                 state.plan = null;
                 state.icons = null;
                 state.metadata = null;
@@ -168,6 +174,11 @@ export function createCrafting(
                 reading = false;
                 changed();
                 if (!readFailed && planIcons === null) void refresh();
+                if (!readFailed && route.view === 'plan' && route.tree) {
+                    // Discovery failures clear the tree target; only an empty controller needs restoring.
+                    if (state.tree.status === 'IDLE') tree.reset(current.gridKey, current.planId);
+                    if (!state.tree.visible) void tree.show(true);
+                }
             }
         }
     }
@@ -177,6 +188,7 @@ export function createCrafting(
         reading = false;
 
         activePlan = null;
+        tree.reset(null, null);
         const key = identity();
         autoStart = input.automatic;
         outcomes.set(key, { mutation: 'create' });
@@ -230,7 +242,17 @@ export function createCrafting(
     }
     const actions = {
         state,
+        async showTree(visible: boolean) {
+            if (route.view === 'plan') navigateToPlan(route.gridKey, route.planId, visible);
+        },
+        focusMissingTree: tree.focusMissing,
+        expandAllTree: tree.expandAll,
+        collapseAllTree: tree.collapseAll,
+        stopTreeExpansion: tree.stopExpansion,
+        toggleTree: tree.toggle,
+        retryTree: tree.retry,
         invalidateIcons() {
+            tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
             iconRevision++;
             state.icons = null;
             state.cpuIcons = null;
@@ -257,10 +279,21 @@ export function createCrafting(
             return !!activePlan;
         },
         route(next: Route) {
+            if (
+                next.view === 'plan' &&
+                route.view === 'plan' &&
+                next.gridKey === route.gridKey &&
+                next.planId === route.planId
+            ) {
+                route = next;
+                if (state.tree.visible !== !!next.tree) void tree.show(!!next.tree);
+                return;
+            }
             generation++;
             request?.abort();
             reading = false;
             route = next;
+            tree.reset(next.view === 'plan' ? next.gridKey : null, next.view === 'plan' ? next.planId : null);
             activePlan = next.view === 'plan' ? { gridKey: next.gridKey, planId: next.planId } : null;
             autoStart = false;
             selectedOnce = false;
@@ -286,9 +319,11 @@ export function createCrafting(
             }
             handoff = null;
             if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) activePlan = null;
+            if (next.view === 'plan' && next.tree && activePlan) void tree.show(true);
         },
         refresh,
         block(error: string | null) {
+            tree.reset(null, null);
             generation++;
             request?.abort();
             reading = false;
@@ -354,6 +389,7 @@ export function createCrafting(
             request?.abort();
             reading = false;
             if (activePlan) {
+                tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
                 outcomes.set(key, { mutation: 'delete' });
                 state.mutation = 'delete';
                 state.error = null;
@@ -392,6 +428,7 @@ export function createCrafting(
             const version = ++generation;
             request?.abort();
             reading = false;
+            tree.reset(activePlan.gridKey, activePlan.planId);
             outcomes.set(key, { mutation: 'submit' });
             const output = state.metadata;
             state.mutation = 'submit';
@@ -472,6 +509,7 @@ export function createCrafting(
                 return;
             const version = ++generation;
             const key = identity();
+            tree.reset(activePlan?.gridKey ?? null, activePlan?.planId ?? null);
             outcomes.set(key, { mutation: 'delete' });
             request?.abort();
             reading = false;
@@ -513,6 +551,7 @@ export function createCrafting(
             }
         },
         dispose() {
+            tree.dispose();
             generation++;
             request?.abort();
             outcomes.clear();

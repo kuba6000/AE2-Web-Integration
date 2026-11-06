@@ -88,6 +88,13 @@ export function mountTheme(
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {
+            showTree: crafting.showTree,
+            focusMissingTree: crafting.focusMissingTree,
+            expandAllTree: crafting.expandAllTree,
+            collapseAllTree: crafting.collapseAllTree,
+            stopTreeExpansion: crafting.stopTreeExpansion,
+            toggleTree: crafting.toggleTree,
+            retryTree: crafting.retryTree,
             search: crafting.search,
             sort: crafting.sort,
             reverse: crafting.reverse,

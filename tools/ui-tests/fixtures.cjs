@@ -547,6 +547,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 if (options.submitDelay) await new Promise((resolve) => setTimeout(resolve, options.submitDelay));
                 response.statusCode = options.submitStatus === 'OK' ? 200 : 409;
                 response.end(JSON.stringify({ status: options.submitStatus, data: options.submitReason || null }));
+            } else if (options.tree && /\/crafting-plans\/\d+\/tree$/.test(resource)) {
+                response.end(JSON.stringify(options.tree(url)));
             } else if (/\/crafting-plans\/\d+$/.test(resource)) {
                 response.statusCode = options.planStatus === 'OK' ? 200 : 404;
                 response.end(

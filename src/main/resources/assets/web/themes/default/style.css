@@ -48,6 +48,12 @@
     --control-edge-dark: #373737;
     --slot-edge-dark: #373737;
     --slot-edge-light: #fff;
+    --tree-recipe: #c1c4c8;
+    --tree-recipe-border: #7e8791;
+    --tree-missing: #6b3030;
+    --tree-missing-border: #e34444;
+    --tree-missing-text: #fff4f4;
+    --tree-blocked: #ffd54a;
     --terminal-title: #404040;
     --text: #34333b;
     --muted: #63616d;
@@ -81,6 +87,8 @@
     --slot: #393842;
     --slot-edge-dark: #25232b;
     --slot-edge-light: #625d6e;
+    --tree-recipe: #45434e;
+    --tree-recipe-border: #777984;
     --terminal-title: #eeeaf4;
     --text: #eeeaf4;
     --muted: #c0bacd;
@@ -108,6 +116,8 @@
         --slot: #393842;
         --slot-edge-dark: #25232b;
         --slot-edge-light: #625d6e;
+        --tree-recipe: #45434e;
+        --tree-recipe-border: #777984;
         --terminal-title: #eeeaf4;
         --text: #eeeaf4;
         --muted: #c0bacd;
@@ -1939,7 +1949,8 @@ label {
         .history-product,
         .history-summary-icon,
         .tracking-resource,
-        .history-analysis-name
+        .history-analysis-name,
+        .tree-card
     )
     .resource-icon {
     display: grid;
@@ -1964,7 +1975,8 @@ label {
         .history-product,
         .history-summary-icon,
         .tracking-resource,
-        .history-analysis-name
+        .history-analysis-name,
+        .tree-card
     )
     .resource-icon-ready {
     outline: none;
@@ -3934,5 +3946,298 @@ button.toast:hover {
 @media (width <= 560px) {
     .plan-export-fields {
         grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.plan-tree {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+.plan-tree[hidden] {
+    display: none;
+}
+.tree-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.tree-controls button {
+    min-width: 40px;
+}
+.tree-message,
+.tree-caveat {
+    margin: 0;
+    font-size: 12px;
+}
+.tree-message {
+    height: 2.8em;
+    flex: 0 0 2.8em;
+    line-height: 1.4;
+    overflow-y: auto;
+}
+.tree-message:empty {
+    visibility: hidden;
+}
+.tree-caveat:empty {
+    display: none;
+}
+.tree-viewport {
+    overflow: auto;
+    min-height: 220px;
+    flex: 1;
+    position: relative;
+    border: 1px solid currentcolor;
+    cursor: grab;
+    user-select: none;
+}
+.tree-viewport[data-dragging='true'],
+.tree-viewport[data-dragging='true'] * {
+    cursor: grabbing;
+}
+.tree-overview {
+    position: absolute;
+    pointer-events: none;
+}
+.tree-space {
+    position: relative;
+}
+.tree-content {
+    position: absolute;
+    transform-origin: top left;
+}
+.tree-row {
+    position: absolute;
+    width: 240px;
+    min-height: 0;
+}
+.tree-card {
+    --resource-icon-size: 32px;
+    --tree-fill: var(--slot);
+    --tree-frame: var(--slot-edge-light);
+
+    background: var(--tree-fill);
+    height: 100%;
+    overflow: hidden;
+    width: 100%;
+    min-height: 0;
+    display: block;
+    position: relative;
+    text-align: left;
+    padding: 8px;
+}
+.tree-card strong,
+.tree-details {
+    position: absolute;
+    left: 12px;
+    right: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 18px;
+}
+.tree-card strong {
+    top: calc(50% - var(--tree-text-height, 34px) / 2);
+    font-size: 13px;
+    white-space: nowrap;
+}
+.tree-details {
+    top: calc(50% - var(--tree-text-height, 34px) / 2 + 20px);
+    font-size: 11px;
+    line-height: 14px;
+    white-space: pre;
+    max-height: 28px;
+}
+.tree-card:has(.resource-icon, .tree-symbol:not([hidden])) strong,
+.tree-card:has(.resource-icon, .tree-symbol:not([hidden])) .tree-details {
+    left: 56px;
+}
+.tree-card .resource-icon,
+.tree-symbol {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    transform: translateY(-50%);
+}
+.tree-card .resource-icon {
+    z-index: 1;
+}
+.tree-marker {
+    position: absolute;
+    top: 1px;
+    right: 4px;
+    z-index: 3;
+    line-height: 1;
+}
+.tree-symbol {
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-weight: bold;
+    background: transparent;
+}
+.tree-symbol[hidden] {
+    display: none;
+}
+.tree-symbol svg {
+    width: 100%;
+    height: 100%;
+}
+.tree-card:has(.resource-icon) .tree-symbol {
+    top: 5px;
+    left: 4px;
+    width: 16px;
+    height: 16px;
+    transform: none;
+}
+.tree-amount {
+    display: none;
+    z-index: 3;
+}
+.plan-tree[data-display='icons'] .tree-card {
+    --resource-icon-size: 32px;
+
+    display: block;
+    padding: 4px;
+}
+.plan-tree[data-display='icons'] .tree-card strong,
+.plan-tree[data-display='icons'] .tree-details {
+    display: none;
+}
+.plan-tree[data-display='icons'] .tree-card .resource-icon,
+.plan-tree[data-display='icons'] .tree-symbol {
+    top: 50%;
+    left: 50%;
+    width: 32px;
+    height: 32px;
+    transform: translate(-50%, -50%);
+}
+.plan-tree[data-display='icons'] .tree-card:has(.resource-icon) .tree-symbol {
+    top: 5px;
+    left: 4px;
+    width: 16px;
+    height: 16px;
+    transform: none;
+}
+.plan-tree[data-display='icons'] .tree-marker {
+    position: absolute;
+    top: 1px;
+    right: 4px;
+    line-height: 1;
+}
+.plan-tree[data-display='icons'] .tree-amount {
+    display: block;
+    position: absolute;
+    right: 3px;
+    bottom: 2px;
+    max-width: 56px;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tree-card[data-reference='true'] {
+    border-style: dashed;
+}
+.tree-card[data-kind='CONTRIBUTION'] {
+    cursor: default;
+}
+@media (width <= 700px) {
+    .tree-space,
+    .tree-content {
+        width: 100% !important;
+        height: auto !important;
+        position: relative;
+        transform: none !important;
+    }
+    .tree-row {
+        position: relative;
+        left: auto !important;
+        top: auto !important;
+        width: auto;
+        margin: 8px 4px 8px var(--tree-indent);
+    }
+    .tree-controls button:nth-child(-n + 4) {
+        display: none;
+    }
+}
+
+.plan-export-button[hidden] {
+    display: none;
+}
+
+@media (width <= 700px) {
+    .tree-row {
+        width: auto !important;
+        height: auto !important;
+    }
+    .tree-card {
+        height: auto;
+        min-height: 72px;
+    }
+    .plan-tree[data-display='icons'] .tree-card {
+        height: 64px;
+        min-height: 64px;
+    }
+    .tree-card strong,
+    .tree-details {
+        display: block;
+    }
+}
+
+.plan-view-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-inline-end: auto;
+    flex-wrap: wrap;
+}
+.plan-view-tools .plan-export-button {
+    margin-inline-end: 0;
+}
+.plan-view-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+.plan-view-switch button[aria-pressed='true'] {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+}
+.tree-card[data-recipe='true'] {
+    --tree-fill: var(--tree-recipe);
+    --tree-frame: var(--tree-recipe-border);
+
+    background: var(--tree-fill);
+    border-color: var(--tree-frame);
+    box-shadow: none;
+}
+.tree-card[data-blocked='true'] {
+    --tree-frame: var(--tree-blocked);
+
+    border-color: var(--tree-frame);
+}
+.tree-card[data-missing='true'] {
+    --tree-fill: var(--tree-missing);
+    --tree-frame: var(--tree-missing-border);
+
+    background: var(--tree-fill);
+    border-color: var(--tree-frame);
+    color: var(--tree-missing-text);
+}
+@media (width <= 600px) {
+    .plan-view-tools {
+        gap: 6px;
+        flex-wrap: nowrap;
+    }
+    .plan-view-switch button {
+        padding: 6px 8px;
+        font-size: 12px;
     }
 }

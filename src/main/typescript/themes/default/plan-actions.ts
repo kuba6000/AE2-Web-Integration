@@ -10,7 +10,8 @@ export function createPlanActions(
     workspace: HTMLElement,
     tooltip: Pick<TooltipBindings, 'hide' | 'bind'>,
     settings: ThemeSettings,
-    beforeDialog: (source: HTMLElement) => HTMLElement
+    beforeDialog: (source: HTMLElement) => HTMLElement,
+    treeExporter: { open(source: HTMLElement, locale: Translator): void; close(): void; check(): void }
 ) {
     const exporter = createPlanExportDialog(application, settings, beforeDialog);
     const exportButton = element('button');
@@ -24,7 +25,8 @@ export function createPlanActions(
     let exportLocale: Translator;
     exportButton.addEventListener('click', () => {
         tooltip.hide();
-        exporter.open(exportButton, exportLocale);
+        if (application.state.crafting.tree.visible) treeExporter.open(exportButton, exportLocale);
+        else exporter.open(exportButton, exportLocale);
     });
     const start = element('button');
     start.type = 'button';
@@ -98,20 +100,46 @@ export function createPlanActions(
     remove.addEventListener('click', () => application.crafting.remove());
     const actions = element('div');
     actions.className = 'plan-actions';
-    actions.append(exportButton, startControls, remove);
+    const views = element('div', '', 'plan-view-switch');
+    views.role = 'group';
+    const list = element('button');
+    const tree = element('button');
+    for (const control of [list, tree]) control.type = 'button';
+    list.onclick = () => void application.crafting.showTree(false);
+    tree.onclick = () => void application.crafting.showTree(true);
+    views.append(list, tree);
+    const left = element('div', '', 'plan-view-tools');
+    left.append(exportButton, views);
+    actions.append(left, startControls, remove);
 
     return {
         element: actions,
         close() {
             exporter.close();
+            treeExporter.close();
             menu.hidePopover();
         },
         render(state: ThemeState['crafting'], locale: Translator) {
             exportLocale = locale;
+            treeExporter.check();
+            exportButton.hidden = false;
+            if (state.tree.visible) exporter.close();
             exportLabel.textContent = locale.t('exportAction');
-            exportButton.setAttribute('aria-label', locale.t('exportPlan'));
-            exportButton.disabled = state.status !== 'ready' || !state.plan?.plan?.length;
+            exportButton.setAttribute(
+                'aria-label',
+                state.tree.visible ? locale.common('treeExportTitle') : locale.t('exportPlan')
+            );
+            exportButton.disabled = state.tree.visible
+                ? state.tree.status !== 'READY' || !state.tree.rows.length
+                : state.status !== 'ready' || !state.plan?.plan?.length;
             const t = locale.common;
+            views.setAttribute('aria-label', t('treeViewMode'));
+            list.textContent = t('treeList');
+            tree.textContent = t('treeTree');
+            list.setAttribute('aria-pressed', String(!state.tree.visible));
+            tree.setAttribute('aria-pressed', String(state.tree.visible));
+            tree.disabled = !state.plan?.isDone || !!state.mutation || !!state.uncertain;
+
             start.textContent = t('startCrafting');
             start.disabled = state.status !== 'ready' || !!state.mutation || !!state.uncertain || !state.selectedCpu;
             more.setAttribute('aria-label', t('recalculateOptions'));

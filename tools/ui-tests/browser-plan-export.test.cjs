@@ -7,8 +7,8 @@ const { fixture, gridA, readyPlan, atlasFixture } = require('./fixtures.cjs');
 async function openExport(page, base, search) {
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     if (search) await page.getByRole('searchbox', { name: 'Search plan resources', exact: true }).fill(search);
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
-    return page.getByRole('dialog', { name: 'Export PNG', exact: true });
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Export', exact: true });
 }
 async function png(page, dialog) {
     const promise = page.waitForEvent('download');
@@ -45,7 +45,7 @@ async function png(page, dialog) {
 test('PNG export stays left-aligned below the grid on the same row as Start on desktop and mobile', async (t) => {
     const { page, base } = await fixture(t, '', {}, { mockClock: false });
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    const exporter = page.getByRole('button', { name: 'Export PNG', exact: true });
+    const exporter = page.getByRole('button', { name: 'Export', exact: true });
     for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 });
         const button = await exporter.boundingBox();
@@ -59,11 +59,11 @@ test('PNG export stays left-aligned below the grid on the same row as Start on d
     await page.setViewportSize({ width: 1280, height: 900 });
     await exporter.hover();
     await page.getByRole('tooltip').waitFor({ state: 'visible' });
-    assert.ok((await page.getByRole('tooltip').innerText()).includes('Export PNG'));
+    assert.ok((await page.getByRole('tooltip').innerText()).includes('Export'));
     assert.equal(await exporter.getAttribute('title'), null);
     await page.setViewportSize({ width: 390, height: 844 });
     await exporter.click();
-    const dialog = page.getByRole('dialog', { name: 'Export PNG', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Export', exact: true });
     await dialog.waitFor({ state: 'visible' });
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     assert.ok(await exporter.evaluate((node) => node === document.activeElement));
@@ -199,7 +199,7 @@ test('plan PNG exports every row independently of search, without icons, and rem
     assert.ok(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth));
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await page.reload();
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     assert.equal(await dialog.getByRole('combobox', { name: 'Background', exact: true }).inputValue(), 'transparent');
     assert.equal(await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).inputValue(), '3');
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('0.5');
@@ -271,7 +271,7 @@ test('closing a large PNG export interrupts drawing before the remaining resourc
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => window.exportDrewLastResource), false);
     assert.equal(downloads, 0);
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     assert.ok(await dialog.getByRole('button', { name: 'Download PNG', exact: true }).isEnabled());
 });
 
@@ -332,7 +332,7 @@ test('restoring a saved ratio chooses columns once rather than changing them beh
     const tileWidth = 240;
     assert.deepEqual([original.pixels.width, original.pixels.height], [tileWidth * 4, 464]);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('0.5');
     assert.equal(await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).inputValue(), '2');
     const smaller = await png(page, dialog);
@@ -385,8 +385,8 @@ test('rectangular export keeps all metric rows and full quantities inside each c
     if (process.env.EXPORT_EVIDENCE_DIR)
         await page.screenshot({ path: path.join(process.env.EXPORT_EVIDENCE_DIR, 'plan-source-mobile.png') });
     await page.getByRole('searchbox', { name: 'Search plan resources', exact: true }).fill('Requested quartz');
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export PNG', exact: true });
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export', exact: true });
     await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('2');
     await dialog.getByRole('combobox', { name: 'Number format', exact: true }).selectOption('full');
@@ -451,7 +451,7 @@ test('closing export while fonts load cancels the download and permits reopening
     });
     await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     await dialog.getByRole('checkbox', { name: 'Include title', exact: true }).uncheck();
     await page.evaluate(() => window.releaseExportFonts());
     await png(page, dialog);

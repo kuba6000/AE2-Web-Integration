@@ -537,6 +537,17 @@ export function createTerminal(
         },
         refresh,
         route(route: Route) {
+            if (
+                route.view === 'plan' &&
+                state.route.view === 'plan' &&
+                route.gridKey === state.route.gridKey &&
+                route.planId === state.route.planId
+            ) {
+                state.route = route;
+                crafting.route(route);
+                notify();
+                return;
+            }
             const related =
                 route.gridKey &&
                 route.gridKey === state.route.gridKey &&

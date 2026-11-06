@@ -1,3 +1,6 @@
+import type { TerminalDisplay } from './web-settings.js';
+import { createTreeExportDialog } from './crafting-tree-export-dialog.js';
+import { createCraftingTreeView } from './crafting-tree.js';
 import { createCraftingDialog } from './crafting-dialog.js';
 import { createPlanPanel } from './plan-panel.js';
 import { createPlanActions } from './plan-actions.js';
@@ -63,7 +66,8 @@ export function createCraftingView(
     const grid = element('ul');
     grid.className = 'resource-grid cpu-items';
     scroll.append(grid);
-    planBody.append(scroll);
+    const tree = createCraftingTreeView(application, tooltip);
+    planBody.append(scroll, tree.element);
     const slots = createSlotGrid(grid, scroll, planView);
     lifetime.onCleanup(slots.dispose);
     const icons = application.icons.observe(scroll, paintResourceIcon);
@@ -107,7 +111,9 @@ export function createCraftingView(
     const panel = createPlanPanel(application, tooltip);
     lifetime.onCleanup(panel.dispose);
     workspace.append(panel.element);
-    const actions = createPlanActions(application, workspace, tooltip, settings, beforeDialog);
+    const treeExporter = createTreeExportDialog(application, settings, beforeDialog);
+    lifetime.onCleanup(treeExporter.dispose);
+    const actions = createPlanActions(application, workspace, tooltip, settings, beforeDialog, treeExporter);
     lifetime.onCleanup(actions.dispose);
     planView.append(header, planBody, actions.element);
     root.append(planView);
@@ -177,7 +183,8 @@ export function createCraftingView(
         open: dialog.open,
         order: dialog.order,
 
-        render(terminal: ThemeState, locale: Translator, enabled: boolean) {
+        render(terminal: ThemeState, locale: Translator, display: TerminalDisplay) {
+            const enabled = display !== 'names';
             const { route, crafting: state } = terminal;
             dialog.render(terminal, enabled);
             const nextRoute = route.view === 'plan' ? `${route.gridKey}/${route.planId}` : '';
@@ -195,6 +202,11 @@ export function createCraftingView(
                 panel.clearIcons();
                 return;
             }
+            tree.render(state.tree, locale, !!state.mutation, display);
+            treeExporter.setDisplay(display);
+            scroll.hidden = state.tree.visible;
+            searchLabel.hidden = state.tree.visible;
+            sortGroup.hidden = state.tree.visible;
             title.textContent = t('craftingPlan');
             panel.render(state, locale);
             searchName.textContent = t('searchPlanResources');
@@ -253,6 +265,8 @@ export function createCraftingView(
         },
         dispose() {
             dialog.dispose();
+            tree.dispose();
+            treeExporter.dispose();
             icons.dispose();
             slots.dispose();
             tools.remove();
