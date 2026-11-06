@@ -408,16 +408,33 @@ class CraftingPlanDocumentTest extends GridTestScope {
     }
 
     @Test
-    void oversizedDocumentReturnsSmallExplicitState() {
+    void largeDocumentRemainsReadable() {
+        JsonObject data = documentWithResources(100_000);
+        assertEquals(
+            "READY",
+            data.get("state")
+                .getAsString());
+        assertEquals(
+            100_000,
+            data.getAsJsonArray("resources")
+                .size());
+    }
+
+    private JsonObject documentWithResources(int count) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(602);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(() -> {
-                CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(100_000, 2 * 1024 * 1024);
-                for (int i = 0; i < 100_000; i++) capture.addResource(() -> TraceFixtures.descriptor("x"));
+                CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(count, 2 * 1024 * 1024);
+                for (int i = 0; i < count; i++) capture.addResource(() -> TraceFixtures.descriptor("x"));
                 capture.result(0, 1, false);
                 return capture.build();
             })), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        JsonObject data = read(grid, plan);
+        return read(grid, plan);
+    }
+
+    @Test
+    void oversizedDocumentReturnsSmallExplicitState() {
+        JsonObject data = documentWithResources(500_000);
         assertEquals(
             "TOO_LARGE",
             data.get("state")
