@@ -39,6 +39,8 @@ dependencies {
     //localRuntime(neoforge.geckolib)
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation "net.neoforged:testframework:${libs.versions.neo.get()}"
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
 }
