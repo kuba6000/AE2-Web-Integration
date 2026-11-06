@@ -136,7 +136,7 @@ jobs:
             25
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
-      - run: ./gradlew --build-cache --stacktrace build
+      - run: ./gradlew --build-cache --stacktrace :build
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.directory }}-jars

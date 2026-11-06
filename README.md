@@ -401,10 +401,11 @@ Run the wrapper from the chosen adapter directory to build an installable mod:
 
 ```shell
 cd forge-1.7.10
-./gradlew build
+./gradlew :build
 ```
 
-Run `./gradlew test spotlessCheck` from `core/` to check shared Java code independently.
+The `:build` task packages core without running its tests. Run `./gradlew build` from `core/`
+to build and check shared Java code independently.
 Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `PATH`, alongside
 the JDK required by the adapter. Gradle installs locked frontend dependencies and compiles TypeScript.
 Node.js and npm are not required to run the finished mod.
