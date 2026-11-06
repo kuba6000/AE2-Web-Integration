@@ -104,3 +104,16 @@ export function treeViewport(nodes: readonly TreePosition[], bounds: TreeViewpor
     });
     return { cards, connections };
 }
+/** Keep overview contents legible within fixed card bounds; tiny cards retain only their shape. */
+export function treeOverviewGeometry(node: Pick<TreePosition, 'x' | 'y' | 'width' | 'height'>, scale: number) {
+    if (Math.min(node.width, node.height) * scale < 10) return null;
+    const padding = 2 / scale;
+    const iconSize = Math.min(node.width - 2 * padding, node.height - 2 * padding);
+    return {
+        iconSize,
+        iconX: node.x + (node.width - iconSize) / 2,
+        iconY: node.y + (node.height - iconSize) / 2,
+        fontSize: Math.min(11 / scale, node.height - 2 * padding),
+        textWidth: node.width - 2 * padding
+    };
+}

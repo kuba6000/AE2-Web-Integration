@@ -87,3 +87,15 @@ test('viewport selection keeps crossing connections without mounting offscreen e
     assert.deepEqual(treeViewport(nodes, { x: 1000, y: 300, width: 100, height: 100 }).cards, [1]);
     assert.deepEqual(treeViewport(nodes, { x: 400, y: 100, width: 200, height: 50 }).connections, []);
 });
+test('overview artwork grows relative to the tree without escaping its card', async () => {
+    const { treeOverviewGeometry } = await import(moduleUrl);
+    const node = { x: 20, y: 30, width: 240, height: 72 };
+    const overview = treeOverviewGeometry(node, 0.3);
+    assert.ok(overview.iconSize > 32);
+    assert.ok(overview.fontSize > 14);
+    assert.ok(overview.iconSize < node.height);
+    assert.equal(overview.iconX + overview.iconSize / 2, node.x + node.width / 2);
+    assert.equal(overview.iconY + overview.iconSize / 2, node.y + node.height / 2);
+    assert.ok(treeOverviewGeometry(node, 0.2).fontSize > overview.fontSize);
+    assert.equal(treeOverviewGeometry(node, 0.01), null);
+});

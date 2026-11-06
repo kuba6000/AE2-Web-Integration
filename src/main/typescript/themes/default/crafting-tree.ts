@@ -1,5 +1,5 @@
 import { craftingTreeContent } from './crafting-tree-content.js';
-import { layoutCraftingTree, treeCardTextLayout, treeViewport } from './crafting-tree-layout.js';
+import { layoutCraftingTree, treeCardTextLayout, treeOverviewGeometry, treeViewport } from './crafting-tree-layout.js';
 import type { CraftingTooltipPresenter } from './crafting.js';
 import type { TerminalDisplay } from './web-settings.js';
 import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
@@ -8,6 +8,7 @@ import { element } from './dom.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import type { ThemeApplication, ThemeState } from '../../app/theme-api.js';
+import type { IconSprite, IconTarget } from '../../app/icons.js';
 import type { Translator } from '../../app/i18n.js';
 
 /** Pan and zoom diagram with an ordinary button outline on narrow screens. */
@@ -42,6 +43,19 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
     let current: ThemeState['crafting']['tree'] | undefined;
     let layout = layoutCraftingTree([]);
     let indices = new Map<string, number>();
+    // Lightweight visible anchors let the shared loader own atlas and animation lifetimes.
+    const overviewIcons = new Map<number, { anchor: HTMLSpanElement; sprite: IconSprite | null }>();
+    const overviewObserver = application.icons.observe(viewport, (target, sprite) => {
+        const entry = overviewIcons.get(Number(target.dataset.treeIndex));
+        if (!entry) return;
+        const previous = entry.sprite;
+        entry.sprite = sprite;
+        if (previous?.image !== sprite?.image || previous?.x !== sprite?.x || previous?.y !== sprite?.y)
+            schedulePaint();
+    });
+    const hammer = new Image();
+    hammer.onload = schedulePaint;
+    hammer.src = `data:image/svg+xml,${encodeURIComponent(craftingHammer)}`;
     const presentations = new Map<number, ReturnType<typeof craftingTreeContent>>();
     let frame = 0;
     let disposed = false;
@@ -257,6 +271,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             height: viewport.clientHeight / scale + 2 * overscan
         });
         const overview = !outline.matches && scale < 0.35;
+        updateOverviewIcons(overview ? visible.cards : []);
         paintCanvas(visible, overview);
         const mounted = outline.matches ? state.rows.map((_, index) => index) : overview ? [] : visible.cards;
         const pinned = focused ?? pendingAnchor?.key;
@@ -284,11 +299,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             wrapper.style.setProperty('--tree-indent', `${Math.min(row.depth, 6) * 12}px`);
             button.dataset.treeKey = row.key;
             button.dataset.reference = String(row.reference);
-            let presentation = presentations.get(index);
-            if (!presentation) {
-                presentation = craftingTreeContent(row, state, locale!, document.documentElement.lang);
-                presentations.set(index, presentation);
-            }
+            const presentation = presentationAt(index);
             if (card.title !== presentation.title) {
                 card.title = presentation.title;
                 name.replaceChildren(renderMinecraftText(presentation.title));
@@ -366,6 +377,77 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             target?.focus({ preventScroll: true });
         }
     }
+    function presentationAt(index: number) {
+        let presentation = presentations.get(index);
+        if (!presentation) {
+            presentation = craftingTreeContent(current!.rows[index], current!, locale!, document.documentElement.lang);
+            presentations.set(index, presentation);
+        }
+        return presentation;
+    }
+    function updateOverviewIcons(visible: readonly number[]) {
+        const targets: IconTarget[] = [];
+        const retained = new Set<number>();
+        if (lastDisplay !== 'names')
+            for (const index of visible) {
+                const geometry = treeOverviewGeometry(layout.nodes[index], scale);
+                if (!geometry) continue;
+                const icon = presentationAt(index).icon;
+                if (!icon) continue;
+                retained.add(index);
+                let entry = overviewIcons.get(index);
+                if (!entry) {
+                    const anchor = element('span');
+                    anchor.dataset.treeIndex = String(index);
+                    anchor.setAttribute('aria-hidden', 'true');
+                    anchor.style.cssText = 'position:absolute;pointer-events:none';
+                    entry = { anchor, sprite: null };
+                    overviewIcons.set(index, entry);
+                    content.append(anchor);
+                }
+                entry.anchor.style.left = `${geometry.iconX}px`;
+                entry.anchor.style.top = `${geometry.iconY}px`;
+                entry.anchor.style.width = entry.anchor.style.height = `${geometry.iconSize}px`;
+                targets.push({ element: entry.anchor, icon });
+            }
+        overviewObserver.update(targets, current?.icons ?? null);
+        for (const [index, entry] of overviewIcons)
+            if (!retained.has(index)) {
+                entry.anchor.remove();
+                overviewIcons.delete(index);
+            }
+    }
+    function paintOverviewContent(ctx: CanvasRenderingContext2D, index: number, font: string) {
+        const node = layout.nodes[index];
+        const geometry = treeOverviewGeometry(node, scale);
+        if (!geometry) return;
+        const presentation = presentationAt(index);
+        const sprite = overviewIcons.get(index)?.sprite;
+        const image = sprite?.image;
+        const { iconX, iconY, iconSize } = geometry;
+        if (image?.width) {
+            ctx.drawImage(image, sprite!.x, sprite!.y, sprite!.width, sprite!.height, iconX, iconY, iconSize, iconSize);
+        } else if (presentation.symbol === 'craft' && hammer.complete && hammer.naturalWidth) {
+            ctx.drawImage(hammer, iconX, iconY, iconSize, iconSize);
+        } else {
+            ctx.font = `bold ${geometry.fontSize}px ${font}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const title = plainMinecraftText(presentation.title);
+            let text = title;
+            if (ctx.measureText(text).width > geometry.textWidth) {
+                let low = 0,
+                    high = title.length;
+                while (low < high) {
+                    const middle = Math.ceil((low + high) / 2);
+                    if (ctx.measureText(title.slice(0, middle) + '…').width <= geometry.textWidth) low = middle;
+                    else high = middle - 1;
+                }
+                text = title.slice(0, low) + '…';
+            }
+            ctx.fillText(text, node.x + node.width / 2, node.y + node.height / 2, geometry.textWidth);
+        }
+    }
     function paintCanvas(visible: ReturnType<typeof treeViewport>, overview: boolean) {
         const state = current;
         canvas.hidden = outline.matches;
@@ -387,6 +469,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
         ctx.translate(pad.x - viewport.scrollLeft, pad.y - viewport.scrollTop);
         ctx.scale(scale, scale);
         const colors = getComputedStyle(root);
+        ctx.imageSmoothingEnabled = true;
         const color = (name: string) => colors.getPropertyValue(name).trim();
         const stroke = {
             NONE: color('--surface-text'),
@@ -424,6 +507,8 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 ctx.strokeStyle = row.shortage === 'NONE' ? color('--slot-edge-light') : stroke[row.shortage];
                 ctx.lineWidth = 1 / scale;
                 ctx.strokeRect(node.x, node.y, node.width, node.height);
+                ctx.fillStyle = color('--surface-text');
+                paintOverviewContent(ctx, index, colors.fontFamily);
             }
     }
     function focusRow(index: number) {
@@ -494,6 +579,7 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 frame = 0;
                 wheel = null;
                 icons.update([], null);
+                updateOverviewIcons([]);
                 revision = -1;
                 return;
             }
@@ -577,6 +663,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
             darkAppearance.removeEventListener('change', schedulePaint);
             viewport.removeEventListener('scroll', schedulePaint);
             icons.dispose();
+            overviewObserver.dispose();
+            overviewIcons.clear();
+            hammer.onload = null;
             outline.removeEventListener('change', changeOutline);
             cards.clear();
             presentations.clear();
