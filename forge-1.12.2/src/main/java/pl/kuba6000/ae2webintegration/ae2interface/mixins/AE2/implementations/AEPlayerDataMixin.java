@@ -1,0 +1,40 @@
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import net.minecraftforge.fml.common.FMLCommonHandler;
+
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+
+import com.mojang.authlib.GameProfile;
+
+import appeng.core.worlddata.IWorldPlayerMapping;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+
+@Mixin(targets = "appeng.core.worlddata.PlayerData", remap = false)
+public class AEPlayerDataMixin implements IPlayerProfileLookup {
+
+    @Shadow
+    @Final
+    private IWorldPlayerMapping playerMapping;
+
+    @Override
+    public PlayerIdentity web$getPlayerProfile(int playerId) {
+        Optional<UUID> maybe = playerMapping.get(playerId);
+        if (!maybe.isPresent()) return null;
+        UUID uuid = maybe.get();
+        GameProfile p = FMLCommonHandler.instance()
+            .getMinecraftServerInstance()
+            .getPlayerProfileCache()
+            .getProfileByUUID(uuid);
+        if (p == null) {
+            p = new GameProfile(uuid, uuid.toString());
+        }
+        return new PlayerIdentity(p.getId(), p.getName());
+    }
+
+}
