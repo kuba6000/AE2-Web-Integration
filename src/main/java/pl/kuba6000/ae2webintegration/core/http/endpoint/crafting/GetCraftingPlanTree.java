@@ -62,9 +62,9 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 public final class GetCraftingPlanTree extends ISyncedRequest {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-    private static final int MAX_CAPTURE_ENTRIES = 20_000;
-    private static final int MAX_DESCRIPTION_CHARACTERS = 262_144;
-    private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+    private static final int MAX_CAPTURE_ENTRIES = 100_000;
+    private static final int MAX_DESCRIPTION_CHARACTERS = 2 * 1024 * 1024;
+    private static final int MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
     public enum Kind {
         RESOURCE,

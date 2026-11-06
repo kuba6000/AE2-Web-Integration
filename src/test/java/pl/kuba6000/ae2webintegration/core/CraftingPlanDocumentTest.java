@@ -412,8 +412,8 @@ class CraftingPlanDocumentTest extends GridTestScope {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(602);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(() -> {
-                CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(20_000, 262_144);
-                for (int i = 0; i < 20_000; i++) capture.addResource(() -> TraceFixtures.descriptor("x"));
+                CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(100_000, 2 * 1024 * 1024);
+                for (int i = 0; i < 100_000; i++) capture.addResource(() -> TraceFixtures.descriptor("x"));
                 capture.result(0, 1, false);
                 return capture.build();
             })), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);

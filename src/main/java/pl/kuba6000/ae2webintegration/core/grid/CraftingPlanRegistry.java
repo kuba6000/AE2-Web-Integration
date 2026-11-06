@@ -99,7 +99,7 @@ public final class CraftingPlanRegistry {
      */
     public static final class TreePreparation {
 
-        private static final int MAX_RECONSTRUCTED_ENTRIES = 20_000;
+        private static final int MAX_RECONSTRUCTED_ENTRIES = 100_000;
 
         private boolean prepared;
         private final String id = UUID.randomUUID()
