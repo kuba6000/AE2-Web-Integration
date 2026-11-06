@@ -3,14 +3,22 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.config.Actionable;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
+import appeng.crafting.fast.CraftingJobFast;
+import appeng.crafting.v2.CraftingJobV2;
 import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.LiteRecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2RecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2TraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -19,6 +27,23 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 
 @Mixin(value = ICraftingJob.class, remap = false)
 public interface AECraftingJobMixin extends IAECraftingJob {
+
+    @Override
+    default @Nullable CraftingRecipeCapture web$captureRecipes(int maxEntries, int maxDescriptionCharacters) {
+        if ((Object) this instanceof CraftingJobFast<?>job)
+            return LiteRecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        if ((Object) this instanceof CraftingJobV2<?>job)
+            return V2RecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
+
+    @Override
+    default @Nullable CraftingTraceCapture web$captureTrace(int maxEntries, int maxDescriptionCharacters) {
+        // Lite records only per-pattern totals, so it keeps the aggregate capture.
+        if ((Object) this instanceof CraftingJobV2<?>job)
+            return V2TraceCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
 
     @Override
     default boolean web$isSimulation() {
