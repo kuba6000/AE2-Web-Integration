@@ -62,12 +62,12 @@ test('compact geometry aligns parents with the first child and leaves earlier br
     assert.ok(after.nodes[3].x + after.nodes[3].width < after.nodes[4].x);
 });
 
-test('text-mode recipe cards are smaller than resource cards and leave connection space', async () => {
+test('text-mode recipe cards share resource height but remain narrower and leave connection space', async () => {
     const { layoutCraftingTree } = await import(moduleUrl);
     const rows = [row(0), { depth: 1, node: { kind: 'TASK' } }, row(2)];
     for (const display of ['both', 'names']) {
         const { nodes } = layoutCraftingTree(rows, display);
-        assert.ok(nodes[1].height < nodes[0].height);
+        assert.equal(nodes[1].height, nodes[0].height);
         assert.ok(nodes[1].width < nodes[0].width);
         assert.ok(nodes[0].height <= 80);
         assert.ok(nodes[1].y + nodes[1].height < nodes[2].y);

@@ -1,4 +1,4 @@
-import { treeCardGeometry } from './crafting-tree-layout.js';
+import { treeCardGeometry, treeCardTextLayout } from './crafting-tree-layout.js';
 import { loadExportFonts } from '../../app/export-text.js';
 import { prepareCanvas, drawText } from '../../app/plan-export.js';
 import { planExportFits, type PlanExportSettings } from '../../app/plan-export-layout.js';
@@ -184,9 +184,18 @@ export async function renderTreePng(
                             );
                         ctx.textAlign = 'start';
                     } else {
+                        const textLayout = treeCardTextLayout(node.height, card.details.length, settings.name);
                         if (settings.name)
-                            drawText(ctx, card.title, geometry.textX, node.y + 10, geometry.textWidth, cardStyle, 13);
-                        const lines = card.details.slice(0, Math.floor((node.height - 36) / 14));
+                            drawText(
+                                ctx,
+                                card.title,
+                                geometry.textX,
+                                node.y + textLayout.top,
+                                geometry.textWidth,
+                                cardStyle,
+                                13
+                            );
+                        const lines = card.details.slice(0, textLayout.lineCount);
                         const lineHeight = 14;
                         for (const [lineIndex, line] of lines.entries()) {
                             ctx.font = `11px ${style.fontFamily}`;
@@ -198,7 +207,7 @@ export async function renderTreePng(
                                 ctx,
                                 line,
                                 geometry.textX,
-                                node.y + 30 + lineIndex * lineHeight,
+                                node.y + textLayout.top + textLayout.detailOffset + lineIndex * lineHeight,
                                 geometry.textWidth,
                                 cardStyle,
                                 fontSize

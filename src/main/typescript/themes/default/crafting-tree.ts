@@ -1,5 +1,5 @@
 import { craftingTreeContent } from './crafting-tree-content.js';
-import { layoutCraftingTree } from './crafting-tree-layout.js';
+import { layoutCraftingTree, treeCardTextLayout } from './crafting-tree-layout.js';
 import type { CraftingTooltipPresenter } from './crafting.js';
 import type { TerminalDisplay } from './web-settings.js';
 import { craftingHammer, terminalIcons } from './icons/pixel/terminal.js';
@@ -322,7 +322,9 @@ export function createCraftingTreeView(application: ThemeApplication, tooltip: C
                 card.presentation = presentation;
                 card.resource = row.node.resourceId != null ? (state.resources[row.node.resourceId] ?? null) : null;
                 marker.textContent = row.reference ? '↪' : leaf ? '' : state.expanded[row.key] ? '−' : '+';
-                details.textContent = presentation.details.join(' · ');
+                const textLayout = treeCardTextLayout(position.height, presentation.details.length);
+                button.style.setProperty('--tree-text-height', `${textLayout.height}px`);
+                details.textContent = presentation.details.slice(0, textLayout.lineCount).join('\n');
                 amount.textContent = presentation.count;
                 const symbolName = presentation.symbol ?? '';
                 if (card.symbolName !== symbolName) {

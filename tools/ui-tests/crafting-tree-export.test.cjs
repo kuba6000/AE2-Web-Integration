@@ -69,7 +69,10 @@ function canvasEnvironment() {
         },
         strokeRect: (...args) => cards.push(args),
         measureText(text) {
-            return { width: (text.length * Number(this.font.match(/([\d.]+)px/)?.[1] || 11)) / 2 };
+            return {
+                width: (text.length * Number(this.font.match(/([\d.]+)px/)?.[1] || 11)) / 2,
+                actualBoundingBoxAscent: this.textBaseline === 'alphabetic' ? 8 : 0
+            };
         },
         fillText(text, x, y) {
             texts.push(text);
@@ -459,6 +462,24 @@ test('truncated compact counts keep their ellipsis inside the right edge in both
     const svgRuns = [...text.matchAll(/<text x="([^"]+)"[^>]*text-anchor="end"[^>]*>([^<]*)<\/text>/g)];
     assert.ok(svgRuns.some((run) => run[2] === '…'));
     assert.ok(svgRuns.every((run) => Number(run[1]) <= 76));
+});
+
+test('text card exports center the title and detail block vertically', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.display = 'both';
+    snapshot.layout = { width: 192, height: 104, nodes: [{ x: 16, y: 16, width: 160, height: 72, parent: null }] };
+    snapshot.cards = [{ title: 'Recipe', details: ['Crafts: 12'], icon: null, symbol: null }];
+    const env = canvasEnvironment();
+    const icons = { resolve: async () => ({ icons: new Map(), dispose() {} }) };
+    await renderTreePng(snapshot, settings, style, icons, new AbortController().signal);
+    assert.equal(env.textDraws.find((run) => run.text === 'Recipe').y, 35);
+    assert.equal(env.textDraws.find((run) => run.text === 'Crafts: 12').y, 55);
+    const result = await renderTreeSvg(snapshot, settings, style, icons, new AbortController().signal);
+    const svg = await result.blob.text();
+    // SVG alphabetic baselines include the fixture font's eight-pixel ascent.
+    assert.match(svg, /<text[^>]*y="43"[^>]*>Recipe<\/text>/);
+    assert.match(svg, /<text[^>]*y="63"[^>]*>Crafts: 12<\/text>/);
 });
 
 test('small recipe exports keep details readable instead of overlapping extra lines', async () => {

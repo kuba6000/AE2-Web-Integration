@@ -34,8 +34,7 @@ export function layoutCraftingTree(rows: readonly LayoutRow[], display: Terminal
         if (parent !== null) children[parent].push(index);
         const recipe = row.node.kind === 'TASK' || row.node.kind === 'RECIPE';
         const width = compact ? column : widths[row.node.kind] - (display === 'names' && !recipe ? 24 : 0);
-        const height = !compact && recipe ? 56 : cardHeight;
-        positions.push({ x: 0, y: 16 + level * stepY, width, height, parent });
+        positions.push({ x: 0, y: 16 + level * stepY, width, height: cardHeight, parent });
         ancestors.push({ depth: row.depth, index });
     }
     let nextLeaf = 16;
@@ -67,4 +66,12 @@ export function treeCardGeometry(node: TreePosition, compact: boolean, resource:
     const textX = node.x + (resource || symbol ? 56 : 12);
     const textWidth = node.width - (textX - node.x) - 16;
     return { iconSize, iconX, iconY, symbolSize, symbolX, symbolY, textX, textWidth };
+}
+
+/** Center the visible title/detail lines as one block; full details remain in the tooltip. */
+export function treeCardTextLayout(cardHeight: number, detailCount: number, title = true) {
+    const lineCount = Math.min(detailCount, 2, Math.max(0, Math.floor((cardHeight - 36) / 14)));
+    const detailOffset = title ? 18 + (lineCount ? 2 : 0) : 0;
+    const height = detailOffset + lineCount * 14;
+    return { lineCount, height, top: (cardHeight - height) / 2, detailOffset };
 }

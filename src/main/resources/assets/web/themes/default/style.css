@@ -4035,19 +4035,16 @@ button.toast:hover {
     line-height: 18px;
 }
 .tree-card strong {
-    top: 10px;
+    top: calc(50% - var(--tree-text-height, 34px) / 2);
     font-size: 13px;
     white-space: nowrap;
 }
 .tree-details {
-    top: 30px;
+    top: calc(50% - var(--tree-text-height, 34px) / 2 + 20px);
     font-size: 11px;
     line-height: 14px;
-    overflow-wrap: anywhere;
+    white-space: pre;
     max-height: 28px;
-}
-.tree-card[data-recipe='true'] .tree-details {
-    max-height: 14px;
 }
 .tree-card:has(.resource-icon, .tree-symbol:not([hidden])) strong,
 .tree-card:has(.resource-icon, .tree-symbol:not([hidden])) .tree-details {

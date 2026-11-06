@@ -1,4 +1,4 @@
-import { treeCardGeometry } from './crafting-tree-layout.js';
+import { treeCardGeometry, treeCardTextLayout } from './crafting-tree-layout.js';
 import type { ThemeApplication } from '../../app/theme-api.js';
 import { createSvgAssets, escapeSvg, svgText } from '../../app/svg-export.js';
 import { loadExportFonts } from '../../app/export-text.js';
@@ -120,10 +120,21 @@ export async function renderTreeSvg(
                     );
                 ctx.textAlign = 'start';
             } else {
+                const textLayout = treeCardTextLayout(node.height, card.details.length, settings.name);
                 if (settings.name)
-                    body.push(svgText(ctx, card.title, geometry.textX, node.y + 10, geometry.textWidth, cardStyle, 13));
+                    body.push(
+                        svgText(
+                            ctx,
+                            card.title,
+                            geometry.textX,
+                            node.y + textLayout.top,
+                            geometry.textWidth,
+                            cardStyle,
+                            13
+                        )
+                    );
                 const lineHeight = 14;
-                const lines = card.details.slice(0, Math.floor((node.height - 36) / lineHeight));
+                const lines = card.details.slice(0, textLayout.lineCount);
                 for (const [lineIndex, line] of lines.entries()) {
                     ctx.font = `11px ${style.fontFamily}`;
                     const fontSize = Math.min(
@@ -135,7 +146,7 @@ export async function renderTreeSvg(
                             ctx,
                             line,
                             geometry.textX,
-                            node.y + 30 + lineIndex * lineHeight,
+                            node.y + textLayout.top + textLayout.detailOffset + lineIndex * lineHeight,
                             geometry.textWidth,
                             cardStyle,
                             fontSize
