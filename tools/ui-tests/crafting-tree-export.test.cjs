@@ -263,7 +263,7 @@ test('compact PNG retains small node geometry, counts and source symbols', async
     assert.ok(env.images.length >= 2, 'craft and storage symbols are painted');
 });
 
-test('PNG centers artwork and separates source badges in text mode', async () => {
+test('PNG anchors source badges to the same card corner in both icon modes', async () => {
     const { renderTreePng } = await import(moduleUrl);
     const icon = { page: 0, x: 0, y: 0 };
     const bitmap = {};
@@ -334,11 +334,12 @@ test('PNG centers artwork and separates source badges in text mode', async () =>
             const itemIndex = env.images.findIndex(([image]) => image === bitmap);
             checkCenter(env.images[itemIndex], snapshot.layout.nodes[1]);
             const [x, y, size] = env.images.at(-1).slice(-4);
-            const [itemX, itemY] = env.images[itemIndex].slice(-4);
-            if (compact) {
-                if (!(x < itemX && y < itemY && x + size > itemX && y + size > itemY))
-                    failures.push('compact source badge should remain near the upper-left corner');
-            } else if (x <= itemX + 32) failures.push('text-mode source badge overlaps the resource icon');
+            const tile = snapshot.layout.nodes[1];
+            assert.deepEqual(
+                [x - tile.x, y - tile.y, size],
+                [4, 5, 16],
+                'both icon modes anchor the same-sized badge to the card, independently of item art'
+            );
         }
     }
     assert.deepEqual(failures, []);

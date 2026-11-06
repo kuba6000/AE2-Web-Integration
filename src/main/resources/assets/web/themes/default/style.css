@@ -4053,10 +4053,6 @@ button.toast:hover {
 .tree-card:has(.resource-icon, .tree-symbol:not([hidden])) .tree-details {
     left: 56px;
 }
-.tree-card:has(.resource-icon):has(.tree-symbol:not([hidden])) strong,
-.tree-card:has(.resource-icon):has(.tree-symbol:not([hidden])) .tree-details {
-    right: 34px;
-}
 .tree-card .resource-icon,
 .tree-symbol {
     position: absolute;
@@ -4092,10 +4088,11 @@ button.toast:hover {
     height: 100%;
 }
 .tree-card:has(.resource-icon) .tree-symbol {
-    right: 8px;
-    left: auto;
-    width: 18px;
-    height: 18px;
+    top: 5px;
+    left: 4px;
+    width: 16px;
+    height: 16px;
+    transform: none;
 }
 .tree-amount {
     display: none;

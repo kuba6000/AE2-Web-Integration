@@ -61,10 +61,10 @@ export function treeCardGeometry(node: TreePosition, compact: boolean, resource:
     const iconSize = 32;
     const iconX = node.x + (compact ? (node.width - iconSize) / 2 : 12);
     const iconY = node.y + (node.height - iconSize) / 2;
-    const symbolSize = resource ? (compact ? 16 : 18) : 32;
-    const symbolX = resource ? node.x + (compact ? 4 : node.width - symbolSize - 8) : iconX;
-    const symbolY = resource && compact ? node.y + 5 : node.y + (node.height - symbolSize) / 2;
+    const symbolSize = resource ? 16 : 32;
+    const symbolX = resource ? node.x + 4 : iconX;
+    const symbolY = resource ? node.y + 5 : node.y + (node.height - symbolSize) / 2;
     const textX = node.x + (resource || symbol ? 56 : 12);
-    const textWidth = node.width - (textX - node.x) - (resource && symbol ? 34 : 16);
+    const textWidth = node.width - (textX - node.x) - 16;
     return { iconSize, iconX, iconY, symbolSize, symbolX, symbolY, textX, textWidth };
 }
