@@ -441,19 +441,29 @@ test('shortage focus keeps healthy ingredients and paints shortage trails and re
     const paint = await page.locator('.plan-tree').evaluate((root) => {
         const canvas = root.querySelector('.tree-overview');
         const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-        const lines = new Set();
-        for (let index = 0; index < pixels.length; index += 4)
-            if (pixels[index + 3] === 255)
-                lines.add(`rgb(${pixels[index]}, ${pixels[index + 1]}, ${pixels[index + 2]})`);
+        // Fit can rasterize a thin line entirely between pixels. Read its unpremultiplied color,
+        // allowing partial coverage and small rounding differences from canvas alpha conversion.
+        const hasColor = (red, green, blue) => {
+            for (let index = 0; index < pixels.length; index += 4)
+                if (
+                    pixels[index + 3] >= 64 &&
+                    Math.abs(pixels[index] - red) <= 3 &&
+                    Math.abs(pixels[index + 1] - green) <= 3 &&
+                    Math.abs(pixels[index + 2] - blue) <= 3
+                )
+                    return true;
+            return false;
+        };
         return {
-            lines: [...lines],
+            yellow: hasColor(255, 213, 74),
+            red: hasColor(227, 68, 68),
             item: getComputedStyle(root.querySelector('.tree-card[data-kind="REQUEST"]')).backgroundColor,
             recipe: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).backgroundColor,
             recipeBorder: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).borderTopColor
         };
     });
-    assert.ok(paint.lines.includes('rgb(255, 213, 74)'), 'upstream connections are yellow');
-    assert.ok(paint.lines.includes('rgb(227, 68, 68)'), 'direct shortage connections are red');
+    assert.ok(paint.yellow, 'upstream connections are yellow');
+    assert.ok(paint.red, 'direct shortage connections are red');
     assert.equal(paint.recipeBorder, 'rgb(255, 213, 74)');
     assert.notEqual(paint.item, paint.recipe, 'recipe background differs without changing the graph geometry');
     await rod.click();
