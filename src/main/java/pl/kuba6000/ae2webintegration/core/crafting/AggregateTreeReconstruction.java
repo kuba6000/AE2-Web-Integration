@@ -1,9 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.crafting;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +49,7 @@ public final class AggregateTreeReconstruction {
 
         final List<Input> inputs = new ArrayList<>();
         final List<CraftingRecipeCapture.Output> outputs = new ArrayList<>();
-        final Map<Integer, BigInteger> outputTotals = new LinkedHashMap<>();
+        final Map<Integer, Long> outputTotals = new LinkedHashMap<>();
     }
 
     private abstract static class Frame {
@@ -62,14 +60,14 @@ public final class AggregateTreeReconstruction {
         final int id;
         final int resource;
         final boolean root;
-        BigInteger remaining;
+        long remaining;
         boolean leavesConsumed;
 
         Request(int id, int resource, long amount, boolean root) {
             this.id = id;
             this.resource = resource;
             this.root = root;
-            remaining = BigInteger.valueOf(amount);
+            remaining = amount;
         }
     }
 
@@ -79,10 +77,10 @@ public final class AggregateTreeReconstruction {
         final int recipe;
         final long crafts;
         final int requestedResource;
-        final BigInteger reserved;
+        final long reserved;
         int nextInput;
 
-        Task(int id, int recipe, long crafts, int requestedResource, BigInteger reserved) {
+        Task(int id, int recipe, long crafts, int requestedResource, long reserved) {
             this.id = id;
             this.recipe = recipe;
             this.crafts = crafts;
@@ -100,10 +98,10 @@ public final class AggregateTreeReconstruction {
         final long[] remainingCrafts;
         final boolean[] activeRecipes;
         final int[] nextProducer;
-        final BigInteger[] initial;
-        final BigInteger[] emitted;
-        final BigInteger[] missing;
-        final BigInteger[] surplus;
+        final long[] initial;
+        final long[] emitted;
+        final long[] missing;
+        final long[] surplus;
         final ArrayDeque<Frame> stack = new ArrayDeque<>();
 
         Allocation(CraftingRecipeCapture capture, int maxEntries) {
@@ -116,16 +114,10 @@ public final class AggregateTreeReconstruction {
                 .size()];
             activeRecipes = new boolean[remainingCrafts.length];
             nextProducer = new int[resourceCount];
-            initial = emptyPool(resourceCount);
-            emitted = emptyPool(resourceCount);
-            missing = emptyPool(resourceCount);
-            surplus = emptyPool(resourceCount);
-        }
-
-        private static BigInteger[] emptyPool(int size) {
-            BigInteger[] pool = new BigInteger[size];
-            Arrays.fill(pool, BigInteger.ZERO);
-            return pool;
+            initial = new long[resourceCount];
+            emitted = new long[resourceCount];
+            missing = new long[resourceCount];
+            surplus = new long[resourceCount];
         }
 
         @Nullable
@@ -185,9 +177,7 @@ public final class AggregateTreeReconstruction {
                     CraftingRecipeCapture.Candidate candidate = capture.candidates()
                         .get(alternatives.get(0));
                     if (candidate.amount() <= 0) return false;
-                    long amount = BigInteger.valueOf(ingredient.multiplier())
-                        .multiply(BigInteger.valueOf(candidate.amount()))
-                        .longValueExact();
+                    long amount = Math.multiplyExact(ingredient.multiplier(), candidate.amount());
                     recipe.inputs.add(new Input(candidate.resourceId(), amount));
                 }
                 for (int row : outputs.rowsFor(id)) {
@@ -195,31 +185,24 @@ public final class AggregateTreeReconstruction {
                         .get(row);
                     if (output.amount() <= 0) return false;
                     recipe.outputs.add(output);
-                    BigInteger total = recipe.outputTotals.getOrDefault(output.resourceId(), BigInteger.ZERO)
-                        .add(BigInteger.valueOf(output.amount()));
-                    total.longValueExact();
+                    long total = Math
+                        .addExact(recipe.outputTotals.getOrDefault(output.resourceId(), 0L), output.amount());
                     recipe.outputTotals.put(output.resourceId(), total);
                 }
                 recipes.add(recipe);
-                for (Map.Entry<Integer, BigInteger> output : recipe.outputTotals.entrySet())
-                    producers.get(output.getKey())
-                        .add(
-                            new Producer(
-                                id,
-                                output.getValue()
-                                    .longValueExact()));
+                for (Map.Entry<Integer, Long> output : recipe.outputTotals.entrySet()) producers.get(output.getKey())
+                    .add(new Producer(id, output.getValue()));
             }
             for (CraftingRecipeCapture.Summary summary : capture.summaries()) {
                 if (summary.amount() < 0) return false;
-                BigInteger[] pool = pool(summary.kind());
+                long[] pool = pool(summary.kind());
                 int resource = summary.resourceId();
-                pool[resource] = pool[resource].add(BigInteger.valueOf(summary.amount()));
-                pool[resource].longValueExact();
+                pool[resource] = Math.addExact(pool[resource], summary.amount());
             }
             return true;
         }
 
-        private BigInteger[] pool(SummaryKind kind) {
+        private long[] pool(SummaryKind kind) {
             switch (kind) {
                 case INITIAL:
                     return initial;
@@ -245,7 +228,7 @@ public final class AggregateTreeReconstruction {
                     || !take(request, surplus, ContributionKind.REUSED)
                     || !take(request, emitted, ContributionKind.EMITTED)) return false;
             } else if (!take(request, surplus, ContributionKind.REUSED)) return false;
-            if (request.remaining.signum() == 0) {
+            if (request.remaining == 0) {
                 stack.pop();
                 return true;
             }
@@ -254,39 +237,36 @@ public final class AggregateTreeReconstruction {
             while (next < choices.size() && remainingCrafts[choices.get(next).recipe] == 0) next++;
             nextProducer[request.resource] = next;
             if (next == choices.size()) {
-                if (!take(request, missing, ContributionKind.MISSING) || request.remaining.signum() != 0) return false;
+                if (!take(request, missing, ContributionKind.MISSING) || request.remaining != 0) return false;
                 stack.pop();
                 return true;
             }
             Producer producer = choices.get(next);
             if (activeRecipes[producer.recipe]) return false;
-            BigInteger output = BigInteger.valueOf(producer.amount);
-            BigInteger[] quotient = request.remaining.divideAndRemainder(output);
-            BigInteger needed = quotient[1].signum() == 0 ? quotient[0] : quotient[0].add(BigInteger.ONE);
-            long crafts = needed.min(BigInteger.valueOf(remainingCrafts[producer.recipe]))
-                .longValueExact();
+            long output = producer.amount;
+            long needed = request.remaining / output + (request.remaining % output == 0 ? 0 : 1);
+            long crafts = Math.min(needed, remainingCrafts[producer.recipe]);
             remainingCrafts[producer.recipe] -= crafts;
-            BigInteger produced = output.multiply(BigInteger.valueOf(crafts));
-            produced.longValueExact();
-            BigInteger supplied = request.remaining.min(produced);
+            long produced = Math.multiplyExact(output, crafts);
+            long supplied = Math.min(request.remaining, produced);
             int task = trace.addTask(crafts);
-            if (task < 0 || !trace.addCraft(request.id, supplied.longValueExact(), task)) return false;
+            if (task < 0 || !trace.addCraft(request.id, supplied, task)) return false;
             Recipe recipe = recipes.get(producer.recipe);
             for (Input input : recipe.inputs) if (!trace.addInput(task, input.resource, input.amount)) return false;
             for (CraftingRecipeCapture.Output row : recipe.outputs)
                 if (!trace.addOutput(task, row.resourceId(), row.amount(), row.primary())) return false;
-            request.remaining = request.remaining.subtract(supplied);
+            request.remaining -= supplied;
             activeRecipes[producer.recipe] = true;
             stack.push(new Task(task, producer.recipe, crafts, request.resource, supplied));
             return true;
         }
 
-        private boolean take(Request request, BigInteger[] pool, ContributionKind kind) {
-            BigInteger amount = request.remaining.min(pool[request.resource]);
-            if (amount.signum() == 0) return true;
-            if (!trace.addContribution(request.id, kind, amount.longValueExact(), request.resource)) return false;
-            pool[request.resource] = pool[request.resource].subtract(amount);
-            request.remaining = request.remaining.subtract(amount);
+        private boolean take(Request request, long[] pool, ContributionKind kind) {
+            long amount = Math.min(request.remaining, pool[request.resource]);
+            if (amount == 0) return true;
+            if (!trace.addContribution(request.id, kind, amount, request.resource)) return false;
+            pool[request.resource] -= amount;
+            request.remaining -= amount;
             return true;
         }
 
@@ -294,31 +274,26 @@ public final class AggregateTreeReconstruction {
             Recipe recipe = recipes.get(task.recipe);
             if (task.nextInput < recipe.inputs.size()) {
                 Input input = recipe.inputs.get(task.nextInput++);
-                long amount = BigInteger.valueOf(task.crafts)
-                    .multiply(BigInteger.valueOf(input.amount))
-                    .longValueExact();
+                long amount = Math.multiplyExact(task.crafts, input.amount);
                 int request = trace.addRequest(input.resource, amount);
                 if (request < 0 || !trace.addChildRequest(task.id, request)) return false;
                 stack.push(new Request(request, input.resource, amount, false));
                 return true;
             }
             trace.finishTask(task.id);
-            for (Map.Entry<Integer, BigInteger> output : recipe.outputTotals.entrySet()) {
+            for (Map.Entry<Integer, Long> output : recipe.outputTotals.entrySet()) {
                 int resource = output.getKey();
-                BigInteger produced = output.getValue()
-                    .multiply(BigInteger.valueOf(task.crafts));
-                produced.longValueExact();
-                if (resource == task.requestedResource) produced = produced.subtract(task.reserved);
-                surplus[resource] = surplus[resource].add(produced);
-                surplus[resource].longValueExact();
+                long produced = Math.multiplyExact(output.getValue(), task.crafts);
+                if (resource == task.requestedResource) produced -= task.reserved;
+                surplus[resource] = Math.addExact(surplus[resource], produced);
             }
             activeRecipes[task.recipe] = false;
             stack.pop();
             return true;
         }
 
-        private static boolean empty(BigInteger[] pool) {
-            for (BigInteger amount : pool) if (amount.signum() != 0) return false;
+        private static boolean empty(long[] pool) {
+            for (long amount : pool) if (amount != 0) return false;
             return true;
         }
     }

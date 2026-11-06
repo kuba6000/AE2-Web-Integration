@@ -207,6 +207,36 @@ class AggregateTreeReconstructionTest {
     }
 
     @Test
+    void quantitiesAboveJavascriptSafeIntegerAndAtLongLimitRemainExact() {
+        for (long amount : new long[] { 9007199254740993L, Long.MAX_VALUE }) {
+            CraftingRecipeCapture.Builder source = capture("product", "input");
+            source.result(0, amount, false);
+            int recipe = source.addRecipe(amount);
+            input(source, recipe, 1, 1);
+            source.addOutput(recipe, 0, 1, true);
+            source.finishRecipe(recipe);
+            source.addSummary(SummaryKind.INITIAL, 1, amount);
+            CraftingTraceCapture trace = AggregateTreeReconstruction.from(source.build(), 100);
+            assertNotNull(trace);
+            assertEquals(
+                amount,
+                trace.requests()
+                    .get(0)
+                    .amount());
+            assertEquals(
+                amount,
+                trace.tasks()
+                    .get(0)
+                    .crafts());
+            assertEquals(
+                amount,
+                trace.requests()
+                    .get(1)
+                    .amount());
+        }
+    }
+
+    @Test
     void deepCompleteCaptureIsTraversedWithoutJavaRecursion() {
         int depth = 2500;
         CraftingRecipeCapture.Builder source = new CraftingRecipeCapture.Builder(20_000, 100_000);

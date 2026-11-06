@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.crafting;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.List;
 
@@ -13,6 +12,9 @@ import org.jetbrains.annotations.Nullable;
  * These links describe possible dependencies, not selected ingredients or observed material transfers.
  */
 public final class CraftingDependencyGraph {
+
+    /** Nonnegative quantities use -1 only internally when their exact sum exceeds long. */
+    private static final long OVERFLOW = -1;
 
     private final CraftingRecipeCapture capture;
     private final Adjacency producers;
@@ -112,10 +114,18 @@ public final class CraftingDependencyGraph {
         return unplacedRecipes;
     }
 
-    /** Captured plan-level missing quantity, never a per-branch allocation. Null means unknown absence. */
-    public @Nullable BigInteger missingAmount(int resourceId) {
-        BigInteger amount = missing.amounts[resourceId];
-        return amount == null && missing.complete ? BigInteger.ZERO : amount;
+    /**
+     * Captured plan-level missing quantity, never a per-branch allocation. Null means unknown absence or an overflowing
+     * sum.
+     */
+    public @Nullable Long missingAmount(int resourceId) {
+        long amount = missing.amounts[resourceId];
+        return amount == OVERFLOW || (!missing.observed[resourceId] && !missing.complete) ? null : amount;
+    }
+
+    /** Known positive shortage, even when its accumulated quantity exceeds long. */
+    public boolean isMissing(int resourceId) {
+        return missing.amounts[resourceId] != 0;
     }
 
     /** Whether missing absence can be established from this fully captured plan. */
@@ -152,8 +162,9 @@ public final class CraftingDependencyGraph {
     /** Reverse only dependency links, never the presentation links from recipes back to outputs. */
     private final class MissingIndex {
 
-        private final BigInteger[] amounts = new BigInteger[capture.resources()
+        private final long[] amounts = new long[capture.resources()
             .size()];
+        private final boolean[] observed = new boolean[amounts.length];
         private final boolean complete;
         private final int count;
         private final List<Integer> unlinked;
@@ -166,14 +177,21 @@ public final class CraftingDependencyGraph {
             boolean allCaptured = capture.result() != null && capture.limits()
                 .isEmpty();
             for (CraftingRecipeCapture.Recipe recipe : capture.recipes()) allCaptured &= recipe.complete();
-            complete = allCaptured;
             for (CraftingRecipeCapture.Summary summary : capture.summaries()) {
                 if (summary.kind() != CraftingRecipeCapture.SummaryKind.MISSING) continue;
                 if (summary.amount() < 0) throw new IllegalArgumentException("Negative missing quantity");
-                BigInteger previous = amounts[summary.resourceId()];
-                BigInteger amount = BigInteger.valueOf(summary.amount());
-                amounts[summary.resourceId()] = previous == null ? amount : previous.add(amount);
+                int resource = summary.resourceId();
+                observed[resource] = true;
+                if (amounts[resource] != OVERFLOW) {
+                    try {
+                        amounts[resource] = Math.addExact(amounts[resource], summary.amount());
+                    } catch (ArithmeticException overflow) {
+                        amounts[resource] = OVERFLOW;
+                        allCaptured = false;
+                    }
+                }
             }
+            complete = allCaptured;
             boolean[] relevantResources = new boolean[amounts.length];
             boolean[] relevantRecipes = new boolean[capture.recipes()
                 .size()];
@@ -182,7 +200,7 @@ public final class CraftingDependencyGraph {
             ArrayDeque<Integer> pending = new ArrayDeque<>();
             int knownMissing = 0;
             for (int resource = 0; resource < amounts.length; resource++) {
-                if (amounts[resource] != null && amounts[resource].signum() > 0) {
+                if (amounts[resource] != 0) {
                     knownMissing++;
                     relevantResources[resource] = true;
                     pending.addLast(resource);
@@ -252,8 +270,7 @@ public final class CraftingDependencyGraph {
             int[] unlinkedRows = new int[count];
             int unlinkedCount = 0;
             for (int resource = 0; resource < amounts.length; resource++) {
-                if (amounts[resource] != null && amounts[resource].signum() > 0 && !reachableResources[resource])
-                    unlinkedRows[unlinkedCount++] = resource;
+                if (amounts[resource] != 0 && !reachableResources[resource]) unlinkedRows[unlinkedCount++] = resource;
             }
             unlinked = new Adjacency.RowIds(unlinkedRows, 0, unlinkedCount);
             int[] unplacedRows = new int[unplacedRecipes.size()];

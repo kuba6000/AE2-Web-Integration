@@ -31,9 +31,9 @@ const row = (value, extra = {}) => ({
 });
 const state = {
     resources: {
-        0: { displayName: 'Machine', missingAmount: '0', icon: null },
-        1: { displayName: '§aGear', missingAmount: '2', icon: { page: 0, x: 0, y: 0 } },
-        2: { displayName: 'Ingot', missingAmount: '0', icon: null }
+        0: { displayName: 'Machine', missingAmount: '0', missing: false, icon: null },
+        1: { displayName: '§aGear', missingAmount: '2', missing: true, icon: { page: 0, x: 0, y: 0 } },
+        2: { displayName: 'Ingot', missingAmount: '0', missing: false, icon: null }
     },
     recipes: {
         4: {

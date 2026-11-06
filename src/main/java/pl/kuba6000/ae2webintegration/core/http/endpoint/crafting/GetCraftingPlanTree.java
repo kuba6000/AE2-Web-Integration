@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
-import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.List;
@@ -148,13 +147,18 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     public static final class Resource extends ResourceDescription {
 
         public final int id;
-        /** Null means absence is unknown in an incomplete capture. */
+        /** Null means absence or the exact accumulated amount is unknown. */
         public final @Nullable String missingAmount;
 
-        Resource(int id, ResourceDescriptor descriptor, @Nullable IconMappings mappings, @Nullable BigInteger missing) {
+        /** Known positive shortage, independent of whether its exact amount fits in long. */
+        public final boolean missing;
+
+        Resource(int id, ResourceDescriptor descriptor, @Nullable IconMappings mappings, @Nullable Long amount,
+            boolean missing) {
             super(descriptor, mappings);
             this.id = id;
-            missingAmount = missing == null ? null : missing.toString();
+            missingAmount = amount == null ? null : amount.toString();
+            this.missing = missing;
         }
     }
 

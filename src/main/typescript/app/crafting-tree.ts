@@ -40,7 +40,7 @@ export type TreeNode = {
     children: TreeChild[];
 };
 export type TreeQuery = { icons: boolean; captureId?: string };
-export type TreeResource = ResourceDescription & { missingAmount: string | null };
+export type TreeResource = ResourceDescription & { missingAmount: string | null; missing: boolean };
 export type TreeDocument = {
     state: 'CALCULATING' | 'PREPARING' | 'UNAVAILABLE' | 'READY' | 'TOO_LARGE';
     mode: TreeMode | null;
@@ -294,10 +294,7 @@ export function createCraftingTree(
                         (edge) =>
                             byId[edge.nodeId]?.kind === 'CONTRIBUTION' && byId[edge.nodeId]?.contribution === 'MISSING'
                     )) ||
-                (node.kind === 'RESOURCE' &&
-                    node.resourceId != null &&
-                    state.resources[node.resourceId]?.missingAmount != null &&
-                    BigInt(state.resources[node.resourceId].missingAmount!) > 0n);
+                (node.kind === 'RESOURCE' && node.resourceId != null && state.resources[node.resourceId]?.missing);
             shortages[node.id] = direct ? 'MISSING' : node.children.some((edge) => edge.missing) ? 'BLOCKED' : 'NONE';
         }
         if (!sameCapture && roots.length && byId[roots[0]]) {

@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -61,8 +60,8 @@ class CraftingTraceGraphTest {
         CraftingTraceGraph graph = CraftingTraceGraph.from(TraceFixtures.gears());
         assertTrue(graph.missingComplete());
         assertEquals(1, graph.missingResourceCount());
-        assertEquals(BigInteger.valueOf(2), graph.missingAmount(TraceFixtures.INGOT));
-        assertEquals(BigInteger.ZERO, graph.missingAmount(TraceFixtures.GEAR));
+        assertEquals(Long.valueOf(2), graph.missingAmount(TraceFixtures.INGOT));
+        assertEquals(Long.valueOf(0), graph.missingAmount(TraceFixtures.GEAR));
     }
 
     @Test
@@ -124,8 +123,25 @@ class CraftingTraceGraphTest {
         assertFalse(trace.addContribution(request, ContributionKind.STORAGE, 1));
         CraftingTraceGraph graph = CraftingTraceGraph.from(trace.build());
         assertFalse(graph.missingComplete());
-        assertEquals(BigInteger.ONE, graph.missingAmount(item));
+        assertEquals(Long.valueOf(1), graph.missingAmount(item));
         assertNull(graph.missingAmount(other));
+    }
+
+    @Test
+    void overflowingMissingSumRetainsShortagePathsWithoutInventingAnAmount() {
+        CraftingTraceCapture.Builder trace = new CraftingTraceCapture.Builder(20, 100);
+        int item = trace.addResource(() -> TraceFixtures.descriptor("item"));
+        int request = trace.addRequest(item, Long.MAX_VALUE);
+        trace.root(request, true);
+        trace.addContribution(request, ContributionKind.MISSING, Long.MAX_VALUE);
+        trace.addContribution(request, ContributionKind.MISSING, 1);
+        trace.addContribution(request, ContributionKind.MISSING, 1);
+        CraftingTraceGraph graph = CraftingTraceGraph.from(trace.build());
+        assertNull(graph.missingAmount(item));
+        assertTrue(graph.isMissing(item));
+        assertFalse(graph.missingComplete());
+        assertEquals(1, graph.missingResourceCount());
+        assertEquals(Arrays.asList(0, 1, 2), graph.contributions(request, true));
     }
 
     @Test

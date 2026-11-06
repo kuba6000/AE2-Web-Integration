@@ -272,6 +272,41 @@ class CraftingPlanDocumentTest extends GridTestScope {
     }
 
     @Test
+    void overflowingMissingRootKeepsItsShortageIdentityWithAnUnknownAmount() {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(609);
+        CraftingRecipeCapture.Builder capture = new CraftingRecipeCapture.Builder(20, 1000);
+        int resource = capture.addResource(
+            () -> TestGridFixtures.planOutput()
+                .description());
+        capture.result(resource, 1, true);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, resource, Long.MAX_VALUE);
+        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, resource, 1);
+        int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(
+                CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(capture::build)),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        JsonObject data = read(grid, plan);
+        JsonObject descriptor = data.getAsJsonArray("resources")
+            .get(0)
+            .getAsJsonObject();
+        assertTrue(
+            descriptor.get("missing")
+                .getAsBoolean());
+        assertTrue(
+            descriptor.get("missingAmount")
+                .isJsonNull());
+        assertFalse(
+            data.get("missingComplete")
+                .getAsBoolean());
+        assertEquals(
+            1,
+            data.get("missingResourceCount")
+                .getAsInt());
+    }
+
+    @Test
     void traceKeepsActualSourcesSharedTasksAndPerConnectionAmounts() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(601);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))

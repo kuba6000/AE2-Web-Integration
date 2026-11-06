@@ -28,7 +28,8 @@ const resources = names.map((displayName, id) => ({
     resourceType: 'ITEM',
     itemKey: null,
     icon: { page: 0, x: (id % 2) * 64, y: 0 },
-    missingAmount: '0'
+    missingAmount: '0',
+    missing: false
 }));
 function tree(url) {
     return {

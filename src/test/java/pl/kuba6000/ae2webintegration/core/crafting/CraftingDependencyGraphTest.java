@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -243,8 +242,8 @@ class CraftingDependencyGraphTest {
         builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, absent, 9007199254740993L);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
 
-        assertEquals(new BigInteger("9007199254740993"), graph.missingAmount(absent));
-        assertEquals(BigInteger.ZERO, graph.missingAmount(available));
+        assertEquals(Long.valueOf(9007199254740993L), graph.missingAmount(absent));
+        assertEquals(Long.valueOf(0), graph.missingAmount(available));
         assertTrue(graph.missingComplete());
         assertEquals(1, graph.missingResourceCount());
         assertEquals(Collections.singletonList(0), graph.declaredProducers(target, true));
@@ -290,13 +289,14 @@ class CraftingDependencyGraphTest {
         builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, root, 1);
         builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, detached, 3);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
-        assertEquals(new BigInteger("9223372036854775808"), graph.missingAmount(root));
+        assertNull(graph.missingAmount(root));
+        assertTrue(graph.isMissing(root));
         assertEquals(2, graph.missingResourceCount());
         assertTrue(
             graph.declaredProducers(root, true)
                 .isEmpty());
         assertEquals(Collections.singletonList(detached), graph.unlinkedMissingResources());
-        assertTrue(graph.missingComplete());
+        assertFalse(graph.missingComplete());
     }
 
     @Test
@@ -310,7 +310,7 @@ class CraftingDependencyGraphTest {
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertFalse(graph.missingComplete());
         assertNull(graph.missingAmount(root));
-        assertEquals(BigInteger.valueOf(7), graph.missingAmount(detached));
+        assertEquals(Long.valueOf(7), graph.missingAmount(detached));
         assertEquals(Collections.singletonList(detached), graph.unlinkedMissingResources());
         assertTrue(
             graph.unplacedRecipes(true)

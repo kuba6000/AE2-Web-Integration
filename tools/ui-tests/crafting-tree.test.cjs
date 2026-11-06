@@ -34,8 +34,8 @@ function document() {
         root: { resourceId: 0, quantity: '4', simulated: false },
         roots: [0],
         resources: [
-            { id: 0, displayName: 'Machine', icon: null, missingAmount: '0' },
-            { id: 1, displayName: 'Gear', icon: null, missingAmount: '2' }
+            { id: 0, displayName: 'Machine', icon: null, missingAmount: '0', missing: false },
+            { id: 1, displayName: 'Gear', icon: null, missingAmount: '2', missing: true }
         ],
         recipes: [{ id: 0, inputs: [], outputs: [{ resourceId: 0, quantity: '1', primary: true }] }],
         nodes: [
@@ -572,5 +572,24 @@ test('manual toggle during expansion follows the displayed folds and supersedes 
         tree.state.rows.map((row) => row.node.id),
         [0, 1]
     );
+    tree.dispose();
+});
+
+test('overflowing missing amounts retain red resources while unknown absence stays neutral', async () => {
+    const { createCraftingTree } = await import(moduleUrl);
+    const data = document();
+    data.mode = 'AGGREGATE';
+    data.roots = [0, 1];
+    data.nodes = [node(0, 'RESOURCE', { resourceId: 0 }), node(1, 'RESOURCE', { resourceId: 1 })];
+    data.resources[0].missingAmount = null;
+    data.resources[0].missing = true;
+    data.resources[1].missingAmount = null;
+    data.resources[1].missing = false;
+    data.missingComplete = false;
+    const tree = createCraftingTree({ planTree: async () => ({ data, icons: null }) }, () => {});
+    tree.reset('grid', 1);
+    await tree.show(true);
+    assert.equal(tree.state.rows.find((row) => row.node.id === 0).shortage, 'MISSING');
+    assert.equal(tree.state.rows.find((row) => row.node.id === 1).shortage, 'NONE');
     tree.dispose();
 });

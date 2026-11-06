@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.crafting;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.List;
 
@@ -14,6 +13,9 @@ import org.jetbrains.annotations.Nullable;
  * Native traces preserve native order; reconstructed aggregate views follow their documented convention.
  */
 public final class CraftingTraceGraph {
+
+    /** Nonnegative quantities use -1 only internally when their exact sum exceeds long. */
+    private static final long OVERFLOW = -1;
 
     private static final int NO_TASK = -1;
 
@@ -115,11 +117,16 @@ public final class CraftingTraceGraph {
 
     /**
      * Sum of the resource's MISSING contributions over the trace, never split by branch. Null means
-     * unknown absence in an incomplete capture; zero is a known absence.
+     * unknown absence in an incomplete capture or an overflowing sum; zero is a known absence.
      */
-    public @Nullable BigInteger missingAmount(int resourceId) {
-        BigInteger amount = missing.amounts[resourceId];
-        return amount == null && missing.complete ? BigInteger.ZERO : amount;
+    public @Nullable Long missingAmount(int resourceId) {
+        long amount = missing.amounts[resourceId];
+        return amount == OVERFLOW || (amount == 0 && !missing.complete) ? null : amount;
+    }
+
+    /** Known positive shortage, even when its accumulated quantity exceeds long. */
+    public boolean isMissing(int resourceId) {
+        return missing.amounts[resourceId] != 0;
     }
 
     /** Whether missing absence can be established from this fully captured trace. */
@@ -135,7 +142,7 @@ public final class CraftingTraceGraph {
     /** Reverse dependency links only: a request to the tasks that issued it, a task to the requests crafting it. */
     private final class MissingIndex {
 
-        private final BigInteger[] amounts = new BigInteger[capture.resources()
+        private final long[] amounts = new long[capture.resources()
             .size()];
         private final boolean complete;
         private final int count;
@@ -146,7 +153,6 @@ public final class CraftingTraceGraph {
             boolean allCaptured = capture.limits()
                 .isEmpty();
             for (CraftingTraceCapture.Task task : capture.tasks()) allCaptured &= task.complete();
-            complete = allCaptured;
             int requestCount = capture.requests()
                 .size();
             boolean[] missingRequests = new boolean[requestCount];
@@ -160,11 +166,18 @@ public final class CraftingTraceGraph {
                 int resource = capture.requests()
                     .get(contribution.requestId())
                     .resourceId();
-                BigInteger amount = BigInteger.valueOf(contribution.amount());
-                amounts[resource] = amounts[resource] == null ? amount : amounts[resource].add(amount);
+                if (amounts[resource] != OVERFLOW) {
+                    try {
+                        amounts[resource] = Math.addExact(amounts[resource], contribution.amount());
+                    } catch (ArithmeticException overflow) {
+                        amounts[resource] = OVERFLOW;
+                        allCaptured = false;
+                    }
+                }
             }
+            complete = allCaptured;
             int knownMissing = 0;
-            for (BigInteger amount : amounts) if (amount != null) knownMissing++;
+            for (long amount : amounts) if (amount != 0) knownMissing++;
             count = knownMissing;
             Adjacency issuers = new Adjacency(
                 requestCount,

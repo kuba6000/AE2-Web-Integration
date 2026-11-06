@@ -94,9 +94,11 @@ export function craftingTreeContent(
     const multiplier = row.node.multiplier ?? row.group?.multiplier ?? null;
     if (multiplier !== null) details.push(`${t('treeMultiplier')}: ${number(multiplier)}`);
     if (row.node.complete === false) details.push(t('treePartialNode'));
-    const missing =
-        row.node.kind === 'RESOURCE' && resource?.missingAmount != null && BigInt(resource.missingAmount) > 0n;
-    if (missing) details.unshift(`${t('treeMissingInPlan')}: ${number(resource!.missingAmount!)}`);
+    const missing = row.node.kind === 'RESOURCE' && resource?.missing;
+    if (missing)
+        details.unshift(
+            `${t('treeMissingInPlan')}: ${resource.missingAmount == null ? t('treeUnknownQuantity') : number(resource.missingAmount)}`
+        );
     else if (row.node.kind === 'RESOURCE' && resource && resource.missingAmount == null)
         details.push(t('treeMissingUnknown'));
     return {

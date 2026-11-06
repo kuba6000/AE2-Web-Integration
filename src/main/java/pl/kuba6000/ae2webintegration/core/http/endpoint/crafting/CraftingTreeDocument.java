@@ -150,7 +150,8 @@ final class CraftingTreeDocument {
                         capture.resources()
                             .get(id),
                         mappings,
-                        graph.missingAmount(id)));
+                        graph.missingAmount(id),
+                        graph.isMissing(id)));
         }
 
         private void addResourceNodes(boolean[] missingOutputs) {
@@ -329,7 +330,8 @@ final class CraftingTreeDocument {
                         capture.resources()
                             .get(id),
                         mappings,
-                        graph.missingAmount(id)));
+                        graph.missingAmount(id),
+                        graph.isMissing(id)));
         }
 
         private void addRequestNodes(boolean[] missingContributions) {
