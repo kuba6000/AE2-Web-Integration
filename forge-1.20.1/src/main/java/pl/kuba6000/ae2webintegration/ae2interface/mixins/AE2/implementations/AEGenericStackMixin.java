@@ -1,0 +1,34 @@
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
+
+import org.jetbrains.annotations.NotNull;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+
+@Mixin(value = GenericStack.class, remap = false)
+public class AEGenericStackMixin implements IAEGenericStack {
+
+    @Shadow
+    @Final
+    private AEKey what;
+
+    @Shadow
+    @Final
+    private long amount;
+
+    @Override
+    public @NotNull IAEKey web$what() {
+        return (IAEKey) what;
+    }
+
+    @Override
+    public long web$amount() {
+        return amount;
+    }
+
+}
