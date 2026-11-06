@@ -1,0 +1,21 @@
+{
+	"modListVersion": 2,
+	"modList": [{
+		"modid": "ae2webintegration",
+		"name": "AE2 Web Integration",
+		"description": "AE2 Web Integration mod",
+		"version": "${modVersion}",
+		"mcversion": "${minecraftVersion}",
+		"url": "https://github.com/kuba6000/AE2-Web-Integration",
+		"updateUrl": "",
+		"authorList": ["kuba6000"],
+		"credits": "",
+		"logoFile": "",
+		"screenshots": [],
+		"parent": "",
+		"requiredMods": [],
+		"dependencies": [],
+		"dependants": [],
+		"useDependencyInformation": false
+	}]
+}

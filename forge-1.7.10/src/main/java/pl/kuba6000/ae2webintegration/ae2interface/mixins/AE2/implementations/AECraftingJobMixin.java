@@ -1,0 +1,115 @@
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Mixin;
+
+import appeng.api.config.Actionable;
+import appeng.api.networking.crafting.ICraftingJob;
+import appeng.api.storage.data.IAEStack;
+import appeng.api.storage.data.IItemList;
+import appeng.crafting.fast.CraftingJobFast;
+import appeng.crafting.v2.CraftingJobV2;
+import appeng.util.item.IAEStackList;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.LiteRecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2RecipePlanCapture;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.V2TraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
+
+@Mixin(value = ICraftingJob.class, remap = false)
+public interface AECraftingJobMixin extends IAECraftingJob {
+
+    @Override
+    default @Nullable CraftingRecipeCapture web$captureRecipes(int maxEntries, int maxDescriptionCharacters) {
+        if ((Object) this instanceof CraftingJobFast<?>job)
+            return LiteRecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        if ((Object) this instanceof CraftingJobV2<?>job)
+            return V2RecipePlanCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
+
+    @Override
+    default @Nullable CraftingTraceCapture web$captureTrace(int maxEntries, int maxDescriptionCharacters) {
+        // Lite records only per-pattern totals, so it keeps the aggregate capture.
+        if ((Object) this instanceof CraftingJobV2<?>job)
+            return V2TraceCapture.capture(job, maxEntries, maxDescriptionCharacters);
+        return null;
+    }
+
+    @Override
+    default boolean web$isSimulation() {
+        return ((ICraftingJob) (Object) this).isSimulation();
+    }
+
+    @Override
+    default long web$getByteTotal() {
+        return ((ICraftingJob) (Object) this).getByteTotal();
+    }
+
+    @Override
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    default ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
+        IItemList<IAEStack<?>> plan = new IAEStackList();
+        ((ICraftingJob) (Object) this).populatePlan(plan);
+
+        final boolean simulation = ((ICraftingJob) (Object) this).isSimulation();
+        final IMeInventoryExtraction inventory = (IMeInventoryExtraction) grid.web$getStorageGrid()
+            .web$getInventory();
+
+        final List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
+        for (final IAEStack<?> captured : plan) {
+            final IAEKey key = (IAEKey) (Object) captured;
+
+            final long stored;
+            final long missing;
+            if (simulation) {
+                long needed = captured.getStackSize();
+                long extracted = inventory.web$extractItems(key, needed, Actionable.SIMULATE, grid);
+                stored = extracted;
+                missing = needed - extracted;
+            } else {
+                stored = captured.getStackSize();
+                missing = 0L;
+            }
+
+            entries.add(new ICraftingPlanSummaryEntry() {
+
+                @Override
+                public IAEKey web$getWhat() {
+                    return key;
+                }
+
+                @Override
+                public long web$getMissingAmount() {
+                    return missing;
+                }
+
+                @Override
+                public long web$getStoredAmount() {
+                    return stored;
+                }
+
+                @Override
+                public long web$getCraftAmount() {
+                    return captured.getCountRequestable();
+                }
+
+                @Override
+                public long web$getCraftSteps() {
+                    return captured.getCountRequestableCrafts();
+                }
+            });
+        }
+
+        return () -> entries;
+    }
+}

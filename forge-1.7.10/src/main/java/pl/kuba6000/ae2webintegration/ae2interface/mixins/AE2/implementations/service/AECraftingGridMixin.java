@@ -1,0 +1,100 @@
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.function.Function;
+
+import org.jetbrains.annotations.NotNull;
+import org.spongepowered.asm.mixin.Mixin;
+
+import com.google.common.collect.ImmutableSet;
+
+import appeng.api.config.CraftingMode;
+import appeng.api.networking.IGrid;
+import appeng.api.networking.crafting.ICraftingCPU;
+import appeng.api.networking.crafting.ICraftingGrid;
+import appeng.api.networking.crafting.ICraftingJob;
+import appeng.api.networking.crafting.ICraftingLink;
+import appeng.api.networking.security.PlayerSource;
+import appeng.api.storage.data.IAEStack;
+import appeng.me.cache.CraftingGridCache;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+
+@Mixin(value = ICraftingGrid.class)
+public interface AECraftingGridMixin extends IAECraftingGrid {
+
+    @Override
+    default int web$getCPUCount() {
+        return ((ICraftingGrid) (Object) this).getCpus()
+            .size();
+    }
+
+    @Override
+    default Set<ICraftingCPUCluster> web$getCPUs() {
+        final ImmutableSet<ICraftingCPU> aecpus = ((ICraftingGrid) (Object) this).getCpus();
+        final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
+        int i = 1;
+        for (ICraftingCPU cpu : aecpus) {
+            cpus.add((ICraftingCPUCluster) cpu);
+            ((ICraftingCPUNameIndex) cpu).web$setInternalID(i++);
+        }
+        return cpus;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount,
+        @NotNull CraftingOptions options) {
+        PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
+        IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
+        aeStack.setStackSize(amount);
+        final Future<ICraftingJob> job;
+        if (options.lightMode() || options.ignoreMissing()) {
+            if (!((Object) this instanceof CraftingGridCache crafting)) {
+                throw new UnsupportedOperationException(
+                    "This crafting service does not support the requested calculation options");
+            }
+            job = crafting.beginCraftingJob(
+                actionSrc.player.worldObj,
+                (IGrid) grid,
+                actionSrc,
+                aeStack,
+                options.ignoreMissing() ? CraftingMode.IGNORE_MISSING : CraftingMode.STANDARD,
+                options.lightMode(),
+                null);
+        } else {
+            job = ((ICraftingGrid) (Object) this)
+                .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
+        }
+        return (Future<IAECraftingJob>) (Object) job;
+    }
+
+    @Override
+    default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+        IAEGrid grid) {
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) ((IGridPlayerSource) grid).web$getPlayerSource();
+        source.clearLastMessage();
+        ICraftingLink link = ((ICraftingGrid) (Object) this)
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, source);
+        String msg = source.takeLastMessage();
+        if (link != null) return null;
+        // A null return means "submitted" to the caller, so never report success when AE2 refused the
+        // job. It rejects a simulated plan (missing ingredients) without emitting any chat message.
+        return msg == null ? "Submission failed" : msg;
+    }
+
+    @Override
+    default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+        return Collections.emptySet();
+    }
+}
