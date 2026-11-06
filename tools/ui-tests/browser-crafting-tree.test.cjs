@@ -109,6 +109,11 @@ async function expand(page, title) {
         { timeout: 5000 }
     );
 }
+async function fitDiagram(page) {
+    await page.getByRole('button', { name: 'Fit visible nodes', exact: true }).click();
+    // Fit updates viewport membership on the next animation frame.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 async function openRecipe(page) {
     // The calculated target opens by itself; its recipe is the first card to open.
     await expand(page, 'Recipe');
@@ -418,6 +423,7 @@ const caveatText = (page) => page.locator('.tree-caveat').evaluate((element) => 
 test('shortage focus keeps healthy ingredients and paints shortage trails and recipe frames in both exports', async (t) => {
     const page = await openTrace(t);
     await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await fitDiagram(page);
     const rodSource = page.locator('.tree-card[data-kind="CONTRIBUTION"]', {
         has: page.locator('strong', { hasText: /^Rod$/ })
     });
@@ -427,16 +433,25 @@ test('shortage focus keeps healthy ingredients and paints shortage trails and re
     await rod.waitFor();
     assert.equal(await rod.getAttribute('aria-expanded'), 'false');
     assert.equal(await rodSource.count(), 0, 'healthy ingredient stays, its healthy source is folded');
+    await fitDiagram(page);
     const plateSources = page.locator('.tree-card[data-kind="CONTRIBUTION"]', {
         has: page.locator('strong', { hasText: /^Plate$/ })
     });
     assert.equal(await plateSources.count(), 2, 'mixed missing and stored sources both stay visible');
-    const paint = await page.locator('.plan-tree').evaluate((root) => ({
-        lines: [...root.querySelectorAll('.tree-lines path')].map((line) => getComputedStyle(line).stroke),
-        item: getComputedStyle(root.querySelector('.tree-card[data-kind="REQUEST"]')).backgroundColor,
-        recipe: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).backgroundColor,
-        recipeBorder: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).borderTopColor
-    }));
+    const paint = await page.locator('.plan-tree').evaluate((root) => {
+        const canvas = root.querySelector('.tree-overview');
+        const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        const lines = new Set();
+        for (let index = 0; index < pixels.length; index += 4)
+            if (pixels[index + 3] === 255)
+                lines.add(`rgb(${pixels[index]}, ${pixels[index + 1]}, ${pixels[index + 2]})`);
+        return {
+            lines: [...lines],
+            item: getComputedStyle(root.querySelector('.tree-card[data-kind="REQUEST"]')).backgroundColor,
+            recipe: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).backgroundColor,
+            recipeBorder: getComputedStyle(root.querySelector('.tree-card[data-kind="TASK"]')).borderTopColor
+        };
+    });
     assert.ok(paint.lines.includes('rgb(255, 213, 74)'), 'upstream connections are yellow');
     assert.ok(paint.lines.includes('rgb(227, 68, 68)'), 'direct shortage connections are red');
     assert.equal(paint.recipeBorder, 'rgb(255, 213, 74)');
@@ -603,11 +618,13 @@ test('a trace shows requests, leaves and a task card like the in-game tree and m
     await card(page, 'Machine').first().waitFor();
     await expand(page, 'Recipe');
     await card(page, 'Plate').first().waitFor();
+    await fitDiagram(page);
     await card(page, 'Rod').first().waitFor();
     const task = await card(page, 'Recipe').locator('.tree-details').textContent();
     assert.doesNotMatch(task, /Machine|Plate|Rod/);
     assert.match(task, /3/);
     await expand(page, 'Plate');
+    await fitDiagram(page);
     await page.locator('.tree-card[data-kind="CONTRIBUTION"]').nth(2).waitFor();
     const leaves = await page.locator('.tree-card[data-kind="CONTRIBUTION"]').evaluateAll((cards) =>
         cards.map((element) => ({
@@ -711,7 +728,7 @@ test('compact tree keeps a clicked task anchored and shows resource, source, and
             (button) => button.textContent === 'Expand all' && button.disabled
         )
     );
-    await page.getByRole('button', { name: 'Fit visible nodes', exact: true }).click();
+    await fitDiagram(page);
     const beforeCollapse = await root.boundingBox();
     await root.click();
     const afterCollapse = await root.boundingBox();

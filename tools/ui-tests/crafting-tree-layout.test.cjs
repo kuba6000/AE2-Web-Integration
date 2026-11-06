@@ -73,3 +73,17 @@ test('text-mode recipe cards share resource height but remain narrower and leave
         assert.ok(nodes[1].y + nodes[1].height < nodes[2].y);
     }
 });
+
+test('viewport selection keeps crossing connections without mounting offscreen endpoint cards', async () => {
+    const { treeViewport } = await import(moduleUrl);
+    const nodes = [
+        { x: 0, y: 0, width: 64, height: 64, parent: null },
+        { x: 1000, y: 300, width: 64, height: 64, parent: 0 },
+        { x: 4000, y: 300, width: 64, height: 64, parent: null }
+    ];
+    const visible = treeViewport(nodes, { x: 400, y: 260, width: 200, height: 50 });
+    assert.deepEqual(visible.cards, []);
+    assert.deepEqual(visible.connections, [1]);
+    assert.deepEqual(treeViewport(nodes, { x: 1000, y: 300, width: 100, height: 100 }).cards, [1]);
+    assert.deepEqual(treeViewport(nodes, { x: 400, y: 100, width: 200, height: 50 }).connections, []);
+});

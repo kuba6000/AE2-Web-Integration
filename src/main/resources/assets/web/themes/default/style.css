@@ -3998,6 +3998,10 @@ button.toast:hover {
 .tree-viewport[data-dragging='true'] * {
     cursor: grabbing;
 }
+.tree-overview {
+    position: absolute;
+    pointer-events: none;
+}
 .tree-space {
     position: relative;
 }
@@ -4144,28 +4148,6 @@ button.toast:hover {
 .tree-card[data-kind='CONTRIBUTION'] {
     cursor: default;
 }
-.tree-lines {
-    position: absolute;
-    pointer-events: none;
-    overflow: visible;
-}
-.tree-lines path {
-    fill: none;
-    stroke: currentcolor;
-    stroke-width: 1;
-    opacity: 0.5;
-}
-.tree-lines path[data-shortage='BLOCKED'],
-.tree-lines path[data-shortage='MISSING'] {
-    stroke-width: 2;
-    opacity: 1;
-}
-.tree-lines path[data-shortage='BLOCKED'] {
-    stroke: var(--tree-blocked);
-}
-.tree-lines path[data-shortage='MISSING'] {
-    stroke: var(--tree-missing-border);
-}
 @media (width <= 700px) {
     .tree-space,
     .tree-content {
@@ -4180,9 +4162,6 @@ button.toast:hover {
         top: auto !important;
         width: auto;
         margin: 8px 4px 8px var(--tree-indent);
-    }
-    .tree-lines {
-        display: none;
     }
     .tree-controls button:nth-child(-n + 4) {
         display: none;

@@ -75,3 +75,32 @@ export function treeCardTextLayout(cardHeight: number, detailCount: number, titl
     const height = detailOffset + lineCount * 14;
     return { lineCount, height, top: (cardHeight - height) / 2, detailOffset };
 }
+
+export type TreeViewport = { x: number; y: number; width: number; height: number };
+
+/** Select cards and actual orthogonal connector segments independently. */
+export function treeViewport(nodes: readonly TreePosition[], bounds: TreeViewport) {
+    const intersects = (x: number, y: number, width: number, height: number) =>
+        x <= bounds.x + bounds.width &&
+        x + width >= bounds.x &&
+        y <= bounds.y + bounds.height &&
+        y + height >= bounds.y;
+    const cards: number[] = [],
+        connections: number[] = [];
+    nodes.forEach((node, index) => {
+        if (intersects(node.x, node.y, node.width, node.height)) cards.push(index);
+        if (node.parent === null) return;
+        const parent = nodes[node.parent];
+        const px = parent.x + parent.width / 2,
+            py = parent.y + parent.height;
+        const x = node.x + node.width / 2,
+            elbow = node.y - 16;
+        if (
+            intersects(px, Math.min(py, elbow), 0, Math.abs(elbow - py)) ||
+            intersects(Math.min(px, x), elbow, Math.abs(x - px), 0) ||
+            intersects(x, elbow, 0, node.y - elbow)
+        )
+            connections.push(index);
+    });
+    return { cards, connections };
+}
