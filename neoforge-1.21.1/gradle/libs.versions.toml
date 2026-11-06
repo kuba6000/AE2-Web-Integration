@@ -1,0 +1,9 @@
+[versions]
+minecraft = "1.21.1"
+neo = "21.1.203"
+parchment = "2024.11.17"
+jetbrains-annotations = "26.0.1"
+
+[libraries]
+minecraft               = { module = "com.mojang:minecraft", version.ref = "minecraft" }
+jetbrains-annotations   = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }

@@ -1,0 +1,22 @@
+name: Test Scala Presence
+
+on:
+  pull_request:
+    branches: [ 1.21.1 ]
+  push:
+    branches: [ 1.21.1 ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-scala-presence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Detect scala presence
+        shell: bash
+        run: |
+          ! grep -E -r 'import scala\.' src/main/java
