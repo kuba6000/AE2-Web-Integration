@@ -639,12 +639,11 @@ test('only an aggregate tree states that it is an approximation, on screen and i
     const trace = await openTrace(t);
     await trace.locator('.tree-card').first().waitFor();
     const traceNotes = await exportScope(trace);
-    assert.ok(traceNotes.length > 0);
     assert.ok(
         aggregateNotes.length > traceNotes.length,
         'the aggregate export adds notes that a trace export does not'
     );
-    assert.ok(aggregateNotes.startsWith(traceNotes.slice(0, 20)), 'both exports share the scope notes');
+    assert.notEqual(aggregateNotes, traceNotes, 'approximation notice belongs only to aggregate captures');
 });
 
 test('the trace tree exports to PNG with its leaves and cards', async (t) => {

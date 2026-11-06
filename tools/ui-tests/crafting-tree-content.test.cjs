@@ -123,3 +123,35 @@ test('shortage reflects each occurrence rather than resource totals', async () =
         assert.equal(card.blocked, blocked);
     }
 });
+
+test('export notices follow actual folds and capture completeness, not shortages or expand-all history', async () => {
+    const { craftingTreeExportNotes } = await import(moduleUrl);
+    const parent = row(node('REQUEST', 1, { children: [{ nodeId: 2 }] }));
+    const capture = {
+        rows: [parent],
+        expanded: {},
+        partial: false,
+        missingComplete: true,
+        mode: 'TRACE',
+        expandedComplete: true
+    };
+    const collapsed = craftingTreeExportNotes(capture, locale);
+    assert.equal(collapsed.length, 1);
+    capture.expanded[parent.key] = true;
+    capture.expandedComplete = false;
+    assert.deepEqual(craftingTreeExportNotes(capture, locale), []);
+    capture.rows = [{ ...parent, reference: true, shortage: 'MISSING' }];
+    capture.expanded = {};
+    assert.deepEqual(craftingTreeExportNotes(capture, locale), []);
+    capture.rows = [row(node('REQUEST', 3))];
+    assert.deepEqual(craftingTreeExportNotes(capture, locale), []);
+    capture.partial = true;
+    const incomplete = craftingTreeExportNotes(capture, locale);
+    assert.equal(incomplete.length, 1);
+    assert.notDeepEqual(incomplete, collapsed);
+    capture.partial = false;
+    capture.missingComplete = false;
+    assert.deepEqual(craftingTreeExportNotes(capture, locale), incomplete);
+    capture.mode = 'AGGREGATE';
+    assert.equal(craftingTreeExportNotes(capture, locale).length, 2);
+});

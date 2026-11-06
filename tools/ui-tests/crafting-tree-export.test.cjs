@@ -89,6 +89,7 @@ function canvasEnvironment() {
                 width: 0,
                 height: 0,
                 getContext: () => context,
+                toDataURL: () => 'data:image/png;base64,dGVzdA==',
                 toBlob: (callback) => callback(new Blob(['png'], { type: 'image/png' }))
             };
             canvases.push(canvas);
@@ -510,4 +511,75 @@ test('small recipe exports keep details readable instead of overlapping extra li
     const text = await result.blob.text();
     assert.match(text, /Craft count: 12/);
     assert.doesNotMatch(text, /Shared reference|Partial recipe/);
+});
+
+test('hiding the caption removes its title, notes and reserved space without hiding resource names', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    const snapshot = scene();
+    snapshot.layout = { width: 280, height: 160, nodes: [{ x: 16, y: 16, width: 240, height: 72, parent: null }] };
+    snapshot.cards = [snapshot.cards[0]];
+    const env = canvasEnvironment();
+    const icons = { resolve: async () => ({ icons: new Map(), dispose() {} }) };
+    const options = { ...settings, caption: false, icon: false };
+    const png = await renderTreePng(snapshot, options, style, icons, new AbortController().signal);
+    assert.equal(png.header, 0);
+    assert.equal(png.width, 280);
+    assert.equal(png.height, 160);
+    assert.ok(env.texts.includes('Root'));
+    assert.ok(!env.texts.includes('Plan'));
+    assert.ok(!env.texts.includes('Partial capture'));
+    const svg = await renderTreeSvg(snapshot, options, style, icons, new AbortController().signal);
+    assert.equal(svg.header, 0);
+    assert.equal(svg.width, png.width);
+    assert.equal(svg.height, png.height);
+    assert.match(await svg.blob.text(), />Root<\/text>/);
+    assert.doesNotMatch(await svg.blob.text(), />Plan<\/text>|Partial capture/);
+});
+
+test('caption item uses its own atlas even when diagram icons are disabled', async () => {
+    const { renderTreePng, renderTreeSvg } = await import(moduleUrl);
+    for (const render of [renderTreePng, renderTreeSvg]) {
+        const snapshot = scene();
+        const icon = { page: 0, x: 0, y: 0 };
+        const metadata = { packId: 'plan-pack', pages: [] };
+        const bitmap = {};
+        snapshot.header = { icon, icons: metadata };
+        let headerReads = 0;
+        let released = 0;
+        const icons = {
+            resolve: async (references, atlas) => {
+                if (references.includes(icon)) {
+                    assert.equal(atlas, metadata);
+                    headerReads++;
+                    return {
+                        icons: new Map([[icon, { image: bitmap, x: 0, y: 0, width: 32, height: 32 }]]),
+                        dispose() {
+                            released++;
+                        }
+                    };
+                }
+                return { icons: new Map(), dispose() {} };
+            }
+        };
+        const env = canvasEnvironment();
+        const result = await render(
+            snapshot,
+            { ...settings, caption: true, icon: false },
+            style,
+            icons,
+            new AbortController().signal
+        );
+        assert.equal(headerReads, 1);
+        assert.equal(released, 1);
+        assert.ok(env.images.some(([image]) => image === bitmap));
+        if (render === renderTreeSvg) assert.match(await result.blob.text(), /<use href="#icon/);
+        await render(
+            snapshot,
+            { ...settings, caption: false, icon: false },
+            style,
+            icons,
+            new AbortController().signal
+        );
+        assert.equal(headerReads, 1);
+    }
 });

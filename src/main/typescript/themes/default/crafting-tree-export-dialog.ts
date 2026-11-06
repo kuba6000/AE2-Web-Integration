@@ -1,6 +1,6 @@
 import { element } from './dom.js';
 import type { TerminalDisplay } from './web-settings.js';
-import { craftingTreeContent } from './crafting-tree-content.js';
+import { craftingTreeContent, craftingTreeExportNotes } from './crafting-tree-content.js';
 import { layoutCraftingTree } from './crafting-tree-layout.js';
 import {
     renderTreePng,
@@ -80,14 +80,14 @@ export function createTreeExportDialog(
     function refresh() {
         const size = scene
             ? settings.format === 'svg'
-                ? treeSvgSize(scene, settings.scale)
-                : treePngSize(scene, settings.scale)
+                ? treeSvgSize(scene, settings.scale, settings.caption)
+                : treePngSize(scene, settings.scale, settings.caption)
             : null;
         readout.textContent = size ? `${size.width} × ${size.height} px` : locale.t('exportTooLarge');
         download.disabled = !size || !!operation;
         download.textContent = `${locale.t('exportDownload')} ${settings.format.toUpperCase()}`;
     }
-    function toggle(key: 'icon' | 'name' | 'colors', label: string) {
+    function toggle(key: 'icon' | 'name' | 'colors' | 'caption', label: string) {
         const input = element('input');
         input.type = 'checkbox';
         input.checked = settings[key];
@@ -130,7 +130,9 @@ export function createTreeExportDialog(
                 link.click();
                 link.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
-                for (const [key, value] of Object.entries(captured)) store.set(`planExport.${key}`, value);
+                const { caption, ...sharedSettings } = captured;
+                store.set('treeExport.caption', caption);
+                for (const [key, value] of Object.entries(sharedSettings)) store.set(`planExport.${key}`, value);
                 message.textContent =
                     result.scale < captured.scale
                         ? locale.t('exportScaleReduced', { scale: result.scale })
@@ -161,18 +163,12 @@ export function createTreeExportDialog(
             locale = translator;
             const t = locale.common;
             const tree = state.tree;
-            settings = readPlanExportSettings((key) => store.get(key));
+            settings = {
+                ...readPlanExportSettings((key) => store.get(key)),
+                caption: store.get('treeExport.caption') !== false
+            };
             origin = { route: routeKey(), captureId: tree.captureId };
-            const notes = [t('treeExportScope'), `${t('treeExportNodeCount')}: ${locale.number(tree.rows.length)}`];
-            // Only an aggregate tree is an approximation; a trace states per-occurrence amounts.
-            if (tree.mode === 'AGGREGATE') {
-                if (tree.rootKind !== 'REQUEST') notes.push(t('treeMissingPlanTotals'));
-                notes.push(
-                    t(tree.rootKind === 'REQUEST' ? 'treeExportOrderedApproximation' : 'treeExportApproximation')
-                );
-            }
-            if (tree.partial) notes.push(t('treeExportPartial'));
-            if (!tree.missingComplete) notes.push(t('treeMissingIncomplete'));
+            const notes = craftingTreeExportNotes(tree, locale);
             scene = {
                 layout: layoutCraftingTree(tree.rows, display),
                 display,
@@ -190,6 +186,21 @@ export function createTreeExportDialog(
                       }
                     : null,
                 title: state.plan?.finalOutput.displayName ?? t('craftingPlan'),
+                ...(state.plan?.finalOutput.icon
+                    ? {
+                          header: {
+                              icon: { ...state.plan.finalOutput.icon },
+                              icons: state.icons
+                                  ? {
+                                        packId: state.icons.packId,
+                                        width: state.icons.width,
+                                        height: state.icons.height,
+                                        pages: state.icons.pages.map((page) => ({ ...page }))
+                                    }
+                                  : null
+                          }
+                      }
+                    : {}),
                 scope: notes
             };
             const computed = getComputedStyle(dialog);
@@ -238,8 +249,9 @@ export function createTreeExportDialog(
                 settings.scale = Number(size.value);
                 refresh();
             };
+            toggle('caption', t('treeExportCaption'));
             toggle('icon', t('treeExportIcons'));
-            if (display !== 'icons') toggle('name', t('name'));
+            if (display !== 'icons') toggle('name', t('treeExportResourceNames'));
             toggle('colors', t('treeExportColors'));
             const background = element('input');
             background.type = 'checkbox';

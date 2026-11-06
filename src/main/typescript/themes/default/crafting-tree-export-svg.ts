@@ -22,15 +22,23 @@ export async function renderTreeSvg(
 ) {
     signal.throwIfAborted();
     if (!scene.cards.length) throw new Error('empty');
-    const size = treeSvgSize(scene, settings.scale);
+    const size = treeSvgSize(scene, settings.scale, settings.caption);
     await loadExportFonts(style.fontFamily, signal);
     const references =
         settings.icon && scene.display !== 'names' ? scene.cards.flatMap((card) => (card.icon ? [card.icon] : [])) : [];
     const resolved = await icons.resolve(references, scene.icons, signal);
+    let headerIcons: Awaited<ReturnType<typeof icons.resolve>> | undefined;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
     try {
-        const assets = await createSvgAssets(style.fonts ?? [], resolved.icons.values(), signal);
+        if (settings.caption !== false && scene.header)
+            headerIcons = await icons.resolve([scene.header.icon], scene.header.icons, signal);
+        const headerIcon = scene.header && headerIcons?.icons.get(scene.header.icon);
+        const assets = await createSvgAssets(
+            style.fonts ?? [],
+            [...resolved.icons.values(), ...(headerIcons?.icons.values() ?? [])],
+            signal
+        );
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('SVG text measurement unavailable');
         ctx.textBaseline = 'top';
@@ -40,13 +48,16 @@ export async function renderTreeSvg(
         const symbol = (id: string, svg: string) =>
             `<symbol id="${id}" viewBox="0 0 32 32">${svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</symbol>`;
         if (settings.background === 'theme') body.push(rect(0, 0, size.width, size.height, style.background));
-        body.push(
-            `<g transform="scale(${size.scale})">`,
-            svgText(ctx, scene.title, 16, 12, size.width / size.scale - 32, style, 17)
-        );
-        scene.scope.forEach((line, index) =>
-            body.push(svgText(ctx, line, 16, 40 + index * 22, size.width / size.scale - 32, style, 12))
-        );
+        body.push(`<g transform="scale(${size.scale})">`);
+        if (settings.caption !== false) {
+            const headerId = headerIcon && assets.iconId(headerIcon);
+            if (headerId) body.push(`<use href="#${headerId}" transform="translate(16 8) scale(0.5)"/>`);
+            const titleX = headerIcon ? 60 : 16;
+            body.push(svgText(ctx, scene.title, titleX, 12, size.width / size.scale - titleX - 16, style, 17));
+            scene.scope.forEach((line, index) =>
+                body.push(svgText(ctx, line, 16, 40 + index * 22, size.width / size.scale - 32, style, 12))
+            );
+        }
         body.push(`<g transform="translate(0 ${size.header})">`);
         const connectionOrder = treeConnectionOrder(scene.cards);
         for (let offset = 0; offset < connectionOrder.length; offset++) {
@@ -170,6 +181,7 @@ export async function renderTreeSvg(
         return { blob, ...size };
     } finally {
         canvas.width = canvas.height = 0;
+        headerIcons?.dispose();
         resolved.dispose();
     }
 }

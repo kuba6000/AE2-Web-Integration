@@ -113,3 +113,13 @@ export function craftingTreeContent(
         reference: row.reference
     };
 }
+
+/** Only information needed to interpret a shared diagram belongs in its caption. */
+export function craftingTreeExportNotes(state: ReadonlyData<TreeState>, locale: Translator) {
+    const notes: string[] = [];
+    if (state.rows.some((row) => !row.reference && row.node.children.length > 0 && !state.expanded[row.key]))
+        notes.push(locale.common('treeExportCollapsed'));
+    if (state.partial || !state.missingComplete) notes.push(locale.common('treeExportIncomplete'));
+    if (state.mode === 'AGGREGATE') notes.push(locale.common('treeExportApproximation'));
+    return notes;
+}

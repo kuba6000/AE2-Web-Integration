@@ -2,7 +2,7 @@ import { treeCardGeometry, treeCardTextLayout } from './crafting-tree-layout.js'
 import { loadExportFonts } from '../../app/export-text.js';
 import { prepareCanvas, drawText } from '../../app/plan-export.js';
 import { planExportFits, type PlanExportSettings } from '../../app/plan-export-layout.js';
-import type { IconMetadata } from '../../app/api-types.js';
+import type { IconMetadata, IconReference } from '../../app/api-types.js';
 import type { ThemeApplication } from '../../app/theme-api.js';
 import type { craftingTreeContent } from './crafting-tree-content.js';
 import type { layoutCraftingTree } from './crafting-tree-layout.js';
@@ -19,12 +19,13 @@ export type TreeExportScene = {
     cards: ReturnType<typeof craftingTreeContent>[];
     icons: IconMetadata | null;
     title: string;
+    header?: { icon: IconReference; icons: IconMetadata | null };
     scope: string[];
 };
 export type TreeExportSettings = Pick<
     PlanExportSettings,
     'format' | 'scale' | 'icon' | 'name' | 'colors' | 'background'
->;
+> & { caption: boolean };
 export type TreeExportStyle = TreePalette & {
     fontFamily: string;
     fonts?: readonly SvgFont[];
@@ -33,20 +34,20 @@ export type TreeExportStyle = TreePalette & {
 };
 
 /** Image bounds cover all expanded nodes, independent of zoom or viewport clipping. */
-export function treeSvgSize(scene: TreeExportScene, scale: number) {
-    const header = 48 + scene.scope.length * 22;
+export function treeSvgSize(scene: TreeExportScene, scale: number, caption = true) {
+    const header = caption ? 48 + scene.scope.length * 22 : 0;
     return {
-        width: Math.ceil(Math.max(720, scene.layout.width) * scale),
+        width: Math.ceil(Math.max(caption ? 720 : 0, scene.layout.width) * scale),
         height: Math.ceil((scene.layout.height + header) * scale),
         scale,
         header
     };
 }
 
-export function treePngSize(scene: TreeExportScene, requestedScale: number) {
+export function treePngSize(scene: TreeExportScene, requestedScale: number, caption = true) {
     for (const scale of [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25]) {
         if (scale > requestedScale) continue;
-        const size = treeSvgSize(scene, scale);
+        const size = treeSvgSize(scene, scale, caption);
         if (planExportFits(size)) return size;
     }
     return null;
@@ -62,14 +63,18 @@ export async function renderTreePng(
 ) {
     signal.throwIfAborted();
     if (!scene.cards.length) throw new Error('empty');
-    let size = treePngSize(scene, settings.scale);
+    let size = treePngSize(scene, settings.scale, settings.caption);
     if (!size) throw new Error('too-large');
     await loadExportFonts(style.fontFamily, signal);
     const references =
         settings.icon && scene.display !== 'names' ? scene.cards.flatMap((card) => (card.icon ? [card.icon] : [])) : [];
     const resolved = await icons.resolve(references, scene.icons, signal);
+    let headerIcons: Awaited<ReturnType<typeof icons.resolve>> | undefined;
     const symbols = new Map<string, HTMLImageElement>();
     try {
+        if (settings.caption !== false && scene.header)
+            headerIcons = await icons.resolve([scene.header.icon], scene.header.icons, signal);
+        const headerIcon = scene.header && headerIcons?.icons.get(scene.header.icon);
         for (const [name, svg] of [
             ['craft', craftingHammer],
             ['storage', terminalIcons.stored]
@@ -87,7 +92,7 @@ export async function renderTreePng(
             try {
                 const ctx = prepareCanvas(canvas, size);
                 if (!ctx) {
-                    size = treePngSize(scene, size.scale - 0.001);
+                    size = treePngSize(scene, size.scale - 0.001, settings.caption);
                     continue;
                 }
                 ctx.clearRect(0, 0, size.width, size.height);
@@ -99,10 +104,25 @@ export async function renderTreePng(
                 ctx.textBaseline = 'top';
                 ctx.imageSmoothingEnabled = true;
                 const logicalWidth = size.width / size.scale;
-                drawText(ctx, scene.title, 16, 12, logicalWidth - 32, style, 17);
-                scene.scope.forEach((line, index) =>
-                    drawText(ctx, line, 16, 40 + index * 22, logicalWidth - 32, style, 12)
-                );
+                if (settings.caption !== false) {
+                    if (headerIcon)
+                        ctx.drawImage(
+                            headerIcon.image,
+                            headerIcon.x,
+                            headerIcon.y,
+                            headerIcon.width,
+                            headerIcon.height,
+                            16,
+                            8,
+                            32,
+                            32
+                        );
+                    const titleX = headerIcon ? 60 : 16;
+                    drawText(ctx, scene.title, titleX, 12, logicalWidth - titleX - 16, style, 17);
+                    scene.scope.forEach((line, index) =>
+                        drawText(ctx, line, 16, 40 + index * 22, logicalWidth - 32, style, 12)
+                    );
+                }
                 ctx.translate(0, size.header);
                 ctx.strokeStyle = style.border;
                 ctx.lineWidth = 2;
@@ -228,7 +248,7 @@ export async function renderTreePng(
                 });
                 signal.throwIfAborted();
                 if (blob) return { blob, ...size };
-                size = treePngSize(scene, size.scale - 0.001);
+                size = treePngSize(scene, size.scale - 0.001, settings.caption);
             } finally {
                 canvas.width = 0;
                 canvas.height = 0;
@@ -236,6 +256,7 @@ export async function renderTreePng(
         }
         throw new Error('too-large');
     } finally {
+        headerIcons?.dispose();
         resolved.dispose();
     }
 }
