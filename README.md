@@ -20,7 +20,7 @@ generates item icons from your modpack and resource packs.
 
 [📖 Installation guide](https://ae2web.kuba6000.pl/get-started) · [🔧 API documentation](https://ae2web.kuba6000.pl/docs/)
 
-![Terminal with item icons, pinned resources and a flow tooltip](core/docs/images/gallery/terminal.webp)
+![Terminal with item icons, pinned resources and a flow tooltip](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/terminal.webp)
 
 ## Current features
 
@@ -85,27 +85,27 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 
 **Crafting plan and CPU selection**
 
-![Calculated crafting plan with CPU selection](core/docs/images/gallery/crafting-plan.webp)
+![Calculated crafting plan with CPU selection](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/crafting-plan.webp)
 
 **Live CPU view**
 
-![Crafting CPU progress and resource states](core/docs/images/gallery/cpu.webp)
+![Crafting CPU progress and resource states](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/cpu.webp)
 
 **Resource history**
 
-![Resource history with stock, input, output and net flow](core/docs/images/gallery/tracking.webp)
+![Resource history with stock, input, output and net flow](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/tracking.webp)
 
 **Completed and cancelled crafts**
 
-![Saved crafting history](core/docs/images/gallery/history.webp)
+![Saved crafting history](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/history.webp)
 
 **Discord notification**
 
-![Discord notification with a crafting result card](core/docs/images/gallery/discord-notification.webp)
+![Discord notification with a crafting result card](https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/discord-notification.webp)
 
 **Mobile terminal**
 
-<img width="360" alt="Terminal with item icons and pagination on a phone" src="core/docs/images/gallery/mobile.webp" />
+<img width="360" alt="Terminal with item icons and pagination on a phone" src="https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/master/core/docs/images/gallery/mobile.webp" />
 
 </details>
 
@@ -357,7 +357,7 @@ location / {
 
 ### Hosting through another web server
 
-The [`tools/php-proxy`](core/tools/php-proxy) directory contains a PHP reverse proxy that serves
+The [`tools/php-proxy`](https://github.com/kuba6000/AE2-Web-Integration/tree/master/core/tools/php-proxy) directory contains a PHP reverse proxy that serves
 the mod's website, assets and API through an existing web server.
 
 ## Telemetry
@@ -410,7 +410,7 @@ Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `P
 the JDK required by the adapter. Gradle installs locked frontend dependencies and compiles TypeScript.
 Node.js and npm are not required to run the finished mod.
 
-See [frontend development](core/tools/ui-tests/README.md) for frontend commands and browser tests.
+See [frontend development](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/tools/ui-tests/README.md) for frontend commands and browser tests.
 
 ### API and custom themes
 
@@ -418,9 +418,9 @@ The web API is available under `/api/` on your Minecraft server. See the
 [API documentation](https://ae2web.kuba6000.pl/docs/); send requests to your own server, not the
 documentation host.
 
-- [OpenAPI generator](core/tools/openapi-doclet/README.md) — generate the API specification from endpoint
+- [OpenAPI generator](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/tools/openapi-doclet/README.md) — generate the API specification from endpoint
   annotations and Javadocs.
-- [Theme author guide](core/docs/themes/README.md) — theme contracts, development tools and the example project.
+- [Theme author guide](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/docs/themes/README.md) — theme contracts, development tools and the example project.
 
 ## License
 
@@ -429,12 +429,12 @@ Bundled third-party libraries and assets retain their own licenses:
 
 | Component | Author / source | License |
 | --- | --- | --- |
-| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](https://github.com/kuba6000/AE2-Web-Integration/blob/master/LICENSE) |
 | Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
 | Configuration library (bundled in Minecraft 1.7.10 and 1.12.2 builds) | [NightConfig 3.6.4, TheElectronWill and contributors](https://github.com/TheElectronWill/night-config/tree/v3.6.4) | [LGPL-3.0](https://github.com/TheElectronWill/night-config/blob/v3.6.4/LICENSE) |
-| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
-| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
-| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
+| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
+| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
 
 ### Third-Party Game Assets
 
