@@ -2,9 +2,9 @@ name: Test Scala Presence
 
 on:
   pull_request:
-    branches: [ core ]
+    branches: [core, master, main]
   push:
-    branches: [ core ]
+    branches: [core, master, main]
   workflow_dispatch:
 
 concurrency:
@@ -23,4 +23,4 @@ jobs:
       - name: Detect scala presence
         shell: bash
         run: |
-          ! grep -E -r 'import scala\.' src/main/java
+          ! grep -E -r 'import scala\.' core/src/main/java forge-1.7.10/src/main/java forge-1.12.2/src/main/java forge-1.20.1/src/main/java neoforge-1.21.1/src/main/java

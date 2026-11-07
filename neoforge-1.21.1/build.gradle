@@ -1,0 +1,79 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.113'
+    id 'com.gradleup.shadow' version '9.4.2'
+    id 'idea'
+    id 'maven-publish'
+    id 'com.diffplug.spotless' version '8.10.2'
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
+}
+
+group = maven_group
+apply from: '../gradle/adapter-version.gradle'
+mod_version = version.toString()
+
+boolean isCI = System.getenv("CI") != null
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+//neoForge.version = libs.versions.neo.get()
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/generated/resources'
+        }
+    }
+    buildtools
+}
+
+configurations {
+    // set these as unresolvable so we don't accidentally force all dependents to use them with us
+    clientRuntimeOnly.canBeResolved = false
+    extraRuntimeOnly.canBeResolved = false
+    clientExtraRuntimeOnly.canBeResolved = false
+
+    runtimeClasspath.extendsFrom localRuntime
+    extraRuntimeClasspath.extendsFrom extraLocalRuntime
+    clientRuntimeClasspath.extendsFrom clientLocalRuntime
+    extraClientRuntimeClasspath.extendsFrom clientExtraLocalRuntime
+
+}
+
+afterEvaluate {
+    configurations {
+        // same as above but for the modRuntimeOnly configurations
+        modClientRuntimeOnly.canBeResolved = false
+        modExtraRuntimeOnly.canBeResolved = false
+        modClientExtraRuntimeOnly.canBeResolved = false
+    }
+}
+
+apply from: "$rootDir/gradle/scripts/jars.gradle"
+if (findProperty('usesShadowedDependencies')?.toString()?.toBoolean()) {
+    apply from: "$rootDir/gradle/scripts/shadow.gradle"
+}
+apply from: "$rootDir/gradle/scripts/moddevgradle.gradle"
+apply from: "$rootDir/gradle/scripts/repositories.gradle"
+apply from: "$rootDir/dependencies.gradle"
+apply from: "$rootDir/gradle/scripts/resources.gradle"
+apply from: "$rootDir/gradle/scripts/publishing.gradle"
+apply from: "$rootDir/gradle/scripts/spotless.gradle"
+
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.compilerArgs << "-Xlint:-removal"
+    options.compilerArgs << "-Aquiet=true" // Suppress mixin notes
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+apply from: 'icon-generator.gradle'
+
+apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'

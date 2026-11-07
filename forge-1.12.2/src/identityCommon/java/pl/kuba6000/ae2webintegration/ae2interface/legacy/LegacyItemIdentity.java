@@ -1,0 +1,267 @@
+package pl.kuba6000.ae2webintegration.ae2interface.legacy;
+
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.Set;
+
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTBase;
+import net.minecraft.nbt.NBTPrimitive;
+import net.minecraft.nbt.NBTTagByteArray;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagIntArray;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraft.nbt.NBTTagString;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraftforge.fluids.FluidStack;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.google.common.hash.Funnels;
+import com.google.common.hash.PrimitiveSink;
+
+import appeng.api.storage.data.IAEStack;
+import appeng.fluids.util.AEFluidStack;
+import appeng.util.item.AEItemStack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+
+/** Canonical native identity only; amounts, crafting flags and display data never enter these bytes. */
+@SuppressWarnings("UnstableApiUsage")
+public final class LegacyItemIdentity {
+
+    private static final int MAX_DEPTH = 64;
+    private static final int MAX_NODES = 65536;
+
+    private LegacyItemIdentity() {}
+
+    public static @Nullable StableKey encode(@NotNull ItemStack stack) {
+        if (stack.isEmpty()) return null;
+        NBTTagCompound capabilities = (NBTTagCompound) stack.writeToNBT(new NBTTagCompound())
+            .getTag("ForgeCaps");
+        return encode(stack.getItem(), stack.getItemDamage(), stack.getTagCompound(), capabilities);
+    }
+
+    /** The caller may retain native serialized capabilities captured before an ownership copy. */
+    public static @Nullable StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag,
+        @Nullable NBTTagCompound capabilities) {
+        ResourceLocation registryName = item.getRegistryName();
+        if (registryName == null) return null;
+        return StableKey.createOptional(sink -> {
+            DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
+            try {
+                StableKey.writeText(sink, "item");
+                StableKey.writeText(sink, registryName.toString());
+                output.writeInt(metadata);
+                output.writeByte(1);
+                return new Tags(output, sink, false).writeItem(tag, capabilities);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+        });
+    }
+
+    public static @Nullable StableKey encode(@NotNull FluidStack stack) {
+        // AE2UEL copies this tag without changing it and treats an empty compound as absent.
+        return encode(
+            "fluid",
+            stack.getFluid()
+                .getName(),
+            0,
+            stack.tag == null || stack.tag.isEmpty() ? null : stack.tag);
+    }
+
+    public static @Nullable StableKey encode(@NotNull IAEStack<?> stack) {
+        if (stack instanceof AEItemStack item) {
+            ResourceLocation registryName = item.getItem()
+                .getRegistryName();
+            NBTTagCompound identity = item.getDefinition()
+                .writeToNBT(new NBTTagCompound());
+            // Amount is presentation state; the full-width damage is framed separately below.
+            identity.removeTag("Count");
+            identity.removeTag("id");
+            identity.removeTag("Damage");
+            return encode(
+                "item",
+                registryName == null ? null : registryName.toString(),
+                item.getItemDamage(),
+                identity);
+        }
+        if (stack instanceof AEFluidStack fluid) {
+            NBTTagCompound serialized = new NBTTagCompound();
+            fluid.writeToNBT(serialized);
+            NBTTagCompound tag = serialized.getCompoundTag("Tag");
+            // AE2UEL's fluid equality collapses an empty secondary compound to absence.
+            return encode(
+                "fluid",
+                fluid.getFluid()
+                    .getName(),
+                0,
+                tag.isEmpty() ? null : tag);
+        }
+        return null;
+    }
+
+    public static @NotNull IAEStack<?> copy(@NotNull IAEStack<?> stack) {
+        if (!(stack instanceof AEItemStack) && !(stack instanceof AEFluidStack)) {
+            throw new UnsupportedOperationException("Unsupported legacy resource identity");
+        }
+        // Follow AE2's native identity-sharing contract; only amount/crafting state is reset.
+        IAEStack<?> result = stack.copy();
+        result.reset();
+        return result;
+    }
+
+    private static @Nullable StableKey encode(String kind, @Nullable String registry, int metadata,
+        @Nullable NBTTagCompound secondary) {
+        if (registry == null || registry.isEmpty()) return null;
+        return StableKey.createOptional(sink -> {
+            DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
+            try {
+                StableKey.writeText(sink, kind);
+                StableKey.writeText(sink, registry);
+                output.writeInt(metadata);
+                output.writeByte(secondary == null ? 0 : 1);
+                return secondary == null || new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+        });
+    }
+
+    private static final class Tags {
+
+        private final DataOutputStream output;
+        private final PrimitiveSink sink;
+        private final boolean normalizeZero;
+        private int nodes;
+
+        private Tags(DataOutputStream output, PrimitiveSink sink, boolean normalizeZero) {
+            this.output = output;
+            this.sink = sink;
+            this.normalizeZero = normalizeZero;
+        }
+
+        private boolean writeItem(@Nullable NBTTagCompound tag, @Nullable NBTTagCompound capabilities)
+            throws IOException {
+            // Native item serialization leaves a compound after excluding id/count/damage.
+            // Stream its fixed field order instead of constructing another envelope for hashing.
+            nodes = 1;
+            boolean hasCapabilities = capabilities != null && !capabilities.isEmpty();
+            output.writeByte(NBT.TAG_COMPOUND);
+            output.writeInt((tag == null ? 0 : 1) + (hasCapabilities ? 1 : 0));
+            if (hasCapabilities) {
+                StableKey.writeText(sink, "ForgeCaps");
+                if (!write(capabilities, 1, true)) return false;
+            }
+            if (tag != null) {
+                StableKey.writeText(sink, "tag");
+                if (!write(tag, 1, true)) return false;
+            }
+            return true;
+        }
+
+        private boolean write(NBTBase tag, int depth, boolean includeType) throws IOException {
+            if (depth > MAX_DEPTH || ++nodes > MAX_NODES)
+                throw new IllegalArgumentException("NBT identity exceeds structural limits");
+            int type = tag.getId();
+            if (includeType) output.writeByte(type);
+            switch (type) {
+                case NBT.TAG_END:
+                    throw new IllegalArgumentException("Unexpected NBT end tag");
+                case NBT.TAG_BYTE:
+                    output.writeByte(((NBTPrimitive) tag).getByte());
+                    break;
+                case NBT.TAG_SHORT:
+                    output.writeShort(((NBTPrimitive) tag).getShort());
+                    break;
+                case NBT.TAG_INT:
+                    output.writeInt(((NBTPrimitive) tag).getInt());
+                    break;
+                case NBT.TAG_LONG:
+                    output.writeLong(((NBTPrimitive) tag).getLong());
+                    break;
+                case NBT.TAG_FLOAT:
+                    float floatValue = ((NBTPrimitive) tag).getFloat();
+                    if (Float.isNaN(floatValue)) return false;
+                    if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
+                        return false;
+                    }
+                    output.writeFloat(floatValue == 0 ? 0 : floatValue);
+                    break;
+                case NBT.TAG_DOUBLE:
+                    double doubleValue = ((NBTPrimitive) tag).getDouble();
+                    if (Double.isNaN(doubleValue)) return false;
+                    if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
+                        return false;
+                    }
+                    output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
+                    break;
+                case NBT.TAG_BYTE_ARRAY:
+                    byte[] byteArray = ((NBTTagByteArray) tag).getByteArray();
+                    output.writeInt(byteArray.length);
+                    output.write(byteArray);
+                    break;
+                case NBT.TAG_STRING:
+                    StableKey.writeText(sink, ((NBTTagString) tag).getString());
+                    break;
+                case NBT.TAG_LIST:
+                    NBTTagList list = (NBTTagList) tag;
+                    int length = list.tagCount();
+                    checkChildren(length);
+                    int elementType = list.getTagType();
+                    if (elementType == NBT.TAG_END && length != 0) {
+                        throw new IllegalArgumentException("Invalid NBT list type");
+                    }
+                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_LONG_ARRAY) return false;
+                    output.writeByte(elementType);
+                    output.writeInt(length);
+                    for (int index = 0; index < length; index++) {
+                        NBTBase child = list.get(index);
+                        if (child.getId() != elementType) {
+                            throw new IllegalArgumentException("Mixed NBT list");
+                        }
+                        if (!write(child, depth + 1, false)) return false;
+                    }
+                    break;
+                case NBT.TAG_COMPOUND:
+                    NBTTagCompound compound = (NBTTagCompound) tag;
+                    Set<String> keys = compound.getKeySet();
+                    checkChildren(keys.size());
+                    String[] names = keys.toArray(new String[keys.size()]);
+                    Arrays.sort(names);
+                    output.writeInt(names.length);
+                    for (String name : names) {
+                        StableKey.writeText(sink, name);
+                        if (!write(compound.getTag(name), depth + 1, true)) return false;
+                    }
+                    break;
+                case NBT.TAG_INT_ARRAY:
+                    int[] intArray = ((NBTTagIntArray) tag).getIntArray();
+                    output.writeInt(intArray.length);
+                    for (int value : intArray) output.writeInt(value);
+                    break;
+                case NBT.TAG_LONG_ARRAY:
+                    // 1.12 exposes no long-array getter. Native serialization of this one leaf is
+                    // deterministic and streams directly into the hash without an accessor or buffer.
+                    NBTTagCompound leaf = new NBTTagCompound();
+                    leaf.setTag("", tag);
+                    CompressedStreamTools.write(leaf, output);
+                    break;
+                default:
+                    return false;
+            }
+            return true;
+        }
+
+        private void checkChildren(int count) {
+            if (count < 0 || count > MAX_NODES - nodes)
+                throw new IllegalArgumentException("NBT identity exceeds structural limits");
+        }
+    }
+}

@@ -1,0 +1,12 @@
+// Release builds supply the exact variant tag. Developer builds only describe this adapter's tags.
+def explicitVersion = providers.environmentVariable('VERSION').getOrNull()
+if (explicitVersion) {
+    version = explicitVersion
+} else {
+    def variant = projectDir.name
+    def described = providers.exec {
+        workingDir rootDir
+        commandLine 'git', 'describe', '--tags', '--match', "*-${variant}", '--always', '--dirty'
+    }.standardOutput.asText.get().trim()
+    version = described.contains("-${variant}") ? described : "0.0.0-${variant}-dev-${described}"
+}

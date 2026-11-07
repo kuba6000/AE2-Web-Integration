@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Freeze and publish the four native tags requested by a core release tag."""
+"""Freeze monorepo release variants and create their tags at one verified commit."""
 
 import argparse
 import base64
@@ -54,16 +54,12 @@ def version_from_tag(tag):
 def source_commit(args):
     git(args.checkout, "fetch", "--no-tags", "origin",
         f"+refs/tags/{args.source_tag}:refs/release-coordinator/source",
-        "+refs/heads/core:refs/remotes/origin/core",
-        *(f"+refs/heads/{branch}:refs/remotes/origin/{branch}" for branch in TARGETS))
+        f"+refs/heads/{args.branch}:refs/remotes/origin/{args.branch}")
     source_object = git(args.checkout, "rev-parse", "refs/release-coordinator/source")
-    core_sha = git(args.checkout, "rev-parse", "refs/release-coordinator/source^{commit}")
-    if core_sha != args.core_sha:
-        raise ReleaseError("Source tag does not resolve to the requested core commit")
-    try:
-        git(args.checkout, "merge-base", "--is-ancestor", core_sha, "refs/remotes/origin/core")
-    except ReleaseError as error:
-        raise ReleaseError("Source commit must belong to core history") from error
+    sha = git(args.checkout, "rev-parse", "refs/release-coordinator/source^{commit}")
+    if sha != args.core_sha:
+        raise ReleaseError("Source tag changed from the requested commit")
+    git(args.checkout, "merge-base", "--is-ancestor", sha, f"refs/remotes/origin/{args.branch}")
     return source_object
 
 
@@ -91,13 +87,19 @@ def require_push_ci(args, branch, sha):
         raise ReleaseError(f"{branch} {sha} latest push CI is not successful; finish CI and rerun preparation")
 
 
-def require_native_commit(args, branch, sha):
-    entry = git(args.checkout, "ls-tree", sha, "--", "core")
-    if entry != f"160000 commit {args.core_sha}\tcore":
-        raise ReleaseError(f"{branch} {sha} is not pinned to tagged core {args.core_sha}; finish pin updates and rerun preparation")
-    if git(args.checkout, "cat-file", "-t", f"{sha}:.github/workflows/release-tags.yml") != "blob":
-        raise ReleaseError(f"{branch} has no native release workflow")
-    require_push_ci(args, branch, sha)
+def release_targets(tag, sha):
+    for minecraft, loader in TARGETS.items():
+        suffix = f"-{loader}-{minecraft}"
+        if tag.endswith(suffix):
+            version_from_tag(tag[:-len(suffix)])
+            return [{"minecraft": minecraft, "loader": loader, "directory": f"{loader}-{minecraft}",
+                     "sha": sha, "tag": tag}]
+    if re.search(r"-(?:neo)?forge-", tag):
+        raise ReleaseError("Unsupported release variant")
+    version = version_from_tag(tag)
+    return [{"minecraft": minecraft, "loader": loader, "directory": f"{loader}-{minecraft}",
+             "sha": sha, "tag": f"{version}-{loader}-{minecraft}"}
+            for minecraft, loader in TARGETS.items()]
 
 
 def tag_exists(args, target):
@@ -111,64 +113,44 @@ def tag_exists(args, target):
     return True
 
 
-def prepare(args, version):
+def prepare(args):
     source_object = source_commit(args)
-    require_push_ci(args, "core", args.core_sha)
-    targets = []
-    for branch, loader in TARGETS.items():
-        sha = git(args.checkout, "rev-parse", f"refs/remotes/origin/{branch}")
-        require_native_commit(args, branch, sha)
-        target = {"branch": branch, "sha": sha, "tag": f"{version}-{loader}-{branch}"}
+    targets = release_targets(args.source_tag, args.core_sha)
+    for target in targets:
+        if git(args.checkout, "cat-file", "-t", f"{args.core_sha}:{target['directory']}/build.gradle") != "blob":
+            raise ReleaseError("Missing adapter build")
         tag_exists(args, target)
-        targets.append(target)
-    plan = {"schema": 1, "repository": args.repository, "source_tag": args.source_tag,
-            "source_object": source_object, "core_sha": args.core_sha, "targets": targets}
-    args.plan.parent.mkdir(parents=True, exist_ok=True)
-    with args.plan.open("x", encoding="utf-8") as output:
-        output.write(json.dumps(plan, indent=2) + "\n")
-    print(json.dumps(plan, indent=2))
+    git(args.checkout, "fetch", "--no-tags", "origin", "refs/heads/version")
+    notes_sha = git(args.checkout, "rev-parse", "FETCH_HEAD^{commit}")
+    plan = {"schema": 2, "repository": args.repository, "source_tag": args.source_tag,
+            "source_object": source_object, "core_sha": args.core_sha, "branch": args.branch,
+            "notes_sha": notes_sha, "targets": targets}
+    args.plan.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(plan))
 
 
-def publish(args, version):
-    token = os.environ.get("CORE_PIN_BOT_TOKEN", "").strip()
-    if not token:
-        print("Skipping native release tags: CORE_PIN_BOT_TOKEN is not configured.")
-        return
+def publish(args):
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
-    if (set(plan) != {"schema", "repository", "source_tag", "source_object", "core_sha", "targets"}
-            or type(plan["schema"]) is not int or plan["schema"] != 1 or plan["repository"] != args.repository
-            or plan["source_tag"] != args.source_tag or plan["core_sha"] != args.core_sha
-            or not isinstance(plan["targets"], list) or len(plan["targets"]) != len(TARGETS)):
-        raise ReleaseError("Release plan does not match the requested source/repository")
-    for target, (branch, loader) in zip(plan["targets"], TARGETS.items()):
-        if (set(target) != {"branch", "sha", "tag"} or target["branch"] != branch
-                or target["tag"] != f"{version}-{loader}-{branch}" or not SHA.fullmatch(target["sha"])):
-            raise ReleaseError("Release plan must contain the four exact native tags and full commit SHAs")
+    expected = release_targets(args.source_tag, args.core_sha)
+    if (plan.get("schema") != 2 or plan.get("repository") != args.repository
+            or plan.get("source_tag") != args.source_tag or plan.get("core_sha") != args.core_sha
+            or plan.get("branch") != args.branch or plan.get("targets") != expected
+            or not SHA.fullmatch(plan.get("notes_sha", ""))):
+        raise ReleaseError("Release plan does not match this request")
     if source_commit(args) != plan["source_object"]:
         raise ReleaseError("Source tag changed after preparation")
-    require_push_ci(args, "core", args.core_sha)
-    existing = []
-    for target in plan["targets"]:
-        require_native_commit(args, target["branch"], target["sha"])
-        try:
-            git(args.checkout, "merge-base", "--is-ancestor", target["sha"],
-                f"refs/remotes/origin/{target['branch']}")
-        except ReleaseError as error:
-            raise ReleaseError(f"Frozen release commit {target['sha']} is no longer in "
-                               f"{target['branch']} history; no release tags were created") from error
-        existing.append(tag_exists(args, target))
-    if github_api("user", token)["login"] != "kuba6000-agent":
-        raise ReleaseError("CORE_PIN_BOT_TOKEN must authenticate as kuba6000-agent")
-    authentication = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
+    require_push_ci(args, args.branch, args.core_sha)
+    existing = [tag_exists(args, target) for target in expected]
+    token = os.environ.get("GH_TOKEN", "").strip()
+    if not token:
+        raise ReleaseError("GH_TOKEN is required to create release tags")
+    authentication = base64.b64encode(f"x-access-token:{token}".encode()).decode()
     if os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"::add-mask::{authentication}", flush=True)
-    for target, exists in zip(plan["targets"], existing):
-        if exists:
-            print(f"Already published {target['tag']} at {target['sha']}", flush=True)
-            continue
-        git(args.checkout, "-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {authentication}",
-            "push", "--no-follow-tags", "origin", f"{target['sha']}:refs/tags/{target['tag']}")
-        print(f"Published {target['tag']} at {target['sha']}", flush=True)
+    for target, exists in zip(expected, existing):
+        if not exists:
+            git(args.checkout, "-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {authentication}",
+                "push", "--no-follow-tags", "origin", f"{args.core_sha}:refs/tags/{target['tag']}")
 
 
 def main():
@@ -179,17 +161,17 @@ def main():
     parser.add_argument("--source-tag", required=True)
     parser.add_argument("--core-sha", required=True)
     parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--branch", choices=("core", "master", "main"), required=True)
     args = parser.parse_args()
     try:
-        version = version_from_tag(args.source_tag)
         if not SHA.fullmatch(args.core_sha):
             raise ReleaseError("Core commit must be a full lowercase 40-character SHA-1")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
             raise ReleaseError("Repository must be owner/name")
         if args.command == "prepare":
-            prepare(args, version)
+            prepare(args)
         else:
-            publish(args, version)
+            publish(args)
     except (ReleaseError, OSError, ValueError, KeyError, TypeError) as error:
         print(str(error), file=sys.stderr)
         return 1

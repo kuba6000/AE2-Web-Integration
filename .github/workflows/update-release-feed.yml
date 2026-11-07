@@ -2,8 +2,8 @@ name: Update release feed
 
 on:
   workflow_run:
-    workflows: [ Release tagged build ]
-    types: [ completed ]
+    workflows: [Release tagged build]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout trusted core automation
         uses: actions/checkout@v4
         with:
-          ref: core
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           submodules: false
 

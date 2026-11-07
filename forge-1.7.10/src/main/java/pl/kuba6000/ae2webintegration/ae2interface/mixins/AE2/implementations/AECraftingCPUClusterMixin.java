@@ -1,0 +1,173 @@
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
+
+import net.minecraft.world.World;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+
+import appeng.api.config.CraftingAllow;
+import appeng.api.networking.crafting.CraftingItemList;
+import appeng.api.storage.data.IAEStack;
+import appeng.api.storage.data.IItemList;
+import appeng.api.util.WorldCoord;
+import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+
+@Mixin(value = CraftingCPUCluster.class, remap = false)
+@SuppressWarnings("UnstableApiUsage")
+public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU, ICraftingCPUNameIndex {
+
+    @Shadow
+    @Final
+    protected WorldCoord min;
+
+    @Shadow
+    protected abstract World getWorld();
+
+    @Shadow
+    private IItemList<IAEStack<?>> waitingFor;
+
+    @Unique
+    private int web$internalID = -1;
+
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
+    @Override
+    public @NotNull StableKey web$getKey() {
+        if (web$stableKey == null) {
+            web$stableKey = StableKey.create(
+                sink -> sink.putInt(getWorld().provider.dimensionId)
+                    .putInt(min.x)
+                    .putInt(min.y)
+                    .putInt(min.z));
+        }
+        return web$stableKey;
+    }
+
+    @Override
+    public void web$setInternalID(int id) {
+        web$internalID = id;
+    }
+
+    @Unique
+    private boolean web$hasCustomName() {
+        return !((CraftingCPUCluster) (Object) this).getName()
+            .isEmpty();
+    }
+
+    @Override
+    public String web$getName() {
+        return web$hasCustomName() ? ((CraftingCPUCluster) (Object) this).getName() : ("CPU #" + web$internalID);
+    }
+
+    @Override
+    public @Nullable String web$getRequesterName() {
+        return ((CraftingCPUCluster) (Object) this).getSourcePlayer();
+    }
+
+    @Override
+    public long web$getAvailableStorage() {
+        return ((CraftingCPUCluster) (Object) this).getAvailableStorage();
+    }
+
+    @Unique
+    private boolean web$isUsedStorageAvailable = true;
+
+    @Unique
+    private boolean web$usedStorageInitialized = false;
+
+    @Override
+    public long web$getUsedStorage() {
+        if (!web$usedStorageInitialized) {
+            web$usedStorageInitialized = true;
+            try {
+                CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
+            } catch (NoSuchMethodException e) {
+                web$isUsedStorageAvailable = false;
+                return -1L;
+            }
+        }
+        if (!web$isUsedStorageAvailable) return -1L;
+        return ((CraftingCPUCluster) (Object) this).getUsedStorage();
+    }
+
+    @Override
+    public long web$getCoProcessors() {
+        return ((CraftingCPUCluster) (Object) this).getCoProcessors();
+    }
+
+    @Override
+    public @NotNull CpuSelectionMode web$getSelectionMode() {
+        return switch (((CraftingCPUCluster) (Object) this).getCraftingAllowMode()) {
+            case ONLY_PLAYER -> CpuSelectionMode.PLAYER_ONLY;
+            case ONLY_NONPLAYER -> CpuSelectionMode.AUTOMATION_ONLY;
+            case ALLOW_ALL -> CpuSelectionMode.ALL;
+        };
+    }
+
+    @Override
+    public boolean web$acceptsPlayerJobs() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && cpu.getCraftingAllowMode() != CraftingAllow.ONLY_NONPLAYER
+            && (!cpu.isBusy() || cpu.isCraftingLinkStandalone());
+    }
+
+    @Override
+    public boolean web$isBusy() {
+        return ((CraftingCPUCluster) (Object) this).isBusy();
+    }
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return !cpu.isDestroyed() && cpu.isActive() && (Object) cpu.getGrid() == grid;
+    }
+
+    @Override
+    public boolean web$isPaused() {
+        return ((CraftingCPUCluster) (Object) this).isSuspended();
+    }
+
+    @Override
+    public void web$setPaused(boolean paused) {
+        ((CraftingCPUCluster) (Object) this).setSuspended(paused);
+    }
+
+    @Override
+    public void web$cancel() {
+        ((CraftingCPUCluster) (Object) this).cancel();
+    }
+
+    @Override
+    public IAEGenericStack web$getFinalOutput() {
+        return (IAEGenericStack) ((CraftingCPUCluster) (Object) this).getFinalMultiOutput();
+    }
+
+    @Override
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        populateList(active, CraftingItemList.ACTIVE);
+        populateList(pending, CraftingItemList.PENDING);
+        populateList(stored, CraftingItemList.STORAGE);
+    }
+
+    @Override
+    public IStackList web$getWaitingFor() {
+        return (IStackList) (Object) waitingFor;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void populateList(IStackList list, CraftingItemList type) {
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem((IItemList<IAEStack<?>>) (Object) list, type);
+    }
+}

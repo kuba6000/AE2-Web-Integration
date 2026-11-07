@@ -1,0 +1,154 @@
+import org.gradle.internal.os.OperatingSystem
+
+ext.isJetbrainsRuntime = System.getProperty('java.vm.vendor').contains('JetBrains')
+
+// mixin {
+//     var refmap = add sourceSets.main, "mixins.ae2webintegration.refmap.json"
+//     slimJar.from refmap
+//     config 'mixins.ae2webintegration.json'
+// }
+
+configurations.create('coreModOutput') {
+    canBeConsumed = false
+}
+dependencies {
+    coreModOutput('pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT') {
+        transitive = false
+        capabilities { requireCapability('pl.kuba6000.ae2webintegration:core-mod-output') }
+    }
+}
+def sharedCore = sourceSets.create('sharedCore') {
+    java.setSrcDirs([])
+    resources.setSrcDirs([])
+    output.classesDirs.setFrom(configurations.coreModOutput)
+}
+
+neoForge {
+    // Specify Forge version
+    version = libs.versions.neo.get()
+
+    parchment {
+        minecraftVersion = libs.versions.minecraft.get()
+        mappingsVersion = libs.versions.parchment.get()
+    }
+
+    // This line is optional. Access Transformers are automatically detected
+    accessTransformers = project.files('src/main/resources/META-INF/accesstransformer.cfg')
+
+    interfaceInjectionData = project.files('injected_interfaces/interfaces.json')
+
+    addModdingDependenciesTo(sourceSets.test)
+//    addModdingDependenciesTo(sourceSets.extra)
+
+    mods {
+        // define mod <-> source bindings
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+            sourceSet(sourceSets.test)
+        }
+    }
+
+    mods.create('craftingIntegrationTests') {
+        sourceSet(sourceSets.main)
+        sourceSet(sourceSets.test)
+        // Production packages core into the mod; tests must preserve that class-loader ownership too.
+        sourceSet(sharedCore)
+    }
+    unitTest {
+        enable()
+        testedMod = mods.craftingIntegrationTests
+        loadedMods.set([mods.craftingIntegrationTests])
+    }
+
+    runs {
+        client {
+            client()
+            ideName = "Client 1"
+
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+        }
+
+        client2 {
+            client()
+            ideName = "Client 2"
+
+            programArguments.addAll('--username', 'YoungOnion', '--uuid', '3a27782d-6864-4814-a9fe-7c6931f29a8a')
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+        }
+
+        server {
+            server()
+            ideName = "Server"
+
+            gameDirectory.set(file('run/server'))
+            programArguments.addAll('--nogui', '--world', 'world-extra')
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+        }
+
+        // Client with GTM + Jade, EMI, AE2
+        cleanClient {
+            client()
+            ideName = "Clean Client"
+
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+        }
+
+        cleanServer {
+            server()
+            ideName = "Clean Server"
+
+            gameDirectory.set(file('run/server'))
+            programArgument '--nogui'
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+        }
+
+        // This run config launches GameTestServer and runs all registered gametests, then exits.
+        // By default, the server will crash when no gametests are provided.
+        // The gametest system is also enabled by default for other run configs under the /test command.
+        gameTestServer {
+            type = "gameTestServer"
+            ideName = "Game Tests"
+
+            gameDirectory.set(file('run/gametest'))
+            systemProperty('neoforge.enabledGameTestNamespaces', project.mod_id)
+            environment('TEST', 'true')
+        }
+
+        data {
+            data()
+            ideName = "Data Generation"
+
+            gameDirectory.set(file('run/data'))
+            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
+            programArguments.addAll('--mod', project.mod_id)
+            programArguments.addAll('--all')
+            programArguments.addAll('--output', file('src/generated/resources/').getAbsolutePath())
+            programArguments.addAll('--existing', file('src/main/resources/').getAbsolutePath())
+        }
+
+        // applies to all the run configs above
+        configureEach {
+            // Recommended logging data for a userdev environment
+            // The markers can be added/remove as needed separated by commas.
+            // "SCAN": For mods scan.
+            // "REGISTRIES": For firing of registry events.
+            // "REGISTRYDUMP": For getting the contents of all registries.
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            // Enable assertions for our classes in dev environment
+            jvmArgument('-ea:pl.kuba6000.ae2webintegration...')
+
+            // Recommended logging level for the console
+            // You can set various levels here.
+            // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+}
+
+// IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}

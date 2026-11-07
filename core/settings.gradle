@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        // Version used when core is built as its own root project (`cd core && ./gradlew spotlessApply`).
+        // When core is included as a submodule of an integration branch this file is not read at all -
+        // that branch's build already puts its own spotless version on the classpath.
+        id 'com.diffplug.spotless' version '8.10.2'
+    }
+}
+
+rootProject.name = 'core'
