@@ -76,10 +76,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build and prepare release artifacts
+        working-directory: .
         run: |
           chmod +x gradlew
           ./gradlew --build-cache --no-configuration-cache --stacktrace \
-            assemble prepareRelease \
+            :${{ inputs.directory }}:assemble :${{ inputs.directory }}:prepareRelease \
             -PreleaseType="${{ steps.notes.outputs.release_type }}" \
             -PreleaseNotesFile=build/release/notes.md
 
@@ -188,6 +189,7 @@ jobs:
         if: steps.portal.outputs.enabled == 'true'
       - name: Publish to Modrinth
         if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'modrinth'
+        working-directory: .
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
@@ -197,13 +199,14 @@ jobs:
           RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-configuration-cache --stacktrace releaseModrinth \
+          ./gradlew --no-configuration-cache --stacktrace :${{ inputs.directory }}:releaseModrinth \
             -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
             -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
             -PreleaseBundleManifest="$RELEASE_MANIFEST" \
             -PreleaseNotesFile="$RELEASE_NOTES"
       - name: Publish to CurseForge
         if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'curseforge'
+        working-directory: .
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
           RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
@@ -213,7 +216,7 @@ jobs:
           RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-configuration-cache --stacktrace releaseCurseforge \
+          ./gradlew --no-configuration-cache --stacktrace :${{ inputs.directory }}:releaseCurseforge \
             -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
             -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
             -PreleaseBundleManifest="$RELEASE_MANIFEST" \

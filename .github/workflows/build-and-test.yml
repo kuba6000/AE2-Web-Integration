@@ -83,7 +83,9 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: |
+            17
+            25
           distribution: temurin
 
       - name: Setup Gradle
@@ -92,16 +94,20 @@ jobs:
           validate-wrappers: true
 
       - name: Grant execute permission for gradlew
+        working-directory: .
         run: chmod +x gradlew
 
       - name: Build and test core
-        run: ./gradlew --build-cache --info --stacktrace build
+        working-directory: .
+        run: ./gradlew --build-cache --info --stacktrace :core:build
 
       - name: Test API documentation generator
-        run: ./gradlew -p tools/openapi-doclet --build-cache test
+        working-directory: .
+        run: ./gradlew -p core/tools/openapi-doclet --build-cache test
 
       - name: Generate OpenAPI
-        run: ./gradlew generateApiDocs -PapiDocumentationVersion=${{ github.sha }}
+        working-directory: .
+        run: ./gradlew :core:generateApiDocs -PapiDocumentationVersion=${{ github.sha }}
 
       - name: Upload API specification
         uses: actions/upload-artifact@v4
@@ -116,9 +122,6 @@ jobs:
       fail-fast: false
       matrix:
         directory: [forge-1.7.10, forge-1.12.2, forge-1.20.1, neoforge-1.21.1]
-    defaults:
-      run:
-        working-directory: ${{ matrix.directory }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,7 +139,7 @@ jobs:
             25
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
-      - run: ./gradlew --build-cache --stacktrace :build
+      - run: ./gradlew --build-cache --stacktrace :${{ matrix.directory }}:build
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.directory }}-jars
