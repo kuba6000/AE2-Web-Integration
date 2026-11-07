@@ -25,7 +25,8 @@ plugins {
 // build format shared core would rewrite it back and forth depending on which worktree it sits in.
 if (project == rootProject) {
     apply plugin: 'org.jetbrains.gradle.plugin.idea-ext'
-    apply from: 'gradle/idea-settings.gradle'
+    apply from: '../gradle/idea-settings.gradle'
+    idea.project.settings.taskTriggers.afterSync tasks.named('updateIdeaEntryPoints')
     apply plugin: 'com.diffplug.spotless'
 
     spotless {

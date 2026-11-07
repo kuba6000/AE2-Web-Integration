@@ -42,11 +42,9 @@ abstract class UpdateIdeaEntryPoints extends DefaultTask {
     }
 }
 
-def updateIdeaEntryPoints = tasks.register('updateIdeaEntryPoints', UpdateIdeaEntryPoints) {
+tasks.register('updateIdeaEntryPoints', UpdateIdeaEntryPoints) {
     group = 'ide'
     description = 'Apply shared framework entry points without replacing local IDEA SDK settings.'
-    rulesFile = layout.projectDirectory.file('gradle/idea-entry-points.xml')
+    rulesFile = new File(buildscript.sourceFile.parentFile, 'idea-entry-points.xml')
     settingsFile = layout.projectDirectory.file('.idea/misc.xml')
 }
-
-legacyForge.ideSyncTask updateIdeaEntryPoints

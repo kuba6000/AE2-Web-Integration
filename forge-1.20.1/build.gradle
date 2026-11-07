@@ -103,5 +103,6 @@ lombok {
     version = "1.18.38"
 }
 
-apply from: 'gradle/idea-settings.gradle'
+apply from: '../gradle/idea-settings.gradle'
+legacyForge.ideSyncTask tasks.named('updateIdeaEntryPoints')
 apply from: 'gradle/release.gradle'

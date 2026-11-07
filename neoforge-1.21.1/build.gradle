@@ -75,5 +75,6 @@ tasks.withType(Test).configureEach {
 
 apply from: 'icon-generator.gradle'
 
-apply from: 'gradle/idea-settings.gradle'
+apply from: '../gradle/idea-settings.gradle'
+neoForge.ideSyncTask tasks.named('updateIdeaEntryPoints')
 apply from: 'gradle/release.gradle'

@@ -1,11 +1,7 @@
 .gradle
 .settings
-# Share inspection policy; keep SDKs, modules and personal IDE state local.
-/.idea/*
-!/.idea/inspectionProfiles/
-/.idea/inspectionProfiles/*
-!/.idea/inspectionProfiles/AE2_Web_Integration.xml
-!/.idea/inspectionProfiles/profiles_settings.xml
+# IDEA policy is shared at the repository root.
+/.idea/
 /.vscode/
 /run/
 /build/
