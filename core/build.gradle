@@ -341,7 +341,31 @@ def iconPackJar = tasks.register('iconPackJar', Jar) {
 configurations.create('iconPackElements') {
     canBeResolved = false
     canBeConsumed = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+    }
+    outgoing.capability("${project.group}:${project.name}-icon-pack:${project.version}")
     outgoing.artifact(iconPackJar)
+}
+
+// Native test launchers load these directories as part of the tested mod's class loader.
+configurations.create('modOutputElements') {
+    canBeResolved = false
+    canBeConsumed = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.CLASSES_AND_RESOURCES))
+    }
+    outgoing.capability("${project.group}:${project.name}-mod-output:${project.version}")
+    sourceSets.main.output.classesDirs.each { directory ->
+        outgoing.artifact(directory) { builtBy tasks.named('compileJava') }
+    }
+    outgoing.artifact(tasks.named('processResources').map { it.destinationDir }) {
+        builtBy tasks.named('processResources')
+    }
 }
 
 // This module is pure Java (no Minecraft/Forge references).

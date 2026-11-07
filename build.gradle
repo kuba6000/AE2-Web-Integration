@@ -1,0 +1,8 @@
+plugins { id 'base' }
+
+def adapters = ['forge-1.7.10', 'forge-1.12.2', 'forge-1.20.1', 'neoforge-1.21.1']
+tasks.named('assemble') { dependsOn adapters.collect { gradle.includedBuild(it).task(':assemble') } }
+tasks.named('check') {
+    dependsOn gradle.includedBuild('core').task(':check')
+    dependsOn adapters.collect { gradle.includedBuild(it).task(':check') }
+}

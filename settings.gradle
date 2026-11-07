@@ -1,0 +1,7 @@
+rootProject.name = 'ae2-web-integration'
+
+includeBuild('core')
+includeBuild('forge-1.7.10')
+includeBuild('forge-1.12.2')
+includeBuild('forge-1.20.1')
+includeBuild('neoforge-1.21.1')

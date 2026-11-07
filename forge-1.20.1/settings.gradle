@@ -3,9 +3,6 @@ pluginManagement {
         maven { url = "https://maven.minecraftforge.net/" }
         gradlePluginPortal()
     }
-    plugins {
-        id 'org.jetbrains.kotlin.jvm' version '2.0.21'
-    }
 }
 
 dependencyResolutionManagement {
@@ -19,8 +16,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "${mod_id}"
+rootProject.name = rootProject.projectDir.name
 
-include ':core'
-
-project(':core').projectDir = file('../core')
+includeBuild('../core')

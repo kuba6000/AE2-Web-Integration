@@ -26,9 +26,9 @@ dependencies {
     }
 
     // Core submodule (pure Java — no Forge/MC/AE2 references)
-    implementation project(':core')
+    implementation 'pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT'
     // Dev runs load only this mod's classes dir; core must be on the run classpath for mixins
-    additionalRuntimeClasspath project(':core')
+    additionalRuntimeClasspath 'pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT'
 
     // AE2
     modImplementation(forge.ae2)

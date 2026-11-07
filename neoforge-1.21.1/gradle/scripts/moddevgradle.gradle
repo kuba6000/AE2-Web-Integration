@@ -8,8 +8,20 @@ ext.isJetbrainsRuntime = System.getProperty('java.vm.vendor').contains('JetBrain
 //     config 'mixins.ae2webintegration.json'
 // }
 
-// Configure shared sources before ModDev finalizes its mod model during IDEA import.
-evaluationDependsOn(':core')
+configurations.create('coreModOutput') {
+    canBeConsumed = false
+}
+dependencies {
+    coreModOutput('pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT') {
+        transitive = false
+        capabilities { requireCapability('pl.kuba6000.ae2webintegration:core-mod-output') }
+    }
+}
+def sharedCore = sourceSets.create('sharedCore') {
+    java.setSrcDirs([])
+    resources.setSrcDirs([])
+    output.classesDirs.setFrom(configurations.coreModOutput)
+}
 
 neoForge {
     // Specify Forge version
@@ -40,7 +52,7 @@ neoForge {
         sourceSet(sourceSets.main)
         sourceSet(sourceSets.test)
         // Production packages core into the mod; tests must preserve that class-loader ownership too.
-        sourceSet(project(':core').sourceSets.main)
+        sourceSet(sharedCore)
     }
     unitTest {
         enable()

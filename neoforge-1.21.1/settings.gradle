@@ -19,8 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "${mod_id}"
+rootProject.name = rootProject.projectDir.name
 
-include ':core'
-
-project(':core').projectDir = file('../core')
+includeBuild('../core')

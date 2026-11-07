@@ -393,21 +393,23 @@ The adapter directories provide Minecraft/loader lifecycle hooks, Mixins and AE2
 | `neoforge-1.21.1/` | NeoForge 1.21.1 |
 
 Each adapter packages the same local core sources. Shared code must remain independent of
-Minecraft and loader APIs. Each build keeps its own Gradle wrapper and Java toolchain.
+Minecraft and loader APIs. A Gradle composite build connects the adapters to one shared core build,
+while each adapter keeps its own Java compilation toolchain.
 
 ### Building and checking
 
-Run the wrapper from the chosen adapter directory to build an installable mod:
+Run the root wrapper to build an installable mod for a selected adapter:
 
 ```shell
-cd forge-1.7.10
-./gradlew :build
+./gradlew :forge-1.7.10:build
 ```
 
-The `:build` task packages core without running its tests. Run `./gradlew build` from `core/`
-to build and check shared Java code independently.
+Adapter builds package core without running its tests. Use `./gradlew :core:build` to build and
+check core independently, `./gradlew assemble` to package all adapters, or `./gradlew build`
+to build and check all Java modules. A single root invocation shares core tasks across adapters.
 Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `PATH`, alongside
-the JDK required by the adapter. Gradle installs locked frontend dependencies and compiles TypeScript.
+Java 25 for the Gradle daemon and the toolchains required by the adapters. Gradle installs locked
+frontend dependencies and compiles TypeScript.
 Node.js and npm are not required to run the finished mod.
 
 See [frontend development](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/tools/ui-tests/README.md) for frontend commands and browser tests.

@@ -332,12 +332,20 @@ print(json.dumps({'body': 'Generated notes for ' + payload['tag_name'] + ' since
         self.git("add", "neoforge-1.21.1")
         self.commit()
         other = f"Fixture {self.commit_number}"
+        shared_build_changes = []
+        for path in ("build.gradle", "settings.gradle", "gradlew", "gradlew.bat"):
+            self.write(path, "shared build change")
+            self.git("add", path)
+            self.commit()
+            shared_build_changes.append(f"Fixture {self.commit_number}")
         self.git("tag", "2.0.0-forge-1.7.10")
         result = self.run_cli(online=True, environment=self.fake_gh("import sys;sys.exit(9)"))
         self.assertEqual(result.returncode, 0, result.stderr)
         notes = (self.checkout / "build/release/notes.md").read_text(encoding="utf-8")
         self.assertIn(own, notes)
         self.assertNotIn(other, notes)
+        for change in shared_build_changes:
+            self.assertIn(change, notes)
 
     def test_prerelease_authored_intro_and_common_crlf_are_optional_and_preserved(self):
         (self.write("release-notes/common.md", "")).write_bytes("Common: zażółć.\r\n".encode("utf-8"))

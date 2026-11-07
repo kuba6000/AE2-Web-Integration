@@ -20,7 +20,8 @@ obfuscation.createRemappingConfiguration(configurations.iconGeneratorCompileOnly
 obfuscation.createRemappingConfiguration(configurations.iconGeneratorRuntimeOnly)
 
 dependencies {
-    iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
+    iconGeneratorShared('pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT') {
+        capabilities { requireCapability('pl.kuba6000.ae2webintegration:core-icon-pack') }
         transitive = false
     }
     modIconGeneratorImplementation(forge.ae2)

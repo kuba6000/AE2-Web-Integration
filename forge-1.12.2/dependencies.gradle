@@ -43,10 +43,10 @@ dependencies {
     api rfg.deobf("curse.maven:ae2-extended-life-570458:5411078") // AE2UEL 0.56.6
     devOnlyNonPublishable(rfg.deobf("curse.maven:ae2-fluid-crafting-rework-623955:5751930"))
 
-    // Core submodule (pure Java — no Forge/MC/AE2 references)
-    implementation project(':core')
-    // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
-    shadowImplementation(project(path: ':core', configuration: 'default')) {
+    // Shared core (pure Java — no Forge/MC/AE2 references)
+    implementation 'pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT'
+    // Bundle core itself; platform dependencies are selected separately below.
+    shadowImplementation('pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT') {
         transitive = false
     }
     shadowImplementation('com.electronwill.night-config:core:3.6.4') {
@@ -63,11 +63,10 @@ tasks.named("shadowJar").configure {
         // Object conversion discovers field annotations reflectively.
         minimize {
             // Generated HTTP catalogs are reached through ServiceLoader.
-            exclude(project(':core'))
+            exclude(dependency('pl.kuba6000.ae2webintegration:core:.*'))
             exclude(dependency('org.xerial:sqlite-jdbc:.*'))
             exclude(dependency('com.electronwill.night-config:core:.*'))
             exclude(dependency('com.electronwill.night-config:toml:.*'))
         }
     }
-    dependsOn(":core:jar")
 }

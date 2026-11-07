@@ -82,7 +82,8 @@ def generated_notes(args, checkout, previous, anchor):
     # Legacy adapter tags live on imported ancestry. Preserve the full migration-range notes once;
     # after both ends use the monorepo layout, omit changes affecting only other adapters.
     if previous and git(checkout, "ls-tree", "--format=%(objecttype)", previous, "--", "core") == "tree":
-        paths = ["core/", f"{args.loader}-{args.minecraft}/", ".github/", "gradle/", "README.md"]
+        paths = ["core/", f"{args.loader}-{args.minecraft}/", ".github/", "gradle/", "README.md",
+                 "build.gradle", "settings.gradle", "gradlew", "gradlew.bat"]
         return "## Changes\n\n" + git(checkout, "log", "--first-parent", "--format=- %s (%h)",
                                        f"{previous}..{anchor}", "--", *paths)
     if not previous:

@@ -19,7 +19,7 @@ java {
 jar.archiveClassifier = "dev"
 
 base {
-    archivesName = "${project.name}" // -${libs.versions.minecraft.get()}
+    archivesName = mod_id
 }
 
 afterEvaluate {
@@ -34,7 +34,7 @@ afterEvaluate {
         destinationDirectory = file('build/libs/')
         manifest.attributes([
                 'MixinConfigs': 'mixins.ae2webintegration.json',
-                'Specification-Title': project.name,
+                'Specification-Title': mod_id,
                 'Specification-Version': mod_version,
                 'Specification-Vendor': 'kuba6000',
                 'Implementation-Title': base.archivesName,

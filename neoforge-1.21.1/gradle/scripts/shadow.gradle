@@ -8,13 +8,12 @@ configurations {
 }
 
 dependencies {
-    coreShadow(project(':core')) {
+    coreShadow('pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT') {
         transitive = false
     }
 }
 
 tasks.named('shadowJar').configure {
-    dependsOn(':core:jar')
     from(tasks.named('jarJar'))
     archiveClassifier = ''
     configurations = [project.configurations.coreShadow]
