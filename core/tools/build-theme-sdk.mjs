@@ -46,5 +46,5 @@ writeFileSync(
         2
     ) + '\n'
 );
-cpSync(path.join(project, 'LICENSE'), path.join(output, 'LICENSE'));
+cpSync(path.join(project, '../LICENSE'), path.join(output, 'LICENSE'));
 console.log(`Theme SDK: ${output}`);
