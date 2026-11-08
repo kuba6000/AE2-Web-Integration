@@ -181,27 +181,6 @@ header {
     min-width: 0;
     overflow-wrap: anywhere;
 }
-.plan-table {
-    overflow-x: auto;
-    max-width: 100%;
-    margin: 16px 0;
-}
-.plan-table table {
-    border-collapse: collapse;
-    width: 100%;
-    min-width: 34rem;
-}
-.plan-table th,
-.plan-table td {
-    padding: 10px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-}
-.plan-table code {
-    display: block;
-    color: var(--muted);
-    margin-top: 4px;
-}
 .plan-actions {
     display: flex;
     align-items: center;
@@ -827,9 +806,6 @@ nav {
 .settings-view {
     min-width: 0;
     overflow-wrap: anywhere;
-}
-.plan-table th {
-    overflow-wrap: normal;
 }
 .history-summary {
     display: flex;

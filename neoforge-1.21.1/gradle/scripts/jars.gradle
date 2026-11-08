@@ -24,7 +24,7 @@ afterEvaluate {
         manifest.attributes([
                 'MixinConfigs': 'mixins.ae2webintegration.json',
                 'Specification-Title': mod_id,
-                'Specification-Version': mod_version,
+                'Specification-Version': project.version.toString(),
                 'Specification-Vendor': 'kuba6000',
                 'Implementation-Title': base.archivesName,
                 'Implementation-Version': version,

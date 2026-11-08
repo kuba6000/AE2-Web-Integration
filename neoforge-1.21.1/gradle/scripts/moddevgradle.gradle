@@ -1,7 +1,3 @@
-import org.gradle.internal.os.OperatingSystem
-
-ext.isJetbrainsRuntime = System.getProperty('java.vm.vendor').contains('JetBrains')
-
 // mixin {
 //     var refmap = add sourceSets.main, "mixins.ae2webintegration.refmap.json"
 //     slimJar.from refmap

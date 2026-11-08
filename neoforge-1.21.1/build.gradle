@@ -10,15 +10,10 @@ plugins {
 
 group = maven_group
 apply from: '../gradle/adapter-version.gradle'
-mod_version = version.toString()
-
-boolean isCI = System.getenv("CI") != null
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
-
-//neoForge.version = libs.versions.neo.get()
 
 sourceSets {
     main {
@@ -26,7 +21,6 @@ sourceSets {
             srcDir 'src/generated/resources'
         }
     }
-    buildtools
 }
 
 configurations {
@@ -59,7 +53,6 @@ apply from: "$rootDir/gradle/scripts/moddevgradle.gradle"
 apply from: "$rootDir/gradle/scripts/repositories.gradle"
 apply from: "$rootDir/dependencies.gradle"
 apply from: "$rootDir/gradle/scripts/resources.gradle"
-apply from: "$rootDir/gradle/scripts/publishing.gradle"
 apply from: "$rootDir/gradle/scripts/spotless.gradle"
 
 

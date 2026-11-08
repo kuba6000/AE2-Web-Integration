@@ -13,9 +13,6 @@ plugins {
 
 group = maven_group
 apply from: '../gradle/adapter-version.gradle'
-mod_version = version.toString()
-
-boolean isCI = System.getenv("CI") != null
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)

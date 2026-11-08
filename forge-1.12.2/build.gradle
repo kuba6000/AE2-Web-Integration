@@ -12,7 +12,6 @@ import org.apache.commons.io.FileUtils
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.gradle.internal.logging.text.StyledTextOutputFactory
 import org.jetbrains.gradle.ext.Gradle
 
 import javax.inject.Inject
@@ -35,9 +34,6 @@ plugins {
     id 'com.google.devtools.ksp' version '1.8.0-1.0.9' apply false
     id 'de.undercouch.download' version '5.6.0' apply false
 }
-
-def out = services.get(StyledTextOutputFactory).create('an-output')
-
 
 // Required properties: we don't know how to handle these being missing gracefully
 checkPropertyExists("modName")
