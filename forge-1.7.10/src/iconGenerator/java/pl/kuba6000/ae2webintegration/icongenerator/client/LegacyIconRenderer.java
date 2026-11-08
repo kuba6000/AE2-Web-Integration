@@ -79,9 +79,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         renderItem.renderWithColor = true;
     }
 
-    void item(@NotNull ItemStack stack, int size, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
-        capture(size, key, captures, () -> {
+    void item(@NotNull ItemStack stack, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
+        capture(key, captures, () -> {
             RenderHelper.enableGUIStandardItemLighting();
             // GuiContainer enables this for RenderItem's scaled 3D block normals.
             GL11.glEnable(GL12.GL_RESCALE_NORMAL);
@@ -95,9 +94,9 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    void fluid(@NotNull FluidStack stack, int size, @NotNull StableKey key, @NotNull List<Capture> captures)
+    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws RenderFailure {
-        capture(size, key, captures, () -> {
+        capture(key, captures, () -> {
             IIcon icon = stack.getFluid()
                 .getIcon(stack);
             if (icon == null) throw new IllegalArgumentException("Fluid has no inventory sprite");
@@ -120,7 +119,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    private void capture(int size, @NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Runnable draw)
+    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Runnable draw)
         throws RenderFailure {
         if (!OpenGlHelper.isFramebufferEnabled())
             throw new IllegalStateException("Framebuffer rendering is unavailable");
@@ -133,7 +132,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
             snapshotCount++;
             snapshotComplete = true;
             try {
-                setup(size);
+                setup();
                 long submittedNanos = drawClock.getAsLong();
                 long drawStarted = System.nanoTime();
                 try {
@@ -176,11 +175,11 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         throw new RenderFailure(renderFailure);
     }
 
-    private void setup(int size) {
+    private void setup() {
         long started = System.nanoTime();
         try {
             if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
-            Framebuffer framebuffer = framebuffer(size);
+            Framebuffer framebuffer = framebuffer();
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
             GL11.glColorMask(true, true, true, true);
             GL11.glDepthMask(true);
@@ -301,9 +300,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         readback.statistics(counts);
     }
 
-    private @NotNull Framebuffer framebuffer(int size) {
-        if (size != ICON_SIZE) throw new IllegalArgumentException("Unsupported icon image size");
-        if (target == null) target = new Framebuffer(size, size, true);
+    private @NotNull Framebuffer framebuffer() {
+        if (target == null) target = new Framebuffer(ICON_SIZE, ICON_SIZE, true);
         return target;
     }
 

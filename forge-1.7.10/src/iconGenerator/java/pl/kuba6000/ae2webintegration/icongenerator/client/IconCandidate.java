@@ -103,7 +103,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
             throws LegacyIconRenderer.RenderFailure {
-            renderer.item(stack, LegacyIconRenderer.ICON_SIZE, key, captures);
+            renderer.item(stack, key, captures);
         }
     }
 
@@ -143,7 +143,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
             throws LegacyIconRenderer.RenderFailure {
-            renderer.fluid(stack, LegacyIconRenderer.ICON_SIZE, key, captures);
+            renderer.fluid(stack, key, captures);
         }
     }
 }

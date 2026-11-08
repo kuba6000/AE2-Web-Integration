@@ -402,9 +402,9 @@ public class AE2Controller {
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored") // Removal is best-effort; the pending result is failed either way.
-    private static boolean sendRequest(ISyncedRequest request) {
+    private static void sendRequest(ISyncedRequest request) {
         if (enqueueServerThreadTask(request) != null) {
-            return true;
+            return;
         }
         try {
             request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -416,9 +416,7 @@ public class AE2Controller {
             request.failIfPending(ApiStatus.SERVER_STOPPING);
             Thread.currentThread()
                 .interrupt();
-            return true;
         }
-        return false;
     }
 
     /** Whether a request still belongs to the currently running HTTP listener. */

@@ -271,7 +271,7 @@ public final class StorageTrackingService implements AutoCloseable {
                 || initialStock
                 || initialFlow
                 || persistStock && !completeStock)
-                points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0));
+                points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0));
             if (persistStock) appendStockPoints(points, observation, next, gap);
             if (persistFlow) appendFlowPoints(points, observation, flowFrom, gap);
             return points;
@@ -283,16 +283,16 @@ public final class StorageTrackingService implements AutoCloseable {
                 Long previous = sampledQuantities == null ? null : sampledQuantities.get(row.itemKey());
                 if (row.quantity() != (previous == null ? 0 : previous)
                     || needsStockBaseline && (observation.full() || stockComplete && !gap) && previous != null)
-                    points.add(point(observation, StorageHistoryPoint.Kind.STOCK, row.itemKey(), row.quantity(), 0, 0));
+                    points.add(point(observation, StorageHistoryPoint.Kind.STOCK, row.itemKey(), row.quantity()));
             }
             if (sampledQuantities != null) {
                 for (Map.Entry<StableKey, Long> sampled : sampledQuantities.entrySet()) {
                     if ((sampled.getValue() != 0 || needsStockBaseline) && !next.containsKey(sampled.getKey()))
-                        points.add(point(observation, StorageHistoryPoint.Kind.STOCK, sampled.getKey(), 0, 0, 0));
+                        points.add(point(observation, StorageHistoryPoint.Kind.STOCK, sampled.getKey(), 0));
                 }
             }
             if (observation.full() || stockComplete && !gap)
-                points.add(point(observation, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0));
+                points.add(point(observation, StorageHistoryPoint.Kind.OBSERVATION, null, 0));
         }
 
         private void appendFlowPoints(List<StorageHistoryPoint> points, StorageObservation observation, long flowFrom,
@@ -342,15 +342,15 @@ public final class StorageTrackingService implements AutoCloseable {
         }
 
         private StorageHistoryPoint point(StorageObservation observation, StorageHistoryPoint.Kind kind,
-            @Nullable StableKey itemKey, long quantity, long input, long output) {
+            @Nullable StableKey itemKey, long quantity) {
             return new StorageHistoryPoint(
                 observation.observedAt(),
                 generation,
                 kind,
                 itemKey,
                 quantity,
-                input,
-                output,
+                0,
+                0,
                 0,
                 0,
                 null);

@@ -167,7 +167,7 @@ final class NativeIconAnimation implements IIconAnimation {
                 return null;
             }
             timelines.add(timeline);
-            tracks.add(new SpriteTimeline.Track(timeline.durations, timeline.indexes, timeline.interpolated));
+            tracks.add(new SpriteTimeline.Track(timeline.durations, timeline.indexes, false));
         }
         if (timelines.isEmpty()) return null;
         // Unknown shader atlas layouts cannot be safely controlled; keep the successful static icon.
@@ -227,7 +227,7 @@ final class NativeIconAnimation implements IIconAnimation {
                 ends[index] = (int) total;
                 indexes[index] = image;
             }
-            return new NativeSprite(sprite, indexes, ends, durations, (int) total, false, gutter);
+            return new NativeSprite(sprite, indexes, ends, durations, (int) total, gutter);
         } catch (IllegalAccessException failure) {
             throw new IllegalStateException("Cannot read native sprite animation metadata", failure);
         }
@@ -288,17 +288,15 @@ final class NativeIconAnimation implements IIconAnimation {
         final int[] ends;
         final int cycle;
         final int[] durations;
-        final boolean interpolated;
         final int gutter;
 
         NativeSprite(@NotNull TextureAtlasSprite sprite, int[] indexes, int[] ends, int[] durations, int cycle,
-            boolean interpolated, int gutter) {
+            int gutter) {
             this.sprite = sprite;
             this.indexes = indexes;
             this.ends = ends;
             this.cycle = cycle;
             this.durations = durations;
-            this.interpolated = interpolated;
             this.gutter = gutter;
         }
 

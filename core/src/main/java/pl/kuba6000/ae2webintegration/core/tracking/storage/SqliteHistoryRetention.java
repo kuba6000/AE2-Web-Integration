@@ -22,12 +22,11 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryS
 final class SqliteHistoryRetention {
 
     // Retain the latest expired stock anchors and gap barrier; deleting the barrier would invent continuity.
-    private static String expiredPoints(Table table, String cutoff) {
-        if (table == Table.FLOW) return "m.observed_at < " + cutoff + "\n";
+    private static String expiredPoints(Table table) {
+        if (table == Table.FLOW) return "m.observed_at < ?\n";
         String matching = table == Table.STOCK ? "newer.resource_id = p.resource_id" : "newer.kind = 'GAP'";
         String ordinary = table == Table.COVERAGE ? "p.kind <> 'GAP' OR " : "";
-        return "m.observed_at < " + cutoff
-            + " AND ("
+        return "m.observed_at < ?" + " AND ("
             + ordinary
             + "EXISTS (SELECT 1 FROM "
             + table.sqlName
@@ -38,10 +37,10 @@ final class SqliteHistoryRetention {
             + matching
             + "\n"
             + """
-                    AND n.observed_at < %s
+                    AND n.observed_at < ?
                     AND (n.observed_at > m.observed_at OR n.observed_at = m.observed_at AND newer.id > p.id)
                 ))
-                """.replace("%s", cutoff);
+                """;
     }
 
     private static final int PRUNE_BATCH_SIZE = 1000;
@@ -94,7 +93,7 @@ final class SqliteHistoryRetention {
         Set<Long> resources = new HashSet<>();
         long deletedUntil = Long.MIN_VALUE;
         for (Table table : Table.values()) {
-            String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table, "?");
+            String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table);
             String resource = table == Table.COVERAGE ? "CAST(NULL AS BIGINT)" : "p.resource_id";
             try (PreparedStatement query = db.prepareStatement(
                 "SELECT p.id, p.measurement_id, " + resource
@@ -119,7 +118,7 @@ final class SqliteHistoryRetention {
                                 rows.getLong("id"),
                                 rows.getLong("measurement_id"),
                                 rows.getLong("observed_at"),
-                                nullableLong(rows, "resource_id")));
+                                nullableResourceId(rows)));
                     }
                 }
             }
@@ -136,8 +135,8 @@ final class SqliteHistoryRetention {
         return new PruneBatch(selected, resources, deletedUntil);
     }
 
-    private static @Nullable Long nullableLong(ResultSet rows, String column) throws SQLException {
-        long value = rows.getLong(column);
+    private static @Nullable Long nullableResourceId(ResultSet rows) throws SQLException {
+        long value = rows.getLong("resource_id");
         return rows.wasNull() ? null : value;
     }
 
