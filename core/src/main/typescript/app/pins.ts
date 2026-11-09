@@ -1,11 +1,20 @@
 import type { Api, ApiFailure } from './api.js';
-import type { ResourcePin, ResourcePinUpdate, PinPlacement, IconMetadata, ResourceResponse } from './api-types.js';
+import type {
+    ResourcePin,
+    ResourcePinUpdate,
+    HomePinGroup,
+    HomePinGroupUpdate,
+    PinPlacement,
+    IconMetadata,
+    ResourceResponse
+} from './api-types.js';
 import type { ResourceHistoryState } from './resource-history.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
 
 export type PinsState = {
     items: ResourcePin[];
+    groups: HomePinGroup[];
     icons: IconMetadata | null;
     histories: Record<string, Record<number, ResourceHistoryState>>;
     status: 'idle' | 'loading' | 'ready' | 'error';
@@ -15,7 +24,15 @@ export type PinsState = {
 
 /** Account-owned pins and bounded history reads share the application's navigation lifetime. */
 export function createPins(api: Api, changed: () => void, iconsEnabled: () => boolean, notify: Notify) {
-    const state: PinsState = { items: [], icons: null, histories: {}, status: 'idle', pending: false, error: null };
+    const state: PinsState = {
+        items: [],
+        groups: [],
+        icons: null,
+        histories: {},
+        status: 'idle',
+        pending: false,
+        error: null
+    };
     let route: Route = { view: 'home', gridKey: null };
     let generation = 0;
     let request: AbortController | undefined;
@@ -36,6 +53,7 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
     }
     function accept(result: ResourceResponse<ResourcePin[]>) {
         state.items = result.data;
+        state.groups = result.groups ?? [];
         state.icons = result.icons;
         state.status = 'ready';
         state.error = null;
@@ -158,7 +176,7 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
     }
     function block(error: string | null) {
         cancel();
-        Object.assign(state, { items: [], icons: null, histories: {}, status: 'error', error });
+        Object.assign(state, { items: [], groups: [], icons: null, histories: {}, status: 'error', error });
         changed();
     }
     async function mutate(action: () => Promise<ResourceResponse<ResourcePin[]>>) {
@@ -207,11 +225,16 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         update: (pin: string, update: ResourcePinUpdate) =>
             mutate(() => api.updateResourcePin(pin, update, iconsEnabled())),
         remove: (pin: string) => mutate(() => api.deleteResourcePin(pin, iconsEnabled())),
+        addGroup: (name: string) => mutate(() => api.addPinGroup(name, iconsEnabled())),
+        updateGroup: (key: string, update: HomePinGroupUpdate) =>
+            mutate(() => api.updatePinGroup(key, update, iconsEnabled())),
+        removeGroup: (key: string) => mutate(() => api.deletePinGroup(key, iconsEnabled())),
         route(next: Route) {
             cancel();
             route = next;
             state.histories = {};
             state.items = [];
+            state.groups = [];
             state.icons = null;
             state.status = 'idle';
             state.error = null;
@@ -226,6 +249,7 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
             disposed = true;
             cancel();
             state.items = [];
+            state.groups = [];
             state.histories = {};
         }
     };

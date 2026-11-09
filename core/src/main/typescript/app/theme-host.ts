@@ -83,7 +83,10 @@ export function mountTheme(
             add: application.pins.add,
             update: application.pins.update,
             remove: application.pins.remove,
-            refresh: application.pins.refresh
+            refresh: application.pins.refresh,
+            addGroup: application.pins.addGroup,
+            updateGroup: application.pins.updateGroup,
+            removeGroup: application.pins.removeGroup
         },
         preference: application.preference,
         displayIcons: application.displayIcons,

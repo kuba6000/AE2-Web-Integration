@@ -88,6 +88,7 @@ export type ResourceResponse<T> = {
     subscription?: string;
     recent?: RecentTracking;
     nextBefore?: string | null;
+    groups?: HomePinGroup[];
 };
 export type StoredResource = ResourceStack & {
     craftable: boolean;
@@ -270,6 +271,7 @@ export type ResourcePin = {
     resource: ResourceDescription | null;
     terminalOrder: number | null;
     homeOrder: number | null;
+    homeGroupKey: string | null;
     homeConfig: PinHomeConfig;
 };
 export type ResourcePinUpdate = {
@@ -277,4 +279,7 @@ export type ResourcePinUpdate = {
     home?: boolean;
     move?: { placement: PinPlacement; direction: 'earlier' | 'later' };
     homeConfig?: PinHomeConfig;
+    homeGroup?: { groupKey?: string };
 };
+export type HomePinGroup = { groupKey: string; name: string; ordinal: number };
+export type HomePinGroupUpdate = { name?: string; move?: 'earlier' | 'later' };

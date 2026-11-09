@@ -52,20 +52,36 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
     themeDirectory = path.resolve(themeDirectory);
     let loggedOut = false;
     let pins = [];
+    let groups = [];
     let nextPin = 0;
+    let nextGroup = 0;
+    function compactHome() {
+        for (const key of new Set(pins.map((pin) => pin.homeGroupKey))) {
+            pins.filter((pin) => pin.homeOrder !== null && pin.homeGroupKey === key)
+                .sort((a, b) => a.homeOrder - b.homeOrder)
+                .forEach((pin, order) => (pin.homeOrder = order));
+        }
+    }
+    const appendOrder = (placement) =>
+        pins.filter(
+            (pin) => pin[`${placement}Order`] !== null && (placement === 'terminal' || pin.homeGroupKey === null)
+        ).length;
     const server = http.createServer(async (request, response) => {
         try {
             const url = new URL(request.url, 'http://localhost');
-            const json = (data, status = 'OK', code = 200) => {
+            const json = (data, status = 'OK', code = 200, metadata = {}) => {
                 response.writeHead(code, { 'Content-Type': 'application/json' });
-                response.end(JSON.stringify({ status, data }));
+                response.end(JSON.stringify({ status, data, ...metadata }));
             };
             if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
                 loggedOut = true;
                 json(null);
                 return;
             }
-            if (url.pathname.startsWith('/api/') && url.pathname.includes('/resource-pins')) {
+            if (
+                url.pathname.startsWith('/api/') &&
+                (url.pathname.includes('/resource-pins') || url.pathname.includes('/resource-pin-groups'))
+            ) {
                 if (loggedOut) {
                     json(null, 'UNAUTHORIZED', 401);
                     return;
@@ -73,6 +89,42 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                 const chunks = [];
                 for await (const chunk of request) chunks.push(chunk);
                 const input = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+                if (url.pathname.includes('/resource-pin-groups')) {
+                    const group = groups.find((value) => value.groupKey === url.pathname.split('/').at(-1));
+                    if (request.method === 'POST' || input.name !== undefined) {
+                        const name = typeof input.name === 'string' ? input.name.trim() : '';
+                        if (
+                            !name ||
+                            name.length > 128 ||
+                            groups.some((value) => value !== group && value.name === name)
+                        ) {
+                            json(null, 'BAD_PARAM', 400);
+                            return;
+                        }
+                        if (request.method === 'POST')
+                            groups.push({ groupKey: String(++nextGroup), name, ordinal: groups.length });
+                        else if (group) group.name = name;
+                    }
+                    if (group && input.move) {
+                        const ordered = [...groups].sort((a, b) => a.ordinal - b.ordinal);
+                        const neighbor = ordered[ordered.indexOf(group) + (input.move === 'earlier' ? -1 : 1)];
+                        if (neighbor) [group.ordinal, neighbor.ordinal] = [neighbor.ordinal, group.ordinal];
+                    }
+                    if (group && request.method === 'DELETE') {
+                        let index = pins.filter((pin) => pin.homeOrder !== null && !pin.homeGroupKey).length;
+                        for (const pin of pins
+                            .filter((pin) => pin.homeGroupKey === group.groupKey)
+                            .sort((a, b) => a.homeOrder - b.homeOrder)) {
+                            pin.homeGroupKey = null;
+                            pin.homeOrder = index++;
+                        }
+                        groups = groups.filter((value) => value !== group).sort((a, b) => a.ordinal - b.ordinal);
+                        groups.forEach((value, ordinal) => (value.ordinal = ordinal));
+                        compactHome();
+                    }
+                    json(pins, 'OK', 200, { groups });
+                    return;
+                }
                 if (request.method === 'POST') {
                     const item = resources.find((resource) => resource.itemKey === input.itemKey);
                     if (!item || !['home', 'terminal'].includes(input.placement)) {
@@ -100,6 +152,7 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                             },
                             terminalOrder: null,
                             homeOrder: null,
+                            homeGroupKey: null,
                             homeConfig: {
                                 showStock: true,
                                 showFlow: true,
@@ -115,9 +168,7 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                         };
                         pins.push(pin);
                     }
-                    pin[`${input.placement}Order`] ??= pins.filter(
-                        (value) => value[`${input.placement}Order`] !== null
-                    ).length;
+                    pin[`${input.placement}Order`] ??= appendOrder(input.placement);
                 } else if (request.method === 'PATCH') {
                     const pin = pins.find((value) => value.pinKey === url.pathname.split('/').at(-1));
                     if (!pin) {
@@ -127,14 +178,29 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                     for (const placement of ['terminal', 'home'])
                         if (input[placement] !== undefined)
                             pin[`${placement}Order`] = input[placement]
-                                ? (pin[`${placement}Order`] ??
-                                  pins.filter((value) => value[`${placement}Order`] !== null).length)
+                                ? (pin[`${placement}Order`] ?? appendOrder(placement))
                                 : null;
                     if (input.homeConfig) pin.homeConfig = input.homeConfig;
+                    if (input.homeGroup) {
+                        const groupKey = input.homeGroup.groupKey ?? null;
+                        if (groupKey !== null && !groups.some((group) => group.groupKey === groupKey)) {
+                            json(null, 'BAD_PARAM', 400);
+                            return;
+                        }
+                        pin.homeOrder = pins.filter(
+                            (value) => value !== pin && value.homeOrder !== null && value.homeGroupKey === groupKey
+                        ).length;
+                        pin.homeGroupKey = groupKey;
+                    }
+                    if (input.home === false) pin.homeGroupKey = null;
                     if (input.move) {
                         const property = `${input.move.placement}Order`,
                             ordered = pins
-                                .filter((value) => value[property] !== null)
+                                .filter(
+                                    (value) =>
+                                        value[property] !== null &&
+                                        (input.move.placement === 'terminal' || value.homeGroupKey === pin.homeGroupKey)
+                                )
                                 .sort((a, b) => a[property] - b[property]);
                         const neighbor = ordered[ordered.indexOf(pin) + (input.move.direction === 'earlier' ? -1 : 1)];
                         if (neighbor) [neighbor[property], pin[property]] = [pin[property], neighbor[property]];
@@ -142,7 +208,8 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                     pins = pins.filter((value) => value.homeOrder !== null || value.terminalOrder !== null);
                 } else if (request.method === 'DELETE')
                     pins = pins.filter((value) => value.pinKey !== url.pathname.split('/').at(-1));
-                json(pins);
+                if (request.method !== 'GET') compactHome();
+                json(pins, 'OK', 200, { groups });
                 return;
             }
             if (url.pathname.startsWith('/api/')) {

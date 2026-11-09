@@ -66,9 +66,12 @@ import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -459,21 +462,21 @@ class IconDeliveryHttpTest {
                 current.rangeMillis(),
                 false,
                 current.flowRangeMillis());
-            assertTrue(pins.update(principal, savedPin.pinKey(), null, null, null, muted));
+            assertTrue(pins.update(principal, savedPin.pinKey(), null, null, null, muted, null));
             assertTrue(
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .get(0)
                     .getAsJsonObject()
                     .get("recent")
                     .isJsonNull());
-            assertTrue(pins.update(principal, savedPin.pinKey(), true, false, null, current));
+            assertTrue(pins.update(principal, savedPin.pinKey(), true, false, null, current, null));
             assertTrue(
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .get(0)
                     .getAsJsonObject()
                     .get("recent")
                     .isJsonNull());
-            assertTrue(pins.update(principal, savedPin.pinKey(), false, true, null, null));
+            assertTrue(pins.update(principal, savedPin.pinKey(), false, true, null, null, null));
             permitted.set(false);
             JsonObject hidden = json(connection("/api/resource-pins")).getAsJsonArray("data")
                 .get(0)
@@ -552,6 +555,9 @@ class IconDeliveryHttpTest {
         router.register(PostResourcePin.class);
         router.register(PatchResourcePin.class);
         router.register(DeleteResourcePin.class);
+        router.register(PostResourcePinGroup.class);
+        router.register(PatchResourcePinGroup.class);
+        router.register(DeleteResourcePinGroup.class);
         HttpServer endpoint = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         endpoint.createContext("/api", router);
         endpoint.start();
@@ -571,11 +577,47 @@ class IconDeliveryHttpTest {
                 .getAsJsonObject()
                 .get("pinKey")
                 .getAsString();
+            String groupPath = "/api/resource-pin-groups";
+            PinReply groupReply = pinRequest("POST", groupPath, "{\"name\":\"Machines\"}", true);
+            assertEquals(200, groupReply.code());
+            String groupKey = groupReply.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("groupKey")
+                .getAsString();
+            String assignment = "{\"homeGroup\":{\"groupKey\":\"" + groupKey + "\"}}";
+            PinReply assigned = pinRequest("PATCH", "/api/resource-pins/" + pinKey, assignment, true);
+            assertEquals(200, assigned.code());
+            assertEquals(
+                groupKey,
+                assigned.body()
+                    .getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("homeGroupKey")
+                    .getAsString());
+            JsonObject beforeInvalid = assigned.body();
+            for (String invalid : Arrays.asList(
+                "{\"homeGroup\":null}",
+                "{\"homeGroup\":{\"groupKey\":null}}",
+                "{\"homeGroup\":[]}",
+                "{\"homeGroup\":{\"groupKey\":\"" + StableKey.random() + "\"}}",
+                "{\"home\":false,\"homeGroup\":{}}")) {
+                assertEquals(400, pinRequest("PATCH", "/api/resource-pins/" + pinKey, invalid, true).code());
+                assertEquals(beforeInvalid, json(connection("/api/resource-pins")));
+            }
             principal.set(TestGridFixtures.principal(42));
             assertEquals(
                 0,
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .size());
+            assertEquals(
+                0,
+                json(connection("/api/resource-pins")).getAsJsonArray("groups")
+                    .size());
+            assertEquals(404, pinRequest("PATCH", groupPath + "/" + groupKey, "{\"name\":\"Stolen\"}", true).code());
+            assertEquals(200, pinRequest("DELETE", groupPath + "/" + groupKey, "", true).code());
             assertEquals(404, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"home\":false}", true).code());
             assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
             principal.set(TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
@@ -590,6 +632,32 @@ class IconDeliveryHttpTest {
             for (String field : Arrays.asList("gridKey", "itemKey", "gridName", "resource")) assertTrue(
                 unavailable.get(field)
                     .isJsonNull());
+            assertEquals(
+                groupKey,
+                unavailable.get("homeGroupKey")
+                    .getAsString());
+            assertEquals(200, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"homeGroup\":{}}", true).code());
+            assertTrue(
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("homeGroupKey")
+                    .isJsonNull());
+            assertEquals(200, pinRequest("PATCH", "/api/resource-pins/" + pinKey, assignment, true).code());
+            PinReply deletedGroup = pinRequest("DELETE", groupPath + "/" + groupKey, "", true);
+            assertEquals(200, deletedGroup.code());
+            JsonObject preserved = deletedGroup.body()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertTrue(
+                preserved.get("homeGroupKey")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                preserved.get("homeOrder")
+                    .getAsInt());
+            assertEquals(unavailable.get("homeConfig"), preserved.get("homeConfig"));
             assertEquals(403, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"terminal\":true}", true).code());
             assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
             assertEquals(
@@ -600,6 +668,55 @@ class IconDeliveryHttpTest {
             port = originalPort;
             endpoint.stop(0);
         }
+    }
+
+    @Test
+    void homePinGroupsRoundTripWithoutAnyLiveNetwork() throws Exception {
+        port = HttpServerTestFixture.startWorld(config);
+        String path = "/api/resource-pin-groups";
+        assertEquals(403, pinRequest("POST", path, "{\"name\":\"Production\"}", false).code());
+        PinReply created = pinRequest("POST", path, "{\"name\":\"  Production  \"}", true);
+        assertEquals(200, created.code());
+        JsonObject group = created.body()
+            .getAsJsonArray("groups")
+            .get(0)
+            .getAsJsonObject();
+        String key = group.get("groupKey")
+            .getAsString();
+        assertEquals(
+            "Production",
+            group.get("name")
+                .getAsString());
+        assertEquals(
+            0,
+            group.get("ordinal")
+                .getAsInt());
+        assertEquals(
+            0,
+            created.body()
+                .getAsJsonArray("data")
+                .size());
+        assertEquals(created.body(), json(connection("/api/resource-pins")));
+        assertEquals(400, pinRequest("POST", path, "{\"name\":\"Production\"}", true).code());
+        assertEquals(400, pinRequest("POST", path, "{\"name\":\"  \"}", true).code());
+        PinReply renamed = pinRequest("PATCH", path + "/" + key, "{\"name\":\"Machines\"}", true);
+        assertEquals(200, renamed.code());
+        assertEquals(
+            "Machines",
+            renamed.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("name")
+                .getAsString());
+        assertEquals(400, pinRequest("PATCH", path + "/" + key, "{\"move\":null}", true).code());
+        assertEquals(404, pinRequest("PATCH", path + "/" + StableKey.random(), "{\"name\":\"Other\"}", true).code());
+        assertEquals(200, pinRequest("DELETE", path + "/" + key, "", true).code());
+        assertEquals(200, pinRequest("DELETE", path + "/" + key, "", true).code());
+        assertEquals(
+            0,
+            json(connection("/api/resource-pins")).getAsJsonArray("groups")
+                .size());
     }
 
     @Test

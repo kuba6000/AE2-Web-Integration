@@ -41,14 +41,22 @@ public final class PatchResourcePin extends ResourcePinRequest {
     public record MoveInput(@NotNull String placement, @NotNull String direction) {}
 
     /**
+     * @param groupKey Home group identifier; omit to select Ungrouped
+     */
+    @Desugar
+    public record HomeGroupInput(@OptionalInput @Nullable StableKey groupKey) {}
+
+    /**
      * @param terminal   whether to show the pin in this network's terminal
      * @param home       whether to show the pin on Home
      * @param move       move the pin within one placement
      * @param homeConfig complete replacement of the Home card's display settings
+     * @param homeGroup  Home group assignment; an empty object selects Ungrouped
      */
     @Desugar
     public record Input(@OptionalInput @Nullable Boolean terminal, @OptionalInput @Nullable Boolean home,
-        @OptionalInput @Nullable MoveInput move, @OptionalInput @Nullable ResourcePinStore.HomeConfig homeConfig) {}
+        @OptionalInput @Nullable MoveInput move, @OptionalInput @Nullable ResourcePinStore.HomeConfig homeConfig,
+        @OptionalInput @Nullable HomeGroupInput homeGroup) {}
 
     @PathParam("pinKey")
     @NotNull
@@ -88,8 +96,18 @@ public final class PatchResourcePin extends ResourcePinRequest {
                 deny(ApiStatus.NO_PERMISSIONS);
                 return;
             }
-            if (!store
-                .update(context.getPrincipal(), pinKey, input.terminal(), input.home(), move, input.homeConfig())) {
+            ResourcePinStore.HomeGroupSelection group = input.homeGroup() == null ? null
+                : new ResourcePinStore.HomeGroupSelection(
+                    input.homeGroup()
+                        .groupKey());
+            if (!store.update(
+                context.getPrincipal(),
+                pinKey,
+                input.terminal(),
+                input.home(),
+                move,
+                input.homeConfig(),
+                group)) {
                 deny(ApiStatus.NOT_FOUND);
                 return;
             }

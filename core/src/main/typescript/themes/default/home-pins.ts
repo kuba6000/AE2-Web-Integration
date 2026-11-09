@@ -15,15 +15,113 @@ export function createHomePins(
     settings: ThemeSettings,
     bindTooltip: Tooltips['bind']
 ) {
-    const list = element('div', '', 'home-pins');
+    const list = element('div', '', 'home-pin-groups');
+    const addGroup = element('form', '', 'home-pin-group-add');
+    const groupNameLabel = element('label');
+    const groupName = element('input');
+    const groupNameText = element('span');
+    groupName.type = 'text';
+    groupName.maxLength = 128;
+    groupName.required = true;
+    const addGroupButton = element('button');
+    addGroupButton.type = 'submit';
+    groupNameLabel.append(groupNameText, groupName);
+    addGroup.append(groupNameLabel, addGroupButton);
     const status = element('p', '', 'hint');
     status.role = 'status';
     const unavailable = element('ul', '', 'home-unavailable-pins');
     const unavailableRows = new Map<string, HTMLLIElement>();
-    host.append(status, list, unavailable);
+    host.append(status, addGroup, list, unavailable);
     const icons = application.icons.observe(list, paintResourceIcon);
     const cards = new Map<string, ReturnType<typeof createCard>>();
+    const sections = new Map<string, ReturnType<typeof createGroup>>();
     let state: ThemeState, locale: Translator;
+    addGroup.onsubmit = (event) => {
+        event.preventDefault();
+        const name = groupName.value.trim();
+        if (!name) return;
+        void application.pins.addGroup(name).then(() => {
+            if (!state.pins.error && state.pins.groups.some((group) => group.name === name)) groupName.value = '';
+        });
+    };
+    function createGroup(key: string) {
+        const section = element('section', '', 'home-pin-group');
+        section.setAttribute('role', 'region');
+        if (key) section.dataset.groupKey = key;
+        const header = element('div', '', 'home-pin-group-heading');
+        const heading = element('h3');
+        const actions = element('div', '', 'home-pin-group-actions');
+        const earlier = element('button', '←'),
+            later = element('button', '→'),
+            rename = element('button'),
+            remove = element('button');
+        for (const button of [earlier, later, rename, remove]) button.type = 'button';
+        actions.append(earlier, later, rename, remove);
+        header.append(heading, actions);
+        const edit = element('form', '', 'home-pin-group-rename');
+        edit.hidden = true;
+        const label = element('label'),
+            nameText = element('span'),
+            name = element('input');
+        name.type = 'text';
+        name.maxLength = 128;
+        name.required = true;
+        const save = element('button'),
+            cancel = element('button');
+        save.type = 'submit';
+        cancel.type = 'button';
+        label.append(nameText, name);
+        edit.append(label, save, cancel);
+        const content = element('div', '', 'home-pins');
+        section.append(header, edit, content);
+        earlier.onclick = () => void application.pins.updateGroup(key, { move: 'earlier' });
+        later.onclick = () => void application.pins.updateGroup(key, { move: 'later' });
+        remove.onclick = () => void application.pins.removeGroup(key);
+        rename.onclick = () => {
+            name.value = state.pins.groups.find((group) => group.groupKey === key)?.name ?? '';
+            edit.hidden = false;
+            name.focus();
+        };
+        cancel.onclick = () => {
+            edit.hidden = true;
+            rename.focus();
+        };
+        edit.onsubmit = (event) => {
+            event.preventDefault();
+            const value = name.value.trim();
+            if (!value) return;
+            void application.pins.updateGroup(key, { name: value }).then(() => {
+                if (
+                    !state.pins.error &&
+                    state.pins.groups.some((group) => group.groupKey === key && group.name === value)
+                ) {
+                    edit.hidden = true;
+                    rename.focus({ preventScroll: true });
+                }
+            });
+        };
+        return {
+            section,
+            content,
+            render(title: string, index: number, count: number) {
+                section.setAttribute('aria-label', title);
+                heading.textContent = title;
+                header.hidden = !key && !count;
+                actions.hidden = !key;
+                if (!key) return;
+                earlier.setAttribute('aria-label', locale.common('moveEarlier'));
+                later.setAttribute('aria-label', locale.common('moveLater'));
+                rename.textContent = locale.common('renamePinGroup');
+                remove.textContent = locale.common('deletePinGroup');
+                nameText.textContent = locale.common('pinGroupName');
+                save.textContent = locale.common('savePinGroup');
+                cancel.textContent = locale.common('cancelPlan');
+                earlier.disabled = state.pins.pending || index === 0;
+                later.disabled = state.pins.pending || index === count - 1;
+                for (const control of [rename, remove, name, save, cancel]) control.disabled = state.pins.pending;
+            }
+        };
+    }
     function createCard(key: string) {
         const card = element('article', '', 'inset-frame home-pin-card');
         const identity = element('div', '', 'home-pin-identity tracking-resource');
@@ -59,6 +157,15 @@ export function createHomePins(
             settingsLabel = element('summary'),
             fields = element('fieldset');
         disclosure.append(settingsLabel, fields);
+        const groupLabel = element('label', '', 'home-pin-group-choice'),
+            groupText = element('span'),
+            groupChoice = element('select');
+        groupLabel.append(groupText, groupChoice);
+        fields.append(groupLabel);
+        groupChoice.onchange = () =>
+            void application.pins.update(key, {
+                homeGroup: groupChoice.value ? { groupKey: groupChoice.value } : {}
+            });
         const inputs = new Map<keyof PinHomeConfig, HTMLInputElement>();
         const groups = new Map<
             'showStock' | 'showRecentFlow' | 'showFlow' | 'showChart',
@@ -142,7 +249,21 @@ export function createHomePins(
             remove.textContent = locale.common('unpinHome');
             remove.disabled = state.pins.pending;
             settingsLabel.textContent = locale.common('pinSettings');
-            disclosure.hidden = !available;
+            groupText.textContent = locale.common('pinGroup');
+            const choices = [{ groupKey: '', name: locale.common('ungroupedPins') }, ...state.pins.groups];
+            if (
+                JSON.stringify([...groupChoice.options].map((option) => [option.value, option.textContent])) !==
+                JSON.stringify(choices.map((group) => [group.groupKey, group.name]))
+            ) {
+                groupChoice.replaceChildren(
+                    ...choices.map((group) => {
+                        const option = element('option', group.name);
+                        option.value = group.groupKey;
+                        return option;
+                    })
+                );
+            }
+            if (!state.pins.pending) groupChoice.value = pin.homeGroupKey ?? '';
             fields.disabled = state.pins.pending;
             const labels = {
                 showStock: 'pinShowStock',
@@ -172,6 +293,7 @@ export function createHomePins(
             for (const [property, group] of groups) {
                 inputs.get(property)!.nextElementSibling!.textContent = locale.common(groupLabels[property]);
                 group.root.setAttribute('aria-label', locale.common(groupLabels[property]));
+                group.root.hidden = !available;
                 group.controls.hidden = !pin.homeConfig[property];
             }
             for (const [property, { input, text }] of ranges) {
@@ -281,26 +403,63 @@ export function createHomePins(
             const pins = active
                 ? state.pins.items.filter((pin) => pin.homeOrder !== null).sort((a, b) => a.homeOrder! - b.homeOrder!)
                 : [];
+            const focused = list.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
+            const groups = active ? [...state.pins.groups].sort((a, b) => a.ordinal - b.ordinal) : [];
+            groupNameText.textContent = locale.common('pinGroupName');
+            addGroupButton.textContent = locale.common('addPinGroup');
+            groupName.disabled = addGroupButton.disabled = state.pins.pending || state.pins.status !== 'ready';
+            addGroup.hidden = !active;
+            const buckets = [
+                ...groups.map((group) => ({ key: group.groupKey, title: group.name })),
+                { key: '', title: locale.common('ungroupedPins') }
+            ];
+            const groupKeys = new Set(buckets.map((group) => group.key));
+            for (const [key, section] of sections)
+                if (!groupKeys.has(key)) {
+                    section.section.remove();
+                    sections.delete(key);
+                }
+            buckets.forEach((group, index) => {
+                const section = sections.get(group.key) ?? createGroup(group.key);
+                sections.set(group.key, section);
+                section.render(group.title, index, groups.length);
+                section.section.hidden =
+                    !active || (!group.key && groups.length > 0 && !pins.some((pin) => !pin.homeGroupKey));
+                if (list.children[index] !== section.section)
+                    list.insertBefore(section.section, list.children[index] ?? null);
+            });
             const keys = new Set(pins.map((pin) => pin.pinKey));
+            const members = new Map<string, typeof pins>();
+            for (const pin of pins) {
+                const key = pin.homeGroupKey ?? '';
+                const bucket = members.get(key) ?? [];
+                bucket.push(pin);
+                members.set(key, bucket);
+            }
             for (const [key, card] of cards)
                 if (!keys.has(key)) {
                     card.dispose();
                     cards.delete(key);
                 }
             const targets: Parameters<typeof icons.update>[0] = [];
-            pins.forEach((pin, index) => {
-                const card = cards.get(pin.pinKey) ?? createCard(pin.pinKey);
-                cards.set(pin.pinKey, card);
-                card.render(pin, index, pins.length);
-                if (list.children[index] !== card.card) {
-                    const focus = card.card.contains(document.activeElement)
-                        ? (document.activeElement as HTMLElement)
-                        : null;
-                    list.insertBefore(card.card, list.children[index] ?? null);
-                    focus?.focus({ preventScroll: true });
-                }
-                if (pin.available && pin.resource) targets.push({ element: card.identity, icon: pin.resource.icon });
-            });
+            for (const bucket of members.values())
+                bucket.forEach((pin, index) => {
+                    const content = sections.get(pin.homeGroupKey ?? '')?.content ?? sections.get('')!.content;
+                    const card = cards.get(pin.pinKey) ?? createCard(pin.pinKey);
+                    cards.set(pin.pinKey, card);
+                    card.render(pin, index, bucket.length);
+                    if (content.children[index] !== card.card) {
+                        const focus = card.card.contains(document.activeElement)
+                            ? (document.activeElement as HTMLElement)
+                            : null;
+                        content.insertBefore(card.card, content.children[index] ?? null);
+                        focus?.focus({ preventScroll: true });
+                    }
+                    if (pin.available && pin.resource)
+                        targets.push({ element: card.identity, icon: pin.resource.icon });
+                });
+            if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+            else if (focused && !focused.isConnected) addGroupButton.focus({ preventScroll: true });
             icons.update(targets, state.pins.icons);
             const inaccessible = active
                 ? state.pins.items.filter((pin) => !pin.available && pin.homeOrder === null)
@@ -341,6 +500,7 @@ export function createHomePins(
             icons.dispose();
             for (const card of cards.values()) card.dispose();
             list.remove();
+            addGroup.remove();
             status.remove();
             unavailable.remove();
         }

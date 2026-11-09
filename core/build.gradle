@@ -263,9 +263,11 @@ tasks.register('testSqlite336', Test) {
     filter {
         includeTestsMatching '*WorldDatabase*Test'
         includeTestsMatching '*WorldSchemaBootstrapTest'
+        includeTestsMatching '*WorldSchemaMigrationTest'
         includeTestsMatching '*GridIdentityRegistryTest'
         includeTestsMatching '*GridSettingsLifecycleTest'
         includeTestsMatching '*ResourcePinStoreTest'
+        includeTestsMatching '*ResourcePinGroupsTest'
         includeTestsMatching '*HistoryMeasurementTest'
         includeTestsMatching '*LiveDataPolicyTest'
         includeTestsMatching '*SqliteStorageHistory*Test'

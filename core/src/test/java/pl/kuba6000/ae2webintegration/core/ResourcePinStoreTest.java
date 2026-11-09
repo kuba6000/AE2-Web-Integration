@@ -261,6 +261,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 null,
                 null,
                 new ResourcePinStore.Move(Placement.TERMINAL, ResourcePinStore.Direction.EARLIER),
+                null,
                 null));
         assertTrue(
             pins.update(
@@ -269,9 +270,10 @@ class ResourcePinStoreTest extends GridTestScope {
                 null,
                 null,
                 new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
+                null,
                 null));
         HomeConfig config = new HomeConfig(false, true, true, false, false, false, true, 604800000, false, 900000);
-        assertTrue(pins.update(owner, firstPin.pinKey(), null, null, null, config));
+        assertTrue(pins.update(owner, firstPin.pinKey(), null, null, null, config, null));
         List<Pin> changed = pins.list(owner);
         for (Pin pin : changed) {
             if (pin.itemKey()
@@ -299,7 +301,8 @@ class ResourcePinStoreTest extends GridTestScope {
                 false,
                 null,
                 null,
-                new HomeConfig(true, true, true, true, true, true, true, 0, true, 86400000)));
+                new HomeConfig(true, true, true, true, true, true, true, 0, true, 86400000),
+                null));
         assertEquals(changed, pins.list(owner));
         assertThrows(
             IllegalArgumentException.class,
@@ -309,6 +312,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 null,
                 false,
                 new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
+                null,
                 null));
         assertEquals(changed, pins.list(owner));
         assertThrows(
@@ -319,7 +323,8 @@ class ResourcePinStoreTest extends GridTestScope {
                 false,
                 null,
                 null,
-                new HomeConfig(true, true, true, true, true, true, true, 86400000, true, 0)));
+                new HomeConfig(true, true, true, true, true, true, true, 86400000, true, 0),
+                null));
         assertEquals(changed, pins.list(owner));
         worlds.close(TestGridFixtures.Worlds.source(gridSave));
         ResourcePinStore reopened = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
@@ -482,7 +487,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 .isEmpty());
         StableKey pinKey = selected.get(0)
             .pinKey();
-        assertTrue(pins.update(WebPrincipal.admin(), pinKey, false, null, null, null));
+        assertTrue(pins.update(WebPrincipal.admin(), pinKey, false, null, null, null, null));
         assertNull(
             pins.list(WebPrincipal.admin())
                 .get(0)
@@ -499,7 +504,7 @@ class ResourcePinStoreTest extends GridTestScope {
             pins.list(WebPrincipal.localhost())
                 .get(0)
                 .pinKey());
-        assertFalse(pins.update(TestGridFixtures.principal(4), pinKey, null, false, null, null));
+        assertFalse(pins.update(TestGridFixtures.principal(4), pinKey, null, false, null, null, null));
         pins.remove(TestGridFixtures.principal(4), pinKey);
         assertEquals(
             1,

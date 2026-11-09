@@ -3702,6 +3702,49 @@ button.toast:hover {
     min-height: 32px;
 }
 
+.home-pin-groups {
+    display: grid;
+    gap: 20px;
+}
+.home-pin-group-add,
+.home-pin-group-rename,
+.home-pin-group-heading,
+.home-pin-group-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.home-pin-group-add {
+    margin-block: 0 16px;
+}
+.home-pin-group-add label,
+.home-pin-group-rename label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.home-pin-group-add input,
+.home-pin-group-rename input {
+    width: 180px;
+    max-width: 100%;
+}
+.home-pin-group {
+    min-width: 0;
+}
+.home-pin-group-heading {
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.home-pin-group-heading h3 {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.home-pin-group-rename {
+    margin-block: 0 10px;
+}
 .home-pins {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
@@ -3789,6 +3832,11 @@ button.toast:hover {
 }
 .home-pin-settings select {
     min-width: 80px;
+}
+.home-pin-group-choice select {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1;
 }
 .home-pin-series {
     display: grid;

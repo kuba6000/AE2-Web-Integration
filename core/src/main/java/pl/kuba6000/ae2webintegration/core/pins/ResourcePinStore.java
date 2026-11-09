@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
@@ -83,7 +84,17 @@ public final class ResourcePinStore {
     @Desugar
     public record Pin(@NotNull StableKey pinKey, @NotNull StableKey gridKey, @NotNull StableKey itemKey,
         @NotNull String gridName, @NotNull ResourceDescriptor resource, @Nullable Integer terminalOrder,
-        @Nullable Integer homeOrder, @NotNull HomeConfig homeConfig) {}
+        @Nullable Integer homeOrder, @Nullable StableKey homeGroupKey, @NotNull HomeConfig homeConfig) {}
+
+    @Desugar
+    public record HomeGroup(@NotNull StableKey groupKey, @NotNull String name, int ordinal) {}
+
+    @Desugar
+    public record Snapshot(@NotNull List<Pin> pins, @NotNull List<HomeGroup> groups) {}
+
+    /** Omitted selection preserves the group; a selection with no key chooses Ungrouped. */
+    @Desugar
+    public record HomeGroupSelection(@Nullable StableKey groupKey) {}
 
     private final @NotNull WorldDatabase database;
 
@@ -101,6 +112,145 @@ public final class ResourcePinStore {
     public @NotNull List<Pin> list(@NotNull WebPrincipal principal) throws IOException {
         String owner = owner(principal);
         return database.read(db -> list(db, owner));
+    }
+
+    public @NotNull Snapshot snapshot(@NotNull WebPrincipal principal) throws IOException {
+        String owner = owner(principal);
+        return database.read(db -> new Snapshot(list(db, owner), groups(db, owner)));
+    }
+
+    private static @NotNull List<HomeGroup> groups(@NotNull Connection db, @NotNull String owner) throws SQLException {
+        List<HomeGroup> groups = new ArrayList<>();
+        try (PreparedStatement query = db.prepareStatement(
+            "SELECT group_key, name, ordinal FROM home_pin_groups WHERE owner = ? ORDER BY ordinal, group_key")) {
+            query.setString(1, owner);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next())
+                    groups.add(new HomeGroup(StableKey.parse(rows.getString(1)), rows.getString(2), rows.getInt(3)));
+            }
+        }
+        return groups;
+    }
+
+    public @NotNull HomeGroup createGroup(@NotNull WebPrincipal principal, @NotNull String name) throws IOException {
+        String owner = owner(principal);
+        String label = groupName(name);
+        return database.write(db -> {
+            List<HomeGroup> groups = groups(db, owner);
+            requireUniqueName(groups, label, null);
+            HomeGroup group = new HomeGroup(StableKey.random(), label, groups.size());
+            try (PreparedStatement insert = db
+                .prepareStatement("INSERT INTO home_pin_groups(group_key, owner, name, ordinal) VALUES (?, ?, ?, ?)")) {
+                insert.setString(
+                    1,
+                    group.groupKey()
+                        .toString());
+                insert.setString(2, owner);
+                insert.setString(3, label);
+                insert.setInt(4, group.ordinal());
+                insert.executeUpdate();
+            }
+            return group;
+        });
+    }
+
+    private static @NotNull String groupName(@NotNull String name) {
+        String label = name.trim();
+        if (label.isEmpty() || label.length() > 128) throw new IllegalArgumentException("Invalid group name");
+        return label;
+    }
+
+    private static void requireUniqueName(@NotNull List<HomeGroup> groups, @NotNull String name,
+        @Nullable StableKey except) {
+        if (groups.stream()
+            .anyMatch(
+                group -> group.name()
+                    .equals(name)
+                    && !group.groupKey()
+                        .equals(except)))
+            throw new IllegalArgumentException("Group name is already in use");
+    }
+
+    public boolean updateGroup(@NotNull WebPrincipal principal, @NotNull StableKey groupKey, @Nullable String name,
+        @Nullable Direction direction) throws IOException {
+        String owner = owner(principal);
+        String label = name == null ? null : groupName(name);
+        return database.write(db -> {
+            List<HomeGroup> groups = groups(db, owner);
+            int index = 0;
+            while (index < groups.size() && !groups.get(index)
+                .groupKey()
+                .equals(groupKey)) index++;
+            if (index == groups.size()) return false;
+            if (label != null) {
+                requireUniqueName(groups, label, groupKey);
+                try (PreparedStatement update = db
+                    .prepareStatement("UPDATE home_pin_groups SET name = ? WHERE group_key = ? AND owner = ?")) {
+                    update.setString(1, label);
+                    update.setString(2, groupKey.toString());
+                    update.setString(3, owner);
+                    update.executeUpdate();
+                }
+            }
+            if (direction != null) {
+                int adjacent = index + (direction == Direction.EARLIER ? -1 : 1);
+                if (adjacent >= 0 && adjacent < groups.size()) {
+                    setGroupOrder(db, groupKey, adjacent);
+                    setGroupOrder(
+                        db,
+                        groups.get(adjacent)
+                            .groupKey(),
+                        index);
+                }
+            }
+            return true;
+        });
+    }
+
+    public void removeGroup(@NotNull WebPrincipal principal, @NotNull StableKey groupKey) throws IOException {
+        String owner = owner(principal);
+        database.write(db -> {
+            if (groups(db, owner).stream()
+                .noneMatch(
+                    group -> group.groupKey()
+                        .equals(groupKey)))
+                return null;
+            List<Pin> pins = list(db, owner);
+            int next = placementPins(pins, Placement.HOME, null).size();
+            try (PreparedStatement move = db
+                .prepareStatement("UPDATE resource_pins SET home_group_key = NULL, home_order = ? WHERE pin_key = ?")) {
+                for (Pin pin : placementPins(pins, Placement.HOME, groupKey)) {
+                    move.setInt(1, next++);
+                    move.setString(
+                        2,
+                        pin.pinKey()
+                            .toString());
+                    move.executeUpdate();
+                }
+            }
+            try (PreparedStatement delete = db
+                .prepareStatement("DELETE FROM home_pin_groups WHERE group_key = ? AND owner = ?")) {
+                delete.setString(1, groupKey.toString());
+                delete.setString(2, owner);
+                delete.executeUpdate();
+            }
+            List<HomeGroup> groups = groups(db, owner);
+            for (int index = 0; index < groups.size(); index++) {
+                HomeGroup group = groups.get(index);
+                if (group.ordinal() != index) setGroupOrder(db, group.groupKey(), index);
+            }
+            return null;
+        });
+    }
+
+    private static void setGroupOrder(@NotNull Connection db, @NotNull StableKey groupKey, int ordinal)
+        throws SQLException {
+        try (PreparedStatement update = db
+            .prepareStatement("UPDATE home_pin_groups SET ordinal = ? WHERE group_key = ?")) {
+            update.setInt(1, ordinal);
+            update.setString(2, groupKey.toString());
+            update.executeUpdate();
+        }
     }
 
     private static @NotNull List<Pin> list(@NotNull Connection db, @NotNull String owner) throws SQLException {
@@ -135,6 +285,8 @@ public final class ResourcePinStore {
                                 base == null ? null : StableKey.parse(base)),
                             nullableInt(rows, "terminal_order"),
                             nullableInt(rows, "home_order"),
+                            rows.getString("home_group_key") == null ? null
+                                : StableKey.parse(rows.getString("home_group_key")),
                             new HomeConfig(
                                 rows.getBoolean("show_stock"),
                                 rows.getBoolean("show_flow"),
@@ -179,8 +331,11 @@ public final class ResourcePinStore {
                 .findFirst()
                 .orElse(null);
             if (existing != null) {
-                if (order(existing, placement) == null)
-                    setOrder(db, existing.pinKey(), placement, placementPins(pins, placement, grid).size());
+                if (order(existing, placement) == null) setOrder(
+                    db,
+                    existing.pinKey(),
+                    placement,
+                    placementPins(pins, placement, placement == Placement.HOME ? null : grid).size());
                 return true;
             }
             try (PreparedStatement insert = db.prepareStatement(
@@ -198,7 +353,7 @@ public final class ResourcePinStore {
                 insert.setString(2, owner);
                 insert.setLong(3, gridId);
                 insert.setLong(4, resourceId);
-                int index = placementPins(pins, placement, grid).size();
+                int index = placementPins(pins, placement, placement == Placement.HOME ? null : grid).size();
                 insert.setObject(5, placement == Placement.TERMINAL ? index : null, Types.INTEGER);
                 insert.setObject(6, placement == Placement.HOME ? index : null, Types.INTEGER);
                 insert.executeUpdate();
@@ -233,15 +388,26 @@ public final class ResourcePinStore {
     }
 
     public boolean update(@NotNull WebPrincipal principal, @NotNull StableKey pinKey, @Nullable Boolean terminal,
-        @Nullable Boolean home, @Nullable Move move, @Nullable HomeConfig configuration) throws IOException {
+        @Nullable Boolean home, @Nullable Move move, @Nullable HomeConfig configuration,
+        @Nullable HomeGroupSelection homeGroup) throws IOException {
         if (configuration != null) configuration.validate();
         String owner = owner(principal);
         return database.write(db -> {
             List<Pin> pins = list(db, owner);
             Pin pin = find(pins, pinKey);
             if (pin == null) return false;
-            Integer terminalOrder = selectedOrder(pins, pin, Placement.TERMINAL, terminal);
-            Integer homeOrder = selectedOrder(pins, pin, Placement.HOME, home);
+            Integer terminalOrder = selectedOrder(pins, pin, Placement.TERMINAL, terminal, null);
+            boolean homeEnabled = home == null ? pin.homeOrder() != null : home;
+            if (homeGroup != null && !homeEnabled)
+                throw new IllegalArgumentException("Cannot group a disabled Home pin");
+            StableKey group = !homeEnabled ? null : homeGroup == null ? pin.homeGroupKey() : homeGroup.groupKey();
+            if (homeGroup != null && group != null
+                && groups(db, owner).stream()
+                    .noneMatch(
+                        value -> value.groupKey()
+                            .equals(group)))
+                throw new IllegalArgumentException("Unknown pin group");
+            Integer homeOrder = selectedOrder(pins, pin, Placement.HOME, home, group);
             if (move != null && (move.placement() == Placement.TERMINAL ? terminalOrder : homeOrder) == null)
                 throw new IllegalArgumentException("Cannot move a disabled placement");
             if (terminalOrder == null && homeOrder == null) {
@@ -253,7 +419,7 @@ public final class ResourcePinStore {
                 UPDATE resource_pins
                 SET terminal_order = ?, home_order = ?, show_stock = ?, show_flow = ?, show_chart = ?,
                     series_stock = ?, series_input = ?, series_output = ?, series_net = ?, range_millis = ?,
-                    show_recent_flow = ?, flow_range_millis = ?
+                    show_recent_flow = ?, flow_range_millis = ?, home_group_key = ?
                 WHERE pin_key = ? AND owner = ?
                 """)) {
                 update.setObject(1, terminalOrder, Types.INTEGER);
@@ -268,13 +434,22 @@ public final class ResourcePinStore {
                 update.setLong(10, config.rangeMillis());
                 update.setBoolean(11, config.showRecentFlow());
                 update.setLong(12, config.flowRangeMillis());
-                update.setString(13, pinKey.toString());
-                update.setString(14, owner);
+                update.setString(13, group == null ? null : group.toString());
+                update.setString(14, pinKey.toString());
+                update.setString(15, owner);
                 update.executeUpdate();
             }
-            if (terminal != null || home != null) compact(db, owner, pin.gridKey());
+            if (terminal != null || home != null || homeGroup != null) {
+                List<Pin> changed = list(db, owner);
+                compact(db, changed, Placement.TERMINAL, pin.gridKey());
+                compact(db, changed, Placement.HOME, pin.homeGroupKey());
+                if (!Objects.equals(group, pin.homeGroupKey())) compact(db, changed, Placement.HOME, group);
+            }
             if (move != null) {
-                List<Pin> ordered = placementPins(list(db, owner), move.placement(), pin.gridKey());
+                List<Pin> ordered = placementPins(
+                    list(db, owner),
+                    move.placement(),
+                    move.placement() == Placement.HOME ? group : pin.gridKey());
                 int index = 0;
                 while (!ordered.get(index)
                     .pinKey()
@@ -295,11 +470,13 @@ public final class ResourcePinStore {
     }
 
     private static @Nullable Integer selectedOrder(@NotNull List<Pin> pins, @NotNull Pin pin,
-        @NotNull Placement placement, @Nullable Boolean enabled) {
+        @NotNull Placement placement, @Nullable Boolean enabled, @Nullable StableKey group) {
         Integer order = order(pin, placement);
-        if (enabled == null) return order;
-        return !enabled ? null
-            : order == null ? Integer.valueOf(placementPins(pins, placement, pin.gridKey()).size()) : order;
+        if (Boolean.FALSE.equals(enabled)) return null;
+        if (enabled == null && order == null) return null;
+        return order == null || (placement == Placement.HOME && !Objects.equals(group, pin.homeGroupKey())) ? Integer
+            .valueOf(placementPins(pins, placement, placement == Placement.HOME ? group : pin.gridKey()).size())
+            : order;
     }
 
     public void remove(@NotNull WebPrincipal principal, @NotNull StableKey pinKey) throws IOException {
@@ -322,28 +499,27 @@ public final class ResourcePinStore {
             delete.setString(2, owner);
             delete.executeUpdate();
         }
-        compact(db, owner, pin.gridKey());
+        List<Pin> remaining = list(db, owner);
+        compact(db, remaining, Placement.TERMINAL, pin.gridKey());
+        compact(db, remaining, Placement.HOME, pin.homeGroupKey());
         if (resourceId != null) ResourceCatalogue.removeUnreferenced(db, Collections.singleton(resourceId));
     }
 
-    private static void compact(@NotNull Connection db, @NotNull String owner, @NotNull StableKey grid)
-        throws SQLException {
-        List<Pin> pins = list(db, owner);
-        for (Placement placement : Placement.values()) {
-            List<Pin> ordered = placementPins(pins, placement, grid);
-            for (int index = 0; index < ordered.size(); index++) {
-                Pin pin = ordered.get(index);
-                if (order(pin, placement) != index) setOrder(db, pin.pinKey(), placement, index);
-            }
+    private static void compact(@NotNull Connection db, @NotNull List<Pin> pins, @NotNull Placement placement,
+        @Nullable StableKey placementKey) throws SQLException {
+        List<Pin> ordered = placementPins(pins, placement, placementKey);
+        for (int index = 0; index < ordered.size(); index++) {
+            Pin pin = ordered.get(index);
+            if (order(pin, placement) != index) setOrder(db, pin.pinKey(), placement, index);
         }
     }
 
     private static @NotNull List<Pin> placementPins(@NotNull List<Pin> pins, @NotNull Placement placement,
-        @NotNull StableKey grid) {
+        @Nullable StableKey placementKey) {
         return pins.stream()
             .filter(
-                pin -> order(pin, placement) != null && (placement == Placement.HOME || pin.gridKey()
-                    .equals(grid)))
+                pin -> order(pin, placement) != null
+                    && Objects.equals(placementKey, placement == Placement.HOME ? pin.homeGroupKey() : pin.gridKey()))
             .sorted(Comparator.comparingInt(pin -> order(pin, placement)))
             .collect(Collectors.toList());
     }

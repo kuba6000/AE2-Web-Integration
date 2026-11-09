@@ -22,7 +22,8 @@ import type {
     GridSettings,
     AvailableUpdate,
     PinPlacement,
-    ResourcePinUpdate
+    ResourcePinUpdate,
+    HomePinGroupUpdate
 } from './api-types.js';
 import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
@@ -98,6 +99,9 @@ export type ThemeApplication = {
         update(pinKey: string, update: ResourcePinUpdate): Promise<void>;
         remove(pinKey: string): Promise<void>;
         refresh(): Promise<void>;
+        addGroup(name: string): Promise<void>;
+        updateGroup(groupKey: string, update: HomePinGroupUpdate): Promise<void>;
+        removeGroup(groupKey: string): Promise<void>;
     };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
