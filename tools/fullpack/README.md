@@ -7,12 +7,25 @@ installed automatically in a local virtual environment.
 
 From the repository root:
 
+Linux (Bash):
+
+```bash
+./gradlew :forge-1.7.10:runFullPack -PfullpackAcceptEula=true
+./gradlew :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
+```
+
+Windows (PowerShell):
+
 ```powershell
 .\gradlew.bat :forge-1.7.10:runFullPack -PfullpackAcceptEula=true
 .\gradlew.bat :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
 ```
 
-Use `./gradlew` on Linux/macOS. Replace `forge-1.7.10` with `forge-1.12.2`, `forge-1.20.1`, or
+Linux needs Python's virtual-environment and `ensurepip` support. On Debian/Ubuntu, install
+`python3-venv` alongside Python3.10+ before the first launch. The client needs a graphical session
+and working OpenGL drivers; the dedicated server can run without a desktop.
+
+Replace `forge-1.7.10` with `forge-1.12.2`, `forge-1.20.1`, or
 `neoforge-1.21.1`. The default packs are GTNH Daily824 (2026-11-08), Nomi-CEu1.7.7, Monifactory0.13.8 and ATM10 8.5,
 respectively. Exact versions, files and hashes are recorded under `profiles/`. Normal launches do
 not update these pins. Deleted or unavailable pinned downloads stop preparation with an error.
@@ -38,6 +51,10 @@ The default cache is `<checkout>/.gradle/fullpack`; prepared games are under
 `runtimes/<profile>/<client-or-server>/game`. `stop` in the server console saves and shuts down;
 Ctrl+C requests shutdown before enforcing the process deadline.
 
+When sharing a checkout between Windows and Linux/WSL, use a separate `fullpackHome` for each
+system, for example `-PfullpackHome="$HOME/.cache/ae2wi-fullpack"` in Bash. Installed Python/game
+runtimes and saved launch commands contain platform-specific paths.
+
 | Gradle property | Meaning |
 | --- | --- |
 | `fullpackHome` | Cache, Python environment and owned instances; default `.gradle/fullpack` |
@@ -58,14 +75,30 @@ loads; its Forge startup-join path is unsupported by these Gradle tasks.
 
 Restart a prepared instance without resetting its world or settings:
 
+Linux:
+
+```bash
+.gradle/fullpack/python/bin/python tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server --accept-eula
+```
+
+Windows:
+
 ```powershell
 .gradle/fullpack/python/Scripts/python.exe tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server --accept-eula
 ```
 
-On POSIX use `.gradle/fullpack/python/bin/python`. Direct CLI `prepare`/`run` also accepts locked
+Direct CLI `prepare`/`run` also accepts locked
 content, runtime, JAR and world paths; use `--help` for arguments.
 
 Run the launcher tests without starting Minecraft:
+
+Linux:
+
+```bash
+.gradle/fullpack/python/bin/python -m unittest discover -s tools/fullpack -p 'test_*.py'
+```
+
+Windows:
 
 ```powershell
 .gradle/fullpack/python/Scripts/python.exe -m unittest discover -s tools/fullpack -p "test_*.py"
