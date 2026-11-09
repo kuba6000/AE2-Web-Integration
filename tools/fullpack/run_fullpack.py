@@ -155,12 +155,12 @@ def main():
     parser.add_argument('--runtime-root', type=Path, required=True)
     parser.add_argument('--profile', required=True)
     parser.add_argument('--role', choices=['client', 'server'], required=True)
-    parser.add_argument('--accept-eula', action='store_true')
+    parser.add_argument('--accept-eula', action='store_true', help='Required for the dedicated server role')
     parser.add_argument('--max-seconds', type=float)
     parser.add_argument('--stop-timeout', type=float, default=20)
     args = parser.parse_args()
     try:
-        if not args.accept_eula:
+        if args.role == 'server' and not args.accept_eula:
             raise ValueError('Explicit --accept-eula is required')
         if not math.isfinite(args.server_timeout) or args.server_timeout <= 0:
             raise ValueError('--server-timeout must be positive and finite')

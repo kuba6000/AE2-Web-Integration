@@ -121,6 +121,13 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(7, result.returncode, result.stderr)
         self.assertEqual('ran', (self.root / 'runtimes/fixture/server/game/result').read_text())
 
+    def test_server_requires_acceptance_before_starting_or_creating_its_instance(self):
+        command = self.command(self.plan("from pathlib import Path; Path('started').touch()"))
+        command.remove('--accept-eula')
+        result = subprocess.run(command, capture_output=True, timeout=10)
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse((self.root / 'runtimes/fixture/server').exists())
+
     def test_foreign_slot_is_not_used_or_modified(self):
         slot = self.root / 'runtimes/fixture/server'
         slot.mkdir(parents=True)
@@ -201,10 +208,11 @@ class LauncherTests(unittest.TestCase):
             'textFiles': {'options.txt': 'soundCategory_master:0.8\nsoundCategory_music:0.4\nfov:0.5\n'}}}))
         command = [sys.executable, str(SCRIPT), 'prepare', '--lock', str(lock), '--content-only',
                    '--cache', str(self.root / 'cache'), '--runtime-root', str(self.root / 'runtimes'),
-                   '--profile', 'fixture', '--role', 'client', '--accept-eula']
+                   '--profile', 'fixture', '--role', 'client']
         result = subprocess.run(command, capture_output=True, text=True, timeout=15)
         self.assertEqual(0, result.returncode, result.stderr)
         options = self.root / 'runtimes/fixture/client/game/options.txt'
+        self.assertFalse((options.parent / 'eula.txt').exists())
         settings = dict(line.split(':', 1) for line in options.read_text().splitlines())
         self.assertEqual(0, float(settings['soundCategory_master']))
         self.assertEqual('0.4', settings['soundCategory_music'])
@@ -213,6 +221,7 @@ class LauncherTests(unittest.TestCase):
         plan = self.plan("from pathlib import Path; import json; Path('observed.json').write_text(json.dumps(dict(line.split(':',1) for line in Path('options.txt').read_text().splitlines())))")
         command = self.command(plan)
         command[command.index('--role') + 1] = 'client'
+        command.remove('--accept-eula')
         result = subprocess.run(command, capture_output=True, text=True, timeout=15)
         self.assertEqual(0, result.returncode, result.stderr)
         observed = json.loads((options.parent / 'observed.json').read_text())

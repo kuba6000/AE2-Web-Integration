@@ -1,7 +1,8 @@
 # Full modpack launchers
 
 Run a pinned full modpack with the production mod built from this checkout. Requires Python3.10+
-on `PATH`, the normal Java25/Node build prerequisites, and acceptance of the Minecraft EULA.
+on `PATH` and the normal Java25/Node build prerequisites. Dedicated-server tasks also require
+explicit Minecraft EULA acceptance.
 Gradle selects the game's Java runtime through its toolchains; Python launcher dependencies are
 installed automatically in a local virtual environment.
 
@@ -10,14 +11,14 @@ From the repository root:
 Linux (Bash):
 
 ```bash
-./gradlew :forge-1.7.10:runFullPack -PfullpackAcceptEula=true
+./gradlew :forge-1.7.10:runFullPack
 ./gradlew :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
 ```
 
 Windows (PowerShell):
 
 ```powershell
-.\gradlew.bat :forge-1.7.10:runFullPack -PfullpackAcceptEula=true
+.\gradlew.bat :forge-1.7.10:runFullPack
 .\gradlew.bat :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
 ```
 
@@ -69,8 +70,9 @@ runtimes and saved launch commands contain platform-specific paths.
 | `fullpackUser` | Offline client name; default `FullpackTest` |
 | `fullpackJoinServer` | Optional localhost address for modern/1.12.2 multiplayer startup |
 
-Relative paths are resolved from the repository root. EULA acceptance may also be supplied through
-`FULLPACK_ACCEPT_EULA=true`. GTNH connects through Multiplayer → Direct Connect after the menu
+Relative paths are resolved from the repository root. Dedicated-server EULA acceptance may also
+be supplied through `FULLPACK_ACCEPT_EULA=true`; client tasks do not require this setting.
+GTNH connects through Multiplayer → Direct Connect after the menu
 loads; its Forge startup-join path is unsupported by these Gradle tasks.
 
 Restart a prepared instance without resetting its world or settings:
