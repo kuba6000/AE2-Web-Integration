@@ -68,7 +68,6 @@ A few additional compatibility notes:
   [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
 - The 1.20.1, 1.21.1 and 26.1.2 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
-- On 26.1.2, AdvancedAE 26.1.7 does not restore active Quantum Computer jobs after a server restart.
 
 ## Requirements
 
