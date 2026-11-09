@@ -228,6 +228,29 @@ header {
     min-width: 0;
     overflow-wrap: anywhere;
 }
+.cpu-overview > .terminal-heading {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+.cpu-overview-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: end;
+    gap: 8px;
+    min-width: 0;
+}
+.cpu-overview-search {
+    flex: 1;
+    min-width: min(160px, 100%);
+    max-width: 260px;
+}
+.cpu-overview-search input {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    font-size: 12px;
+}
 .cpu-list {
     list-style: none;
     padding: 0;

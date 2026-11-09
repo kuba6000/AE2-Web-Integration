@@ -5,9 +5,10 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { cpuHref } from '../../app/router.js';
-import { selectionModes, renderCpuState, renderCpuSelectionMode } from './cpu-presentation.js';
-import { terminalIcons, craftingHammer } from './icons/pixel/terminal.js';
-import { cpuChipIcon, cpuSearchIcon } from './icons/pixel/cpu-controls.js';
+import { renderCpuState, renderCpuSelectionMode } from './cpu-presentation.js';
+import { terminalIcons } from './icons/pixel/terminal.js';
+import { cpuSearchIcon } from './icons/pixel/cpu-controls.js';
+import { cpuSortCriteria, orderedCpus } from './cpu-list-order.js';
 import type { CpuTooltips } from './cpu-tooltips.js';
 
 export function createCpuSelector(application: ThemeApplication, settings: ThemeSettings, tips: CpuTooltips) {
@@ -60,13 +61,7 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
           }
         | undefined;
     let selectorSearchOpen = false;
-    const selectorCriteria = [
-        { value: 'name', label: 'name', icon: terminalIcons.name },
-        { value: 'capacity', label: 'cpuCapacityLabel', icon: terminalIcons.stored },
-        { value: 'coprocessors', label: 'cpuCoprocessorsLabel', icon: cpuChipIcon },
-        { value: 'state', label: 'cpuBusyState', icon: craftingHammer },
-        { value: 'automation', label: 'cpuAutomation', icon: terminalIcons.all }
-    ] as const;
+    const selectorCriteria = cpuSortCriteria;
     const hasSelectionMode = application.state.capabilities.cpuSelectionMode === true;
     const availableSelectorCriteria = selectorCriteria.filter(
         (criterion) => hasSelectionMode || criterion.value !== 'automation'
@@ -163,43 +158,7 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
     }
 
     function visibleCpus() {
-        const criterion = effectiveSelectorSort();
-        const terms = selectorSearch.value.trim().toLocaleLowerCase(document.documentElement.lang).split(/\s+/);
-        return state.cpus
-            .filter((cpu) => {
-                const text = `${plainMinecraftText(cpu.name)} ${cpu.key}`.toLocaleLowerCase(
-                    document.documentElement.lang
-                );
-                return terms.every((term) => text.includes(term));
-            })
-            .sort((a, b) => {
-                const name = (plainMinecraftText(a.name).trim() || a.key).localeCompare(
-                    plainMinecraftText(b.name).trim() || b.key,
-                    document.documentElement.lang
-                );
-                const aMode = a.selectionMode ? selectionModes[a.selectionMode].order : null;
-                const bMode = b.selectionMode ? selectionModes[b.selectionMode].order : null;
-                if (criterion.value === 'automation' && (aMode === null) !== (bMode === null))
-                    return aMode === null ? 1 : -1;
-                let primary = name;
-                switch (criterion.value) {
-                    case 'capacity':
-                        primary = a.availableStorage - b.availableStorage;
-                        break;
-                    case 'coprocessors':
-                        primary = a.coProcessors - b.coProcessors;
-                        break;
-                    case 'state':
-                        primary = Number(a.isBusy) - Number(b.isBusy);
-                        break;
-                    case 'automation':
-                        primary = (aMode ?? 0) - (bMode ?? 0);
-                        break;
-                }
-                return (
-                    (selectorDescending ? -primary : primary) || name || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
-                );
-            });
+        return orderedCpus(state.cpus, effectiveSelectorSort().value, selectorDescending, selectorSearch.value);
     }
 
     function renderSelector() {
