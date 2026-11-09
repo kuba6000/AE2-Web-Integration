@@ -162,7 +162,7 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                 else if (loggedOut) json(null, 'UNAUTHORIZED', 401);
                 else if (url.pathname === '/api/themes') json({ defaultTheme: 'builtin:default', themes: [] });
                 else if (url.pathname === '/api/icon-pack')
-                    json({ available: false, packId: null, width: 0, height: 0 });
+                    json({ available: false, hasAnimations: false, packId: null, width: 0, height: 0 });
                 else if (url.pathname === '/api/grids') json([grid]);
                 else if (url.pathname === `/api/grids/${gridKey}/items`) json(resources);
                 else if (url.pathname === `/api/grids/${gridKey}/cpus`) json({});

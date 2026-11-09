@@ -980,6 +980,9 @@ class IconDeliveryHttpTest {
         assertTrue(
             data.get("available")
                 .getAsBoolean());
+        assertFalse(
+            data.get("hasAnimations")
+                .getAsBoolean());
         assertEquals(
             packId,
             data.get("packId")
@@ -1066,6 +1069,10 @@ class IconDeliveryHttpTest {
     @Test
     void absentInvalidAndMismatchedPacksLeaveNormalServerAvailableAcrossRestarts() throws Exception {
         port = HttpServerTestFixture.startWorld(config);
+        assertFalse(
+            json(connection("/api/icon-pack")).getAsJsonObject("data")
+                .get("hasAnimations")
+                .getAsBoolean());
         assertFalse(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
@@ -1204,6 +1211,10 @@ class IconDeliveryHttpTest {
         }
         Files.move(generated, directory.resolve("ae2webintegration/icons.ae2wi-icons"));
         port = HttpServerTestFixture.startWorld(config);
+        assertTrue(
+            json(connection("/api/icon-pack")).getAsJsonObject("data")
+                .get("hasAnimations")
+                .getAsBoolean());
         AtomicInteger normalized = new AtomicInteger();
         Grid grid = new Grid(
             88103,

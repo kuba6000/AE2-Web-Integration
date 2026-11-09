@@ -34,6 +34,7 @@ for (const deviceScaleFactor of [1.25])
             viewport: { width: 1167, height: 900 }
         });
         await atlasFixture(page, options);
+        options.pack.hasAnimations = true;
         options.atlas = Buffer.from(
             await page.evaluate(() => {
                 const canvas = document.createElement('canvas');

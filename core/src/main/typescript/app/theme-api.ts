@@ -48,7 +48,7 @@ export type ThemeState = ReadonlyData<{
     /** Advances only when a full item snapshot is accepted, independently of live deltas. */
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
-    iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
+    iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
     itemError: string | null;
     refreshing: boolean;

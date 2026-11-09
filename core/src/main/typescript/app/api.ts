@@ -89,7 +89,7 @@ export type Api = {
     skipUpdate: (tag: string) => Promise<null>;
     iconPack: (
         signal?: AbortSignal
-    ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
+    ) => Promise<{ available: boolean; hasAnimations: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
     items: (
         gridKey: string,

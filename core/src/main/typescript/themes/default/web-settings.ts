@@ -1,6 +1,7 @@
 import type { ThemeContext, ThemeApplication, ThemeState, ThemeSettings } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { element } from './dom.js';
+import type { TooltipBindings } from './tooltip-bindings.js';
 
 export type TerminalDisplay = 'names' | 'both' | 'icons';
 
@@ -16,7 +17,8 @@ export function createWebSettings(
     workspace: HTMLElement,
     application: ThemeApplication,
     { settings, themes, lifetime }: Pick<ThemeContext, 'settings' | 'themes' | 'lifetime'>,
-    onDisplayChange: () => void
+    onDisplayChange: () => void,
+    tooltips: Pick<TooltipBindings, 'bind'>
 ) {
     root.innerHTML = `
         <div class="terminal-heading"><h2 id="web-settings-title" data-text="webSettings"></h2></div>
@@ -75,13 +77,16 @@ export function createWebSettings(
                     <span data-theme-text="resourcesPerPage"></span>
                     <select id="terminal-page-size"></select>
                 </label>
-                <label class="web-preference-toggle">
-                    <span data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons">
-                </label>
-                <label>
-                    <span><span id="animation-interval-label" data-theme-text="animationUpdateInterval"></span> — <output id="animation-interval-value" for="animation-update-interval"></output></span>
-                    <input type="range" id="animation-update-interval" min="0" max="1000" step="10" aria-labelledby="animation-interval-label">
-                </label>
+                <div class="web-preferences-section web-preference-field" id="animation-settings" role="group" aria-labelledby="animated-icons-label">
+                    <label class="web-preference-toggle">
+                        <span id="animated-icons-label" data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons" aria-describedby="animation-availability">
+                    </label>
+                    <label>
+                        <span><span id="animation-interval-label" data-theme-text="animationUpdateInterval"></span> — <output id="animation-interval-value" for="animation-update-interval"></output></span>
+                        <input type="range" id="animation-update-interval" min="0" max="1000" step="10" aria-labelledby="animation-interval-label" aria-describedby="animation-availability">
+                    </label>
+                    <p class="hint" id="animation-availability" role="status"></p>
+                </div>
             </section>
         </div>
         </div>
@@ -92,6 +97,9 @@ export function createWebSettings(
         animatedIcons: root.querySelector<HTMLInputElement>('#animated-icons')!,
         animationInterval: root.querySelector<HTMLInputElement>('#animation-update-interval')!,
         animationIntervalValue: root.querySelector<HTMLOutputElement>('#animation-interval-value')!,
+        animationSettings: root.querySelector<HTMLElement>('#animation-settings')!,
+        animationLabel: root.querySelector<HTMLElement>('#animated-icons-label')!,
+        animationAvailability: root.querySelector<HTMLParagraphElement>('#animation-availability')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
@@ -140,11 +148,18 @@ export function createWebSettings(
             ? savedInterval
             : 200;
     let uncappedLabel = '';
+    tooltips.bind(controls.animationSettings, () => [
+        element('span', controls.animationAvailability.textContent || controls.animationLabel.textContent || '')
+    ]);
     function renderAnimationInterval() {
         const value = animationInterval === 0 ? uncappedLabel : `${animationInterval} ms`;
         controls.animationInterval.value = String(animationInterval);
         controls.animationInterval.setAttribute('aria-valuetext', value);
-        controls.animationInterval.disabled = !controls.animatedIcons.checked;
+        const pack = application.state.iconPack;
+        controls.animatedIcons.disabled = pack.available !== true || pack.hasAnimations !== true;
+        controls.animationSettings.tabIndex = controls.animatedIcons.disabled ? 0 : -1;
+        controls.animationSettings.setAttribute('aria-disabled', String(controls.animatedIcons.disabled));
+        controls.animationInterval.disabled = controls.animatedIcons.disabled || !controls.animatedIcons.checked;
         controls.animationIntervalValue.value = value;
     }
     function updateAnimationInterval() {
@@ -217,6 +232,13 @@ export function createWebSettings(
     autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     function render(state: ThemeState, locale: Translator): TerminalDisplay {
         uncappedLabel = locale.t('animationUncapped');
+        const { available, hasAnimations, status } = state.iconPack;
+        let animationMessage = '';
+        if (status === 'error') animationMessage = locale.t('iconsError');
+        else if (available === false) animationMessage = locale.t('iconsUnavailable');
+        else if (status === 'loading') animationMessage = locale.t('iconsLoading');
+        else if (hasAnimations !== true) animationMessage = locale.t('animatedIconsUnavailable');
+        controls.animationAvailability.textContent = animationMessage;
         renderAnimationInterval();
         root.hidden = state.route.view !== 'web-settings';
         const language = state.preferences.language;
@@ -234,7 +256,6 @@ export function createWebSettings(
         document.documentElement.dataset.font = font;
 
         autoRefresh.checked = state.preferences.autoRefresh;
-        const { available, status } = state.iconPack;
         const effectiveDisplay = available === true ? terminalDisplay : 'names';
         const select = controls.terminalDisplay;
         select.value = effectiveDisplay;

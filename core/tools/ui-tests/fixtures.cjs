@@ -434,7 +434,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                     response.writeHead(503).end(JSON.stringify({ status: 'INTERNAL_ERROR', data: null }));
                     return;
                 }
-                const pack = options.pack || { available: false, packId: null, width: 0, height: 0 };
+                const pack = options.pack || {
+                    available: false,
+                    hasAnimations: false,
+                    packId: null,
+                    width: 0,
+                    height: 0
+                };
                 if (options.packDelay) await new Promise((resolve) => setTimeout(resolve, options.packDelay));
                 response.end(JSON.stringify({ status: 'OK', data: pack }));
             } else if (resource === '/api/auth/logout') {
@@ -897,7 +903,7 @@ async function atlasFixture(page, options) {
         height: 64,
         pages: [{ digest: 'b'.repeat(64), width: 128, height: 64 }]
     };
-    options.pack = { available: true, packId: options.icons.packId, width: 64, height: 64 };
+    options.pack = { available: true, hasAnimations: false, packId: options.icons.packId, width: 64, height: 64 };
 }
 
 // Public seam: API names become readable, safely styled browser content; section codes

@@ -337,6 +337,10 @@ public final class IconPack implements Closeable {
         return entries.get(key);
     }
 
+    public boolean hasAnimations() {
+        return !animations.isEmpty();
+    }
+
     /** One immutable page and ordered frame crops; null when the resource has only a static icon. */
     public @Nullable Animation animation(@NotNull StableKey key) {
         return animations.get(key);
