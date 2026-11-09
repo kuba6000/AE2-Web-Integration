@@ -279,6 +279,11 @@ public final class WorldDatabase implements AutoCloseable {
         } catch (SQLException | IOException | RuntimeException | Error failure) {
             if (opened != null) {
                 try {
+                    if (!opened.getAutoCommit()) opened.rollback();
+                } catch (SQLException rollback) {
+                    failure.addSuppressed(rollback);
+                }
+                try {
                     opened.close();
                     releaseOwnership();
                 } catch (SQLException closeFailure) {
