@@ -412,6 +412,10 @@ Java 25 for the Gradle daemon and the toolchains required by the adapters. Gradl
 frontend dependencies and compiles TypeScript.
 Node.js and npm are not required to run the finished mod.
 
+For manual testing in GTNH, Nomi-CEu, Monifactory or ATM10, use the
+[full modpack launchers](tools/fullpack/README.md). Each adapter provides `runFullPack` and
+`runFullServer`, with automatic pinned-pack downloads and separate disposable instances.
+
 See [frontend development](https://github.com/kuba6000/AE2-Web-Integration/blob/master/core/tools/ui-tests/README.md) for frontend commands and browser tests.
 
 ### API and custom themes

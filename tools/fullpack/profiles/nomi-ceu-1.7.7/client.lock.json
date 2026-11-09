@@ -1,0 +1,1962 @@
+{
+  "lockVersion": 1,
+  "source": "https://github.com/Nomi-CEu/Nomi-CEu/releases/download/1.7.7/nomi-ceu-1.7.7-client.zip",
+  "sourceSha256": "4cae9ec95a00f38a622336baac86eadf874d17403f3d63b744a776099dc6e798",
+  "allowHttp": false,
+  "manifest": {
+    "version": 1,
+    "files": [
+      {
+        "path": "mods/journeymap-1.12.2-5.7.1p3.jar",
+        "url": "https://edge.forgecdn.net/files/5172/461/journeymap-1.12.2-5.7.1p3.jar",
+        "sha1": "2b96f7b27b088fddbb5e603848d7aeaebedb96f3",
+        "sha256": "b72c9dd7e6dd0f7438c01ea8e440519bf4a3c0b47674810929a9c899dc98b406"
+      },
+      {
+        "path": "mods/EnderIO-1.12.2-5.3.72.jar",
+        "url": "https://edge.forgecdn.net/files/4674/244/EnderIO-1.12.2-5.3.72.jar",
+        "sha1": "60d62a0dab5b12c527fd8eda1d353888e3406175",
+        "sha256": "9b5e7756af35a191de8bc8f010c0f7c7ffc2e1e056a69ec265d1dd5ce90d19b4"
+      },
+      {
+        "path": "mods/Morpheus-1.12.2-3.5.106.jar",
+        "url": "https://edge.forgecdn.net/files/2664/449/Morpheus-1.12.2-3.5.106.jar",
+        "sha1": "c948341a1b2243d4f8081c4db2cd727c2c4a7ed0",
+        "sha256": "1904c32a8e0077e005bfefe005c26834c2df09881bc075a7deadce8da97fb457"
+      },
+      {
+        "path": "mods/CoFHCore-1.12.2-4.6.6.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2920/433/CoFHCore-1.12.2-4.6.6.1-universal.jar",
+        "sha1": "4dd5aa3ff30d7966ae253556f79bb3f13bc5576e",
+        "sha256": "e07b0c48def9ce8cfaa4cf7a7c656bf7f7d6815f74fbcc2957dd43efa78486a9"
+      },
+      {
+        "path": "mods/ThermalExpansion-1.12.2-5.5.7.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2926/431/ThermalExpansion-1.12.2-5.5.7.1-universal.jar",
+        "sha1": "3568d977c90987c58ad2c7cb3837c4ac8de49216",
+        "sha256": "f1cc8aeefcda2c00235bfb5ee7f76d731325aa324e90e84d7d232d88c1e6f472"
+      },
+      {
+        "path": "mods/bdlib-1.14.4.1-mc1.12.2.jar",
+        "url": "https://edge.forgecdn.net/files/4675/629/bdlib-1.14.4.1-mc1.12.2.jar",
+        "sha1": "6cb8cb1edc2897cf30f5071b04c29a2482d2b109",
+        "sha256": "b385f1a6f3f908673324ef03ed15b6bb5f588ce2e36443acc7273a6263cca045"
+      },
+      {
+        "path": "mods/RedstoneArsenal-1.12.2-2.6.6.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2939/416/RedstoneArsenal-1.12.2-2.6.6.1-universal.jar",
+        "sha1": "9c8c89fd184ee8631d155ec81eee0a7db287a5ec",
+        "sha256": "d2cc4aeb515dcd8360e1deed588db739920e04477dc4617e4ae4ee8edf40fcd9"
+      },
+      {
+        "path": "mods/ChestTransporter-1.12.2-2.8.8.jar",
+        "url": "https://edge.forgecdn.net/files/2524/58/ChestTransporter-1.12.2-2.8.8.jar",
+        "sha1": "50c48502302193af990ed3c33b6e23e1f240cb1d",
+        "sha256": "ea8ba7acdfaf7102cad7e3638bffa247bd5cfb634de4c355d47d33a8d2c724a1"
+      },
+      {
+        "path": "mods/modtweaker-4.0.20.5.jar",
+        "url": "https://edge.forgecdn.net/files/3488/553/modtweaker-4.0.20.5.jar",
+        "sha1": "4e1e9795f8344ffa76718ece16dc4692d0f630cf",
+        "sha256": "7c71da026b6d89b0c4d3d5138b4390dbed83cb36fa9b45faa1d4e2ae0ee9fc6a"
+      },
+      {
+        "path": "mods/ThermalFoundation-1.12.2-2.6.7.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2926/428/ThermalFoundation-1.12.2-2.6.7.1-universal.jar",
+        "sha1": "6bd93897638fd68794cae17c9520b68a85fc97d0",
+        "sha256": "5052f3e308b3ecb6620d26c5ab0cc15c0373732086337483a19fd4447e540ab0"
+      },
+      {
+        "path": "mods/Draconic-Evolution-1.12.2-2.3.28.354-universal.jar",
+        "url": "https://edge.forgecdn.net/files/3431/261/Draconic-Evolution-1.12.2-2.3.28.354-universal.jar",
+        "sha1": "aa952832b369ff12a26ef608ee7a001b687ca226",
+        "sha256": "1eecdefa00056efac98ff56e25f7ed840b70e2d809c628e38c9c5b5518ff14ff"
+      },
+      {
+        "path": "mods/StorageDrawers-1.12.2-5.5.3.jar",
+        "url": "https://edge.forgecdn.net/files/5981/297/StorageDrawers-1.12.2-5.5.3.jar",
+        "sha1": "8be312005dc837372bfbe2dfb8db77822d326062",
+        "sha256": "26337559bad06539175f0a5fe886db816f0f6045d96be4737493a0e669117e2f"
+      },
+      {
+        "path": "mods/extrautils2-1.12-1.9.9.jar",
+        "url": "https://edge.forgecdn.net/files/2678/374/extrautils2-1.12-1.9.9.jar",
+        "sha1": "9f9a217b23626cb338cf229054ed490d913610dc",
+        "sha256": "6c1809eb2222604ebf3c051e1c7834b84049013b537633c2e5a1b0077ef9a940"
+      },
+      {
+        "path": "mods/NuclearCraft-2.18y-1.12.2.jar",
+        "url": "https://edge.forgecdn.net/files/3074/246/NuclearCraft-2.18y-1.12.2.jar",
+        "sha1": "0adb73ab9ad85959767efcac005b5ff6e8c4bb05",
+        "sha256": "1e4f7d787f4c8350eaaf1527571d6da44cc08d1ab008970786487edebbdebf5a"
+      },
+      {
+        "path": "mods/CustomMainMenu-MC1.12.2-2.0.9.1.jar",
+        "url": "https://edge.forgecdn.net/files/2857/869/CustomMainMenu-MC1.12.2-2.0.9.1.jar",
+        "sha1": "9aad10a13bed75b6061a33219ab4f2f39e0ccc12",
+        "sha256": "63b8e4d86b336739c9df8275d28e61519c73c815d0ba9ec18fb8d0cf8a218488"
+      },
+      {
+        "path": "mods/ResourceLoader-MC1.12.1-1.5.3.jar",
+        "url": "https://edge.forgecdn.net/files/2477/566/ResourceLoader-MC1.12.1-1.5.3.jar",
+        "sha1": "d8c10e6e29df5f9bc51e468642d9b3cae5f2f8e4",
+        "sha256": "5c5ee114dccab5caca1772e3487eca04e161c494baca4d53c8fddf5cf8722e56"
+      },
+      {
+        "path": "mods/Baubles-1.12-1.5.2.jar",
+        "url": "https://edge.forgecdn.net/files/2518/667/Baubles-1.12-1.5.2.jar",
+        "sha1": "cb13fcfb18a9cb0cbd825fd5fe8d813c77368549",
+        "sha256": "b32010b2f2778aa1188585e7ead91ad46d4cb2c715f9c778a61848ba7fe51f8d"
+      },
+      {
+        "path": "mods/ActuallyAdditions-1.12.2-r152.jar",
+        "url": "https://edge.forgecdn.net/files/3117/927/ActuallyAdditions-1.12.2-r152.jar",
+        "sha1": "6e5f7deda0d3cf196b38f57eb60ef18a85b0ca2d",
+        "sha256": "21311e401f36a58222a50b6f0d66ac29614d7ab039c961dcc307fe499da030b6"
+      },
+      {
+        "path": "mods/Bookshelf-1.12.2-2.3.590.jar",
+        "url": "https://edge.forgecdn.net/files/2836/960/Bookshelf-1.12.2-2.3.590.jar",
+        "sha1": "83a1864dd78f48102609849dd36866d6cf32b907",
+        "sha256": "043afbddfd567e753a893f5a8f0e052db7c45209a08d09d9dcf32cadca764109"
+      },
+      {
+        "path": "mods/ProjectRed-1.12.2-4.9.4.120-Base.jar",
+        "url": "https://edge.forgecdn.net/files/2745/545/ProjectRed-1.12.2-4.9.4.120-Base.jar",
+        "sha1": "11168221284c53b89363e93ab36110a29c26c1a2",
+        "sha256": "8345e86d84cc38e8017fef9b20b1160b4a988637e14b8bcb5b817747d8e63570"
+      },
+      {
+        "path": "mods/MrTJPCore-1.12.2-2.1.4.43-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2735/197/MrTJPCore-1.12.2-2.1.4.43-universal.jar",
+        "sha1": "981382e6c623e8fe68cee07c8ee1f6f2c77b94dd",
+        "sha256": "82652f00e513c61c99a791abf2cbc10fdfb0e3a79e4eb02b305cccbc2d2f0087"
+      },
+      {
+        "path": "mods/ProjectRed-1.12.2-4.9.4.120-integration.jar",
+        "url": "https://edge.forgecdn.net/files/2745/548/ProjectRed-1.12.2-4.9.4.120-integration.jar",
+        "sha1": "f05cda479b14d41e02120295b4bcbb0ab25738d2",
+        "sha256": "659623f496dd457dd689c69dbd7a593453f65f78662a4af8dc624bfff33ee2eb"
+      },
+      {
+        "path": "mods/Chameleon-1.12-4.1.3.jar",
+        "url": "https://edge.forgecdn.net/files/2450/900/Chameleon-1.12-4.1.3.jar",
+        "sha1": "5ed3dd5fd1ebded57bfe525b4ece11232bd14e5e",
+        "sha256": "238416f801acda67b90fba9e0e572dbd6e7631b7e64c3eb3d6226f45ae536c87"
+      },
+      {
+        "path": "mods/BrandonsCore-1.12.2-2.4.20.162-universal.jar",
+        "url": "https://edge.forgecdn.net/files/3408/276/BrandonsCore-1.12.2-2.4.20.162-universal.jar",
+        "sha1": "f6035eb93d9c7b91334ed7bfc17ed36c8c9d86c8",
+        "sha256": "7f26e2cad131d3cb79296b0309dbde4f361b34c7f602d9575aecff893bb04d76"
+      },
+      {
+        "path": "mods/EnderCore-1.12.2-0.5.78.jar",
+        "url": "https://edge.forgecdn.net/files/4671/384/EnderCore-1.12.2-0.5.78.jar",
+        "sha1": "96c2389a5fdb2968cd69fc80b478a9a0b0ecc441",
+        "sha256": "adbd309f6c8001c38c4630aa701cdc5ea59fa7ee9ffa770e21f56b160adb443c"
+      },
+      {
+        "path": "mods/Chisel-MC1.12.2-1.0.2.45.jar",
+        "url": "https://edge.forgecdn.net/files/2915/375/Chisel-MC1.12.2-1.0.2.45.jar",
+        "sha1": "d378cee9195841ea78bb9800f543d718ef2c60ef",
+        "sha256": "64c62f20a89939db2c03d47737c7bd371d8bd8c10ae42e2e8c63432ae89db2c7"
+      },
+      {
+        "path": "mods/TrashSlot_1.12.2-8.4.10.jar",
+        "url": "https://edge.forgecdn.net/files/2722/385/TrashSlot_1.12.2-8.4.10.jar",
+        "sha1": "afd3e28370aaeb18d35ac0143307a0e0350e7c84",
+        "sha256": "ddb13a0209cd38bdff452cf583e7453fe10f45f3c8e49e444af533d6cc82f940"
+      },
+      {
+        "path": "mods/LibVulpes-1.12.2-0.4.2-75-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2949/886/LibVulpes-1.12.2-0.4.2-75-universal.jar",
+        "sha1": "7a8c2f5e206d02779fb8d15ecca0b1c7316a64be",
+        "sha256": "1419cd97c7d661e1f54aec01b83c2caa3f9ea563693b34e9959967838b594175"
+      },
+      {
+        "path": "mods/AdvancedRocketry-1.12.2-1.7.0-232-universal.jar",
+        "url": "https://edge.forgecdn.net/files/3015/79/AdvancedRocketry-1.12.2-1.7.0-232-universal.jar",
+        "sha1": "c76482331a007c095675c18423d0c89210ea5ce9",
+        "sha256": "5ba44110e530c6c13c4c46e59fa7ea1a9e090d43d870d210eff8d77a8d0e0e8f"
+      },
+      {
+        "path": "mods/FTBUtilities-5.4.1.131.jar",
+        "url": "https://edge.forgecdn.net/files/3157/548/FTBUtilities-5.4.1.131.jar",
+        "sha1": "d1f6545ac58ad895f2c8bcd0d4963d92f14b1938",
+        "sha256": "e458fe39aba9ba28122496e54f826e4f61df515ed1f8d0c70cc9e56f67a5404a"
+      },
+      {
+        "path": "mods/FTBLib-5.4.7.2.jar",
+        "url": "https://edge.forgecdn.net/files/2985/811/FTBLib-5.4.7.2.jar",
+        "sha1": "7c20cd223bc2334edf153e074f35acdbcab3c976",
+        "sha256": "623fc574f0227fec6cc9e26c3879a605f9b4499c0078ff085291901a5495a6ac"
+      },
+      {
+        "path": "mods/armorplus-1.12.2-11.25.1.62.jar",
+        "url": "https://edge.forgecdn.net/files/2803/109/armorplus-1.12.2-11.25.1.62.jar",
+        "sha1": "a9d23317b0e36eeaf42d077d9bfc9ad22f859b93",
+        "sha256": "c7f6c0daac33d527e9f20e5238610171c8653cff77c1d348fa37a0e1db3ec3a0"
+      },
+      {
+        "path": "mods/modnametooltip_1.12.2-1.10.1.jar",
+        "url": "https://edge.forgecdn.net/files/2739/582/modnametooltip_1.12.2-1.10.1.jar",
+        "sha1": "46e4e9aa1a443de953088148fdcd3c7b9255d7cf",
+        "sha256": "c779c2b7f6105ded36163801c7458baf677075f862bcabe7b1b29121799a31f6"
+      },
+      {
+        "path": "mods/CraftTweaker2-1.12-4.1.20.709.jar",
+        "url": "https://edge.forgecdn.net/files/6929/88/CraftTweaker2-1.12-4.1.20.709.jar",
+        "sha1": "15aa4bc8d3e01621e8b045c3a33ccba8058207d5",
+        "sha256": "10f9b14779416ff036b25780747f4307c4c4a74bd8136db1dd99fb39b1946fc9"
+      },
+      {
+        "path": "mods/JustEnoughResources-1.12.2-0.9.3.203.jar",
+        "url": "https://edge.forgecdn.net/files/4440/935/JustEnoughResources-1.12.2-0.9.3.203.jar",
+        "sha1": "cabcc7f31532215a6dd7c884ae281b59e0a53e2c",
+        "sha256": "dfacf1111862a95ed5803499ce5229a194a2e92be7e308fd5f423b017addbc09"
+      },
+      {
+        "path": "mods/Snad-1.12.1-1.7.09.16a.jar",
+        "url": "https://edge.forgecdn.net/files/2480/458/Snad-1.12.1-1.7.09.16a.jar",
+        "sha1": "c978dbfca262e0b2f5cc0132dd76a5e2d2901304",
+        "sha256": "c38dbf3b805dfbd0412dd7ab7d75dac2a2772a7d26e9a975e39e33074de83506"
+      },
+      {
+        "path": "mods/DarkUtils-1.12.2-1.8.230.jar",
+        "url": "https://edge.forgecdn.net/files/2813/586/DarkUtils-1.12.2-1.8.230.jar",
+        "sha1": "3f34c35903ca09e637dc3426eb81ca64ced0429a",
+        "sha256": "62ef749c6c4acd3b057a9d13e46626910fe4a4b877603d50c82af58a73485d33"
+      },
+      {
+        "path": "mods/JustEnoughCalculation-1.12.2-3.2.7.jar",
+        "url": "https://edge.forgecdn.net/files/3524/685/JustEnoughCalculation-1.12.2-3.2.7.jar",
+        "sha1": "af07e8e6567e910f679b14f9b67b23da3213eeb2",
+        "sha256": "5fc2aed14ac29f715af29ea26016e018f2a734fadfe3fc60d52d07206cf054f4"
+      },
+      {
+        "path": "mods/CodeChickenLib-1.12.2-3.2.3.358-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2779/848/CodeChickenLib-1.12.2-3.2.3.358-universal.jar",
+        "sha1": "b6a7e3b889c354216059a3bfad298e30a1e46a2d",
+        "sha256": "5f8499f7ee2590e45110bbf296b2bf101aec15897e28d5e9759cf8f2387d8a74"
+      },
+      {
+        "path": "mods/CraftableElytra-1.1.jar",
+        "url": "https://edge.forgecdn.net/files/2540/650/CraftableElytra-1.1.jar",
+        "sha1": "cc72da339655263e171813baed556339b6649e25",
+        "sha256": "c21c5a1050b4518e53093f31b8135247827baab450b6fc8f7b9647184a93ef37"
+      },
+      {
+        "path": "mods/moreoverlays-1.15.1-mc1.12.2.jar",
+        "url": "https://edge.forgecdn.net/files/2745/657/moreoverlays-1.15.1-mc1.12.2.jar",
+        "sha1": "b308fe363f23343d0b073d04883c5fca63b08d0b",
+        "sha256": "428542f8e4e9a683826058fd113d6e74121a3d47c7e796d7cb96ceed801102ad"
+      },
+      {
+        "path": "mods/WirelessCraftingTerminal-1.12.2-3.12.97.jar",
+        "url": "https://edge.forgecdn.net/files/2830/252/WirelessCraftingTerminal-1.12.2-3.12.97.jar",
+        "sha1": "f1ec1a90b4c351cfc17c6d9a3cbd3c1607258c4e",
+        "sha256": "69e5b82f33925169e33456a5f6b3202917c06fc34f1f32f71cf553b0733f0114"
+      },
+      {
+        "path": "mods/EnderStorage-1.12.2-2.4.6.137-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2755/787/EnderStorage-1.12.2-2.4.6.137-universal.jar",
+        "sha1": "7a872baf72b1da038704056a0cf7bbcc40bfa4d6",
+        "sha256": "06e2357019f4e0836bfb9202af013adc125252f610b198a7a547d4596d2934c0"
+      },
+      {
+        "path": "mods/SolarFluxReborn-1.12.2-12.4.11.jar",
+        "url": "https://edge.forgecdn.net/files/3050/838/SolarFluxReborn-1.12.2-12.4.11.jar",
+        "sha1": "521624cbd22f7dcef0ddc9f9f0898b2368439404",
+        "sha256": "be490ddbeb08b35ba76bee38feaae465a9553ba3bcfbe2d5eef83875d5b5eda2"
+      },
+      {
+        "path": "mods/base-1.12.2-3.14.0.jar",
+        "url": "https://edge.forgecdn.net/files/3440/963/base-1.12.2-3.14.0.jar",
+        "sha1": "4fbf3bae670f626028e29b57622b0ee98a8ad4db",
+        "sha256": "5ec979220887e4e73772ecdb5dceb8a258b4da974bd4ece8fd85cade089913d4"
+      },
+      {
+        "path": "mods/topaddons-1.12.2-1.13.0.jar",
+        "url": "https://edge.forgecdn.net/files/2887/479/topaddons-1.12.2-1.13.0.jar",
+        "sha1": "81fd91d9b4579a3f07a8d3b860f7db5426e77c72",
+        "sha256": "d29f313101f814caa15c589ad1352579922ac588fc11500af2fabeeefbcc70a2"
+      },
+      {
+        "path": "mods/thedragonlib-1.12.2-5.3.0.jar",
+        "url": "https://edge.forgecdn.net/files/2580/332/thedragonlib-1.12.2-5.3.0.jar",
+        "sha1": "8b74708e6cea88f6939306d069505db74e2e2f6a",
+        "sha256": "d9cafb914f3c4a583157a9c23d394dedd3cdd6aa9b27b8ca5f333797e9959fe8"
+      },
+      {
+        "path": "mods/AppleSkin-mc1.12-1.0.14.jar",
+        "url": "https://edge.forgecdn.net/files/2987/247/AppleSkin-mc1.12-1.0.14.jar",
+        "sha1": "d798af79de48be0f00c772943e5ec5a2fb5659fa",
+        "sha256": "4bbd37edecff0b420ab0eea166b5d7b4b41a9870bfb8647bf243140dc57f101e"
+      },
+      {
+        "path": "mods/AutoRegLib-1.3-32.jar",
+        "url": "https://edge.forgecdn.net/files/2746/11/AutoRegLib-1.3-32.jar",
+        "sha1": "267269ca7f1a71fb3bb35bdb8e61702a4da6263e",
+        "sha256": "d8610a94da8f30815db4612b3291ecdcfd8204eaf1a4db8c5d0663c7b1191d91"
+      },
+      {
+        "path": "mods/Controlling-3.0.12.4.jar",
+        "url": "https://edge.forgecdn.net/files/5408/385/Controlling-3.0.12.4.jar",
+        "sha1": "d588b1fefb912c1080d397834b6300e59409183c",
+        "sha256": "f5edd4793f96cd5a6f31aecbd3030093b367a51afba5d6f7281756d0f9c03786"
+      },
+      {
+        "path": "mods/EnchantmentDescriptions-1.12.2-1.1.20.jar",
+        "url": "https://edge.forgecdn.net/files/2898/966/EnchantmentDescriptions-1.12.2-1.1.20.jar",
+        "sha1": "d82e9d326b9d40904edb189077fabe0f5f47557a",
+        "sha256": "a67a4cf91eb47c7cf345ad8ae956688e29b55bb99b03024d43981595e4282b96"
+      },
+      {
+        "path": "mods/ElevatorMod-1.12.2-1.3.14.jar",
+        "url": "https://edge.forgecdn.net/files/2845/365/ElevatorMod-1.12.2-1.3.14.jar",
+        "sha1": "7701eb987d8102a345e46725f4f2c6b9fc83005c",
+        "sha256": "2f4f60a5a5016f1805fcc085b3f490ff51c7ceb5b3c728619c7572b04c027684"
+      },
+      {
+        "path": "mods/ClientTweaks_1.12.2-3.1.11.jar",
+        "url": "https://edge.forgecdn.net/files/2624/712/ClientTweaks_1.12.2-3.1.11.jar",
+        "sha1": "c6c31bc3e10fe8da49cb37088ec3d0e8d481ad46",
+        "sha256": "ac75e2d505bda70dc3c4f0778d66a79213870ee43b74744e31e37f9c3aaf7654"
+      },
+      {
+        "path": "mods/SimplyJetpacks2-1.12.2-2.2.15.69.jar",
+        "url": "https://edge.forgecdn.net/files/3017/440/SimplyJetpacks2-1.12.2-2.2.15.69.jar",
+        "sha1": "731aac71a7381b28b30ad3f0fb1d9d0f79090a1f",
+        "sha256": "ec54c1b047354a15d77dd426432e561664c785699fabeddb589fb2a3a12901c2"
+      },
+      {
+        "path": "mods/OpenGlider-1.12.1-1.1.0.jar",
+        "url": "https://edge.forgecdn.net/files/2464/501/OpenGlider-1.12.1-1.1.0.jar",
+        "sha1": "8d2f6a5321df463ea46abab13468785dc3847d12",
+        "sha256": "f2c8045b82b15019daf970bde833d555e35de990964e22e0b84001188ab2ff5d"
+      },
+      {
+        "path": "mods/NaturesCompass-1.12.2-1.8.5.jar",
+        "url": "https://edge.forgecdn.net/files/2893/527/NaturesCompass-1.12.2-1.8.5.jar",
+        "sha1": "60bcf179cab708f67bbce98d201e82f3e7be9266",
+        "sha256": "bd4f556b7e5480687dbc09735dca05a1ceb3622dc93422adb5dab4f68cc9f2d1"
+      },
+      {
+        "path": "mods/MTLib-3.0.7.jar",
+        "url": "https://edge.forgecdn.net/files/3308/160/MTLib-3.0.7.jar",
+        "sha1": "7d2b9e97518dca1e9326fd347ba1eb93dec35999",
+        "sha256": "e978ce61b6177ec07a9db231d05a64415239c836f43f5cbcc0cf01bd9da4b3e2"
+      },
+      {
+        "path": "mods/torchmaster_1.12.2-1.8.5.0.jar",
+        "url": "https://edge.forgecdn.net/files/3529/742/torchmaster_1.12.2-1.8.5.0.jar",
+        "sha1": "8bc4bae76967b025746768473462d446ee09f505",
+        "sha256": "c8e0099dcda96d0d284db19be2998fac0a9dd71f84d90ea2b03b07fdf36eafa1"
+      },
+      {
+        "path": "mods/p455w0rdslib-1.12.2-2.3.161.jar",
+        "url": "https://edge.forgecdn.net/files/2830/265/p455w0rdslib-1.12.2-2.3.161.jar",
+        "sha1": "be56bc229b7f418675bf46277e37a8272def5327",
+        "sha256": "e5844c044d9f2ce2f23eef84d95eea8cc1f2c5581874bd01410e7d103b90a424"
+      },
+      {
+        "path": "mods/Clumps-3.1.2.jar",
+        "url": "https://edge.forgecdn.net/files/2666/198/Clumps-3.1.2.jar",
+        "sha1": "6ea78bea8006e3924bc37c2aef0115134c8af07b",
+        "sha256": "f3ce670e0087f4c6b770fd05ae5c3dfd8462f74c62397932ea72954d1c6c8df4"
+      },
+      {
+        "path": "mods/Xtones-1.2.2.jar",
+        "url": "https://edge.forgecdn.net/files/3248/33/Xtones-1.2.2.jar",
+        "sha1": "0e4d2c453000370722e384eaca047958f898996f",
+        "sha256": "e5ebc5a68d5b7648f255d66c191d577d4b51c06535c81c8fa0df17d281da06fb"
+      },
+      {
+        "path": "mods/CreativeCore_v1.10.71_mc1.12.2.jar",
+        "url": "https://edge.forgecdn.net/files/4722/163/CreativeCore_v1.10.71_mc1.12.2.jar",
+        "sha1": "2c60a20ae9c9431a3b215a331c2b2af7fa3a060c",
+        "sha256": "b0ef34ec816fa91451f8d4b62c016c159ab3559d6f75870790d1215943f009d5"
+      },
+      {
+        "path": "mods/LittleTiles_v1.5.87_mc1.12.2.jar",
+        "url": "https://edge.forgecdn.net/files/5180/387/LittleTiles_v1.5.87_mc1.12.2.jar",
+        "sha1": "f77d34ddd13caeb4781908443f73e51b9118fe60",
+        "sha256": "ceff70615c898883180c34992c4568bd288858227830b10a04d579969c8c8d36"
+      },
+      {
+        "path": "mods/ForgeMultipart-1.12.2-2.6.2.83-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2755/790/ForgeMultipart-1.12.2-2.6.2.83-universal.jar",
+        "sha1": "3306ea22380bc9b6a0170b23fa0251085d5a6e25",
+        "sha256": "25718bd80799a608c45299d13d86e5d67248f07a3c00657c690948b1821835ce"
+      },
+      {
+        "path": "mods/FasterLadderClimbing-1.12-0.1-146.jar",
+        "url": "https://edge.forgecdn.net/files/2512/758/FasterLadderClimbing-1.12-0.1-146.jar",
+        "sha1": "8f078c9f4389687103dc5f053403a921e9ac849d",
+        "sha256": "aac69179428a4efd0f4a28668a5467c4807c256ae85d6cbba51c1245f77b68c7"
+      },
+      {
+        "path": "mods/ToolBelt-1.12.2-1.9.14.jar",
+        "url": "https://edge.forgecdn.net/files/3459/767/ToolBelt-1.12.2-1.9.14.jar",
+        "sha1": "6a9078c5d0f9e92a9f66ded407cba4b48dadbdf8",
+        "sha256": "66f4a7c5b894fe2d1c134c1868094709d9eceee36a5ea2ecec70b01ef1f5079c"
+      },
+      {
+        "path": "mods/Avaritia-1.12.2-3.3.0.37-universal.jar",
+        "url": "https://edge.forgecdn.net/files/3143/349/Avaritia-1.12.2-3.3.0.37-universal.jar",
+        "sha1": "7b60729ab6e144803160c955fcb1e6d695a1aba6",
+        "sha256": "e37b89bf89d5cb75d0605cf03863537b7e52a73e2ff6fb033161989c43d33876"
+      },
+      {
+        "path": "mods/TombManyGraves-1.12-4.2.0.jar",
+        "url": "https://edge.forgecdn.net/files/2619/249/TombManyGraves-1.12-4.2.0.jar",
+        "sha1": "cfba896b87294e2351c383b5d4127112d26ab5e0",
+        "sha256": "3fef07b3124a16250645c9549b9b67e0a85dde29b5b27b16d33581b531f25fce"
+      },
+      {
+        "path": "mods/moreplates-1.12.2-5.5.2.jar",
+        "url": "https://edge.forgecdn.net/files/2668/113/moreplates-1.12.2-5.5.2.jar",
+        "sha1": "fa08e8954c395f7dc074bc8de4f55e48d8ab130b",
+        "sha256": "e6e5f35869a1267f47341279e844665e0338435f6b6a9ee5bb130afa6bb80aee"
+      },
+      {
+        "path": "mods/CTM-MC1.12.2-1.0.2.31.jar",
+        "url": "https://edge.forgecdn.net/files/2915/363/CTM-MC1.12.2-1.0.2.31.jar",
+        "sha1": "892e0788531269bfa2f356e4e12825e19d4e5412",
+        "sha256": "433f441dc9c0aa75a4168df832900720ddadac1f22cc3bba4e4f25ca789b268b"
+      },
+      {
+        "path": "mods/lostcities-1.12-2.0.22.jar",
+        "url": "https://edge.forgecdn.net/files/2861/574/lostcities-1.12-2.0.22.jar",
+        "sha1": "dcea94d4a3d05f8282e014fcfe69048feafe4ce0",
+        "sha256": "d29a3fb8fa4c4d74dfadb9deee2eb501e5840c6217be80e24370dcbb709d32b3"
+      },
+      {
+        "path": "mods/RedstoneFlux-1.12-2.1.1.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2920/436/RedstoneFlux-1.12-2.1.1.1-universal.jar",
+        "sha1": "7835c1dcc006e5d4a406a6b0615012b825e25044",
+        "sha256": "6ff7f96d076bfaad83fb6ba92ec457b8a76391439663b0cc32a9ec5398345280"
+      },
+      {
+        "path": "mods/CoFHWorld-1.12.2-1.4.0.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2920/434/CoFHWorld-1.12.2-1.4.0.1-universal.jar",
+        "sha1": "863e1524fe0087d434a5e44d27cc2dd0353b9399",
+        "sha256": "f10cd57075690ecbe52094f8af0d2a5af12f89c82b7c6eb73d3d090d74206ea0"
+      },
+      {
+        "path": "mods/ThermalCultivation-1.12.2-0.3.6.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2920/437/ThermalCultivation-1.12.2-0.3.6.1-universal.jar",
+        "sha1": "4aef97dad21a3b8cd6cce7bcf601b41574cb22ff",
+        "sha256": "d26cae12decefd72dd02d959ece758ee8261f090b4cc8fdd24b870ed148b5a24"
+      },
+      {
+        "path": "mods/Cucumber-1.12.2-1.1.3.jar",
+        "url": "https://edge.forgecdn.net/files/2645/867/Cucumber-1.12.2-1.1.3.jar",
+        "sha1": "8be30f1977cd9df566dfbae2977793335e576591",
+        "sha256": "0475ba0f0964c4a56afd1c2765b7063849ca2b77a91d80d7f612fb15354c27e5"
+      },
+      {
+        "path": "mods/ActuallyBaubles-1.12-1.1.jar",
+        "url": "https://edge.forgecdn.net/files/2459/131/ActuallyBaubles-1.12-1.1.jar",
+        "sha1": "f9ff7eff30f5de77a67ddf3ff965e51b1d9e0616",
+        "sha256": "69817c09c8f0252098142383036062ca2e91d05bd1e422e3ae6682e8423e4bc1"
+      },
+      {
+        "path": "mods/architecturecraft-1.12-3.108.jar",
+        "url": "https://edge.forgecdn.net/files/4344/128/architecturecraft-1.12-3.108.jar",
+        "sha1": "45a0bff7cdc7d22e7172baeebaf8202c3208bf22",
+        "sha256": "34a864afeceb60f744b5071ba625de5d294143f7c08740642cb21482b288bd7e"
+      },
+      {
+        "path": "mods/packmode-1.12.2-1.2.0.jar",
+        "url": "https://edge.forgecdn.net/files/2567/799/packmode-1.12.2-1.2.0.jar",
+        "sha1": "69f53ba7d8c9c349768d2bc5b4a4269fde7acb0b",
+        "sha256": "c5433d2f0864b6ae1075147c709817a97b8f99370fc56037d21fc200d7e0ff44"
+      },
+      {
+        "path": "mods/DenseMetals-1.12.2-2.0.0.30.jar",
+        "url": "https://edge.forgecdn.net/files/2833/2/DenseMetals-1.12.2-2.0.0.30.jar",
+        "sha1": "9274a6e3d42b12915d1067a982155efc9b66cf1c",
+        "sha256": "9d2670fcaf9eb349f898f7e844db8612963e8968b6e61bd34ee3df3b311ff358"
+      },
+      {
+        "path": "mods/CraftingNetherStar 1.12.1 -1.1.jar",
+        "url": "https://edge.forgecdn.net/files/2491/542/CraftingNetherStar%201.12.1%20-1.1.jar",
+        "sha1": "9a2bf7aca0ce6bf14b231d1f177f8ad5cd719dcf",
+        "sha256": "547e3650ee744d2fe6a6c5e7a08e93075b7f81636453b877f9876659dd6343d6"
+      },
+      {
+        "path": "mods/TipTheScales-1.12.2-1.0.4.jar",
+        "url": "https://edge.forgecdn.net/files/2689/835/TipTheScales-1.12.2-1.0.4.jar",
+        "sha1": "e63241c7fa81c7fce9f3df0121682bcdcb63929c",
+        "sha256": "91eab825f0730d412a05a40136e9f0755b9a2b9483fc92255cba08e282a1e146"
+      },
+      {
+        "path": "mods/Placebo-1.12.2-1.6.1.jar",
+        "url": "https://edge.forgecdn.net/files/4629/597/Placebo-1.12.2-1.6.1.jar",
+        "sha1": "d2142220e0944a8ad9d76ad7f50a5aa8d4e5fd80",
+        "sha256": "6fe241d316a61314aad22ab80664a1741a2c8f1b2368d73723b62ecc41dfeb0f"
+      },
+      {
+        "path": "mods/ThermalInnovation-1.12.2-0.3.6.1-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2920/441/ThermalInnovation-1.12.2-0.3.6.1-universal.jar",
+        "sha1": "a2603c82d0deefef67b3708fd79fd1e813b4d080",
+        "sha256": "5c72f0db4476dab72c5c9cb68e9ef21ddb45f7b4cbedf4673d069f7d194b9886"
+      },
+      {
+        "path": "mods/CraftPresence-2.7.0+1.12.2-forge.jar",
+        "url": "https://edge.forgecdn.net/files/7146/337/CraftPresence-2.7.0%2b1.12.2-forge.jar",
+        "sha1": "b038ea06eef589216967f0c0ccd0d7e8023e9aeb",
+        "sha256": "3db4f9ef7273ba1d6fd89cbbb58003a7d368c2f340a59a72ebd35ccee7b26c87"
+      },
+      {
+        "path": "mods/hooked-1.0.3.jar",
+        "url": "https://edge.forgecdn.net/files/2607/310/hooked-1.0.3.jar",
+        "sha1": "b6782fc948c75b2e4afca26af3bb408983023f35",
+        "sha256": "73e0a8cfd842e9ac95cd78f89f752eaac4042d6a4eabcb5f482e963fefcc30f7"
+      },
+      {
+        "path": "mods/BuildingGadgets-2.8.4.jar",
+        "url": "https://edge.forgecdn.net/files/3005/950/BuildingGadgets-2.8.4.jar",
+        "sha1": "7f33f2343bf0af70d5d853378d465657beea3740",
+        "sha256": "1f130a49dbcdd56ec24df38710d6fe67e95880294f9941c28a4d4a104d1ddec5"
+      },
+      {
+        "path": "mods/worleycaves-1.12.2-1.5.2.jar",
+        "url": "https://edge.forgecdn.net/files/3038/801/worleycaves-1.12.2-1.5.2.jar",
+        "sha1": "ad8d5845683a65981b54d9737d9dcccaf8ae9b9c",
+        "sha256": "85aaefc2caae45fecf584160bf41db75d72a65b8ae7d879eceafd77fde03a501"
+      },
+      {
+        "path": "mods/effortlessbuilding-1.12.2-2.16.jar",
+        "url": "https://edge.forgecdn.net/files/2847/346/effortlessbuilding-1.12.2-2.16.jar",
+        "sha1": "20dbc6175aaff8164f08a8034eca5e91d8a1e659",
+        "sha256": "b534b51d4b4d329f2a3c81fdcd4a461319752821bd4f075e76fea4029fdbd3f1"
+      },
+      {
+        "path": "mods/AE2WTLib-1.12.2-1.0.34.jar",
+        "url": "https://edge.forgecdn.net/files/2830/114/AE2WTLib-1.12.2-1.0.34.jar",
+        "sha1": "d76ffb730d9e02aeb6dd5bb3c5dd5fa39f5fe1b9",
+        "sha256": "6d0ec545bf94e6142b4140f910aae4114b1f92298e820c12fa91af35a3c90d60"
+      },
+      {
+        "path": "mods/EnderIO-endergy-1.12.2-5.3.72.jar",
+        "url": "https://edge.forgecdn.net/files/4674/241/EnderIO-endergy-1.12.2-5.3.72.jar",
+        "sha1": "8680a3378f36adb2680fae14a9cfa9d2abbd5694",
+        "sha256": "8379e7174304658873e5e260aeb362d5c4f4dc450fae6f81ee2fde7d07645a98"
+      },
+      {
+        "path": "mods/morelibs-1.12.2-1.2.2.jar",
+        "url": "https://edge.forgecdn.net/files/2669/468/morelibs-1.12.2-1.2.2.jar",
+        "sha1": "0a8925bf2cbca5353d693562d9f3267917400646",
+        "sha256": "17dfb6558732f7761cb9584349de80f88ea7c4a4ffd06ce6842b54bd6a2a64cc"
+      },
+      {
+        "path": "mods/ProjectIntelligence-1.12.2-1.0.9.28-universal.jar",
+        "url": "https://edge.forgecdn.net/files/2833/640/ProjectIntelligence-1.12.2-1.0.9.28-universal.jar",
+        "sha1": "d6424c4111913a48f9c983199d07140136a12ee1",
+        "sha256": "bdbb48ac3f504f224e5383e281e56e773aa6261defb6912c99fb6e0088d6fae9"
+      },
+      {
+        "path": "mods/moresoundconfig-1.0.4.jar",
+        "url": "https://edge.forgecdn.net/files/2707/92/moresoundconfig-1.0.4.jar",
+        "sha1": "5a17517653deef1faf9d47005aad288b7c61ecaa",
+        "sha256": "7a62ee6873864043d345a9ddda02696d71121193e21f06cae645479975f35c1f"
+      },
+      {
+        "path": "mods/Patchouli-1.0-23.6.jar",
+        "url": "https://edge.forgecdn.net/files/3162/874/Patchouli-1.0-23.6.jar",
+        "sha1": "0febe14bdd007b13f6089a16a57d90e44646f041",
+        "sha256": "8fcceac75c71e0d041db734111200205d03431b7e8646f8209cf2c4de9afef7b"
+      },
+      {
+        "path": "mods/PackagedAuto-1.12.2-1.0.23.72.jar",
+        "url": "https://edge.forgecdn.net/files/7222/356/PackagedAuto-1.12.2-1.0.23.72.jar",
+        "sha1": "6afa5ea240a04b82e4e1d2da09e60a8fd43853f6",
+        "sha256": "fbb764c8a505829f2e9cda1b176612cacad13edd7818809eadc09d0e8d825fb2"
+      },
+      {
+        "path": "mods/Bountiful-2.2.2.jar",
+        "url": "https://edge.forgecdn.net/files/2949/667/Bountiful-2.2.2.jar",
+        "sha1": "8d252d4a57e8e38e5d620a32ca3559581d925b1f",
+        "sha256": "1f83f43892158c3eef5547dbc29dfd122504f0c6e4960e15eb741404c9135e1b"
+      },
+      {
+        "path": "mods/advsolars-1.0.jar",
+        "url": "https://edge.forgecdn.net/files/2675/884/advsolars-1.0.jar",
+        "sha1": "77315e433a877e89b134831e5c3ba02814674ff4",
+        "sha256": "250d0df49fdf8d80a932dbb08511102880d3a62de63ee053345afaafc173d2c2"
+      },
+      {
+        "path": "mods/FTBBackups-1.1.0.1.jar",
+        "url": "https://edge.forgecdn.net/files/2819/669/FTBBackups-1.1.0.1.jar",
+        "sha1": "20ddf96ff380f1f3219305f2efc6742ab5999449",
+        "sha256": "6b6bcbbf6ac4528657345e1696339528a44643ecb06e6137908eafb8432bd962"
+      },
+      {
+        "path": "mods/PackagedExCrafting-1.12.2-1.0.3.33.jar",
+        "url": "https://edge.forgecdn.net/files/6928/168/PackagedExCrafting-1.12.2-1.0.3.33.jar",
+        "sha1": "c590527fdd7a4336ec47064f503ee20204080d16",
+        "sha256": "b15477558f13e9adc33c6afc872288973e3909c0abcc25c78654af00ff09f07c"
+      },
+      {
+        "path": "mods/collective-1.12.2-3.0.jar",
+        "url": "https://edge.forgecdn.net/files/3533/131/collective-1.12.2-3.0.jar",
+        "sha1": "c4c9a362baf6404024d44cd63e673eb7a44494ba",
+        "sha256": "43541ab1d57cf5aa3aba63fa34b6b6ebffd67f602b9fb4d220e4bec365cb754c"
+      },
+      {
+        "path": "mods/spark-forge1122.jar",
+        "url": "https://edge.forgecdn.net/files/3245/793/spark-forge1122.jar",
+        "sha1": "6ea08fc3f82535f37a76f2e7340d239e64e40489",
+        "sha256": "0454aa68c94b097ef218ce79a65438fd10f5d1f756f86bad015a78dd4bbd6776"
+      },
+      {
+        "path": "mods/supersoundmuffler-revived_1.12.2_1.0.2.10.jar",
+        "url": "https://edge.forgecdn.net/files/2886/150/supersoundmuffler-revived_1.12.2_1.0.2.10.jar",
+        "sha1": "dbd647ab54a365b6f1a67d569fca20ee33fb958a",
+        "sha256": "2faf6423756b3c4af3a83424a931122d18ee16dfaf1fff5058baaee923522312"
+      },
+      {
+        "path": "mods/framedcompactdrawers-1.2.7.jar",
+        "url": "https://edge.forgecdn.net/files/3015/136/framedcompactdrawers-1.2.7.jar",
+        "sha1": "8d69342523edd7a8103f98197ca9edbd69cd5af4",
+        "sha256": "0b5ef2bac1feb334132e4b18434390d772e534d038b9d062b98f1ed8d8029dcb"
+      },
+      {
+        "path": "mods/dynamistics-1.0.2.jar",
+        "url": "https://edge.forgecdn.net/files/3056/455/dynamistics-1.0.2.jar",
+        "sha1": "f956193b77dc770ea30e3de33e7c9706e75e762e",
+        "sha256": "e3d2215286984be17bf5fef2ac3e2f8ddc62a35ad4d7f1e25b91cd5520347335"
+      },
+      {
+        "path": "mods/MoreFurnaces-Nomifactory-Edition-1.12.2-1.11.0.jar",
+        "url": "https://edge.forgecdn.net/files/3613/142/MoreFurnaces-Nomifactory-Edition-1.12.2-1.11.0.jar",
+        "sha1": "ddbbf9e3a4c2928b8683d3a4de4bdc6bf2118930",
+        "sha256": "dc1f5c254e1c5a9587db019747ccac61880de87f5c1f5230f7d571f8a92678b2"
+      },
+      {
+        "path": "mods/extendedcrafting-nomifactory-edition-1.7.0.7.jar",
+        "url": "https://edge.forgecdn.net/files/5778/512/extendedcrafting-nomifactory-edition-1.7.0.7.jar",
+        "sha1": "c2e72c5baeb4dbe9d6b89bb1d79b330813a82457",
+        "sha256": "75ed6cf78cf73816bb1d44fed0bbd1e5b2f5e08fbb2ef98bc49b6b59715bb271"
+      },
+      {
+        "path": "mods/!mixinbooter-10.7.jar",
+        "url": "https://edge.forgecdn.net/files/7049/694/!mixinbooter-10.7.jar",
+        "sha1": "3fdfffe4fd446461ea9c3cb044484588997b9dbc",
+        "sha256": "8bb53080aede2d2b1e1c5f713bbf49a38f20add8caa3d52fabcdf8a536b55a18"
+      },
+      {
+        "path": "mods/DimensionalEdibles-1.12.2-1.6.4.jar",
+        "url": "https://edge.forgecdn.net/files/3671/689/DimensionalEdibles-1.12.2-1.6.4.jar",
+        "sha1": "9966043928111309e8b1b029b3bff6386e7922fe",
+        "sha256": "0f811d35c42cc1ae9b9318a451c10195bcbecb7bb5164e841b0f3e89dc06bbce"
+      },
+      {
+        "path": "mods/Forgelin-Continuous-2.2.21.0.jar",
+        "url": "https://edge.forgecdn.net/files/7182/824/Forgelin-Continuous-2.2.21.0.jar",
+        "sha1": "73be480f397e8e7393cfebac036079d26c006fab",
+        "sha256": "073c0f892955c6dd1c2c2e91e8712c4d375f44cad1407534e9513d0e13c4a0b2"
+      },
+      {
+        "path": "mods/loliasm-5.30.jar",
+        "url": "https://edge.forgecdn.net/files/7267/368/loliasm-5.30.jar",
+        "sha1": "9f1fa93f44e10c095f826dd25c537b42afd3f4aa",
+        "sha256": "a5f97ffc4a4495d5a9157fa03fdfb2a636650d68e1c29274c5de0b248d1777ea"
+      },
+      {
+        "path": "mods/mousetweaks-1.12.2-3.1.5.jar",
+        "url": "https://edge.forgecdn.net/files/5876/158/mousetweaks-1.12.2-3.1.5.jar",
+        "sha1": "793920175608d000688a88fce14f4c04efdedc58",
+        "sha256": "4874dc0e614ea47f4c049875ffffc4a48b79dceebb5b76f41945b42dfd624175"
+      },
+      {
+        "path": "mods/uberconduitprobe-1.0.3.jar",
+        "url": "https://edge.forgecdn.net/files/3407/210/uberconduitprobe-1.0.3.jar",
+        "sha1": "54641c644077747124b223a2363ec4b5a91e95f5",
+        "sha256": "107344e318970f984bf8a2407aef9de6eafc726d3f3e00f19c6dd675c6756239"
+      },
+      {
+        "path": "mods/DefaultWorldGenerator-port-1.12-2.3.1.jar",
+        "url": "https://edge.forgecdn.net/files/3337/685/DefaultWorldGenerator-port-1.12-2.3.1.jar",
+        "sha1": "5077eb323251b8fa3da222a4ced897525f512c47",
+        "sha256": "dc273312735b9bf1be981a3617b40ee54bd7f9826bd94bff9df757b1e941628a"
+      },
+      {
+        "path": "mods/oauth-1.06.4.jar",
+        "url": "https://edge.forgecdn.net/files/3739/783/oauth-1.06.4.jar",
+        "sha1": "cefbdb74897dd11c713a9a73b9075caafb25c64d",
+        "sha256": "211db6d0687fffd970752c7a4b1a69d26182736ce41a06b1bc5516c6031fa50e"
+      },
+      {
+        "path": "mods/gregtech-1.12.2-2.8.10-beta.jar",
+        "url": "https://edge.forgecdn.net/files/5519/22/gregtech-1.12.2-2.8.10-beta.jar",
+        "sha1": "0c72d4b7b87092d4068c3cb660c95c2c845174c1",
+        "sha256": "54744bb11ea4679df4b55846d8073e9bb2ef8c1c53aae8aee41cda3fc22d927e"
+      },
+      {
+        "path": "mods/HadEnoughItems_1.12.2-4.29.14.jar",
+        "url": "https://edge.forgecdn.net/files/7387/686/HadEnoughItems_1.12.2-4.29.14.jar",
+        "sha1": "cb696342e9da001da5d324fab3e705038da2594d",
+        "sha256": "8ae40803907cbcd2ff6b0ed5017ba1e6ceabbe7f2f6604258da539cc380dd620"
+      },
+      {
+        "path": "mods/GregicalityMultiblocks-1.2.11.jar",
+        "url": "https://edge.forgecdn.net/files/5619/513/GregicalityMultiblocks-1.2.11.jar",
+        "sha1": "87a13e37bccd8c7a55bc4222ae58f5c8f0c84441",
+        "sha256": "dc250750b86c4d95bb68fe1681d48ce912efa1472ec0355c30e625d41a0591da"
+      },
+      {
+        "path": "mods/ae2-uel-v0.56.5.jar",
+        "url": "https://edge.forgecdn.net/files/5378/163/ae2-uel-v0.56.5.jar",
+        "sha1": "6eb5fb7611ef073b5fb58e1cf41c2374f608797f",
+        "sha256": "0b4bf550dbab289f33ff0bbc84dd3158837a2c2a5fbe734ac4bafdf63524f6cf"
+      },
+      {
+        "path": "mods/findme-1.12.2-1.0.0.jar",
+        "url": "https://edge.forgecdn.net/files/3748/963/findme-1.12.2-1.0.0.jar",
+        "sha1": "f1b5417b09bc8f7eb74afdfa03c4bacc6d283de2",
+        "sha256": "8728443f3838f3ab09f3a407823fdc11ee8f4dd0cc0e56e2e1a8281cbf1a5c6a"
+      },
+      {
+        "path": "mods/JEI-Utilities-1.12.2-0.2.13.jar",
+        "url": "https://edge.forgecdn.net/files/6937/116/JEI-Utilities-1.12.2-0.2.13.jar",
+        "sha1": "453b3e717bc1c522b1d1d1d5385125b73ea239e1",
+        "sha256": "cee780b9e233455a98264584664be28b1be201e16e6de6bf75c985f0e324ac5a"
+      },
+      {
+        "path": "mods/modularui-3.0.4.jar",
+        "url": "https://edge.forgecdn.net/files/7202/582/modularui-3.0.4.jar",
+        "sha1": "ecea53ea5ff6b6b4cdd8f89e82ee12adf4aa1923",
+        "sha256": "afa69bc56c9aac8c84e7fb163cf7c83a55d5b08a1a3e9631f9e45a24f49a9002"
+      },
+      {
+        "path": "mods/BetterQuestingUnofficial-4.2.2.jar",
+        "url": "https://edge.forgecdn.net/files/5183/601/BetterQuestingUnofficial-4.2.2.jar",
+        "sha1": "bc397af3bc7e3698df2de051cad5f44cabbceeb0",
+        "sha256": "1a72c43626064ce205779ffba2fce1c7da55790eaf070a89e03b1cb8f6a7b2e0"
+      },
+      {
+        "path": "mods/bogosorter-1.5.0.jar",
+        "url": "https://edge.forgecdn.net/files/7102/721/bogosorter-1.5.0.jar",
+        "sha1": "92ff58180f72ff871986a6597983e03fdeda1730",
+        "sha256": "81085b09354aac5ce19e84848e3d2569c9674a128d9862166b7a36052bf87909"
+      },
+      {
+        "path": "mods/CraftingTweaks_1.12.2-9.0.1.jar",
+        "url": "https://edge.forgecdn.net/files/3852/709/CraftingTweaks_1.12.2-9.0.1.jar",
+        "sha1": "0185dcfe6dcf35723ef7b5e177838870d26349d4",
+        "sha256": "fa1aa0ad09e7f240e4af9af20a7478cab93598e468cfda3a42e46bb65e067dae"
+      },
+      {
+        "path": "mods/ULVCovers-1.12.2-2.8.0.jar",
+        "url": "https://edge.forgecdn.net/files/4912/949/ULVCovers-1.12.2-2.8.0.jar",
+        "sha1": "19624a33b2c8568fb215a2b7e651e2d96400189d",
+        "sha256": "7451ae3fdf5fa563ec2303774929135fbddbebe152d8945059fd7493625cc921"
+      },
+      {
+        "path": "mods/groovyscript-1.3.3.jar",
+        "url": "https://edge.forgecdn.net/files/7343/465/groovyscript-1.3.3.jar",
+        "sha1": "e39f9e6db89884b7060bc01fd9e897c80544ed0a",
+        "sha256": "af8afde58c3a5e03c3194f01f1881b43163aef9418bcc09a4df5d82a6e05d80c"
+      },
+      {
+        "path": "mods/UniversalTweaks-1.12.2-1.17.0.jar",
+        "url": "https://edge.forgecdn.net/files/7156/691/UniversalTweaks-1.12.2-1.17.0.jar",
+        "sha1": "a0f6d918ade59f2b4eb7b7df5442fb21c1ea4e66",
+        "sha256": "d86a0b2bd3d1c855e32300f125e738bd56f8d91637dc6c83c9d57fdbd7424308"
+      },
+      {
+        "path": "mods/DeepMobEvolution-1.12.2-1.2.3.jar",
+        "url": "https://edge.forgecdn.net/files/5985/530/DeepMobEvolution-1.12.2-1.2.3.jar",
+        "sha1": "3af2c664de02b44f303958406ce1fb5bbc68b94d",
+        "sha256": "326678421a4645d3cecc44bc49e691423de5ddb9a6611bae2fcb56d575d3b0ed"
+      },
+      {
+        "path": "mods/PackagedDraconic-1.12.2-1.0.4.24.jar",
+        "url": "https://edge.forgecdn.net/files/6904/341/PackagedDraconic-1.12.2-1.0.4.24.jar",
+        "sha1": "327bd52b2551a71026763efe99972de77d8cdf84",
+        "sha256": "ee3e2f36d9c9c60e50157bab9869cb1f695a982985aba37f59fe1e6844c7e364"
+      },
+      {
+        "path": "mods/gregtech-drawers-1.12.2-1.0.7.jar",
+        "url": "https://edge.forgecdn.net/files/5006/537/gregtech-drawers-1.12.2-1.0.7.jar",
+        "sha1": "aa721c74d5f77859ec5196f19cb13c27acd3cf50",
+        "sha256": "150beebcdd86c8640e7d4ef7ba4f2173af9cd502017e7f841766d016fa5eff5f"
+      },
+      {
+        "path": "mods/!configanytime-3.0.jar",
+        "url": "https://edge.forgecdn.net/files/5212/709/!configanytime-3.0.jar",
+        "sha1": "b6d8a10219d3802e04de6b1e815a5853e50adbcc",
+        "sha256": "29fe190f0d1bb0b3841b2b9f315a5d561cab9f587df6164a0205440540577575"
+      },
+      {
+        "path": "mods/nonetherportals-1.1.0.jar",
+        "url": "https://edge.forgecdn.net/files/4569/618/nonetherportals-1.1.0.jar",
+        "sha1": "5646d1cb31929787c89192dd0b034061f7a54409",
+        "sha256": "5225d92bc2d7e745cab2b3176680b435e8fa41bd2868d69c1b592835a6c131e9"
+      },
+      {
+        "path": "mods/vintagefix-0.6.2.jar",
+        "url": "https://edge.forgecdn.net/files/6609/247/vintagefix-0.6.2.jar",
+        "sha1": "eb820c6e58a4d091b80311a28650c7a1b99a1b14",
+        "sha256": "03a946ed9b6dcc459f4e9765fe4aad61a7fcaf9886ac115e8ba1902fbddbf60c"
+      },
+      {
+        "path": "mods/!Red-Core-MC-1.8-1.12-0.6.jar",
+        "url": "https://edge.forgecdn.net/files/6147/102/!Red-Core-MC-1.8-1.12-0.6.jar",
+        "sha1": "ac72ee1e7777a3f20ace120c301fde68a3dfea23",
+        "sha256": "698a0e74f50e6fa44a34026d95894c2b6608998521bbcee2a83447c5d208fde4"
+      },
+      {
+        "path": "mods/nae2-1.6.4.jar",
+        "url": "https://edge.forgecdn.net/files/5380/800/nae2-1.6.4.jar",
+        "sha1": "02018e1e520d478b2b82a63ddb679452957bd415",
+        "sha256": "966a050348b4be8ad458541ad549c2bf38cadddcf065d1bb4c7a28ec82a3b229"
+      },
+      {
+        "path": "mods/visualores-0.2.6.jar",
+        "url": "https://edge.forgecdn.net/files/5828/524/visualores-0.2.6.jar",
+        "sha1": "36b7821f7bae9302c95be5972271b3ea34026e66",
+        "sha256": "795d31450fdfe98b9fcdd5848d1fbaa36e9d7b152df100f28525233ce26154da"
+      },
+      {
+        "path": "mods/serializationisbad-1.5.2.jar",
+        "url": "https://edge.forgecdn.net/files/5187/152/serializationisbad-1.5.2.jar",
+        "sha1": "da05f7344986d425c858decb36cf776b3fe53dad",
+        "sha256": "2031c8edce4b124f29a33c9ba892b9049d19fcff4c711e2aa276d051cf0d5d31"
+      },
+      {
+        "path": "mods/Alfheim-1.6.jar",
+        "url": "https://edge.forgecdn.net/files/6687/458/Alfheim-1.6.jar",
+        "sha1": "15aaa39a13e18ab2f29456b25fd9732da1949329",
+        "sha256": "730bb0425c97d394c86712e27f71c93069d5b95877bd54f70fc56235eeef33ef"
+      },
+      {
+        "path": "mods/[MC-1.12.2] Key Binding Patch v1.3.3.3 - 2024-12-1.jar",
+        "url": "https://edge.forgecdn.net/files/5951/859/%5bMC-1.12.2%5d%20Key%20Binding%20Patch%20v1.3.3.3%20-%202024-12-1.jar",
+        "sha1": "9c4f758e158ae780dbf091d7c05e30eb13d8175f",
+        "sha256": "0223a857235e9c0db492f5d885f22b492638208abcc041cf5e229696cb77e26d"
+      },
+      {
+        "path": "mods/NomiLabs-0.17.14.jar",
+        "url": "https://edge.forgecdn.net/files/7411/328/NomiLabs-0.17.14.jar",
+        "sha1": "61acd5b7217e626e8843bdea9b7b7ed5825afdf9",
+        "sha256": "158f0257feea7b0ad5b266bedc30a089a1d2c6c1f3ea7ffea154caeff1781c19"
+      },
+      {
+        "path": "mods/betterp2p-1.12.2-1.3.2.jar",
+        "url": "https://edge.forgecdn.net/files/4928/154/betterp2p-1.12.2-1.3.2.jar",
+        "sha1": "5d0c93fbc7bfb7ea36410ae770af1259c0c14a37",
+        "sha256": "219fa97931f66958f06798855168a41e977fc10ea5dac9917a36f557f4dbb009"
+      },
+      {
+        "path": "mods/RealBench-Nomi-CEu-1.0.4.jar",
+        "url": "https://edge.forgecdn.net/files/4941/450/RealBench-Nomi-CEu-1.0.4.jar",
+        "sha1": "9cdbfa8fd24b8f9d112faea994f58950291dbfc2",
+        "sha256": "4e1ba86bd28c70124c886a7174b380aad818319b5d91be932a98f7fbe0fea479"
+      },
+      {
+        "path": "mods/ae2stuff-1.12.2-0.10.jar",
+        "url": "https://edge.forgecdn.net/files/6706/171/ae2stuff-1.12.2-0.10.jar",
+        "sha1": "bee5d1abcb2a5df0535fd217e2c62d3f6cb46803",
+        "sha256": "aa1077585a76dc0096802cc246c3412814c22fcc7e0975e4887909b82c0cabef"
+      },
+      {
+        "path": "mods/TheOneSmeagle-1.12-1.1.5.jar",
+        "url": "https://edge.forgecdn.net/files/7095/96/TheOneSmeagle-1.12-1.1.5.jar",
+        "sha1": "4dffa3a8dd9e3bb9d4a97b56e3f4f8ef04c46862",
+        "sha256": "ae0ca4af8735602e355991a72709da877d502f1950a99fbbe53943f435498d24"
+      },
+      {
+        "path": "mods/UniLib-1.2.0+1.12.2-forge.jar",
+        "url": "https://edge.forgecdn.net/files/7145/693/UniLib-1.2.0%2b1.12.2-forge.jar",
+        "sha1": "7cb336e5fedf6ed4cea500410c5a13f81146116d",
+        "sha256": "f2b4b7eeb92a0673998713f037d6a0d71874b647b25b4c27718d92eb92133db7"
+      },
+      {
+        "path": "mods/LibrarianLib-Continuous-1.12.2-4.22-2.0-3.jar",
+        "url": "https://edge.forgecdn.net/files/6617/935/LibrarianLib-Continuous-1.12.2-4.22-2.0-3.jar",
+        "sha1": "25466f0709c6bb1f22232bfda9e53d4946c9ae1e",
+        "sha256": "27cef30297b6551f96b3ed41980582de3b5836f459915ae9f5e9c4d2cccf6d13"
+      },
+      {
+        "path": "mods/AE2CT-Legacy-0.1.2.jar",
+        "url": "https://edge.forgecdn.net/files/5814/89/AE2CT-Legacy-0.1.2.jar",
+        "sha1": "c2757db9c8b124c6def1f384e6b412e4ce70a5b5",
+        "sha256": "fadb8f4ec2cfea4217b8ded7719aa1fc01e87ebcb2679da24f6d4ed0a79f0d6c"
+      },
+      {
+        "path": "mods/sussypatches-1.9.2.jar",
+        "url": "https://edge.forgecdn.net/files/7252/924/sussypatches-1.9.2.jar",
+        "sha1": "82db81b6c1224980cb6d5405029678d808454847",
+        "sha256": "c6ac9b9a9f920d1c21559cf0e414308d1d2ea1b5ae9efc5788125297d54b9224"
+      }
+    ],
+    "archives": [
+      {
+        "url": "https://github.com/Nomi-CEu/Nomi-CEu/releases/download/1.7.7/nomi-ceu-1.7.7-client.zip",
+        "sha256": "64c142e6ad0b8e40cd0ae3fb420f51ca64df2bad7c0de78b49d293b5d2ab5240",
+        "stripPrefix": "overrides"
+      }
+    ],
+    "textFiles": {}
+  },
+  "provider": {
+    "name": "curseforge",
+    "metadataSource": "curse-tools",
+    "metadataApi": "https://api.curse.tools",
+    "optionalMods": "required-only",
+    "minecraft": {
+      "version": "1.12.2",
+      "modLoaders": [
+        {
+          "id": "forge-14.23.5.2860",
+          "primary": true
+        }
+      ]
+    },
+    "packName": "nomi-ceu",
+    "packVersion": "1.7.7",
+    "files": [
+      {
+        "projectID": 32274,
+        "fileID": 5172461,
+        "classId": 6,
+        "path": "mods/journeymap-1.12.2-5.7.1p3.jar",
+        "sha1": "2b96f7b27b088fddbb5e603848d7aeaebedb96f3"
+      },
+      {
+        "projectID": 64578,
+        "fileID": 4674244,
+        "classId": 6,
+        "path": "mods/EnderIO-1.12.2-5.3.72.jar",
+        "sha1": "60d62a0dab5b12c527fd8eda1d353888e3406175"
+      },
+      {
+        "projectID": 69118,
+        "fileID": 2664449,
+        "classId": 6,
+        "path": "mods/Morpheus-1.12.2-3.5.106.jar",
+        "sha1": "c948341a1b2243d4f8081c4db2cd727c2c4a7ed0"
+      },
+      {
+        "projectID": 69162,
+        "fileID": 2920433,
+        "classId": 6,
+        "path": "mods/CoFHCore-1.12.2-4.6.6.1-universal.jar",
+        "sha1": "4dd5aa3ff30d7966ae253556f79bb3f13bc5576e"
+      },
+      {
+        "projectID": 69163,
+        "fileID": 2926431,
+        "classId": 6,
+        "path": "mods/ThermalExpansion-1.12.2-5.5.7.1-universal.jar",
+        "sha1": "3568d977c90987c58ad2c7cb3837c4ac8de49216"
+      },
+      {
+        "projectID": 70496,
+        "fileID": 4675629,
+        "classId": 6,
+        "path": "mods/bdlib-1.14.4.1-mc1.12.2.jar",
+        "sha1": "6cb8cb1edc2897cf30f5071b04c29a2482d2b109"
+      },
+      {
+        "projectID": 70631,
+        "fileID": 2939416,
+        "classId": 6,
+        "path": "mods/RedstoneArsenal-1.12.2-2.6.6.1-universal.jar",
+        "sha1": "9c8c89fd184ee8631d155ec81eee0a7db287a5ec"
+      },
+      {
+        "projectID": 78778,
+        "fileID": 2524058,
+        "classId": 6,
+        "path": "mods/ChestTransporter-1.12.2-2.8.8.jar",
+        "sha1": "50c48502302193af990ed3c33b6e23e1f240cb1d"
+      },
+      {
+        "projectID": 220954,
+        "fileID": 3488553,
+        "classId": 6,
+        "path": "mods/modtweaker-4.0.20.5.jar",
+        "sha1": "4e1e9795f8344ffa76718ece16dc4692d0f630cf"
+      },
+      {
+        "projectID": 222880,
+        "fileID": 2926428,
+        "classId": 6,
+        "path": "mods/ThermalFoundation-1.12.2-2.6.7.1-universal.jar",
+        "sha1": "6bd93897638fd68794cae17c9520b68a85fc97d0"
+      },
+      {
+        "projectID": 223565,
+        "fileID": 3431261,
+        "classId": 6,
+        "path": "mods/Draconic-Evolution-1.12.2-2.3.28.354-universal.jar",
+        "sha1": "aa952832b369ff12a26ef608ee7a001b687ca226"
+      },
+      {
+        "projectID": 223852,
+        "fileID": 5981297,
+        "classId": 6,
+        "path": "mods/StorageDrawers-1.12.2-5.5.3.jar",
+        "sha1": "8be312005dc837372bfbe2dfb8db77822d326062"
+      },
+      {
+        "projectID": 225561,
+        "fileID": 2678374,
+        "classId": 6,
+        "path": "mods/extrautils2-1.12-1.9.9.jar",
+        "sha1": "9f9a217b23626cb338cf229054ed490d913610dc"
+      },
+      {
+        "projectID": 226254,
+        "fileID": 3074246,
+        "classId": 6,
+        "path": "mods/NuclearCraft-2.18y-1.12.2.jar",
+        "sha1": "0adb73ab9ad85959767efcac005b5ff6e8c4bb05"
+      },
+      {
+        "projectID": 226406,
+        "fileID": 2857869,
+        "classId": 6,
+        "path": "mods/CustomMainMenu-MC1.12.2-2.0.9.1.jar",
+        "sha1": "9aad10a13bed75b6061a33219ab4f2f39e0ccc12"
+      },
+      {
+        "projectID": 226447,
+        "fileID": 2477566,
+        "classId": 6,
+        "path": "mods/ResourceLoader-MC1.12.1-1.5.3.jar",
+        "sha1": "d8c10e6e29df5f9bc51e468642d9b3cae5f2f8e4"
+      },
+      {
+        "projectID": 227083,
+        "fileID": 2518667,
+        "classId": 6,
+        "path": "mods/Baubles-1.12-1.5.2.jar",
+        "sha1": "cb13fcfb18a9cb0cbd825fd5fe8d813c77368549"
+      },
+      {
+        "projectID": 228404,
+        "fileID": 3117927,
+        "classId": 6,
+        "path": "mods/ActuallyAdditions-1.12.2-r152.jar",
+        "sha1": "6e5f7deda0d3cf196b38f57eb60ef18a85b0ca2d"
+      },
+      {
+        "projectID": 228525,
+        "fileID": 2836960,
+        "classId": 6,
+        "path": "mods/Bookshelf-1.12.2-2.3.590.jar",
+        "sha1": "83a1864dd78f48102609849dd36866d6cf32b907"
+      },
+      {
+        "projectID": 228702,
+        "fileID": 2745545,
+        "classId": 6,
+        "path": "mods/ProjectRed-1.12.2-4.9.4.120-Base.jar",
+        "sha1": "11168221284c53b89363e93ab36110a29c26c1a2"
+      },
+      {
+        "projectID": 229002,
+        "fileID": 2735197,
+        "classId": 6,
+        "path": "mods/MrTJPCore-1.12.2-2.1.4.43-universal.jar",
+        "sha1": "981382e6c623e8fe68cee07c8ee1f6f2c77b94dd"
+      },
+      {
+        "projectID": 229045,
+        "fileID": 2745548,
+        "classId": 6,
+        "path": "mods/ProjectRed-1.12.2-4.9.4.120-integration.jar",
+        "sha1": "f05cda479b14d41e02120295b4bcbb0ab25738d2"
+      },
+      {
+        "projectID": 230497,
+        "fileID": 2450900,
+        "classId": 6,
+        "path": "mods/Chameleon-1.12-4.1.3.jar",
+        "sha1": "5ed3dd5fd1ebded57bfe525b4ece11232bd14e5e"
+      },
+      {
+        "projectID": 231382,
+        "fileID": 3408276,
+        "classId": 6,
+        "path": "mods/BrandonsCore-1.12.2-2.4.20.162-universal.jar",
+        "sha1": "f6035eb93d9c7b91334ed7bfc17ed36c8c9d86c8"
+      },
+      {
+        "projectID": 231868,
+        "fileID": 4671384,
+        "classId": 6,
+        "path": "mods/EnderCore-1.12.2-0.5.78.jar",
+        "sha1": "96c2389a5fdb2968cd69fc80b478a9a0b0ecc441"
+      },
+      {
+        "projectID": 235279,
+        "fileID": 2915375,
+        "classId": 6,
+        "path": "mods/Chisel-MC1.12.2-1.0.2.45.jar",
+        "sha1": "d378cee9195841ea78bb9800f543d718ef2c60ef"
+      },
+      {
+        "projectID": 235577,
+        "fileID": 2722385,
+        "classId": 6,
+        "path": "mods/TrashSlot_1.12.2-8.4.10.jar",
+        "sha1": "afd3e28370aaeb18d35ac0143307a0e0350e7c84"
+      },
+      {
+        "projectID": 236541,
+        "fileID": 2949886,
+        "classId": 6,
+        "path": "mods/LibVulpes-1.12.2-0.4.2-75-universal.jar",
+        "sha1": "7a8c2f5e206d02779fb8d15ecca0b1c7316a64be"
+      },
+      {
+        "projectID": 236542,
+        "fileID": 3015079,
+        "classId": 6,
+        "path": "mods/AdvancedRocketry-1.12.2-1.7.0-232-universal.jar",
+        "sha1": "c76482331a007c095675c18423d0c89210ea5ce9"
+      },
+      {
+        "projectID": 237102,
+        "fileID": 3157548,
+        "classId": 6,
+        "path": "mods/FTBUtilities-5.4.1.131.jar",
+        "sha1": "d1f6545ac58ad895f2c8bcd0d4963d92f14b1938"
+      },
+      {
+        "projectID": 237167,
+        "fileID": 2985811,
+        "classId": 6,
+        "path": "mods/FTBLib-5.4.7.2.jar",
+        "sha1": "7c20cd223bc2334edf153e074f35acdbcab3c976"
+      },
+      {
+        "projectID": 237366,
+        "fileID": 2803109,
+        "classId": 6,
+        "path": "mods/armorplus-1.12.2-11.25.1.62.jar",
+        "sha1": "a9d23317b0e36eeaf42d077d9bfc9ad22f859b93"
+      },
+      {
+        "projectID": 238747,
+        "fileID": 2739582,
+        "classId": 6,
+        "path": "mods/modnametooltip_1.12.2-1.10.1.jar",
+        "sha1": "46e4e9aa1a443de953088148fdcd3c7b9255d7cf"
+      },
+      {
+        "projectID": 239197,
+        "fileID": 6929088,
+        "classId": 6,
+        "path": "mods/CraftTweaker2-1.12-4.1.20.709.jar",
+        "sha1": "15aa4bc8d3e01621e8b045c3a33ccba8058207d5"
+      },
+      {
+        "projectID": 240630,
+        "fileID": 4440935,
+        "classId": 6,
+        "path": "mods/JustEnoughResources-1.12.2-0.9.3.203.jar",
+        "sha1": "cabcc7f31532215a6dd7c884ae281b59e0a53e2c"
+      },
+      {
+        "projectID": 241344,
+        "fileID": 2480458,
+        "classId": 6,
+        "path": "mods/Snad-1.12.1-1.7.09.16a.jar",
+        "sha1": "c978dbfca262e0b2f5cc0132dd76a5e2d2901304"
+      },
+      {
+        "projectID": 242195,
+        "fileID": 2813586,
+        "classId": 6,
+        "path": "mods/DarkUtils-1.12.2-1.8.230.jar",
+        "sha1": "3f34c35903ca09e637dc3426eb81ca64ced0429a"
+      },
+      {
+        "projectID": 242223,
+        "fileID": 3524685,
+        "classId": 6,
+        "path": "mods/JustEnoughCalculation-1.12.2-3.2.7.jar",
+        "sha1": "af07e8e6567e910f679b14f9b67b23da3213eeb2"
+      },
+      {
+        "projectID": 242818,
+        "fileID": 2779848,
+        "classId": 6,
+        "path": "mods/CodeChickenLib-1.12.2-3.2.3.358-universal.jar",
+        "sha1": "b6a7e3b889c354216059a3bfad298e30a1e46a2d"
+      },
+      {
+        "projectID": 243146,
+        "fileID": 2540650,
+        "classId": 6,
+        "path": "mods/CraftableElytra-1.1.jar",
+        "sha1": "cc72da339655263e171813baed556339b6649e25"
+      },
+      {
+        "projectID": 243478,
+        "fileID": 2745657,
+        "classId": 6,
+        "path": "mods/moreoverlays-1.15.1-mc1.12.2.jar",
+        "sha1": "b308fe363f23343d0b073d04883c5fca63b08d0b"
+      },
+      {
+        "projectID": 244559,
+        "fileID": 2830252,
+        "classId": 6,
+        "path": "mods/WirelessCraftingTerminal-1.12.2-3.12.97.jar",
+        "sha1": "f1ec1a90b4c351cfc17c6d9a3cbd3c1607258c4e"
+      },
+      {
+        "projectID": 245174,
+        "fileID": 2755787,
+        "classId": 6,
+        "path": "mods/EnderStorage-1.12.2-2.4.6.137-universal.jar",
+        "sha1": "7a872baf72b1da038704056a0cf7bbcc40bfa4d6"
+      },
+      {
+        "projectID": 246974,
+        "fileID": 3050838,
+        "classId": 6,
+        "path": "mods/SolarFluxReborn-1.12.2-12.4.11.jar",
+        "sha1": "521624cbd22f7dcef0ddc9f9f0898b2368439404"
+      },
+      {
+        "projectID": 246996,
+        "fileID": 3440963,
+        "classId": 6,
+        "path": "mods/base-1.12.2-3.14.0.jar",
+        "sha1": "4fbf3bae670f626028e29b57622b0ee98a8ad4db"
+      },
+      {
+        "projectID": 247111,
+        "fileID": 2887479,
+        "classId": 6,
+        "path": "mods/topaddons-1.12.2-1.13.0.jar",
+        "sha1": "81fd91d9b4579a3f07a8d3b860f7db5426e77c72"
+      },
+      {
+        "projectID": 248055,
+        "fileID": 2580332,
+        "classId": 6,
+        "path": "mods/thedragonlib-1.12.2-5.3.0.jar",
+        "sha1": "8b74708e6cea88f6939306d069505db74e2e2f6a"
+      },
+      {
+        "projectID": 248787,
+        "fileID": 2987247,
+        "classId": 6,
+        "path": "mods/AppleSkin-mc1.12-1.0.14.jar",
+        "sha1": "d798af79de48be0f00c772943e5ec5a2fb5659fa"
+      },
+      {
+        "projectID": 250363,
+        "fileID": 2746011,
+        "classId": 6,
+        "path": "mods/AutoRegLib-1.3-32.jar",
+        "sha1": "267269ca7f1a71fb3bb35bdb8e61702a4da6263e"
+      },
+      {
+        "projectID": 250398,
+        "fileID": 5408385,
+        "classId": 6,
+        "path": "mods/Controlling-3.0.12.4.jar",
+        "sha1": "d588b1fefb912c1080d397834b6300e59409183c"
+      },
+      {
+        "projectID": 250419,
+        "fileID": 2898966,
+        "classId": 6,
+        "path": "mods/EnchantmentDescriptions-1.12.2-1.1.20.jar",
+        "sha1": "d82e9d326b9d40904edb189077fabe0f5f47557a"
+      },
+      {
+        "projectID": 250832,
+        "fileID": 2845365,
+        "classId": 6,
+        "path": "mods/ElevatorMod-1.12.2-1.3.14.jar",
+        "sha1": "7701eb987d8102a345e46725f4f2c6b9fc83005c"
+      },
+      {
+        "projectID": 251407,
+        "fileID": 2624712,
+        "classId": 6,
+        "path": "mods/ClientTweaks_1.12.2-3.1.11.jar",
+        "sha1": "c6c31bc3e10fe8da49cb37088ec3d0e8d481ad46"
+      },
+      {
+        "projectID": 251792,
+        "fileID": 3017440,
+        "classId": 6,
+        "path": "mods/SimplyJetpacks2-1.12.2-2.2.15.69.jar",
+        "sha1": "731aac71a7381b28b30ad3f0fb1d9d0f79090a1f"
+      },
+      {
+        "projectID": 252354,
+        "fileID": 2464501,
+        "classId": 6,
+        "path": "mods/OpenGlider-1.12.1-1.1.0.jar",
+        "sha1": "8d2f6a5321df463ea46abab13468785dc3847d12"
+      },
+      {
+        "projectID": 252848,
+        "fileID": 2893527,
+        "classId": 6,
+        "path": "mods/NaturesCompass-1.12.2-1.8.5.jar",
+        "sha1": "60bcf179cab708f67bbce98d201e82f3e7be9266"
+      },
+      {
+        "projectID": 253211,
+        "fileID": 3308160,
+        "classId": 6,
+        "path": "mods/MTLib-3.0.7.jar",
+        "sha1": "7d2b9e97518dca1e9326fd347ba1eb93dec35999"
+      },
+      {
+        "projectID": 254268,
+        "fileID": 3529742,
+        "classId": 6,
+        "path": "mods/torchmaster_1.12.2-1.8.5.0.jar",
+        "sha1": "8bc4bae76967b025746768473462d446ee09f505"
+      },
+      {
+        "projectID": 255232,
+        "fileID": 2830265,
+        "classId": 6,
+        "path": "mods/p455w0rdslib-1.12.2-2.3.161.jar",
+        "sha1": "be56bc229b7f418675bf46277e37a8272def5327"
+      },
+      {
+        "projectID": 256717,
+        "fileID": 2666198,
+        "classId": 6,
+        "path": "mods/Clumps-3.1.2.jar",
+        "sha1": "6ea78bea8006e3924bc37c2aef0115134c8af07b"
+      },
+      {
+        "projectID": 257573,
+        "fileID": 3248033,
+        "classId": 6,
+        "path": "mods/Xtones-1.2.2.jar",
+        "sha1": "0e4d2c453000370722e384eaca047958f898996f"
+      },
+      {
+        "projectID": 257814,
+        "fileID": 4722163,
+        "classId": 6,
+        "path": "mods/CreativeCore_v1.10.71_mc1.12.2.jar",
+        "sha1": "2c60a20ae9c9431a3b215a331c2b2af7fa3a060c"
+      },
+      {
+        "projectID": 257818,
+        "fileID": 5180387,
+        "classId": 6,
+        "path": "mods/LittleTiles_v1.5.87_mc1.12.2.jar",
+        "sha1": "f77d34ddd13caeb4781908443f73e51b9118fe60"
+      },
+      {
+        "projectID": 258426,
+        "fileID": 2755790,
+        "classId": 6,
+        "path": "mods/ForgeMultipart-1.12.2-2.6.2.83-universal.jar",
+        "sha1": "3306ea22380bc9b6a0170b23fa0251085d5a6e25"
+      },
+      {
+        "projectID": 258881,
+        "fileID": 2512758,
+        "classId": 6,
+        "path": "mods/FasterLadderClimbing-1.12-0.1-146.jar",
+        "sha1": "8f078c9f4389687103dc5f053403a921e9ac849d"
+      },
+      {
+        "projectID": 260262,
+        "fileID": 3459767,
+        "classId": 6,
+        "path": "mods/ToolBelt-1.12.2-1.9.14.jar",
+        "sha1": "6a9078c5d0f9e92a9f66ded407cba4b48dadbdf8"
+      },
+      {
+        "projectID": 261348,
+        "fileID": 3143349,
+        "classId": 6,
+        "path": "mods/Avaritia-1.12.2-3.3.0.37-universal.jar",
+        "sha1": "7b60729ab6e144803160c955fcb1e6d695a1aba6"
+      },
+      {
+        "projectID": 262823,
+        "fileID": 2619249,
+        "classId": 6,
+        "path": "mods/TombManyGraves-1.12-4.2.0.jar",
+        "sha1": "cfba896b87294e2351c383b5d4127112d26ab5e0"
+      },
+      {
+        "projectID": 266736,
+        "fileID": 2668113,
+        "classId": 6,
+        "path": "mods/moreplates-1.12.2-5.5.2.jar",
+        "sha1": "fa08e8954c395f7dc074bc8de4f55e48d8ab130b"
+      },
+      {
+        "projectID": 267602,
+        "fileID": 2915363,
+        "classId": 6,
+        "path": "mods/CTM-MC1.12.2-1.0.2.31.jar",
+        "sha1": "892e0788531269bfa2f356e4e12825e19d4e5412"
+      },
+      {
+        "projectID": 269024,
+        "fileID": 2861574,
+        "classId": 6,
+        "path": "mods/lostcities-1.12-2.0.22.jar",
+        "sha1": "dcea94d4a3d05f8282e014fcfe69048feafe4ce0"
+      },
+      {
+        "projectID": 270789,
+        "fileID": 2920436,
+        "classId": 6,
+        "path": "mods/RedstoneFlux-1.12-2.1.1.1-universal.jar",
+        "sha1": "7835c1dcc006e5d4a406a6b0615012b825e25044"
+      },
+      {
+        "projectID": 271384,
+        "fileID": 2920434,
+        "classId": 6,
+        "path": "mods/CoFHWorld-1.12.2-1.4.0.1-universal.jar",
+        "sha1": "863e1524fe0087d434a5e44d27cc2dd0353b9399"
+      },
+      {
+        "projectID": 271835,
+        "fileID": 2920437,
+        "classId": 6,
+        "path": "mods/ThermalCultivation-1.12.2-0.3.6.1-universal.jar",
+        "sha1": "4aef97dad21a3b8cd6cce7bcf601b41574cb22ff"
+      },
+      {
+        "projectID": 272335,
+        "fileID": 2645867,
+        "classId": 6,
+        "path": "mods/Cucumber-1.12.2-1.1.3.jar",
+        "sha1": "8be30f1977cd9df566dfbae2977793335e576591"
+      },
+      {
+        "projectID": 273430,
+        "fileID": 2459131,
+        "classId": 6,
+        "path": "mods/ActuallyBaubles-1.12-1.1.jar",
+        "sha1": "f9ff7eff30f5de77a67ddf3ff965e51b1d9e0616"
+      },
+      {
+        "projectID": 277631,
+        "fileID": 4344128,
+        "classId": 6,
+        "path": "mods/architecturecraft-1.12-3.108.jar",
+        "sha1": "45a0bff7cdc7d22e7172baeebaf8202c3208bf22"
+      },
+      {
+        "projectID": 278398,
+        "fileID": 2567799,
+        "classId": 6,
+        "path": "mods/packmode-1.12.2-1.2.0.jar",
+        "sha1": "69f53ba7d8c9c349768d2bc5b4a4269fde7acb0b"
+      },
+      {
+        "projectID": 278799,
+        "fileID": 2833002,
+        "classId": 6,
+        "path": "mods/DenseMetals-1.12.2-2.0.0.30.jar",
+        "sha1": "9274a6e3d42b12915d1067a982155efc9b66cf1c"
+      },
+      {
+        "projectID": 279172,
+        "fileID": 2491542,
+        "classId": 6,
+        "path": "mods/CraftingNetherStar 1.12.1 -1.1.jar",
+        "sha1": "9a2bf7aca0ce6bf14b231d1f177f8ad5cd719dcf"
+      },
+      {
+        "projectID": 282313,
+        "fileID": 2689835,
+        "classId": 6,
+        "path": "mods/TipTheScales-1.12.2-1.0.4.jar",
+        "sha1": "e63241c7fa81c7fce9f3df0121682bcdcb63929c"
+      },
+      {
+        "projectID": 283644,
+        "fileID": 4629597,
+        "classId": 6,
+        "path": "mods/Placebo-1.12.2-1.6.1.jar",
+        "sha1": "d2142220e0944a8ad9d76ad7f50a5aa8d4e5fd80"
+      },
+      {
+        "projectID": 291737,
+        "fileID": 2920441,
+        "classId": 6,
+        "path": "mods/ThermalInnovation-1.12.2-0.3.6.1-universal.jar",
+        "sha1": "a2603c82d0deefef67b3708fd79fd1e813b4d080"
+      },
+      {
+        "projectID": 297038,
+        "fileID": 7146337,
+        "classId": 6,
+        "path": "mods/CraftPresence-2.7.0+1.12.2-forge.jar",
+        "sha1": "b038ea06eef589216967f0c0ccd0d7e8023e9aeb"
+      },
+      {
+        "projectID": 297209,
+        "fileID": 2607310,
+        "classId": 6,
+        "path": "mods/hooked-1.0.3.jar",
+        "sha1": "b6782fc948c75b2e4afca26af3bb408983023f35"
+      },
+      {
+        "projectID": 298187,
+        "fileID": 3005950,
+        "classId": 6,
+        "path": "mods/BuildingGadgets-2.8.4.jar",
+        "sha1": "7f33f2343bf0af70d5d853378d465657beea3740"
+      },
+      {
+        "projectID": 299815,
+        "fileID": 3038801,
+        "classId": 6,
+        "path": "mods/worleycaves-1.12.2-1.5.2.jar",
+        "sha1": "ad8d5845683a65981b54d9737d9dcccaf8ae9b9c"
+      },
+      {
+        "projectID": 302113,
+        "fileID": 2847346,
+        "classId": 6,
+        "path": "mods/effortlessbuilding-1.12.2-2.16.jar",
+        "sha1": "20dbc6175aaff8164f08a8034eca5e91d8a1e659"
+      },
+      {
+        "projectID": 304024,
+        "fileID": 2830114,
+        "classId": 6,
+        "path": "mods/AE2WTLib-1.12.2-1.0.34.jar",
+        "sha1": "d76ffb730d9e02aeb6dd5bb3c5dd5fa39f5fe1b9"
+      },
+      {
+        "projectID": 304346,
+        "fileID": 4674241,
+        "classId": 6,
+        "path": "mods/EnderIO-endergy-1.12.2-5.3.72.jar",
+        "sha1": "8680a3378f36adb2680fae14a9cfa9d2abbd5694"
+      },
+      {
+        "projectID": 304920,
+        "fileID": 2669468,
+        "classId": 6,
+        "path": "mods/morelibs-1.12.2-1.2.2.jar",
+        "sha1": "0a8925bf2cbca5353d693562d9f3267917400646"
+      },
+      {
+        "projectID": 306028,
+        "fileID": 2833640,
+        "classId": 6,
+        "path": "mods/ProjectIntelligence-1.12.2-1.0.9.28-universal.jar",
+        "sha1": "d6424c4111913a48f9c983199d07140136a12ee1"
+      },
+      {
+        "projectID": 306555,
+        "fileID": 2707092,
+        "classId": 6,
+        "path": "mods/moresoundconfig-1.0.4.jar",
+        "sha1": "5a17517653deef1faf9d47005aad288b7c61ecaa"
+      },
+      {
+        "projectID": 306770,
+        "fileID": 3162874,
+        "classId": 6,
+        "path": "mods/Patchouli-1.0-23.6.jar",
+        "sha1": "0febe14bdd007b13f6089a16a57d90e44646f041"
+      },
+      {
+        "projectID": 308380,
+        "fileID": 7222356,
+        "classId": 6,
+        "path": "mods/PackagedAuto-1.12.2-1.0.23.72.jar",
+        "sha1": "6afa5ea240a04b82e4e1d2da09e60a8fd43853f6"
+      },
+      {
+        "projectID": 309516,
+        "fileID": 2949667,
+        "classId": 6,
+        "path": "mods/Bountiful-2.2.2.jar",
+        "sha1": "8d252d4a57e8e38e5d620a32ca3559581d925b1f"
+      },
+      {
+        "projectID": 313141,
+        "fileID": 2675884,
+        "classId": 6,
+        "path": "mods/advsolars-1.0.jar",
+        "sha1": "77315e433a877e89b134831e5c3ba02814674ff4"
+      },
+      {
+        "projectID": 314904,
+        "fileID": 2819669,
+        "classId": 6,
+        "path": "mods/FTBBackups-1.1.0.1.jar",
+        "sha1": "20ddf96ff380f1f3219305f2efc6742ab5999449"
+      },
+      {
+        "projectID": 322861,
+        "fileID": 6928168,
+        "classId": 6,
+        "path": "mods/PackagedExCrafting-1.12.2-1.0.3.33.jar",
+        "sha1": "c590527fdd7a4336ec47064f503ee20204080d16"
+      },
+      {
+        "projectID": 342584,
+        "fileID": 3533131,
+        "classId": 6,
+        "path": "mods/collective-1.12.2-3.0.jar",
+        "sha1": "c4c9a362baf6404024d44cd63e673eb7a44494ba"
+      },
+      {
+        "projectID": 361579,
+        "fileID": 3245793,
+        "classId": 6,
+        "path": "mods/spark-forge1122.jar",
+        "sha1": "6ea08fc3f82535f37a76f2e7340d239e64e40489"
+      },
+      {
+        "projectID": 363856,
+        "fileID": 2886150,
+        "classId": 6,
+        "path": "mods/supersoundmuffler-revived_1.12.2_1.0.2.10.jar",
+        "sha1": "dbd647ab54a365b6f1a67d569fca20ee33fb958a"
+      },
+      {
+        "projectID": 376351,
+        "fileID": 3015136,
+        "classId": 6,
+        "path": "mods/framedcompactdrawers-1.2.7.jar",
+        "sha1": "8d69342523edd7a8103f98197ca9edbd69cd5af4"
+      },
+      {
+        "projectID": 383632,
+        "fileID": 3056455,
+        "classId": 6,
+        "path": "mods/dynamistics-1.0.2.jar",
+        "sha1": "f956193b77dc770ea30e3de33e7c9706e75e762e"
+      },
+      {
+        "projectID": 391401,
+        "fileID": 3613142,
+        "classId": 6,
+        "path": "mods/MoreFurnaces-Nomifactory-Edition-1.12.2-1.11.0.jar",
+        "sha1": "ddbbf9e3a4c2928b8683d3a4de4bdc6bf2118930"
+      },
+      {
+        "projectID": 398267,
+        "fileID": 5778512,
+        "classId": 6,
+        "path": "mods/extendedcrafting-nomifactory-edition-1.7.0.7.jar",
+        "sha1": "c2e72c5baeb4dbe9d6b89bb1d79b330813a82457"
+      },
+      {
+        "projectID": 419286,
+        "fileID": 7049694,
+        "classId": 6,
+        "path": "mods/!mixinbooter-10.7.jar",
+        "sha1": "3fdfffe4fd446461ea9c3cb044484588997b9dbc"
+      },
+      {
+        "projectID": 431982,
+        "fileID": 3671689,
+        "classId": 6,
+        "path": "mods/DimensionalEdibles-1.12.2-1.6.4.jar",
+        "sha1": "9966043928111309e8b1b029b3bff6386e7922fe"
+      },
+      {
+        "projectID": 456403,
+        "fileID": 7182824,
+        "classId": 6,
+        "path": "mods/Forgelin-Continuous-2.2.21.0.jar",
+        "sha1": "73be480f397e8e7393cfebac036079d26c006fab"
+      },
+      {
+        "projectID": 460609,
+        "fileID": 7267368,
+        "classId": 6,
+        "path": "mods/loliasm-5.30.jar",
+        "sha1": "9f1fa93f44e10c095f826dd25c537b42afd3f4aa"
+      },
+      {
+        "projectID": 461660,
+        "fileID": 5876158,
+        "classId": 6,
+        "path": "mods/mousetweaks-1.12.2-3.1.5.jar",
+        "sha1": "793920175608d000688a88fce14f4c04efdedc58"
+      },
+      {
+        "projectID": 473325,
+        "fileID": 3407210,
+        "classId": 6,
+        "path": "mods/uberconduitprobe-1.0.3.jar",
+        "sha1": "54641c644077747124b223a2363ec4b5a91e95f5"
+      },
+      {
+        "projectID": 490698,
+        "fileID": 3337685,
+        "classId": 6,
+        "path": "mods/DefaultWorldGenerator-port-1.12-2.3.1.jar",
+        "sha1": "5077eb323251b8fa3da222a4ced897525f512c47"
+      },
+      {
+        "projectID": 513857,
+        "fileID": 3739783,
+        "classId": 6,
+        "path": "mods/oauth-1.06.4.jar",
+        "sha1": "cefbdb74897dd11c713a9a73b9075caafb25c64d"
+      },
+      {
+        "projectID": 557242,
+        "fileID": 5519022,
+        "classId": 6,
+        "path": "mods/gregtech-1.12.2-2.8.10-beta.jar",
+        "sha1": "0c72d4b7b87092d4068c3cb660c95c2c845174c1"
+      },
+      {
+        "projectID": 557549,
+        "fileID": 7387686,
+        "classId": 6,
+        "path": "mods/HadEnoughItems_1.12.2-4.29.14.jar",
+        "sha1": "cb696342e9da001da5d324fab3e705038da2594d"
+      },
+      {
+        "projectID": 564858,
+        "fileID": 5619513,
+        "classId": 6,
+        "path": "mods/GregicalityMultiblocks-1.2.11.jar",
+        "sha1": "87a13e37bccd8c7a55bc4222ae58f5c8f0c84441"
+      },
+      {
+        "projectID": 570458,
+        "fileID": 5378163,
+        "classId": 6,
+        "path": "mods/ae2-uel-v0.56.5.jar",
+        "sha1": "6eb5fb7611ef073b5fb58e1cf41c2374f608797f"
+      },
+      {
+        "projectID": 610085,
+        "fileID": 3748963,
+        "classId": 6,
+        "path": "mods/findme-1.12.2-1.0.0.jar",
+        "sha1": "f1b5417b09bc8f7eb74afdfa03c4bacc6d283de2"
+      },
+      {
+        "projectID": 616190,
+        "fileID": 6937116,
+        "classId": 6,
+        "path": "mods/JEI-Utilities-1.12.2-0.2.13.jar",
+        "sha1": "453b3e717bc1c522b1d1d1d5385125b73ea239e1"
+      },
+      {
+        "projectID": 624243,
+        "fileID": 7202582,
+        "classId": 6,
+        "path": "mods/modularui-3.0.4.jar",
+        "sha1": "ecea53ea5ff6b6b4cdd8f89e82ee12adf4aa1923"
+      },
+      {
+        "projectID": 629629,
+        "fileID": 5183601,
+        "classId": 6,
+        "path": "mods/BetterQuestingUnofficial-4.2.2.jar",
+        "sha1": "bc397af3bc7e3698df2de051cad5f44cabbceeb0"
+      },
+      {
+        "projectID": 632327,
+        "fileID": 7102721,
+        "classId": 6,
+        "path": "mods/bogosorter-1.5.0.jar",
+        "sha1": "92ff58180f72ff871986a6597983e03fdeda1730"
+      },
+      {
+        "projectID": 633720,
+        "fileID": 3852709,
+        "classId": 6,
+        "path": "mods/CraftingTweaks_1.12.2-9.0.1.jar",
+        "sha1": "0185dcfe6dcf35723ef7b5e177838870d26349d4"
+      },
+      {
+        "projectID": 635555,
+        "fileID": 4912949,
+        "classId": 6,
+        "path": "mods/ULVCovers-1.12.2-2.8.0.jar",
+        "sha1": "19624a33b2c8568fb215a2b7e651e2d96400189d"
+      },
+      {
+        "projectID": 687577,
+        "fileID": 7343465,
+        "classId": 6,
+        "path": "mods/groovyscript-1.3.3.jar",
+        "sha1": "e39f9e6db89884b7060bc01fd9e897c80544ed0a"
+      },
+      {
+        "projectID": 705000,
+        "fileID": 7156691,
+        "classId": 6,
+        "path": "mods/UniversalTweaks-1.12.2-1.17.0.jar",
+        "sha1": "a0f6d918ade59f2b4eb7b7df5442fb21c1ea4e66"
+      },
+      {
+        "projectID": 737252,
+        "fileID": 5985530,
+        "classId": 6,
+        "path": "mods/DeepMobEvolution-1.12.2-1.2.3.jar",
+        "sha1": "3af2c664de02b44f303958406ce1fb5bbc68b94d"
+      },
+      {
+        "projectID": 833931,
+        "fileID": 6904341,
+        "classId": 6,
+        "path": "mods/PackagedDraconic-1.12.2-1.0.4.24.jar",
+        "sha1": "327bd52b2551a71026763efe99972de77d8cdf84"
+      },
+      {
+        "projectID": 845779,
+        "fileID": 5006537,
+        "classId": 6,
+        "path": "mods/gregtech-drawers-1.12.2-1.0.7.jar",
+        "sha1": "aa721c74d5f77859ec5196f19cb13c27acd3cf50"
+      },
+      {
+        "projectID": 870276,
+        "fileID": 5212709,
+        "classId": 6,
+        "path": "mods/!configanytime-3.0.jar",
+        "sha1": "b6d8a10219d3802e04de6b1e815a5853e50adbcc"
+      },
+      {
+        "projectID": 870486,
+        "fileID": 4569618,
+        "classId": 6,
+        "path": "mods/nonetherportals-1.1.0.jar",
+        "sha1": "5646d1cb31929787c89192dd0b034061f7a54409"
+      },
+      {
+        "projectID": 871198,
+        "fileID": 6609247,
+        "classId": 6,
+        "path": "mods/vintagefix-0.6.2.jar",
+        "sha1": "eb820c6e58a4d091b80311a28650c7a1b99a1b14"
+      },
+      {
+        "projectID": 873867,
+        "fileID": 6147102,
+        "classId": 6,
+        "path": "mods/!Red-Core-MC-1.8-1.12-0.6.jar",
+        "sha1": "ac72ee1e7777a3f20ace120c301fde68a3dfea23"
+      },
+      {
+        "projectID": 884359,
+        "fileID": 5380800,
+        "classId": 6,
+        "path": "mods/nae2-1.6.4.jar",
+        "sha1": "02018e1e520d478b2b82a63ddb679452957bd415"
+      },
+      {
+        "projectID": 895539,
+        "fileID": 5828524,
+        "classId": 6,
+        "path": "mods/visualores-0.2.6.jar",
+        "sha1": "36b7821f7bae9302c95be5972271b3ea34026e66"
+      },
+      {
+        "projectID": 896591,
+        "fileID": 5187152,
+        "classId": 6,
+        "path": "mods/serializationisbad-1.5.2.jar",
+        "sha1": "da05f7344986d425c858decb36cf776b3fe53dad"
+      },
+      {
+        "projectID": 910715,
+        "fileID": 6687458,
+        "classId": 6,
+        "path": "mods/Alfheim-1.6.jar",
+        "sha1": "15aaa39a13e18ab2f29456b25fd9732da1949329"
+      },
+      {
+        "projectID": 928895,
+        "fileID": 5951859,
+        "classId": 6,
+        "path": "mods/[MC-1.12.2] Key Binding Patch v1.3.3.3 - 2024-12-1.jar",
+        "sha1": "9c4f758e158ae780dbf091d7c05e30eb13d8175f"
+      },
+      {
+        "projectID": 932060,
+        "fileID": 7411328,
+        "classId": 6,
+        "path": "mods/NomiLabs-0.17.14.jar",
+        "sha1": "61acd5b7217e626e8843bdea9b7b7ed5825afdf9"
+      },
+      {
+        "projectID": 943734,
+        "fileID": 4928154,
+        "classId": 6,
+        "path": "mods/betterp2p-1.12.2-1.3.2.jar",
+        "sha1": "5d0c93fbc7bfb7ea36410ae770af1259c0c14a37"
+      },
+      {
+        "projectID": 945503,
+        "fileID": 4941450,
+        "classId": 6,
+        "path": "mods/RealBench-Nomi-CEu-1.0.4.jar",
+        "sha1": "9cdbfa8fd24b8f9d112faea994f58950291dbfc2"
+      },
+      {
+        "projectID": 951064,
+        "fileID": 6706171,
+        "classId": 6,
+        "path": "mods/ae2stuff-1.12.2-0.10.jar",
+        "sha1": "bee5d1abcb2a5df0535fd217e2c62d3f6cb46803"
+      },
+      {
+        "projectID": 977883,
+        "fileID": 7095096,
+        "classId": 6,
+        "path": "mods/TheOneSmeagle-1.12-1.1.5.jar",
+        "sha1": "4dffa3a8dd9e3bb9d4a97b56e3f4f8ef04c46862"
+      },
+      {
+        "projectID": 1056812,
+        "fileID": 7145693,
+        "classId": 6,
+        "path": "mods/UniLib-1.2.0+1.12.2-forge.jar",
+        "sha1": "7cb336e5fedf6ed4cea500410c5a13f81146116d"
+      },
+      {
+        "projectID": 1058274,
+        "fileID": 6617935,
+        "classId": 6,
+        "path": "mods/LibrarianLib-Continuous-1.12.2-4.22-2.0-3.jar",
+        "sha1": "25466f0709c6bb1f22232bfda9e53d4946c9ae1e"
+      },
+      {
+        "projectID": 1121489,
+        "fileID": 5814089,
+        "classId": 6,
+        "path": "mods/AE2CT-Legacy-0.1.2.jar",
+        "sha1": "c2757db9c8b124c6def1f384e6b412e4ce70a5b5"
+      },
+      {
+        "projectID": 1319894,
+        "fileID": 7252924,
+        "classId": 6,
+        "path": "mods/sussypatches-1.9.2.jar",
+        "sha1": "82db81b6c1224980cb6d5405029678d808454847"
+      }
+    ]
+  }
+}

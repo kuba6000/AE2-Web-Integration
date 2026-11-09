@@ -1,0 +1,46 @@
+{
+  "pack": "ATM10",
+  "packVersion": "8.5",
+  "projectID": 925200,
+  "clientFileID": 9431424,
+  "serverFileID": 9431427,
+  "metadataSource": "curse-tools",
+  "metadataApi": "https://api.curse.tools/v1",
+  "minecraft": "1.21.1",
+  "loader": "neoforge-21.1.265",
+  "javaMajor": 21,
+  "clientArchiveSha1": "b27b7b6e7eb9b1477802486f5703ea44e0dba399",
+  "clientArchiveSha256": "ea56a46b478b634ac538dfdd4c7175b5e58f6f3e0df67d25373ff601c79b49ac",
+  "serverArchiveSha1": "e902796543ff6dd96bc10fa240f98752784ad3e9",
+  "serverArchiveSha256": "dfb34538715589f354c370101ffab3cbb2c3c8dcbc1dac6e382e8560b4a6db06",
+  "serverBundledModJars": 468,
+  "serverArchiveContainsLoaderInstaller": true,
+  "serverInstallerSha1": "25ce1d35d619ccfd3080076fa5758c18e11a9778",
+  "clientManifestEntries": 498,
+  "clientOptionalEntries": 0,
+  "selectedAt": "2026-11-06",
+  "officialProjectUrl": "https://www.curseforge.com/minecraft/modpacks/all-the-mods-10",
+  "officialSourceRepository": "https://github.com/AllTheMods/ATM-10",
+  "clientArchiveUrl": "https://edge.forgecdn.net/files/9431/424/All-the-Mods-10-8.5.zip",
+  "serverArchiveUrl": "https://edge.forgecdn.net/files/9431/427/ServerFiles-8.5.zip",
+  "releaseType": "release",
+  "clientReleaseDate": "2026-11-04T07:16:05.953Z",
+  "serverReleaseDate": "2026-11-04T07:17:46.8Z",
+  "clientBundledModJars": [
+    "cc-tweaked-1.21.1-forge-1.120.2.jar"
+  ],
+  "preparation": {
+    "client": {
+      "dependencyFiles": 498,
+      "modJars": 494,
+      "resourcePacks": 1,
+      "shaderPacks": 4,
+      "complete": true
+    },
+    "server": {
+      "modJars": 468,
+      "complete": true
+    },
+    "gameLaunched": false
+  }
+}

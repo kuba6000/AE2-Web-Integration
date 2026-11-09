@@ -1,0 +1,82 @@
+def repository = projectDir.parentFile
+def scripts = new File(repository, 'tools/fullpack')
+def windows = System.getProperty('os.name').toLowerCase().contains('windows')
+def setting = { String name, String fallback -> providers.gradleProperty(name).getOrElse(fallback) }
+def path = { String value -> new File(value).absolute ? new File(value) : new File(repository, value) }
+def adapters = [
+    'forge-1.7.10': ['gtnh-daily-824-2026-11-08', '1.7.10', 'publishableObfJar', 'reobfIconGeneratorJar'],
+    'forge-1.12.2': ['nomi-ceu-1.7.7', '1.12.2', 'reobfJar', 'reobfIconGeneratorJar'],
+    'forge-1.20.1': ['monifactory-0.13.8', '1.20.1', 'reobfShadowJar', 'reobfIconGeneratorJar'],
+    'neoforge-1.21.1': ['atm10-8.5', '1.21.1', 'shadowJar', 'iconGeneratorJar']
+]
+def adapter = adapters[projectDir.name]
+if (!adapter) throw new GradleException('Fullpack tasks require a supported Minecraft adapter.')
+def mainArtifact = adapter[2] == 'publishableObfJar' ? project.property('publishableObfJar') : tasks.named(adapter[2])
+def generatorArtifact = tasks.named(adapter[3])
+def profileName = setting('fullpackProfile', adapter[0])
+if (!(profileName ==~ /[a-zA-Z0-9][a-zA-Z0-9_.-]*/)) {
+    throw new GradleException('fullpackProfile must name a directory under tools/fullpack/profiles.')
+}
+def profile = new File(scripts, "profiles/${profileName}")
+def home = path(setting('fullpackHome', '.gradle/fullpack'))
+def python = new File(home, "python/${windows ? 'Scripts/python.exe' : 'bin/python'}")
+def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
+    group = 'Fullpack'
+    description = 'Installs pinned Python launcher dependencies in the local fullpack cache.'
+    notCompatibleWithConfigurationCache('Resolves local Python launcher settings at execution time.')
+    doFirst {
+        commandLine setting('fullpackPython', windows ? 'python' : 'python3'),
+            new File(scripts, 'setup_runtime.py').path, '--home', home.path
+    }
+}
+
+['prepareFullPack': ['client', 'prepare'], 'prepareFullServer': ['server', 'prepare'],
+ 'runFullPack': ['client', 'run'], 'runFullServer': ['server', 'run']].each { taskName, target ->
+    tasks.register(taskName, Exec) {
+        group = 'Fullpack'
+        description = "${target[1] == 'run' ? 'Runs' : 'Prepares'} the pinned ${profileName} ${target[0]} with this checkout's production artifacts."
+        notCompatibleWithConfigurationCache('Resolves local game/runtime settings at execution time.')
+        dependsOn mainArtifact, setupRuntime
+        if (target[0] == 'client') dependsOn generatorArtifact
+        standardInput = System.in
+        workingDir repository
+        doFirst {
+            if (setting('fullpackAcceptEula', System.getenv('FULLPACK_ACCEPT_EULA') ?: 'false') != 'true') {
+                throw new GradleException('Accept Minecraft EULA with -PfullpackAcceptEula=true before running.')
+            }
+            def runtimeFile = new File(profile, 'runtime.json')
+            if (!runtimeFile.isFile()) throw new GradleException("Missing runtime profile: ${runtimeFile}")
+            def runtime = new groovy.json.JsonSlurper().parse(runtimeFile, 'UTF-8')
+            if (runtime.minecraft != adapter[1] || !(runtime.java in [8, 17, 21])) {
+                throw new GradleException('The fullpack profile must match this adapter and a supported Java runtime.')
+            }
+            def configuredJava = setting('fullpackJava', '')
+            def java = configuredJava ? path(configuredJava) : javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(runtime.java as int)
+            }.get().executablePath.asFile
+            def command = [python.path, new File(scripts, 'run_fullpack.py').path, target[1],
+                '--lock', new File(profile, "${target[0]}.lock.json").path,
+                '--runtime-config', runtimeFile.path, '--cache', new File(home, 'objects').path,
+                '--runtime-cache', new File(home, 'minecraft').path, '--runtime-root', new File(home, 'runtimes').path,
+                '--profile', setting('fullpackSlot', profileName), '--role', target[0], '--java', java.path,
+                '--accept-eula', '--mod-jar', mainArtifact.get().archiveFile.get().asFile.path,
+                '--memory-mib', setting('fullpackMemoryMiB', target[0] == 'client' ? '6144' : '4096'),
+                '--port', setting('fullpackPort', '25585'),
+                '--web-port', setting('fullpackWebPort', target[0] == 'client' ? '23241' : '23240')]
+            if (target[0] == 'client') {
+                command.addAll(['--icon-generator-jar', generatorArtifact.get().archiveFile.get().asFile.path,
+                    '--offline-user', setting('fullpackUser', 'FullpackTest')])
+                def server = setting('fullpackJoinServer', '')
+                if (server) {
+                    if (runtime.kind == 'gtnh') {
+                        throw new GradleException('GTNH must connect from its menu; startup joining is unreliable in Forge 1.7.10.')
+                    }
+                    command.addAll(['--join-server', server])
+                }
+            }
+            def world = setting('fullpackWorld', '')
+            if (world) command.addAll(['--world', path(world).path])
+            commandLine command
+        }
+    }
+}

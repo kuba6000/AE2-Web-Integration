@@ -1,0 +1,1261 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "mods/adventurebackpack-1.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/AdventureBackpack2/releases/download/1.5.0-GTNH/adventurebackpack-1.5.0-GTNH.jar",
+      "owner": "AdventureBackpack2",
+      "maven": "com.github.GTNewHorizons:AdventureBackpack2:1.5.0-GTNH"
+    },
+    {
+      "path": "mods/AFSU-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/AFSU/releases/download/1.4.0-GTNH/AFSU-1.4.0-GTNH.jar",
+      "owner": "AFSU",
+      "maven": "com.github.GTNewHorizons:AFSU:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/AngerMod-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/AngerMod/releases/download/1.1.0/AngerMod-1.1.0.jar",
+      "owner": "AngerMod",
+      "maven": "com.github.GTNewHorizons:AngerMod:1.1.0"
+    },
+    {
+      "path": "mods/AppleCore-3.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/AppleCore/releases/download/3.4.0/AppleCore-3.4.0.jar",
+      "owner": "AppleCore",
+      "maven": "com.github.GTNewHorizons:AppleCore:3.4.0"
+    },
+    {
+      "path": "mods/ArchitectureCraft-1.13.0.jar",
+      "url": "https://github.com/GTNewHorizons/ArchitectureCraft/releases/download/1.13.0/ArchitectureCraft-1.13.0.jar",
+      "owner": "ArchitectureCraft",
+      "maven": "com.github.GTNewHorizons:ArchitectureCraft:1.13.0"
+    },
+    {
+      "path": "mods/AsieLib-0.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/AsieLib/releases/download/0.8.0/AsieLib-0.8.0.jar",
+      "owner": "AsieLib",
+      "maven": "com.github.GTNewHorizons:AsieLib:0.8.0"
+    },
+    {
+      "path": "mods/Avaritia-2.0.jar",
+      "url": "https://github.com/GTNewHorizons/Avaritia/releases/download/2.0/Avaritia-2.0.jar",
+      "owner": "Avaritia",
+      "maven": "com.github.GTNewHorizons:Avaritia:2.0"
+    },
+    {
+      "path": "mods/Avaritiaddons-1.10.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Avaritiaddons/releases/download/1.10.0-GTNH/Avaritiaddons-1.10.0-GTNH.jar",
+      "owner": "Avaritiaddons",
+      "maven": "com.github.GTNewHorizons:Avaritiaddons:1.10.0-GTNH"
+    },
+    {
+      "path": "mods/bdlib-1.12.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/bdlib/releases/download/1.12.0-GTNH/bdlib-1.12.0-GTNH.jar",
+      "owner": "bdlib",
+      "maven": "com.github.GTNewHorizons:bdlib:1.12.0-GTNH"
+    },
+    {
+      "path": "mods/BetterBuildersWands-0.14.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/BetterBuildersWands/releases/download/0.14.0-GTNH/BetterBuildersWands-0.14.0-GTNH.jar",
+      "owner": "BetterBuildersWands",
+      "maven": "com.github.GTNewHorizons:BetterBuildersWands:0.14.0-GTNH"
+    },
+    {
+      "path": "mods/BetterQuesting-3.9.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/BetterQuesting/releases/download/3.9.0-GTNH/BetterQuesting-3.9.0-GTNH.jar",
+      "owner": "BetterQuesting",
+      "maven": "com.github.GTNewHorizons:BetterQuesting:3.9.0-GTNH"
+    },
+    {
+      "path": "mods/binnie-mods-2.7.0.jar",
+      "url": "https://github.com/GTNewHorizons/Binnie/releases/download/2.7.0/binnie-mods-2.7.0.jar",
+      "owner": "Binnie",
+      "maven": "com.github.GTNewHorizons:Binnie:2.7.0"
+    },
+    {
+      "path": "mods/BlockLimiter-0.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/BlockLimiter/releases/download/0.8.0/BlockLimiter-0.8.0.jar",
+      "owner": "BlockLimiter",
+      "maven": "com.github.GTNewHorizons:BlockLimiter:0.8.0"
+    },
+    {
+      "path": "mods/BloodArsenal-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/BloodArsenal/releases/download/1.6.0/BloodArsenal-1.6.0.jar",
+      "owner": "BloodArsenal",
+      "maven": "com.github.GTNewHorizons:BloodArsenal:1.6.0"
+    },
+    {
+      "path": "mods/BloodMagic-1.10.0.jar",
+      "url": "https://github.com/GTNewHorizons/BloodMagic/releases/download/1.10.0/BloodMagic-1.10.0.jar",
+      "owner": "BloodMagic",
+      "maven": "com.github.GTNewHorizons:BloodMagic:1.10.0"
+    },
+    {
+      "path": "mods/Botania-1.14.1-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Botania/releases/download/1.14.1-GTNH/Botania-1.14.1-GTNH.jar",
+      "owner": "Botania",
+      "maven": "com.github.GTNewHorizons:Botania:1.14.1-GTNH"
+    },
+    {
+      "path": "mods/BotanicHorizons-1.13.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Botanic-horizons/releases/download/1.13.0-GTNH/BotanicHorizons-1.13.0-GTNH.jar",
+      "owner": "Botanic-horizons",
+      "maven": "com.github.GTNewHorizons:Botanic-horizons:1.13.0-GTNH"
+    },
+    {
+      "path": "mods/buildcraft-7.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/BuildCraft/releases/download/7.2.0/buildcraft-7.2.0.jar",
+      "owner": "BuildCraft",
+      "maven": "com.github.GTNewHorizons:BuildCraft:7.2.0"
+    },
+    {
+      "path": "mods/buildcraft-compat-7.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/BuildCraftCompat/releases/download/7.2.0/buildcraft-compat-7.2.0.jar",
+      "owner": "BuildCraftCompat",
+      "maven": "com.github.GTNewHorizons:BuildCraftCompat:7.2.0"
+    },
+    {
+      "path": "mods/CarpentersBlocks-3.8.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/CarpentersBlocks/releases/download/3.8.0-GTNH/CarpentersBlocks-3.8.0-GTNH.jar",
+      "owner": "CarpentersBlocks",
+      "maven": "com.github.GTNewHorizons:CarpentersBlocks:3.8.0-GTNH"
+    },
+    {
+      "path": "mods/catwalks-2.5.0-GTNH.jar",
+      "url": "https://nexus.gtnewhorizons.com/repository/releases/com/github/GTNewHorizons/Catwalks-2/2.5.0-GTNH/Catwalks-2-2.5.0-GTNH.jar",
+      "owner": "Catwalks-2",
+      "maven": "com.github.GTNewHorizons:Catwalks-2:2.5.0-GTNH"
+    },
+    {
+      "path": "mods/chisel-2.18.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Chisel/releases/download/2.18.0-GTNH/chisel-2.18.0-GTNH.jar",
+      "owner": "Chisel",
+      "maven": "com.github.GTNewHorizons:Chisel:2.18.0-GTNH"
+    },
+    {
+      "path": "mods/chiseltones-1.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ChiselTones/releases/download/1.3.0-GTNH/chiseltones-1.3.0-GTNH.jar",
+      "owner": "ChiselTones",
+      "maven": "com.github.GTNewHorizons:ChiselTones:1.3.0-GTNH"
+    },
+    {
+      "path": "mods/CodeChickenCore-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/CodeChickenCore/releases/download/1.5.0/CodeChickenCore-1.5.0.jar",
+      "owner": "CodeChickenCore",
+      "maven": "com.github.GTNewHorizons:CodeChickenCore:1.5.0"
+    },
+    {
+      "path": "mods/Computronics-1.10.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Computronics/releases/download/1.10.0-GTNH/Computronics-1.10.0-GTNH.jar",
+      "owner": "Computronics",
+      "maven": "com.github.GTNewHorizons:Computronics:1.10.0-GTNH"
+    },
+    {
+      "path": "mods/CookingForBlockheads-1.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/CookingForBlockheads/releases/download/1.5.0-GTNH/CookingForBlockheads-1.5.0-GTNH.jar",
+      "owner": "CookingForBlockheads",
+      "maven": "com.github.GTNewHorizons:CookingForBlockheads:1.5.0-GTNH"
+    },
+    {
+      "path": "mods/CraftTweaker-3.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/CraftTweaker/releases/download/3.5.0/CraftTweaker-3.5.0.jar",
+      "owner": "CraftTweaker",
+      "maven": "com.github.GTNewHorizons:CraftTweaker:3.5.0"
+    },
+    {
+      "path": "mods/Draconic-Evolution-1.6.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Draconic-Evolution/releases/download/1.6.0-GTNH/Draconic-Evolution-1.6.0-GTNH.jar",
+      "owner": "Draconic-Evolution",
+      "maven": "com.github.GTNewHorizons:Draconic-Evolution:1.6.0-GTNH"
+    },
+    {
+      "path": "mods/EMT-1.8.1.jar",
+      "url": "https://github.com/GTNewHorizons/Electro-Magic-Tools/releases/download/1.8.1/EMT-1.8.1.jar",
+      "owner": "Electro-Magic-Tools",
+      "maven": "com.github.GTNewHorizons:Electro-Magic-Tools:1.8.1"
+    },
+    {
+      "path": "mods/endercore-0.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/EnderCore/releases/download/0.6.0/endercore-0.6.0.jar",
+      "owner": "EnderCore",
+      "maven": "com.github.GTNewHorizons:EnderCore:0.6.0"
+    },
+    {
+      "path": "mods/EnderIO-2.11.0.jar",
+      "url": "https://github.com/GTNewHorizons/EnderIO/releases/download/2.11.0/EnderIO-2.11.0.jar",
+      "owner": "EnderIO",
+      "maven": "com.github.GTNewHorizons:EnderIO:2.11.0"
+    },
+    {
+      "path": "mods/EnderStorage-1.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/EnderStorage/releases/download/1.9.0/EnderStorage-1.9.0.jar",
+      "owner": "EnderStorage",
+      "maven": "com.github.GTNewHorizons:EnderStorage:1.9.0"
+    },
+    {
+      "path": "mods/EnderZoo-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/EnderZoo/releases/download/1.4.0/EnderZoo-1.4.0.jar",
+      "owner": "EnderZoo",
+      "maven": "com.github.GTNewHorizons:EnderZoo:1.4.0"
+    },
+    {
+      "path": "mods/EnhancedLootBags-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/EnhancedLootBags/releases/download/1.4.0/EnhancedLootBags-1.4.0.jar",
+      "owner": "EnhancedLootBags",
+      "maven": "com.github.GTNewHorizons:EnhancedLootBags:1.4.0"
+    },
+    {
+      "path": "mods/eternalsingularity-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/Eternal-Singularity/releases/download/1.5.0/eternalsingularity-1.5.0.jar",
+      "owner": "Eternal-Singularity",
+      "maven": "com.github.GTNewHorizons:Eternal-Singularity:1.5.0"
+    },
+    {
+      "path": "mods/findit-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/FindIt/releases/download/1.5.0/findit-1.5.0.jar",
+      "owner": "FindIt",
+      "maven": "com.github.GTNewHorizons:FindIt:1.5.0"
+    },
+    {
+      "path": "mods/Forbidden.Magic-0.10.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ForbiddenMagic/releases/download/0.10.0-GTNH/Forbidden.Magic-0.10.0-GTNH.jar",
+      "owner": "ForbiddenMagic",
+      "maven": "com.github.GTNewHorizons:ForbiddenMagic:0.10.0-GTNH"
+    },
+    {
+      "path": "mods/Forestry-4.12.0.jar",
+      "url": "https://github.com/GTNewHorizons/ForestryMC/releases/download/4.12.0/Forestry-4.12.0.jar",
+      "owner": "ForestryMC",
+      "maven": "com.github.GTNewHorizons:ForestryMC:4.12.0"
+    },
+    {
+      "path": "mods/forgelin-2.1.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Forgelin/releases/download/2.1.0-GTNH/forgelin-2.1.0-GTNH.jar",
+      "owner": "Forgelin",
+      "maven": "com.github.GTNewHorizons:Forgelin:2.1.0-GTNH"
+    },
+    {
+      "path": "mods/ForgeMultipart-1.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/ForgeMultipart/releases/download/1.8.0/ForgeMultipart-1.8.0.jar",
+      "owner": "ForgeMultipart",
+      "maven": "com.github.GTNewHorizons:ForgeMultipart:1.8.0"
+    },
+    {
+      "path": "mods/gadomancy-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/Gadomancy/releases/download/1.6.0/gadomancy-1.6.0.jar",
+      "owner": "Gadomancy",
+      "maven": "com.github.GTNewHorizons:Gadomancy:1.6.0"
+    },
+    {
+      "path": "mods/Galacticraft-3.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Galacticraft/releases/download/3.5.0-GTNH/Galacticraft-3.5.0-GTNH.jar",
+      "owner": "Galacticraft",
+      "maven": "com.github.GTNewHorizons:Galacticraft:3.5.0-GTNH"
+    },
+    {
+      "path": "mods/GalaxySpace-1.1.146-GTNH.jar",
+      "url": "https://nexus.gtnewhorizons.com/repository/releases/com/github/GTNewHorizons/Galaxy-Space-GTNH/1.1.146-GTNH/Galaxy-Space-GTNH-1.1.146-GTNH.jar",
+      "owner": "Galaxy-Space-GTNH",
+      "maven": "com.github.GTNewHorizons:Galaxy-Space-GTNH:1.1.146-GTNH"
+    },
+    {
+      "path": "mods/gendustry-1.10.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/gendustry/releases/download/1.10.0-GTNH/gendustry-1.10.0-GTNH.jar",
+      "owner": "gendustry",
+      "maven": "com.github.GTNewHorizons:gendustry:1.10.0-GTNH"
+    },
+    {
+      "path": "mods/gregtech-5.09.55.3.jar",
+      "url": "https://github.com/GTNewHorizons/GT5-Unofficial/releases/download/5.09.55.3/gregtech-5.09.55.3.jar",
+      "owner": "GT5-Unofficial",
+      "maven": "com.github.GTNewHorizons:GT5-Unofficial:5.09.55.3"
+    },
+    {
+      "path": "mods/GTNH-TC-Wands-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/GTNH-TC-Wands/releases/download/1.5.0/GTNH-TC-Wands-1.5.0.jar",
+      "owner": "GTNH-TC-Wands",
+      "maven": "com.github.GTNewHorizons:GTNH-TC-Wands:1.5.0"
+    },
+    {
+      "path": "mods/gtnhlib-0.12.0.jar",
+      "url": "https://github.com/GTNewHorizons/GTNHLib/releases/download/0.12.0/gtnhlib-0.12.0.jar",
+      "owner": "GTNHLib",
+      "maven": "com.github.GTNewHorizons:GTNHLib:0.12.0"
+    },
+    {
+      "path": "mods/HardcoreEnderExpansion-1.14.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Hardcore-Ender-Expansion/releases/download/1.14.0-GTNH/HardcoreEnderExpansion-1.14.0-GTNH.jar",
+      "owner": "Hardcore-Ender-Expansion",
+      "maven": "com.github.GTNewHorizons:Hardcore-Ender-Expansion:1.14.0-GTNH"
+    },
+    {
+      "path": "mods/harvestcraft-1.4.0-GTNH.jar",
+      "url": "https://nexus.gtnewhorizons.com/repository/releases/com/github/GTNewHorizons/harvestcraft/1.4.0-GTNH/harvestcraft-1.4.0-GTNH.jar",
+      "owner": "harvestcraft",
+      "maven": "com.github.GTNewHorizons:harvestcraft:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/hodgepodge-2.8.1.jar",
+      "url": "https://github.com/GTNewHorizons/Hodgepodge/releases/download/2.8.1/hodgepodge-2.8.1.jar",
+      "owner": "Hodgepodge",
+      "maven": "com.github.GTNewHorizons:Hodgepodge:2.8.1"
+    },
+    {
+      "path": "mods/holoinventory-2.6.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/HoloInventory/releases/download/2.6.0-GTNH/holoinventory-2.6.0-GTNH.jar",
+      "owner": "HoloInventory",
+      "maven": "com.github.GTNewHorizons:HoloInventory:2.6.0-GTNH"
+    },
+    {
+      "path": "mods/hydroenergy-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/HydroEnergy/releases/download/1.5.0/hydroenergy-1.5.0.jar",
+      "owner": "HydroEnergy",
+      "maven": "com.github.GTNewHorizons:HydroEnergy:1.5.0"
+    },
+    {
+      "path": "mods/ifu-1.13.0.jar",
+      "url": "https://github.com/GTNewHorizons/IFU/releases/download/1.13.0/ifu-1.13.0.jar",
+      "owner": "IFU",
+      "maven": "com.github.GTNewHorizons:IFU:1.13.0"
+    },
+    {
+      "path": "mods/IguanaTweaksTConstruct-2.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/IguanaTweaksTConstruct/releases/download/2.8.0/IguanaTweaksTConstruct-2.8.0.jar",
+      "owner": "IguanaTweaksTConstruct",
+      "maven": "com.github.GTNewHorizons:IguanaTweaksTConstruct:2.8.0"
+    },
+    {
+      "path": "mods/InfernalMobs-1.11.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Infernal-Mobs/releases/download/1.11.0-GTNH/InfernalMobs-1.11.0-GTNH.jar",
+      "owner": "Infernal-Mobs",
+      "maven": "com.github.GTNewHorizons:Infernal-Mobs:1.11.0-GTNH"
+    },
+    {
+      "path": "mods/InGameInfoXML-2.10.0.jar",
+      "url": "https://github.com/GTNewHorizons/InGame-Info-XML/releases/download/2.10.0/InGameInfoXML-2.10.0.jar",
+      "owner": "InGame-Info-XML",
+      "maven": "com.github.GTNewHorizons:InGame-Info-XML:2.10.0"
+    },
+    {
+      "path": "mods/IronChest-6.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/ironchest/releases/download/6.2.0/IronChest-6.2.0.jar",
+      "owner": "ironchest",
+      "maven": "com.github.GTNewHorizons:ironchest:6.2.0"
+    },
+    {
+      "path": "mods/IronChestMinecarts-1.3.0.jar",
+      "url": "https://github.com/GTNewHorizons/IronChestMinecarts/releases/download/1.3.0/IronChestMinecarts-1.3.0.jar",
+      "owner": "IronChestMinecarts",
+      "maven": "com.github.GTNewHorizons:IronChestMinecarts:1.3.0"
+    },
+    {
+      "path": "mods/irontanks-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/Irontanks/releases/download/1.5.0/irontanks-1.5.0.jar",
+      "owner": "Irontanks",
+      "maven": "com.github.GTNewHorizons:Irontanks:1.5.0"
+    },
+    {
+      "path": "mods/JABBA-1.6.1.jar",
+      "url": "https://github.com/GTNewHorizons/Jabba/releases/download/1.6.1/JABBA-1.6.1.jar",
+      "owner": "Jabba",
+      "maven": "com.github.GTNewHorizons:Jabba:1.6.1"
+    },
+    {
+      "path": "mods/littletiles-1.7.1.jar",
+      "url": "https://github.com/GTNewHorizons/LittleTiles/releases/download/1.7.1/littletiles-1.7.1.jar",
+      "owner": "LittleTiles",
+      "maven": "com.github.GTNewHorizons:LittleTiles:1.7.1"
+    },
+    {
+      "path": "mods/logisticspipes-1.6.1-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/LogisticsPipes/releases/download/1.6.1-GTNH/logisticspipes-1.6.1-GTNH.jar",
+      "owner": "LogisticsPipes",
+      "maven": "com.github.GTNewHorizons:LogisticsPipes:1.6.1-GTNH"
+    },
+    {
+      "path": "mods/lootgames-2.3.0.jar",
+      "url": "https://github.com/GTNewHorizons/LootGames/releases/download/2.3.0/lootgames-2.3.0.jar",
+      "owner": "LootGames",
+      "maven": "com.github.GTNewHorizons:LootGames:2.3.0"
+    },
+    {
+      "path": "mods/LunatriusCore-1.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/LunatriusCore/releases/download/1.3.0-GTNH/LunatriusCore-1.3.0-GTNH.jar",
+      "owner": "LunatriusCore",
+      "maven": "com.github.GTNewHorizons:LunatriusCore:1.3.0-GTNH"
+    },
+    {
+      "path": "mods/magicbees-2.11.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/MagicBees/releases/download/2.11.0-GTNH/magicbees-2.11.0-GTNH.jar",
+      "owner": "MagicBees",
+      "maven": "com.github.GTNewHorizons:MagicBees:2.11.0-GTNH"
+    },
+    {
+      "path": "mods/malisisdoors-1.20.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/MalisisDoors/releases/download/1.20.0-GTNH/malisisdoors-1.20.0-GTNH.jar",
+      "owner": "MalisisDoors",
+      "maven": "com.github.GTNewHorizons:MalisisDoors:1.20.0-GTNH"
+    },
+    {
+      "path": "mods/Mantle-0.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/Mantle/releases/download/0.6.0/Mantle-0.6.0.jar",
+      "owner": "Mantle",
+      "maven": "com.github.GTNewHorizons:Mantle:0.6.0"
+    },
+    {
+      "path": "mods/backpack-2.7.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Minecraft-Backpack-Mod/releases/download/2.7.0-GTNH/backpack-2.7.0-GTNH.jar",
+      "owner": "Minecraft-Backpack-Mod",
+      "maven": "com.github.GTNewHorizons:Minecraft-Backpack-Mod:2.7.0-GTNH"
+    },
+    {
+      "path": "mods/GTTweaker-2.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/Minetweaker-Gregtech-5-Addon/releases/download/2.4.0/GTTweaker-2.4.0.jar",
+      "owner": "Minetweaker-Gregtech-5-Addon",
+      "maven": "com.github.GTNewHorizons:Minetweaker-Gregtech-5-Addon:2.4.0"
+    },
+    {
+      "path": "mods/ModTweaker2-0.15.0.jar",
+      "url": "https://github.com/GTNewHorizons/ModTweaker/releases/download/0.15.0/ModTweaker2-0.15.0.jar",
+      "owner": "ModTweaker",
+      "maven": "com.github.GTNewHorizons:ModTweaker:0.15.0"
+    },
+    {
+      "path": "mods/Natura-2.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/Natura/releases/download/2.9.0/Natura-2.9.0.jar",
+      "owner": "Natura",
+      "maven": "com.github.GTNewHorizons:Natura:2.9.0"
+    },
+    {
+      "path": "mods/naturescompass-1.6.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/NaturesCompass/releases/download/1.6.0-GTNH/naturescompass-1.6.0-GTNH.jar",
+      "owner": "NaturesCompass",
+      "maven": "com.github.GTNewHorizons:NaturesCompass:1.6.0-GTNH"
+    },
+    {
+      "path": "mods/NEICustomDiagram-1.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/nei-custom-diagram/releases/download/1.9.0/NEICustomDiagram-1.9.0.jar",
+      "owner": "nei-custom-diagram",
+      "maven": "com.github.GTNewHorizons:nei-custom-diagram:1.9.0"
+    },
+    {
+      "path": "mods/NEIIntegration-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/NEI-Integration/releases/download/1.6.0/NEIIntegration-1.6.0.jar",
+      "owner": "NEI-Integration",
+      "maven": "com.github.GTNewHorizons:NEI-Integration:1.6.0"
+    },
+    {
+      "path": "mods/netherportalfix-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/NetherPortalFix/releases/download/1.5.0/netherportalfix-1.5.0.jar",
+      "owner": "NetherPortalFix",
+      "maven": "com.github.GTNewHorizons:NetherPortalFix:1.5.0"
+    },
+    {
+      "path": "mods/GTNewHorizonsCoreMod-2.10.4.jar",
+      "url": "https://github.com/GTNewHorizons/NewHorizonsCoreMod/releases/download/2.10.4/GTNewHorizonsCoreMod-2.10.4.jar",
+      "owner": "NewHorizonsCoreMod",
+      "maven": "com.github.GTNewHorizons:NewHorizonsCoreMod:2.10.4"
+    },
+    {
+      "path": "mods/NodalMechanics-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Nodal-Mechanics/releases/download/1.4.0-GTNH/NodalMechanics-1.4.0-GTNH.jar",
+      "owner": "Nodal-Mechanics",
+      "maven": "com.github.GTNewHorizons:Nodal-Mechanics:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/NotEnoughItems-2.9.3-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/NotEnoughItems/releases/download/2.9.3-GTNH/NotEnoughItems-2.9.3-GTNH.jar",
+      "owner": "NotEnoughItems",
+      "maven": "com.github.GTNewHorizons:NotEnoughItems:2.9.3-GTNH"
+    },
+    {
+      "path": "mods/IC2NuclearControl-2.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/Nuclear-Control/releases/download/2.8.0/IC2NuclearControl-2.8.0.jar",
+      "owner": "Nuclear-Control",
+      "maven": "com.github.GTNewHorizons:Nuclear-Control:2.8.0"
+    },
+    {
+      "path": "mods/OpenGlasses-1.7.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/OCGlasses/releases/download/1.7.0-GTNH/OpenGlasses-1.7.0-GTNH.jar",
+      "owner": "OCGlasses",
+      "maven": "com.github.GTNewHorizons:OCGlasses:1.7.0-GTNH"
+    },
+    {
+      "path": "mods/OpenBlocks-1.13.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/OpenBlocks/releases/download/1.13.0-GTNH/OpenBlocks-1.13.0-GTNH.jar",
+      "owner": "OpenBlocks",
+      "maven": "com.github.GTNewHorizons:OpenBlocks:1.13.0-GTNH"
+    },
+    {
+      "path": "mods/OpenComputers-1.13.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/OpenComputers/releases/download/1.13.0-GTNH/OpenComputers-1.13.0-GTNH.jar",
+      "owner": "OpenComputers",
+      "maven": "com.github.GTNewHorizons:OpenComputers:1.13.0-GTNH"
+    },
+    {
+      "path": "mods/OpenModsLibs-0.11.0.jar",
+      "url": "https://github.com/GTNewHorizons/OpenModsLib/releases/download/0.11.0/OpenModsLibs-0.11.0.jar",
+      "owner": "OpenModsLib",
+      "maven": "com.github.GTNewHorizons:OpenModsLib:0.11.0"
+    },
+    {
+      "path": "mods/OpenModularTurrets-2.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/OpenModularTurrets/releases/download/2.5.0/OpenModularTurrets-2.5.0.jar",
+      "owner": "OpenModularTurrets",
+      "maven": "com.github.GTNewHorizons:OpenModularTurrets:2.5.0"
+    },
+    {
+      "path": "mods/opensecurity-1.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/OpenSecurity/releases/download/1.3.0-GTNH/opensecurity-1.3.0-GTNH.jar",
+      "owner": "OpenSecurity",
+      "maven": "com.github.GTNewHorizons:OpenSecurity:1.3.0-GTNH"
+    },
+    {
+      "path": "mods/Opis-1.5.0-mapless.jar",
+      "url": "https://github.com/GTNewHorizons/Opis/releases/download/1.5.0-mapless/Opis-1.5.0-mapless.jar",
+      "owner": "Opis",
+      "maven": "com.github.GTNewHorizons:Opis:1.5.0-mapless"
+    },
+    {
+      "path": "mods/personalspace-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/PersonalSpace/releases/download/1.1.0/personalspace-1.1.0.jar",
+      "owner": "PersonalSpace",
+      "maven": "com.github.GTNewHorizons:PersonalSpace:1.1.0"
+    },
+    {
+      "path": "mods/ProjectBlue-1.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ProjectBlue/releases/download/1.3.0-GTNH/ProjectBlue-1.3.0-GTNH.jar",
+      "owner": "ProjectBlue",
+      "maven": "com.github.GTNewHorizons:ProjectBlue:1.3.0-GTNH"
+    },
+    {
+      "path": "mods/ProjRed-4.13.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ProjectRed/releases/download/4.13.0-GTNH/ProjRed-4.13.0-GTNH.jar",
+      "owner": "ProjectRed",
+      "maven": "com.github.GTNewHorizons:ProjectRed:4.13.0-GTNH"
+    },
+    {
+      "path": "mods/Railcraft-9.18.0.jar",
+      "url": "https://github.com/GTNewHorizons/Railcraft/releases/download/9.18.0/Railcraft-9.18.0.jar",
+      "owner": "Railcraft",
+      "maven": "com.github.GTNewHorizons:Railcraft:9.18.0"
+    },
+    {
+      "path": "mods/RWG-alpha-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/Realistic-World-Gen/releases/download/alpha-1.6.0/RWG-alpha-1.6.0.jar",
+      "owner": "Realistic-World-Gen",
+      "maven": "com.github.GTNewHorizons:Realistic-World-Gen:alpha-1.6.0"
+    },
+    {
+      "path": "mods/RemoteIO-2.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/RemoteIO/releases/download/2.8.0/RemoteIO-2.8.0.jar",
+      "owner": "RemoteIO",
+      "maven": "com.github.GTNewHorizons:RemoteIO:2.8.0"
+    },
+    {
+      "path": "mods/roguelike-1.7.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Roguelike-Dungeons/releases/download/1.7.0-GTNH/roguelike-1.7.0-GTNH.jar",
+      "owner": "Roguelike-Dungeons",
+      "maven": "com.github.GTNewHorizons:Roguelike-Dungeons:1.7.0-GTNH"
+    },
+    {
+      "path": "mods/StevesCarts-2.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/SC2/releases/download/2.4.0/StevesCarts-2.4.0.jar",
+      "owner": "SC2",
+      "maven": "com.github.GTNewHorizons:SC2:2.4.0"
+    },
+    {
+      "path": "mods/SGCraft-1.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/SGCraft/releases/download/1.5.0-GTNH/SGCraft-1.5.0-GTNH.jar",
+      "owner": "SGCraft",
+      "maven": "com.github.GTNewHorizons:SGCraft:1.5.0-GTNH"
+    },
+    {
+      "path": "mods/sharewhereiam-2.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/Share-Where-I-am/releases/download/2.2.0/sharewhereiam-2.2.0.jar",
+      "owner": "Share-Where-I-am",
+      "maven": "com.github.GTNewHorizons:Share-Where-I-am:2.2.0"
+    },
+    {
+      "path": "mods/sleepingbag-0.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/SleepingBags/releases/download/0.4.0/sleepingbag-0.4.0.jar",
+      "owner": "SleepingBags",
+      "maven": "com.github.GTNewHorizons:SleepingBags:0.4.0"
+    },
+    {
+      "path": "mods/SpecialMobs-3.8.1.jar",
+      "url": "https://github.com/GTNewHorizons/SpecialMobs/releases/download/3.8.1/SpecialMobs-3.8.1.jar",
+      "owner": "SpecialMobs",
+      "maven": "com.github.GTNewHorizons:SpecialMobs:3.8.1"
+    },
+    {
+      "path": "mods/StevesFactoryManager-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Steve-s-Factory-Manager/releases/download/1.4.0-GTNH/StevesFactoryManager-1.4.0-GTNH.jar",
+      "owner": "Steve-s-Factory-Manager",
+      "maven": "com.github.GTNewHorizons:Steve-s-Factory-Manager:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/StevesAddons-0.16.0.jar",
+      "url": "https://github.com/GTNewHorizons/StevesAddons/releases/download/0.16.0/StevesAddons-0.16.0.jar",
+      "owner": "StevesAddons",
+      "maven": "com.github.GTNewHorizons:StevesAddons:0.16.0"
+    },
+    {
+      "path": "mods/StorageDrawers-2.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/StorageDrawers/releases/download/2.3.0-GTNH/StorageDrawers-2.3.0-GTNH.jar",
+      "owner": "StorageDrawers",
+      "maven": "com.github.GTNewHorizons:StorageDrawers:2.3.0-GTNH"
+    },
+    {
+      "path": "mods/structurecompat-0.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/StructureCompat/releases/download/0.8.0/structurecompat-0.8.0.jar",
+      "owner": "StructureCompat",
+      "maven": "com.github.GTNewHorizons:StructureCompat:0.8.0"
+    },
+    {
+      "path": "mods/structurelib-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/StructureLib/releases/download/1.5.0/structurelib-1.5.0.jar",
+      "owner": "StructureLib",
+      "maven": "com.github.GTNewHorizons:StructureLib:1.5.0"
+    },
+    {
+      "path": "mods/SuperTic-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/Super-TiC/releases/download/1.6.0/SuperTic-1.6.0.jar",
+      "owner": "Super-TiC",
+      "maven": "com.github.GTNewHorizons:Super-TiC:1.6.0"
+    },
+    {
+      "path": "mods/supersolarpanel-1.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/supersolarpanels/releases/download/1.2.0/supersolarpanel-1.2.0.jar",
+      "owner": "supersolarpanels",
+      "maven": "com.github.GTNewHorizons:supersolarpanels:1.2.0"
+    },
+    {
+      "path": "mods/ThaumcraftResearchTweaks-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/thaumcraft-research-tweaks/releases/download/1.5.0/ThaumcraftResearchTweaks-1.5.0.jar",
+      "owner": "thaumcraft-research-tweaks",
+      "maven": "com.github.GTNewHorizons:thaumcraft-research-tweaks:1.5.0"
+    },
+    {
+      "path": "mods/ThaumcraftMobAspects-1.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumcraftMobAspects/releases/download/1.3.0-GTNH/ThaumcraftMobAspects-1.3.0-GTNH.jar",
+      "owner": "ThaumcraftMobAspects",
+      "maven": "com.github.GTNewHorizons:ThaumcraftMobAspects:1.3.0-GTNH"
+    },
+    {
+      "path": "mods/Thaumic-Exploration-1.6.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Thaumic_Exploration/releases/download/1.6.0-GTNH/Thaumic-Exploration-1.6.0-GTNH.jar",
+      "owner": "Thaumic_Exploration",
+      "maven": "com.github.GTNewHorizons:Thaumic_Exploration:1.6.0-GTNH"
+    },
+    {
+      "path": "mods/Thaumic-Based-1.10.0.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumicBases/releases/download/1.10.0/Thaumic-Based-1.10.0.jar",
+      "owner": "ThaumicBases",
+      "maven": "com.github.GTNewHorizons:ThaumicBases:1.10.0"
+    },
+    {
+      "path": "mods/ThaumicHorizons-1.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumicHorizons/releases/download/1.9.0/ThaumicHorizons-1.9.0.jar",
+      "owner": "ThaumicHorizons",
+      "maven": "com.github.GTNewHorizons:ThaumicHorizons:1.9.0"
+    },
+    {
+      "path": "mods/thaumicinsurgence-0.4.1.jar",
+      "url": "https://github.com/GTNewHorizons/thaumicinsurgence/releases/download/0.4.1/thaumicinsurgence-0.4.1.jar",
+      "owner": "thaumicinsurgence",
+      "maven": "com.github.GTNewHorizons:thaumicinsurgence:0.4.1"
+    },
+    {
+      "path": "mods/ThaumicTinkerer-2.13.0.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumicTinkerer/releases/download/2.13.0/ThaumicTinkerer-2.13.0.jar",
+      "owner": "ThaumicTinkerer",
+      "maven": "com.github.GTNewHorizons:ThaumicTinkerer:2.13.0"
+    },
+    {
+      "path": "mods/TConstruct-1.15.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/TinkersConstruct/releases/download/1.15.0-GTNH/TConstruct-1.15.0-GTNH.jar",
+      "owner": "TinkersConstruct",
+      "maven": "com.github.GTNewHorizons:TinkersConstruct:1.15.0-GTNH"
+    },
+    {
+      "path": "mods/TMechworks-0.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/TinkersMechworks/releases/download/0.5.0/TMechworks-0.5.0.jar",
+      "owner": "TinkersMechworks",
+      "maven": "com.github.GTNewHorizons:TinkersMechworks:0.5.0"
+    },
+    {
+      "path": "mods/TooMuchLoot-4.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/TooMuchLoot/releases/download/4.5.0-GTNH/TooMuchLoot-4.5.0-GTNH.jar",
+      "owner": "TooMuchLoot",
+      "maven": "com.github.GTNewHorizons:TooMuchLoot:4.5.0-GTNH"
+    },
+    {
+      "path": "mods/Translocator-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/Translocators/releases/download/1.5.0/Translocator-1.5.0.jar",
+      "owner": "Translocators",
+      "maven": "com.github.GTNewHorizons:Translocators:1.5.0"
+    },
+    {
+      "path": "mods/TwilightForest-2.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/twilightforest/releases/download/2.8.0/TwilightForest-2.8.0.jar",
+      "owner": "twilightforest",
+      "maven": "com.github.GTNewHorizons:twilightforest:2.8.0"
+    },
+    {
+      "path": "mods/Universal-Singularities-8.16.0.jar",
+      "url": "https://github.com/GTNewHorizons/Universal-Singularities/releases/download/8.16.0/Universal-Singularities-8.16.0.jar",
+      "owner": "Universal-Singularities",
+      "maven": "com.github.GTNewHorizons:Universal-Singularities:8.16.0"
+    },
+    {
+      "path": "mods/visualprospecting-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/VisualProspecting/releases/download/1.6.0/visualprospecting-1.6.0.jar",
+      "owner": "VisualProspecting",
+      "maven": "com.github.GTNewHorizons:VisualProspecting:1.6.0"
+    },
+    {
+      "path": "mods/Waila-1.20.0.jar",
+      "url": "https://github.com/GTNewHorizons/waila/releases/download/1.20.0/Waila-1.20.0.jar",
+      "owner": "waila",
+      "maven": "com.github.GTNewHorizons:waila:1.20.0"
+    },
+    {
+      "path": "mods/WailaHarvestability-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/WailaHarvestability/releases/download/1.4.0-GTNH/WailaHarvestability-1.4.0-GTNH.jar",
+      "owner": "WailaHarvestability",
+      "maven": "com.github.GTNewHorizons:WailaHarvestability:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/WAILAPlugins-0.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/WAILAPlugins/releases/download/0.8.0/WAILAPlugins-0.8.0.jar",
+      "owner": "WAILAPlugins",
+      "maven": "com.github.GTNewHorizons:WAILAPlugins:0.8.0"
+    },
+    {
+      "path": "mods/WanionLib-1.11.0.jar",
+      "url": "https://github.com/GTNewHorizons/WanionLib/releases/download/1.11.0/WanionLib-1.11.0.jar",
+      "owner": "WanionLib",
+      "maven": "com.github.GTNewHorizons:WanionLib:1.11.0"
+    },
+    {
+      "path": "mods/WarpTheory-1.6.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/WarpTheory/releases/download/1.6.0-GTNH/WarpTheory-1.6.0-GTNH.jar",
+      "owner": "WarpTheory",
+      "maven": "com.github.GTNewHorizons:WarpTheory:1.6.0-GTNH"
+    },
+    {
+      "path": "mods/Wawla-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/WAWLA/releases/download/1.4.0-GTNH/Wawla-1.4.0-GTNH.jar",
+      "owner": "WAWLA",
+      "maven": "com.github.GTNewHorizons:WAWLA:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/WR-CBE-1.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/WirelessRedstone-CBE/releases/download/1.8.0/WR-CBE-1.8.0.jar",
+      "owner": "WirelessRedstone-CBE",
+      "maven": "com.github.GTNewHorizons:WirelessRedstone-CBE:1.8.0"
+    },
+    {
+      "path": "mods/WitcheryExtras-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/WitcheryExtras/releases/download/1.5.0/WitcheryExtras-1.5.0.jar",
+      "owner": "WitcheryExtras",
+      "maven": "com.github.GTNewHorizons:WitcheryExtras:1.5.0"
+    },
+    {
+      "path": "mods/WitchingGadgets-1.9.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/WitchingGadgets/releases/download/1.9.0-GTNH/WitchingGadgets-1.9.0-GTNH.jar",
+      "owner": "WitchingGadgets",
+      "maven": "com.github.GTNewHorizons:WitchingGadgets:1.9.0-GTNH"
+    },
+    {
+      "path": "mods/YAMCore-0.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/Yamcl/releases/download/0.8.0/YAMCore-0.8.0.jar",
+      "owner": "Yamcl",
+      "maven": "com.github.GTNewHorizons:Yamcl:0.8.0"
+    },
+    {
+      "path": "mods/openprinter-0.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/OpenPrinter/releases/download/0.4.0-GTNH/openprinter-0.4.0-GTNH.jar",
+      "owner": "OpenPrinter",
+      "maven": "com.github.GTNewHorizons:OpenPrinter:0.4.0-GTNH"
+    },
+    {
+      "path": "mods/blockrenderer6343-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/BlockRenderer6343/releases/download/1.5.0/blockrenderer6343-1.5.0.jar",
+      "owner": "BlockRenderer6343",
+      "maven": "com.github.GTNewHorizons:BlockRenderer6343:1.5.0"
+    },
+    {
+      "path": "mods/modularui-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/ModularUI/releases/download/1.4.0/modularui-1.4.0.jar",
+      "owner": "ModularUI",
+      "maven": "com.github.GTNewHorizons:ModularUI:1.4.0"
+    },
+    {
+      "path": "mods/FloodLights-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/FloodLights/releases/download/1.6.0/FloodLights-1.6.0.jar",
+      "owner": "FloodLights",
+      "maven": "com.github.GTNewHorizons:FloodLights:1.6.0"
+    },
+    {
+      "path": "mods/ForgeRelocationFMP-0.3.0.jar",
+      "url": "https://github.com/GTNewHorizons/ForgeRelocationFMP/releases/download/0.3.0/ForgeRelocationFMP-0.3.0.jar",
+      "owner": "ForgeRelocationFMP",
+      "maven": "com.github.GTNewHorizons:ForgeRelocationFMP:0.3.0"
+    },
+    {
+      "path": "mods/ForgeRelocation-0.4.1.jar",
+      "url": "https://github.com/GTNewHorizons/ForgeRelocation/releases/download/0.4.1/ForgeRelocation-0.4.1.jar",
+      "owner": "ForgeRelocation",
+      "maven": "com.github.GTNewHorizons:ForgeRelocation:0.4.1"
+    },
+    {
+      "path": "mods/HelpFixer-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/HelpFixer/releases/download/1.4.0/HelpFixer-1.4.0.jar",
+      "owner": "HelpFixer",
+      "maven": "com.github.GTNewHorizons:HelpFixer:1.4.0"
+    },
+    {
+      "path": "mods/PlayerAPI-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/Player-API/releases/download/1.6.0/PlayerAPI-1.6.0.jar",
+      "owner": "Player-API",
+      "maven": "com.github.GTNewHorizons:Player-API:1.6.0"
+    },
+    {
+      "path": "mods/DummyCore-1.22.0.jar",
+      "url": "https://github.com/GTNewHorizons/DummyCore/releases/download/1.22.0/DummyCore-1.22.0.jar",
+      "owner": "DummyCore",
+      "maven": "com.github.GTNewHorizons:DummyCore:1.22.0"
+    },
+    {
+      "path": "mods/BuildCraftOilTweak-1.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/BuildCraftOilTweak/releases/download/1.2.0/BuildCraftOilTweak-1.2.0.jar",
+      "owner": "BuildCraftOilTweak",
+      "maven": "com.github.GTNewHorizons:BuildCraftOilTweak:1.2.0"
+    },
+    {
+      "path": "mods/gravisuiteneo-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/Gravitation-Suite-Neo/releases/download/1.4.0/gravisuiteneo-1.4.0.jar",
+      "owner": "Gravitation-Suite-Neo",
+      "maven": "com.github.GTNewHorizons:Gravitation-Suite-Neo:1.4.0"
+    },
+    {
+      "path": "mods/MrTJPCore-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/MrTJPCore/releases/download/1.4.0/MrTJPCore-1.4.0.jar",
+      "owner": "MrTJPCore",
+      "maven": "com.github.GTNewHorizons:MrTJPCore:1.4.0"
+    },
+    {
+      "path": "mods/RandomThings-2.8.0.jar",
+      "url": "https://github.com/GTNewHorizons/Random-Things/releases/download/2.8.0/RandomThings-2.8.0.jar",
+      "owner": "Random-Things",
+      "maven": "com.github.GTNewHorizons:Random-Things:2.8.0"
+    },
+    {
+      "path": "mods/Tainted-Magic-7.8.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Tainted-Magic/releases/download/7.8.0-GTNH/Tainted-Magic-7.8.0-GTNH.jar",
+      "owner": "Tainted-Magic",
+      "maven": "com.github.GTNewHorizons:Tainted-Magic:7.8.0-GTNH"
+    },
+    {
+      "path": "mods/lwjgl3ify-3.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/lwjgl3ify/releases/download/3.1.0/lwjgl3ify-3.1.0.jar",
+      "owner": "lwjgl3ify",
+      "maven": "com.github.GTNewHorizons:lwjgl3ify:3.1.0"
+    },
+    {
+      "path": "lwjgl3ify-forgePatches.jar",
+      "url": "https://github.com/GTNewHorizons/lwjgl3ify/releases/download/3.1.0/lwjgl3ify-3.1.0-forgePatches.jar"
+    },
+    {
+      "path": "mods/AmunRa-GC-0.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/amunra/releases/download/0.9.0/AmunRa-GC-0.9.0.jar",
+      "owner": "amunra",
+      "maven": "com.github.GTNewHorizons:amunra:0.9.0"
+    },
+    {
+      "path": "mods/alchgrate-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/AlchemyGrate/releases/download/1.4.0-GTNH/alchgrate-1.4.0-GTNH.jar",
+      "owner": "AlchemyGrate",
+      "maven": "com.github.GTNewHorizons:AlchemyGrate:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/nutrition-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/Nutrition/releases/download/1.1.0/nutrition-1.1.0.jar",
+      "owner": "Nutrition",
+      "maven": "com.github.GTNewHorizons:Nutrition:1.1.0"
+    },
+    {
+      "path": "mods/thaumicboots-1.6.0.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumicBoots/releases/download/1.6.0/thaumicboots-1.6.0.jar",
+      "owner": "ThaumicBoots",
+      "maven": "com.github.GTNewHorizons:ThaumicBoots:1.6.0"
+    },
+    {
+      "path": "mods/amazingtrophies-1.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/Amazing-Trophies/releases/download/1.5.0/amazingtrophies-1.5.0.jar",
+      "owner": "Amazing-Trophies",
+      "maven": "com.github.GTNewHorizons:Amazing-Trophies:1.5.0"
+    },
+    {
+      "path": "mods/tinkersdefense-1.4.0.jar",
+      "url": "https://github.com/GTNewHorizons/Tinkers-Defense/releases/download/1.4.0/tinkersdefense-1.4.0.jar",
+      "owner": "Tinkers-Defense",
+      "maven": "com.github.GTNewHorizons:Tinkers-Defense:1.4.0"
+    },
+    {
+      "path": "mods/NEIAddons-1.19.0.jar",
+      "url": "https://github.com/GTNewHorizons/neiaddons/releases/download/1.19.0/NEIAddons-1.19.0.jar",
+      "owner": "neiaddons",
+      "maven": "com.github.GTNewHorizons:neiaddons:1.19.0"
+    },
+    {
+      "path": "mods/akashictome-1.3.0.jar",
+      "url": "https://github.com/GTNewHorizons/AkashicTome/releases/download/1.3.0/akashictome-1.3.0.jar",
+      "owner": "AkashicTome",
+      "maven": "com.github.GTNewHorizons:AkashicTome:1.3.0"
+    },
+    {
+      "path": "mods/BaublesExpanded-2.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Baubles-Expanded/releases/download/2.3.0-GTNH/BaublesExpanded-2.3.0-GTNH.jar",
+      "owner": "Baubles-Expanded",
+      "maven": "com.github.GTNewHorizons:Baubles-Expanded:2.3.0-GTNH"
+    },
+    {
+      "path": "mods/postea-1.3.0.jar",
+      "url": "https://github.com/GTNewHorizons/Postea/releases/download/1.3.0/postea-1.3.0.jar",
+      "owner": "Postea",
+      "maven": "com.github.GTNewHorizons:Postea:1.3.0"
+    },
+    {
+      "path": "mods/bogosorter-1.4.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/InventoryBogoSorter/releases/download/1.4.0-GTNH/bogosorter-1.4.0-GTNH.jar",
+      "owner": "InventoryBogoSorter",
+      "maven": "com.github.GTNewHorizons:InventoryBogoSorter:1.4.0-GTNH"
+    },
+    {
+      "path": "mods/matter-manipulator-0.2.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/MatterManipulator/releases/download/0.2.0-GTNH/matter-manipulator-0.2.0-GTNH.jar",
+      "owner": "MatterManipulator",
+      "maven": "com.github.GTNewHorizons:MatterManipulator:0.2.0-GTNH"
+    },
+    {
+      "path": "mods/darkerer-1.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/Darkerer/releases/download/1.2.0/darkerer-1.2.0.jar",
+      "owner": "Darkerer",
+      "maven": "com.github.GTNewHorizons:Darkerer:1.2.0"
+    },
+    {
+      "path": "mods/etfuturum-2.7.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/Et-Futurum-Requiem/releases/download/2.7.0-GTNH/etfuturum-2.7.0-GTNH.jar",
+      "owner": "Et-Futurum-Requiem",
+      "maven": "com.github.GTNewHorizons:Et-Futurum-Requiem:2.7.0-GTNH"
+    },
+    {
+      "path": "mods/irontankminecarts-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/IronTankMinecarts/releases/download/1.1.0/irontankminecarts-1.1.0.jar",
+      "owner": "IronTankMinecarts",
+      "maven": "com.github.GTNewHorizons:IronTankMinecarts:1.1.0"
+    },
+    {
+      "path": "mods/coretweaks-0.3.5.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/CoreTweaks/releases/download/0.3.5.0-GTNH/coretweaks-0.3.5.0-GTNH.jar",
+      "owner": "CoreTweaks",
+      "maven": "com.github.GTNewHorizons:CoreTweaks:0.3.5.0-GTNH"
+    },
+    {
+      "path": "mods/modernmarkings-0.4.0-1.7.10.jar",
+      "url": "https://github.com/GTNewHorizons/ModernMarkings/releases/download/0.4.0-1.7.10/modernmarkings-0.4.0-1.7.10.jar",
+      "owner": "ModernMarkings",
+      "maven": "com.github.GTNewHorizons:ModernMarkings:0.4.0-1.7.10"
+    },
+    {
+      "path": "mods/battlegear2-1.7.0-backhand.jar",
+      "url": "https://github.com/GTNewHorizons/Battlegear2-for-Backhand/releases/download/1.7.0-backhand/battlegear2-1.7.0-backhand.jar",
+      "owner": "Battlegear2-for-Backhand",
+      "maven": "com.github.GTNewHorizons:Battlegear2-for-Backhand:1.7.0-backhand"
+    },
+    {
+      "path": "mods/backhand-1.9.0.jar",
+      "url": "https://github.com/GTNewHorizons/Backhand/releases/download/1.9.0/backhand-1.9.0.jar",
+      "owner": "Backhand",
+      "maven": "com.github.GTNewHorizons:Backhand:1.9.0"
+    },
+    {
+      "path": "mods/randomboubles-1.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/RandomBoubles/releases/download/1.2.0/randomboubles-1.2.0.jar",
+      "owner": "RandomBoubles",
+      "maven": "com.github.GTNewHorizons:RandomBoubles:1.2.0"
+    },
+    {
+      "path": "mods/vendingmachine-0.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/VendingMachine/releases/download/0.5.0/vendingmachine-0.5.0.jar",
+      "owner": "VendingMachine",
+      "maven": "com.github.GTNewHorizons:VendingMachine:0.5.0"
+    },
+    {
+      "path": "mods/freecam-gtnh-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/Freecam/releases/download/1.1.0/freecam-gtnh-1.1.0.jar",
+      "owner": "Freecam",
+      "maven": "com.github.GTNewHorizons:Freecam:1.1.0"
+    },
+    {
+      "path": "mods/craftingtweaks-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/GregoryTweaksForCrafting/releases/download/1.1.0/craftingtweaks-1.1.0.jar",
+      "owner": "GregoryTweaksForCrafting",
+      "maven": "com.github.GTNewHorizons:GregoryTweaksForCrafting:1.1.0"
+    },
+    {
+      "path": "mods/cropsnh-2.1.1.jar",
+      "url": "https://github.com/GTNewHorizons/CropsNH/releases/download/2.1.1/cropsnh-2.1.1.jar",
+      "owner": "CropsNH",
+      "maven": "com.github.GTNewHorizons:CropsNH:2.1.1"
+    },
+    {
+      "path": "mods/fether-2.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/Fether/releases/download/2.1.0/fether-2.1.0.jar",
+      "owner": "Fether",
+      "maven": "com.github.GTNewHorizons:Fether:2.1.0"
+    },
+    {
+      "path": "mods/aspectrecipeindex-1.2.2.jar",
+      "url": "https://github.com/GTNewHorizons/AspectRecipeIndex/releases/download/1.2.2/aspectrecipeindex-1.2.2.jar",
+      "owner": "AspectRecipeIndex",
+      "maven": "com.github.GTNewHorizons:AspectRecipeIndex:1.2.2"
+    },
+    {
+      "path": "mods/cosmeticarmorreworked-1.1.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/CosmeticArmorReworked/releases/download/1.1.0-GTNH/cosmeticarmorreworked-1.1.0-GTNH.jar",
+      "owner": "CosmeticArmorReworked",
+      "maven": "com.github.GTNewHorizons:CosmeticArmorReworked:1.1.0-GTNH"
+    },
+    {
+      "path": "mods/VillageNames-4.6.1-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/VillageNames/releases/download/4.6.1-GTNH/VillageNames-4.6.1-GTNH.jar",
+      "owner": "VillageNames",
+      "maven": "com.github.GTNewHorizons:VillageNames:4.6.1-GTNH"
+    },
+    {
+      "path": "mods/ThaumicMachina-0.3.0-GTNH.jar",
+      "url": "https://github.com/GTNewHorizons/ThaumicMachina/releases/download/0.3.0-GTNH/ThaumicMachina-0.3.0-GTNH.jar",
+      "owner": "ThaumicMachina",
+      "maven": "com.github.GTNewHorizons:ThaumicMachina:0.3.0-GTNH"
+    },
+    {
+      "path": "mods/jarjar-0.4.0-beta.jar",
+      "url": "https://github.com/GTNewHorizons/JarJar/releases/download/0.4.0-beta/jarjar-0.4.0-beta.jar",
+      "owner": "JarJar",
+      "maven": "com.github.GTNewHorizons:JarJar:0.4.0-beta"
+    },
+    {
+      "path": "mods/nohotbarneeded-0.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/NoHotbarNeeded/releases/download/0.1.0/nohotbarneeded-0.1.0.jar",
+      "owner": "NoHotbarNeeded",
+      "maven": "com.github.GTNewHorizons:NoHotbarNeeded:0.1.0"
+    },
+    {
+      "path": "mods/gtnhextlib-1.1.0.jar",
+      "url": "https://github.com/GTNewHorizons/GTNHExtLib/releases/download/1.1.0/gtnhextlib-1.1.0.jar",
+      "owner": "GTNHExtLib",
+      "maven": "com.github.GTNewHorizons:GTNHExtLib:1.1.0"
+    },
+    {
+      "path": "mods/guidenh-1.4.2.jar",
+      "url": "https://github.com/GTNewHorizons/GuideNH/releases/download/1.4.2/guidenh-1.4.2.jar",
+      "owner": "GuideNH",
+      "maven": "com.github.GTNewHorizons:GuideNH:1.4.2"
+    },
+    {
+      "path": "mods/Automagy-0.30.0-GTNH.jar",
+      "url": "https://nexus.gtnewhorizons.com/repository/releases/tuhljin/automagy/Automagy-GTNH/0.30.0-GTNH/Automagy-GTNH-0.30.0-GTNH.jar",
+      "owner": "Automagy-GTNH",
+      "maven": "tuhljin.automagy:Automagy-GTNH:0.30.0-GTNH"
+    },
+    {
+      "path": "mods/modularui2-2.4.0-1.7.10.jar",
+      "url": "https://github.com/GTNewHorizons/ModularUI2/releases/download/2.4.0-1.7.10/modularui2-2.4.0-1.7.10.jar",
+      "owner": "ModularUI2",
+      "maven": "com.github.GTNewHorizons:ModularUI2:2.4.0-1.7.10"
+    },
+    {
+      "path": "mods/navigator-1.2.0.jar",
+      "url": "https://github.com/GTNewHorizons/Navigator/releases/download/1.2.0/navigator-1.2.0.jar",
+      "owner": "Navigator",
+      "maven": "com.github.GTNewHorizons:Navigator:1.2.0"
+    },
+    {
+      "path": "mods/ServerUtilities-2.5.0.jar",
+      "url": "https://github.com/GTNewHorizons/ServerUtilities/releases/download/2.5.0/ServerUtilities-2.5.0.jar",
+      "owner": "ServerUtilities",
+      "maven": "com.github.GTNewHorizons:ServerUtilities:2.5.0"
+    },
+    {
+      "path": "mods/SpiceOfLife-2.3.0-carrot.jar",
+      "url": "https://github.com/GTNewHorizons/SpiceOfLife/releases/download/2.3.0-carrot/SpiceOfLife-2.3.0-carrot.jar",
+      "owner": "SpiceOfLife",
+      "maven": "com.github.GTNewHorizons:SpiceOfLife:2.3.0-carrot"
+    },
+    {
+      "path": "mods/rwg2-2.1.1.jar",
+      "url": "https://github.com/GTNewHorizons/Realistic-World-Gen-2/releases/download/2.1.1/rwg2-2.1.1.jar",
+      "owner": "Realistic-World-Gen-2",
+      "maven": "com.github.GTNewHorizons:Realistic-World-Gen-2:2.1.1"
+    },
+    {
+      "path": "mods/appliedenergistics2-1.0.1.jar",
+      "url": "https://github.com/GTNewHorizons/Applied-Energistics-2-NH/releases/download/1.0.1/appliedenergistics2-1.0.1.jar",
+      "owner": "Applied-Energistics-2-NH",
+      "maven": "com.github.GTNewHorizons:Applied-Energistics-2-NH:1.0.1"
+    },
+    {
+      "path": "mods/tasknh-0.15.1.jar",
+      "url": "https://github.com/GTNewHorizons/TaskNH/releases/download/0.15.1/tasknh-0.15.1.jar",
+      "owner": "TaskNH",
+      "maven": "com.github.GTNewHorizons:TaskNH:0.15.1"
+    },
+    {
+      "path": "mods/BiblioCraft[v1.11.7][MC1.7.10].jar",
+      "url": "https://mediafilez.forgecdn.net/files/2423/369/BiblioCraft%5bv1.11.7%5d%5bMC1.7.10%5d.jar"
+    },
+    {
+      "path": "mods/BiblioWoods[BiomesOPlenty][v1.9].jar",
+      "url": "https://mediafilez.forgecdn.net/files/2229/577/BiblioWoods%5bBiomesOPlenty%5d%5bv1.9%5d.jar"
+    },
+    {
+      "path": "mods/BiblioWoods[Forestry][v1.7].jar",
+      "url": "https://mediafilez.forgecdn.net/files/2229/574/BiblioWoods%5bForestry%5d%5bv1.7%5d.jar"
+    },
+    {
+      "path": "mods/BiblioWoods[Natura][v1.5].jar",
+      "url": "https://mediafilez.forgecdn.net/files/2229/581/BiblioWoods%5bNatura%5d%5bv1.5%5d.jar"
+    },
+    {
+      "path": "mods/witchery-1.7.10-0.24.1.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2234/410/witchery-1.7.10-0.24.1.jar"
+    },
+    {
+      "path": "mods/CoFHCore-[1.7.10]3.1.4-329.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2388/750/CoFHCore-%5b1.7.10%5d3.1.4-329.jar"
+    },
+    {
+      "path": "mods/Healer-1.2.1.jar",
+      "url": "https://mediafilez.forgecdn.net/files/4367/893/Healer-1.2.1.jar"
+    },
+    {
+      "path": "mods/Thaumcraft-1.7.10-4.2.3.5.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2227/552/Thaumcraft-1.7.10-4.2.3.5.jar"
+    },
+    {
+      "path": "mods/JourneyMapServer1.0.5_MC1.7.10.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2232/619/JourneyMapServer1.0.5_MC1.7.10.jar"
+    },
+    {
+      "path": "mods/AdvancedSolarPanel-1.7.10-3.5.1.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2885/953/AdvancedSolarPanel_1.7.10_Edition.jar"
+    },
+    {
+      "path": "mods/extrautilities-1.2.12.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2264/383/extrautilities-1.2.12.jar"
+    },
+    {
+      "path": "mods/industrialcraft-2-2.2.828-experimental.jar",
+      "url": "https://mediafilez.forgecdn.net/files/6833/54/industrialcraft-2-2.2.828-experimental.jar"
+    },
+    {
+      "path": "mods/Ztones-1.7.10-2.2.2.jar",
+      "url": "http://downloads.gtnewhorizons.com/Mods_for_Twitch/Ztones-1.7.10-2.2.2.jar"
+    },
+    {
+      "path": "mods/BiomesOPlenty-1.7.10-2.1.0.2308-universal.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2499/612/BiomesOPlenty-1.7.10-2.1.0.2308-universal.jar"
+    },
+    {
+      "path": "mods/Thaumcraft4Tweaks-1.5.48.jar",
+      "url": "https://mediafilez.forgecdn.net/files/9115/276/Thaumcraft4Tweaks-1.5.48.jar"
+    },
+    {
+      "path": "mods/CompactKineticGenerators-1.7.10-1.0.jar",
+      "url": "http://downloads.gtnewhorizons.com/Mods_for_Twitch/CompactKineticGenerators-1.7.10-1.0.jar"
+    },
+    {
+      "path": "mods/GraviSuite-1.7.10-2.0.3.jar",
+      "url": "http://downloads.gtnewhorizons.com/Mods_for_Twitch/GraviSuite-1.7.10-2.0.3.jar"
+    },
+    {
+      "path": "mods/+unimixins-all-1.7.10-0.3.1.jar",
+      "url": "https://mediafilez.forgecdn.net/files/8153/136/%2Bunimixins-all-1.7.10-0.3.1.jar"
+    },
+    {
+      "path": "mods/archaicfix-0.8.2.jar",
+      "url": "https://mediafilez.forgecdn.net/files/9300/534/archaicfix-0.8.2.jar"
+    },
+    {
+      "path": "mods/HungerOverhaul-1.7.10-1.0.0.jenkins104.jar",
+      "url": "https://mediafilez.forgecdn.net/files/2332/505/HungerOverhaul-1.7.10-1.0.0.jenkins104.jar"
+    },
+    {
+      "path": "mods/bugtorch-1.3.1.jar",
+      "url": "https://github.com/jss2a98aj/BugTorch/releases/download/1.3.1/bugtorch-1.3.1.jar"
+    },
+    {
+      "path": "mods/endlessids-mc1.7.10-1.7.4.jar",
+      "url": "https://mediafilez.forgecdn.net/files/8169/819/endlessids-mc1.7.10-1.7.4.jar"
+    },
+    {
+      "path": "mods/chunkapi-mc1.7.10-0.8.4.jar",
+      "url": "https://mediafilez.forgecdn.net/files/8609/71/chunkapi-mc1.7.10-0.8.4.jar"
+    },
+    {
+      "path": "mods/falsepatternlib-mc1.7.10-1.12.2.jar",
+      "url": "https://mediafilez.forgecdn.net/files/8169/770/falsepatternlib-mc1.7.10-1.12.2.jar"
+    },
+    {
+      "path": "mods/TGregworks-1.7.10-GTNH-1.0.34.jar",
+      "url": "https://files.vexatos.com/TGregworks/TGregworks-1.7.10-GTNH-1.0.34.jar"
+    },
+    {
+      "path": "mods/mobsinfo-0.6.2.jar",
+      "url": "https://mediafilez.forgecdn.net/files/9376/153/mobsinfo-0.6.2.jar"
+    },
+    {
+      "path": "mods/salisarcana-v2.7.0.jar",
+      "url": "https://mediafilez.forgecdn.net/files/8926/401/salisarcana-v2.7.0.jar"
+    }
+  ],
+  "archives": [
+    {
+      "url": "https://github.com/GTNewHorizons/GT-New-Horizons-Modpack/releases/download/2.10.0-nightly-2026-11-06/2.10.0-nightly-2026-11-06.zip",
+      "exclude": [
+        ".gitattributes",
+        ".gitignore",
+        "CODEOWNERS",
+        "LICENSE",
+        "README.md",
+        "config/txloader",
+        "mods/OpenSecurity/sounds/alarms/StargateAtlantisTheme.ogg",
+        "mods/OpenSecurity/sounds/alarms/alarm-SG1.ogg",
+        "mods/OpenSecurity/sounds/alarms/alarm-SG1evac.ogg",
+        "mods/OpenSecurity/sounds/alarms/alarm-SGA.ogg",
+        "mods/OpenSecurity/sounds/alarms/alarm-SGAoffworld.ogg",
+        "mods/OpenSecurity/sounds/alarms/klaxon1.ogg",
+        "mods/OpenSecurity/sounds/alarms/klaxon2.ogg",
+        "resourcepacks",
+        "scripts/ZZ-Client-Only.zs",
+        "servers.json",
+        "startserver.bat",
+        "startserver.sh",
+        "server.properties"
+      ]
+    },
+    {
+      "url": "https://github.com/Pxx500/DreamAssemblerXXL/releases/download/fullpack-daily/server-assets-b2d5104e062f1f07e148db650e46a680701c0a4c680ffb47149cb451d4ac02fd.zip",
+      "keepExisting": true
+    }
+  ],
+  "textFiles": {
+    "config/GTNewHorizons/dreamcraft.cfg": "# Configuration file\n\n##########################################################################################################\n# modfixes\n#--------------------------------------------------------------------------------------------------------#\n# Fixes to various mods that allow GTNH to function properly\n##########################################################################################################\n\nmodfixes {\n    # Set to true to enable OilSpawn from this Mod. Make sure to disable Oil-Spawn in BuildCraft if you do [default: false]\n    B:GenerateOil=true\n\n    # Set to true to allow Minetweaker to override the vanilla furnace fuel handler, allowing the burn value of WOOD material items to be changed. [default: true]\n    B:MinetweakerFurnaceFixEnabled=true\n\n    ##########################################################################################################\n    # oilgen\n    #--------------------------------------------------------------------------------------------------------#\n    # The OilgenChance is based on height of the biome. On high-y biomes, the basic chance is divided by 2, on low-y biomes like oceans, it is multiplied by 1.8.\n    # The multiplier set here for -OilBoostBiomes- Biomes is applied after those multipliers are set.\n    ##########################################################################################################\n\n    oilgen {\n        # Boost factor of oil spheres in certain Biomes that are listed in -OilBoostBiomes- [range: 0.0 ~ 50.0, default: 2.5]\n        S:OilBiomeBoostFactor=3.5\n\n        # List BiomeIDs (Numbers only; One per line!) where no oil should be generated [default: ]\n        I:OilBiomeIDBlackList <\n            16\n            21\n            29\n            43\n            44\n            52\n            62\n            65\n            76\n            87\n            97\n            99\n            107\n            113\n            123\n            192\n         >\n\n        # List BiomeIDs (Numbers only; One per line!) where the boost multiplicator is applied. Leave empty to disable Biome-Boost [default: []]\n        I:OilBoostBiomes <\n            0\n            2\n            5\n            12\n            30\n            32\n            42\n            45\n            48\n            51\n            57\n            58\n            64\n            70\n            71\n            92\n            95\n            104\n            110\n            115\n            119\n            122\n            193\n            202\n            224\n            225\n            226\n            228\n            230\n            235\n         >\n\n        # Threshold at which an oil-deposit will be considered as 'large' and the fountain will be higher and thicker. [range: 0 ~ 100, default: 14]\n        I:OilDepositThresholdLarge=14\n\n        # Threshold at which an oil-deposit will be considered as 'medium' and the fountain will be higher and thicker. [range: 0 ~ 100, default: 11]\n        I:OilDepositThresholdMedium=11\n\n        # The minimum distance of 2 Oil-Deposits in chunks. Modulo-Based; A 2 here means an deposit can only spawn in chunks that have a number that is a multiple of 2 (Chunknumber * 16 = X/Z coord) [range: 0 ~ 1024, default: 2]\n        I:OilDepostMinDistance=2\n\n        # List DimensionIDs (Numbers only; One per line!) here where the OilGenerator should do its work [default: [0]]\n        I:OilDimensionWhitelist <\n            0\n         >\n\n        # Visible height of the fountain above the oil-deposit for LARGE deposits [range: 0 ~ 100, default: 16]\n        I:OilFountainSizeLarge=16\n\n        # Visible height of the fountain above the oil-deposit for MEDIUM deposits [range: 0 ~ 100, default: 5]\n        I:OilFountainSizeSmall=5\n\n        # General OilGen factor [range: 0.0 ~ 2000.0, default: 30.0]\n        D:OilSphereChance=60.0\n\n        # The maximum radius of an underground OilSphere. The final size is calculated by OilSphereMinRadius + Random(OilSphereMaxSize-OilSphereMinRadius) [range: 3 ~ 50, default: 15]\n        I:OilSphereMaxSize=15\n\n        # The minimum radius of an underground OilSphere [range: 0 ~ 20, default: 8]\n        I:OilSphereMinRadius=8\n    }\n\n}\n\n\n##########################################################################################################\n# modules\n#--------------------------------------------------------------------------------------------------------#\n# Enable or disable parts of the GTNH CoreMod\n##########################################################################################################\n\nmodules {\n    # A complete, full working example for a custom chest, with its own renderer for items and blocks, custom sound and a GUI [default: true]\n    B:BabyChest=true\n\n    # Set to true to enable CustomDrops module. This needs a separate config file which is created once you start with this setting enabled [default: false]\n    B:CustomDrops=true\n\n    # Set to true to enable CustomFuels module. Allows you to set burn-time values to almost any item [default: false]\n    B:CustomFuels=true\n\n    # Set to true to enable CustomToolTips module. This needs a separate config file which is created once you start with this setting enabled [default: false]\n    B:CustomToolTips=true\n\n    # Set to true to display modpack version on debug GUI (F3) [default: true]\n    B:DebugVersionDisplay=true\n\n    # Enables crafting recipes for Forestry stamps and Chunk Loader Coins. Only works on single player [default: true]\n    B:ForestryStampsAndChunkLoaderCoinsEnabled=true\n\n    # Enables crafting recipes for Forestry stamps and Chunk Loader Coins on server [default: false]\n    B:ForestryStampsAndChunkLoaderCoinsServerEnabled=false\n\n    # Set to true to display GTNH buttons in the pause menu [default: true]\n    B:\"GTNH Pause menu buttons\"=true\n\n    # Set to true to enable HazardousItems module. This needs a separate config file which is created once you start with this setting enabled [default: false]\n    B:HazardousItems=true\n\n    # Set to true to show login message with modpack version [default: true]\n    B:LoginMessage=true\n\n    # Version of the Modpack [default: 2.10.x]\n    S:ModPackVersion=2.10.x (Daily 824) - 2026-11-08\n\n    # Set to false to prevent the OreDict register for SpaceStones and SpaceDusts [default: true]\n    B:OreDictItems=true\n}\n\n\n",
+    "config/DreamCoreMod.properties": "#Config file for the ASM part of GTNHCoreMod\n#Tue Jul 28 12:17:03 CEST 2026\ndownloadOnlyOnce=true\npatchItemFocusWarding=true\nshowConfirmExitWindow=false\ndisplayedModpackVersion=2.10.x (Daily 824) - 2026-11-08\n"
+  }
+}

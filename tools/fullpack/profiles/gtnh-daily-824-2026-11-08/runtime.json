@@ -1,0 +1,11 @@
+{
+  "kind": "gtnh",
+  "minecraft": "1.7.10",
+  "loader": "10.13.4.1614",
+  "java": 17,
+  "protocol": 5,
+  "lwjgl3ify": "3.1.0",
+  "forgePatchesSha1": "714c4eb02fe6f855d7738df5f584cc53b4c3cf1a",
+  "clientMetadataUrl": "https://github.com/GTNewHorizons/lwjgl3ify/releases/download/3.1.0/version.json",
+  "clientMetadataSha256": "9545720a5093d579c6d3cf5a0613c26cc47ae3367b2376c0be51c157f3f502c9"
+}

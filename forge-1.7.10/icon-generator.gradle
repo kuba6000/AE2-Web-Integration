@@ -65,6 +65,13 @@ def generatorJar = tasks.register('iconGeneratorJar', ShadowJar) {
     relocate('pl.kuba6000.ae2webintegration.ae2interface.legacy', 'pl.kuba6000.ae2webintegration.icongenerator.internal.legacy')
 }
 
+tasks.named('processIconGeneratorResources') {
+    inputs.property('version', project.version)
+    filesMatching('mcmod.info') {
+        expand(version: project.version)
+    }
+}
+
 def mappings = tasks.named('generateForgeSrgMappings', GenSrgMappingsTask)
 def patchedMinecraftJar = tasks.named('packagePatchedMc', Jar)
 def generatorReleaseJar = tasks.register('reobfIconGeneratorJar', ReobfuscatedJar) {

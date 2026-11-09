@@ -1,0 +1,7 @@
+{
+  "kind": "neoforge",
+  "minecraft": "1.21.1",
+  "loader": "21.1.265",
+  "java": 21,
+  "protocol": 767
+}

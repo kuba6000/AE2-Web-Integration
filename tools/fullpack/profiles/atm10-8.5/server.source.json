@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "files": [],
+  "archives": [
+    {
+      "url": "https://edge.forgecdn.net/files/9431/427/ServerFiles-8.5.zip",
+      "sha256": "dfb34538715589f354c370101ffab3cbb2c3c8dcbc1dac6e382e8560b4a6db06",
+      "sha1": "e902796543ff6dd96bc10fa240f98752784ad3e9"
+    }
+  ],
+  "textFiles": {}
+}

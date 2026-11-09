@@ -1,0 +1,17 @@
+{
+  "lockVersion": 1,
+  "source": "server.manifest.json",
+  "sourceSha256": "6db6ba76f4082ac37c7438b01fc267d3614ec7709341dca3b6acdecbe332fbb7",
+  "allowHttp": false,
+  "manifest": {
+    "version": 1,
+    "files": [],
+    "archives": [
+      {
+        "url": "https://github.com/Nomi-CEu/Nomi-CEu/releases/download/1.7.7/nomi-ceu-1.7.7-server.zip",
+        "sha256": "b9915d046b1b6ac2f3d02ea731d248a4bcd6e3dd4ceb81a1dfecdc350347295a"
+      }
+    ],
+    "textFiles": {}
+  }
+}

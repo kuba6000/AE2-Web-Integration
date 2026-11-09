@@ -1,0 +1,14 @@
+{
+  "label": "2.10.x (Daily 824) - 2026-11-08",
+  "pinnedAt": "2026-11-09T18:51:55.249581+00:00",
+  "sources": {
+    "client": {
+      "url": "https://github.com/Pxx500/DreamAssemblerXXL/releases/download/fullpack-daily/daily.json",
+      "sha256": "ce014df6df8545e65c8d71e506f4beb38702594b0f5f54eed8e6076d880d5187"
+    },
+    "server": {
+      "url": "https://github.com/Pxx500/DreamAssemblerXXL/releases/download/fullpack-daily/daily-server.json",
+      "sha256": "5b372699dde68af754e0821df15b2a1088fd20f9c7b5d6e985e876d83491c27f"
+    }
+  }
+}

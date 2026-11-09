@@ -1,0 +1,20 @@
+{
+  "label": "Monifactory Beta 0.13.8",
+  "verifiedOn": "2026-11-06",
+  "minecraft": "1.20.1",
+  "loader": "forge-47.4.13",
+  "optionalMods": "required-only",
+  "release": "https://github.com/Omicron-Industries/Monifactory/releases/tag/0.13.8",
+  "sources": {
+    "client": {
+      "url": "https://github.com/Omicron-Industries/Monifactory/releases/download/0.13.8/Monifactory-Beta.0.13.8-client.zip",
+      "sha256": "9f199e66cb0650a86b65949a16d8aa73a9fd3c3e098520b9b09ae0937092af07",
+      "metadataSource": "curse-tools",
+      "metadataApi": "https://api.curse.tools"
+    },
+    "server": {
+      "url": "https://github.com/Omicron-Industries/Monifactory/releases/download/0.13.8/Monifactory-Beta.0.13.8-server.zip",
+      "sha256": "7ec684ebe5402c51e7f5a3a66979728e8893787b5aa888c47351ecdf18416a04"
+    }
+  }
+}

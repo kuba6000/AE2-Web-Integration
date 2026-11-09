@@ -1,0 +1,17 @@
+{
+  "lockVersion": 1,
+  "source": "server.manifest.json",
+  "sourceSha256": "3e7af156c0de3b57dee7367fe67057742b39948d924972505bbe07637b8b5ae5",
+  "allowHttp": false,
+  "manifest": {
+    "version": 1,
+    "files": [],
+    "archives": [
+      {
+        "url": "https://github.com/Omicron-Industries/Monifactory/releases/download/0.13.8/Monifactory-Beta.0.13.8-server.zip",
+        "sha256": "7ec684ebe5402c51e7f5a3a66979728e8893787b5aa888c47351ecdf18416a04"
+      }
+    ],
+    "textFiles": {}
+  }
+}

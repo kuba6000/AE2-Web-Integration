@@ -1,0 +1,7 @@
+{
+  "kind": "forge",
+  "minecraft": "1.20.1",
+  "loader": "47.4.13",
+  "java": 17,
+  "protocol": 763
+}
