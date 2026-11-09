@@ -1,0 +1,316 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.Collections;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+
+@SuppressWarnings("PMD.AvoidMagicNumbers")
+class TrackingStatisticsResponseTest extends GridTestScope {
+
+    private static final StableKey GRID = TestGridFixtures.key(990_581L);
+
+    private static final IStackList EMPTY_ITEMS = new IStackList() {
+
+        public long web$getAmount(IAEKey key) {
+            return 0;
+        }
+
+        public Iterable<IAEGenericStack> web$stacks() {
+            return Collections.emptyList();
+        }
+    };
+
+    private CraftingHistoryWorld historyWorld;
+
+    @BeforeEach
+    void startHistory() {
+        historyWorld = new CraftingHistoryWorld(gridSave);
+    }
+
+    @AfterEach
+    void tearDown() {
+        historyWorld.close();
+        AE2JobTracker.clearActiveJobs();
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "0,0,0,0,0,ITEM", "0,0,10,0,0,FLUID", "1000,0,10,0,0,OTHER", "1000,500,10,0.5,20,ITEM" })
+    void historySerializesFiniteStatisticsEvenWhenNoTimeWasMeasured(long elapsed, long spent, long crafted,
+        double expectedShare, double expectedRate, ResourceType resourceType) throws Exception {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
+        OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
+        key.resourceType = resourceType;
+        ResourceSnapshot output = ResourceSnapshot.capture(new OutputSnapshotTest.Stack(key, 10));
+        assertNotNull(output);
+        assertNotNull(
+            output.description()
+                .itemKey());
+        AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
+        // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
+        info.timeDone = System.currentTimeMillis();
+        info.timeStarted = info.timeDone - elapsed;
+        info.isDone = true;
+        info.timeSpentOn.put(key, spent);
+        info.craftedTotal.put(key, crafted);
+        info.resourceSnapshots.put(key, ResourceSnapshot.capture(key, crafted));
+        info.itemShare.put(
+            key,
+            new ArrayList<>(
+                Collections.singletonList(new CompletedCrafting.Interval(info.timeStarted, info.timeStarted + spent))));
+        StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(actualKey);
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        assertNotNull(history);
+        assertTrue(history.enqueue(actualKey, CompletedCrafting.capture(info)));
+        history.flush();
+        long entryId = history.list(actualKey, null, 100)
+            .entries()
+            .get(0)
+            .id();
+        key.unavailable = true;
+
+        GetTracking request = new GetTracking();
+        request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=" + entryId));
+        JsonObject response = new JsonParser().parse(request.getJSON())
+            .getAsJsonObject();
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        JsonObject item = response.getAsJsonObject("data")
+            .getAsJsonArray("items")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            resourceType.name(),
+            item.get("resourceType")
+                .getAsString());
+        JsonObject finalOutput = response.getAsJsonObject("data")
+            .getAsJsonObject("finalOutput");
+        assertEquals(
+            resourceType.name(),
+            finalOutput.get("resourceType")
+                .getAsString());
+        assertFalse(finalOutput.has("craftable"));
+        assertEquals(
+            "resource",
+            item.get("registryPath")
+                .getAsString());
+        assertEquals(
+            "Resource",
+            item.get("displayName")
+                .getAsString());
+        assertEquals(
+            "example",
+            item.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            item.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            item.get("damage")
+                .getAsInt());
+        assertFalse(item.has("itemId"));
+        assertEquals(
+            output.description()
+                .itemKey()
+                .toString(),
+            item.get("itemKey")
+                .getAsString());
+        assertFalse(item.has("itemName"));
+        assertFalse(item.has("itemid"));
+        assertFalse(item.has("itemname"));
+        assertEquals(
+            crafted,
+            item.get("craftedTotal")
+                .getAsLong());
+        assertEquals(
+            expectedShare,
+            item.get("shareInCraftingTimeCombined")
+                .getAsDouble(),
+            0.000001);
+        assertEquals(
+            expectedRate,
+            item.get("craftsPerSec")
+                .getAsDouble(),
+            0.000001);
+        assertTrue(
+            Double.isFinite(
+                item.get("shareInCraftingTime")
+                    .getAsDouble()));
+        assertEquals(
+            1,
+            item.getAsJsonArray("timings")
+                .size());
+        GetTracking requestedIcons = new GetTracking();
+        requestedIcons.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=" + entryId + "&icons=true"));
+        JsonObject withoutPack = new JsonParser().parse(requestedIcons.getJSON())
+            .getAsJsonObject();
+        assertTrue(
+            withoutPack.get("icons")
+                .isJsonNull());
+        assertTrue(
+            withoutPack.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
+                .get("icon")
+                .isJsonNull());
+        assertTrue(
+            withoutPack.getAsJsonObject("data")
+                .getAsJsonArray("items")
+                .get(0)
+                .getAsJsonObject()
+                .get("icon")
+                .isJsonNull());
+        assertEquals(response.get("data"), withoutPack.get("data"), "Missing pack preserves all measured history data");
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "0,0,false,0", "0,10,false,0", "500,10,false,20", "500,10,true,20" })
+    void activeCpuSerializesFiniteRatesAndHandlesClockMovingBeforeJobStart(long spent, long crafted,
+        boolean clockMovedBack, double expectedRate) {
+        OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
+        OutputSnapshotTest.Stack output = new OutputSnapshotTest.Stack(key, 10);
+        ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[] { ICraftingCPUCluster.class },
+            (proxy, method, args) -> switch (method.getName()) {
+                case "web$getFinalOutput" -> output;
+                case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+                case "web$getName" -> "cpu";
+                case "web$isBusy" -> true;
+                case "web$getSelectionMode" -> null;
+                case "web$acceptsPlayerJobs" -> false;
+                case "web$getAvailableStorage" -> 64L;
+                case "web$getItemLists" -> null;
+                default -> throw new AssertionError("Unexpected CPU call: " + method.getName());
+            });
+        IAECraftingGrid crafting = (IAECraftingGrid) Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[] { IAECraftingGrid.class },
+            (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$getCPUs")) return Collections.singleton(cpu);
+                throw new AssertionError("Unexpected crafting service call: " + method.getName());
+            });
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+            GRID,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public IAECraftingGrid web$getCraftingGrid() {
+                return crafting;
+            }
+        };
+        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE(grid) {
+
+            @Override
+            public IStackList web$createStackList() {
+                return EMPTY_ITEMS;
+            }
+        };
+        TestGridFixtures.track(grid);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        info.timeStarted = System.currentTimeMillis() + (clockMovedBack ? 60_000 : -60_000);
+        // One already measured stage of a still-active job; its duration may legitimately be zero.
+        info.timeSpentOn.put(key, spent);
+        info.craftedTotal.put(key, crafted);
+        IAE previous = AE2Controller.AE2Interface;
+        AE2Controller.AE2Interface = ae;
+        try {
+            GetCPU request = new GetCPU();
+            assertTrue(
+                request.init(
+                    TestGridFixtures.context(
+                        -1,
+                        "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
+            request.runOnServerThread(ae);
+            JsonObject response = new JsonParser().parse(request.getJSON())
+                .getAsJsonObject();
+            assertEquals(
+                "OK",
+                response.get("status")
+                    .getAsString());
+            JsonObject item = response.getAsJsonObject("data")
+                .getAsJsonArray("items")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                "ITEM",
+                item.get("resourceType")
+                    .getAsString());
+            assertEquals(
+                "resource",
+                item.get("registryPath")
+                    .getAsString());
+            assertEquals(
+                "Resource",
+                item.get("displayName")
+                    .getAsString());
+            assertEquals(
+                "example",
+                item.get("registryNamespace")
+                    .getAsString());
+            assertEquals(
+                2,
+                item.get("componentCount")
+                    .getAsInt());
+            assertEquals(
+                7,
+                item.get("damage")
+                    .getAsInt());
+            assertFalse(item.has("itemId"));
+            assertFalse(item.has("itemName"));
+            assertFalse(item.has("itemid"));
+            assertFalse(item.has("itemname"));
+            assertEquals(
+                crafted,
+                item.get("craftedTotal")
+                    .getAsLong());
+            assertEquals(
+                expectedRate,
+                item.get("craftsPerSec")
+                    .getAsDouble(),
+                0.000001);
+            double share = item.get("shareInCraftingTimeCombined")
+                .getAsDouble();
+            assertTrue(Double.isFinite(share) && share >= 0 && share <= 1);
+            if (clockMovedBack) assertEquals(0d, share);
+        } finally {
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+}

@@ -1,0 +1,14 @@
+[{
+    "modid": "${modid}",
+    "name": "AE2 Web Integration",
+    "description": "Web terminal for Applied Energistics 2 ME networks.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "https://github.com/kuba6000/AE2-Web-Integration",
+    "updateUrl": "",
+    "authorList": ["kuba6000"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+}]

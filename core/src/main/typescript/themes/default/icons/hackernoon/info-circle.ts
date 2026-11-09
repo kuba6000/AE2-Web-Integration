@@ -1,0 +1,2 @@
+// HackerNoon Pixel Icon Library (MIT); see LICENSE and README.md in this directory.
+export const infoCircle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" shape-rendering="crispEdges" aria-hidden="true" focusable="false" class="info-icon"><path fill="#2878d0" d="m22,9v-2h-1v-2h-1v-1h-1v-1h-2v-1h-2v-1h-6v1h-2v1h-2v1h-1v1h-1v2h-1v2h-1v6h1v2h1v2h1v1h1v1h2v1h2v1h6v-1h2v-1h2v-1h1v-1h1v-2h1v-2h1v-6h-1Z"/><g fill="#fff"><polygon points="14 15 14 17 10 17 10 15 11 15 11 10 10 10 10 9 13 9 13 15 14 15"/><rect x="11" y="6" width="2" height="2"/></g></svg>`;

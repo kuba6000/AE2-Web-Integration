@@ -1,0 +1,8 @@
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+RewriteEngine On
+# Preserve Bearer authentication with Apache CGI/FastCGI handlers.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^index\.php$ - [L]
+RewriteRule ^ index.php [L]

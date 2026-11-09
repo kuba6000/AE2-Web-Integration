@@ -1,0 +1,13 @@
+
+plugins {
+    id 'com.gtnewhorizons.gtnhconvention'
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
+}
+
+apply from: '../gradle/adapter-version.gradle'
+
+apply from: 'icon-generator.gradle'
+
+apply from: '../gradle/idea-settings.gradle'
+idea.project.settings.taskTriggers.afterSync tasks.named('updateIdeaEntryPoints')
+apply from: 'gradle/release.gradle'

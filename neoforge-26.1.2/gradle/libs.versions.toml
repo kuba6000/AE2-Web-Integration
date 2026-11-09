@@ -1,0 +1,7 @@
+[versions]
+minecraft = "26.1.2"
+neo = "26.1.2.126"
+jetbrains-annotations = "26.0.1"
+
+[libraries]
+jetbrains-annotations   = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }

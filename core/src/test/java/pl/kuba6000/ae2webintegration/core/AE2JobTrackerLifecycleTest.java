@@ -1,0 +1,976 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry.Entry;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
+
+@SuppressWarnings("PMD.AvoidMagicNumbers")
+class AE2JobTrackerLifecycleTest extends GridTestScope {
+
+    private StableKey gridKey;
+    private CraftingHistoryWorld historyWorld;
+    private final TestGridFixtures.TestGrid grid = TestGridFixtures.grid(900_101L);
+
+    @BeforeEach
+    void setUp() {
+        historyWorld = new CraftingHistoryWorld(gridSave);
+        AE2JobTracker.clearActiveJobs();
+        TestGridFixtures.track(grid);
+        gridKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AE2JobTracker.clearActiveJobs();
+        historyWorld.close();
+    }
+
+    @Test
+    void mergedRequestersUseUuidAndPublishDetachedNamesInSubmissionOrder() {
+        EqualCpu cpu = new EqualCpu();
+        PlayerIdentity alice = new PlayerIdentity(UUID.randomUUID(), "Alex");
+        PlayerIdentity sameName = new PlayerIdentity(UUID.randomUUID(), "Alex");
+        PlayerIdentity renamed = new PlayerIdentity(alice.uuid, "AlexRenamed");
+        AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
+        callbacks.jobStarted(cpu, grid, false, false, alice);
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertNotNull(info);
+        List<CraftingRequester> initial = info.getRequesters();
+        callbacks.jobStarted(cpu, grid, true, false, sameName);
+        callbacks.jobStarted(cpu, grid, true, false, renamed);
+        callbacks.jobStarted(cpu, grid, true, true, null);
+        callbacks.jobStarted(cpu, grid, true, true, null);
+        assertEquals(Collections.singletonList(CraftingRequester.player(alice)), initial);
+        assertEquals(
+            Arrays.asList(
+                CraftingRequester.player(renamed),
+                CraftingRequester.player(sameName),
+                CraftingRequester.automation()),
+            info.getRequesters());
+        assertThrows(
+            UnsupportedOperationException.class,
+            () -> info.getRequesters()
+                .clear());
+        callbacks.jobCompleted(grid, cpu);
+        CompletedCrafting stored = completed(gridKey);
+        assertEquals(
+            CraftingRequester.automation(),
+            stored.requesters()
+                .get(2));
+        assertEquals(
+            Arrays.asList(alice.uuid, sameName.uuid),
+            Arrays.asList(
+                stored.requesters()
+                    .get(0)
+                    .player().uuid,
+                stored.requesters()
+                    .get(1)
+                    .player().uuid));
+        assertEquals(
+            "AlexRenamed",
+            stored.requesters()
+                .get(0)
+                .player().name);
+        assertEquals(
+            "Alex",
+            stored.requesters()
+                .get(1)
+                .player().name);
+        GetTracking detail = new GetTracking();
+        detail.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=1"));
+        JsonObject body = new JsonParser().parse(detail.getJSON())
+            .getAsJsonObject()
+            .getAsJsonObject("data");
+        assertEquals(
+            "AlexRenamed",
+            body.getAsJsonArray("requesters")
+                .get(0)
+                .getAsJsonObject()
+                .getAsJsonObject("player")
+                .get("name")
+                .getAsString());
+        GetTrackingHistory list = new GetTrackingHistory();
+        list.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey));
+        JsonObject summary = new JsonParser().parse(list.getJSON())
+            .getAsJsonObject()
+            .getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(body.getAsJsonArray("requesters"), summary.getAsJsonArray("requesters"));
+    }
+
+    @Test
+    void machineAdmissionIsPerGridAndTogglingDoesNotReplaceActiveMeasurements() {
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+        assertNotNull(data);
+        GridSettingsData settings = data.getSettings();
+        TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_105L);
+        TestGridFixtures.track(other);
+        EqualCpu ignored = new EqualCpu();
+        EqualCpu machine = new EqualCpu();
+        EqualCpu player = new EqualCpu();
+        AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
+        callbacks.jobStarted(ignored, grid, false, true, TestGridFixtures.playerIdentity(7));
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        settings.setTrackMachineCrafting(true);
+        callbacks.jobStarted(ignored, grid, true, true, null);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        callbacks.jobStarted(machine, grid, false, true, null);
+        AE2JobTracker.JobTrackingInfo active = AE2JobTracker.findActiveJob(machine);
+        assertNotNull(active);
+        callbacks.jobStarted(ignored, other, false, true, null);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        callbacks.jobStarted(player, other, false, false, null);
+        assertNotNull(AE2JobTracker.findActiveJob(player));
+        settings.setTrackMachineCrafting(false);
+        machine.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        callbacks.jobStarted(machine, grid, true, true, null);
+        assertSame(active, AE2JobTracker.findActiveJob(machine));
+        assertEquals(9, active.finalOutput.quantity());
+        callbacks.jobCompleted(grid, machine);
+        assertEquals(active.finalOutput, completed(gridKey).finalOutput());
+        settings.setTrackMachineCrafting(true);
+        settings.setTracked(false);
+        callbacks.jobStarted(ignored, grid, false, true, null);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+    }
+
+    @Test
+    void controllerAdditionDuringCraftingPublishesTheMergedOutputImmediately() {
+        Set<DimensionalCoords> positions = new LinkedHashSet<>();
+        positions.add(new DimensionalCoords("world", 0, 0, 0));
+        TestGridFixtures.TestGrid changing = new TestGridFixtures.TestGrid(
+            900_104L,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public @NotNull Set<DimensionalCoords> web$getControllers() {
+                return positions;
+            }
+        };
+        TestGridFixtures.track(changing);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(changing);
+        assertNotNull(key);
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, changing, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        positions.add(new DimensionalCoords("world", 1, 0, 0));
+        CoreEngine.GRID_IDENTITIES.controllerValidated(changing);
+        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        AE2JobTracker.addJob(cpu, changing, true, CraftingRequester.automation());
+        AE2JobTracker.completeCrafting(changing, cpu);
+        assertEquals(info.finalOutput, completed(key).finalOutput());
+        IAE previous = AE2Controller.AE2Interface;
+        try {
+            AE2Controller.AE2Interface = TestGridFixtures.ae(changing);
+            CoreEngine.onServerTick();
+            assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(changing));
+            assertEquals(info.finalOutput, completed(key).finalOutput());
+            assertEquals(9, info.finalOutput.quantity());
+        } finally {
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void completionOrCancellationDuringConflictIsNotPublishedAfterRecovery(boolean cancelled) {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
+        grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        if (cancelled) AE2JobTracker.cancelCrafting(grid, cpu);
+        else AE2JobTracker.completeCrafting(grid, cpu);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        CoreEngine.onServerTick();
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+    }
+
+    @Test
+    void cachedLifecycleAndHotUpdatesDoNotEnumerateControllers() {
+        AtomicBoolean mayReadControllers = new AtomicBoolean(true);
+        TestGridFixtures.TestGrid stable = new TestGridFixtures.TestGrid(
+            900_103L,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public @NotNull Set<DimensionalCoords> web$getControllers() {
+                if (!mayReadControllers.get())
+                    throw new AssertionError("Crafting callbacks must use the prepared binding");
+                return super.web$getControllers();
+            }
+        };
+        TestGridFixtures.track(stable);
+        StableKey stableKey = CoreEngine.GRID_IDENTITIES.getKey(stable);
+        assertNotNull(stableKey);
+        mayReadControllers.set(false);
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, stable, false, CraftingRequester.automation());
+        Resource resource = new Resource(1, 0);
+        push(cpu, "provider", new DimensionalCoords("world", 0, 0, 0), resource);
+        update(cpu, resource, 1);
+        update(cpu, resource, 0);
+        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        AE2JobTracker.addJob(cpu, stable, true, CraftingRequester.automation());
+        AE2JobTracker.completeCrafting(stable, cpu);
+
+        assertEquals(
+            9,
+            completed(stableKey).finalOutput()
+                .quantity());
+    }
+
+    @Test
+    void jobsWithoutAValidatedIdentityAreNotTrackedRetroactively() throws Exception {
+        historyWorld.close();
+        historyWorld = new CraftingHistoryWorld(gridSave);
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        CoreEngine.onServerTick();
+        AE2JobTracker.completeCrafting(grid, cpu);
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void completionUsesTheCurrentGridsTrackingSetting(boolean tracked) throws Exception {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertNotNull(info);
+        TestGridFixtures.TestGrid destination = TestGridFixtures.grid(900_102L);
+        StableKey destinationKey = CoreEngine.GRID_IDENTITIES.getKey(destination);
+        assertNotNull(destinationKey);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, destinationKey, tracked);
+        // Native completion hooks pass the CPU's current grid, which can differ from its starting grid.
+        AE2JobTracker.completeCrafting(destination, cpu);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        if (tracked) assertEquals(info.finalOutput, completed(destinationKey).finalOutput());
+        else assertEmptyHistory(TestGridFixtures.OWNER_ID, destinationKey);
+    }
+
+    @Test
+    void existingMergeCapturesOutputWhileItsGridBindingIsUnavailable() throws Exception {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+
+        AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
+
+        assertSame(info, AE2JobTracker.findActiveJob(cpu));
+        assertEquals(9, info.finalOutput.quantity());
+    }
+
+    @Test
+    void mergeRetiresLosingPlansAndHistoryWithoutDiscardingTheWinningPlan() throws Exception {
+        TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
+        GridAccess.list(TestGridFixtures.ae(grid, other));
+        StableKey losingKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        assertNotNull(losingKey);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, true);
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, other, false, CraftingRequester.automation());
+        AE2JobTracker.completeCrafting(other, cpu);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, false);
+        CompletableFuture<IAECraftingJob> losingPlan = new CompletableFuture<>();
+        int losingId = GridData.getOrCreate(losingKey)
+            .addJob(losingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        CompletableFuture<IAECraftingJob> winningPlan = new CompletableFuture<>();
+        int winningId = GridData.getOrCreate(gridKey)
+            .addJob(winningPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        TestGridFixtures.TestGrid merged = new TestGridFixtures.TestGrid(
+            gridKey,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public @NotNull Set<DimensionalCoords> web$getControllers() {
+                Set<DimensionalCoords> result = new LinkedHashSet<>(grid.web$getControllers());
+                result.addAll(other.web$getControllers());
+                return result;
+            }
+        };
+
+        CoreEngine.GRID_IDENTITIES.controllerValidated(merged);
+        GridAccess.list(TestGridFixtures.ae(merged));
+        assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(merged));
+        assertTrue(losingPlan.isCancelled());
+        Entry retainedPlan = GridData.getOrCreate(gridKey)
+            .getJob(winningId);
+        assertNotNull(retainedPlan);
+        assertSame(winningPlan, retainedPlan.plan);
+
+        TestGridFixtures.TestAE split = TestGridFixtures.ae(grid, other);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(other);
+        GridAccess.list(split);
+        StableKey splitKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        assertNotNull(splitKey);
+        assertNotEquals(losingKey, splitKey);
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, splitKey);
+        GetCraftingPlan request = new GetCraftingPlan();
+        assertTrue(
+            request.init(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + splitKey + "&id=" + losingId)));
+        request.runOnServerThread(split);
+        assertEquals(
+            "INVALID_ID",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void rebuiltControllerDoesNotExposePreviousHistoryOrPlansToItsNewOwner() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.completeCrafting(grid, cpu);
+        CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
+        int planId = GridData.getOrCreate(gridKey)
+            .addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(900_101L, 42);
+        TestGridFixtures.TestAE ae = TestGridFixtures.ae(replacement);
+
+        StableKey replacementKey = CoreEngine.GRID_IDENTITIES.getKey(replacement);
+        assertNotNull(replacementKey);
+        assertNotEquals(gridKey, replacementKey);
+        assertEmptyHistory(42, replacementKey);
+        assertTrue(plan.isCancelled());
+        GetCraftingPlan request = new GetCraftingPlan();
+        assertTrue(request.init(TestGridFixtures.context(42, "grid=" + replacementKey + "&id=" + planId)));
+        request.runOnServerThread(ae);
+        assertEquals(
+            "INVALID_ID",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    private static void flushHistory() {
+        try {
+            CraftingHistoryService history = CoreEngine.getCraftingHistory();
+            assertNotNull(history);
+            history.flush();
+        } catch (IOException failure) {
+            throw new UncheckedIOException(failure);
+        }
+    }
+
+    private static CompletedCrafting completed(StableKey key) {
+        flushHistory();
+        try {
+            CraftingHistoryService history = CoreEngine.getCraftingHistory();
+            assertNotNull(history);
+            List<SqliteCraftingHistoryStore.Summary> entries = history.list(key, null, 100)
+                .entries();
+            assertEquals(1, entries.size());
+            CompletedCrafting job = history.read(
+                key,
+                entries.get(0)
+                    .id());
+            assertNotNull(job);
+            return job;
+        } catch (IOException failure) {
+            throw new UncheckedIOException(failure);
+        }
+    }
+
+    private static void assertEmptyHistory(int playerId, StableKey key) {
+        flushHistory();
+        GetTrackingHistory request = new GetTrackingHistory();
+        request.handle(TestGridFixtures.context(playerId, "grid=" + key));
+        JsonObject response = new JsonParser().parse(request.getJSON())
+            .getAsJsonObject();
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        assertEquals(
+            0,
+            response.getAsJsonArray("data")
+                .size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void completedHistorySurvivesRestartWithoutNativeResourceReads(boolean unsupportedIdentity) throws Exception {
+        EqualCpu cpu = new EqualCpu();
+        OutputSnapshotTest.Resource output = new OutputSnapshotTest.Resource();
+        output.unsupportedIdentity = unsupportedIdentity;
+        cpu.output = new OutputSnapshotTest.Stack(output, 37);
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.completeCrafting(grid, cpu);
+        output.unavailable = true;
+        flushHistory();
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        assertNotNull(history);
+        long id = history.list(gridKey, null, 100)
+            .entries()
+            .get(0)
+            .id();
+
+        historyWorld.close();
+        historyWorld = new CraftingHistoryWorld(gridSave);
+        TestGridFixtures.track(grid);
+        assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(grid));
+        assertNull(GridData.find(gridKey), "Durable history must not require an in-memory grid runtime");
+
+        GetTracking request = new GetTracking();
+        request.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=" + id));
+        JsonObject response = new JsonParser().parse(request.getJSON())
+            .getAsJsonObject();
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        JsonObject product = response.getAsJsonObject("data")
+            .getAsJsonObject("finalOutput");
+        assertEquals(
+            37,
+            product.get("quantity")
+                .getAsLong());
+        assertEquals(
+            "Resource",
+            product.get("displayName")
+                .getAsString());
+        assertEquals(
+            unsupportedIdentity,
+            product.get("itemKey")
+                .isJsonNull());
+
+        TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_106L);
+        StableKey otherKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        GetTracking foreignJob = new GetTracking();
+        foreignJob.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + otherKey + "&id=" + id));
+        assertEquals(
+            "TRACKING_NOT_FOUND",
+            new JsonParser().parse(foreignJob.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void unrelatedAndUnknownControllerRemovalPreservesActiveCompletion() throws Exception {
+        TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
+        GridAccess.list(TestGridFixtures.ae(grid, other));
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(other.position());
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(new DimensionalCoords("unknown", 1, 2, 3));
+        AE2JobTracker.completeCrafting(grid, cpu);
+
+        assertEquals(info.finalOutput, completed(gridKey).finalOutput());
+        assertNotNull(info);
+        assertTrue(info.isDone);
+    }
+
+    @Test
+    void distinctCpuObjectsKeepDistinctTrackingEntriesEvenWhenTheyCompareEqual() {
+        EqualCpu first = new EqualCpu();
+        EqualCpu second = new EqualCpu();
+
+        AE2JobTracker.addJob(first, grid, false, CraftingRequester.automation());
+        AE2JobTracker.addJob(second, grid, false, CraftingRequester.automation());
+
+        AE2JobTracker.JobTrackingInfo firstInfo = AE2JobTracker.findActiveJob(first);
+        AE2JobTracker.JobTrackingInfo secondInfo = AE2JobTracker.findActiveJob(second);
+        assertNotNull(firstInfo);
+        assertNotNull(secondInfo);
+        assertNotSame(firstInfo, secondInfo);
+    }
+
+    @Test
+    void serverStopCleanupDropsEveryActiveCpuTrackingEntry() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
+
+        AE2JobTracker.clearActiveJobs();
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+    }
+
+    @Test
+    void missingFinalOutputDoesNotStartTrackingOrProduceHistory() {
+        EqualCpu cpu = new EqualCpu();
+        cpu.output = null;
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        update(cpu, new Resource(1, 0), 10);
+        AE2JobTracker.completeCrafting(grid, cpu);
+        AE2JobTracker.cancelCrafting(grid, cpu);
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+    }
+
+    @Test
+    void missingFinalOutputOnMergeDiscardsTrackingWithoutPublishingPartialHistory() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        update(cpu, new Resource(1, 0), 10);
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
+
+        cpu.output = null;
+        AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        update(cpu, new Resource(1, 0), 0);
+        AE2JobTracker.completeCrafting(grid, cpu);
+        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+    }
+
+    @Test
+    void completionKeepsKnownOutputWhenTheNativeCpuHasAlreadyClearedItsStack() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        cpu.output = null;
+
+        AE2JobTracker.completeCrafting(grid, cpu);
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        assertEquals(info.finalOutput, completed(gridKey).finalOutput());
+        assertTrue(info.isDone);
+        assertEquals(5, info.finalOutput.quantity());
+        assertEquals(
+            "resource",
+            info.finalOutput.description()
+                .registryPath());
+    }
+
+    @Test
+    void deliveriesKeepTaggedVariantsSeparateAcrossEquivalentKeysAndWaitingCycles() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        Resource first = new Resource(1, 0);
+        Resource second = new Resource(1, 1);
+
+        update(cpu, first, 10);
+        update(cpu, second, 20);
+        update(cpu, new Resource(1, 0), 6);
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertEquals(4L, info.craftedTotal.get(first));
+        assertEquals(20L, info.waitingFor.get(second));
+
+        update(cpu, new Resource(1, 0), 0);
+        assertEquals(10L, info.craftedTotal.get(first));
+        assertTrue(info.startedWaitingFor.containsKey(second));
+        update(cpu, new Resource(1, 0), 3);
+        update(cpu, new Resource(1, 0), 0);
+        update(cpu, new Resource(1, 1), 0);
+
+        assertEquals(13L, info.craftedTotal.get(first));
+        assertEquals(20L, info.craftedTotal.get(second));
+        assertEquals(
+            2,
+            info.itemShare.get(first)
+                .size());
+        assertEquals(
+            1,
+            info.itemShare.get(second)
+                .size());
+        assertTrue(info.startedWaitingFor.isEmpty());
+        assertTrue(info.waitingFor.isEmpty());
+        assertEquals(
+            info.timeSpentOn.get(first)
+                .longValue(),
+            info.getTimeSpentOn(new Resource(1, 0)));
+    }
+
+    @Test
+    void providersShareNamesAndLocationsButFinishOnlyAfterAllTheirOutputsArrive() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        Resource first = new Resource(1, 0);
+        Resource second = new Resource(2, 0);
+        DimensionalCoords firstLocation = new DimensionalCoords(0, 1, 2, 3);
+        DimensionalCoords secondLocation = new DimensionalCoords(0, 4, 5, 6);
+        // Aa and BB also exercise distinct provider names with the same String hash.
+        push(cpu, "Aa", firstLocation, first);
+        // Equal names must group even when they are different String instances.
+        // noinspection StringOperationCanBeSimplified
+        push(cpu, new String("Aa"), secondLocation, second);
+        push(cpu, "BB", firstLocation, first);
+        push(cpu, "Aa", firstLocation, first);
+        update(cpu, first, 10);
+        update(cpu, second, 20);
+
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertEquals(2, info.interfaceStarted.size());
+        AE2JobTracker.AEInterface grouped = info.interfaceStarted.keySet()
+            .stream()
+            .filter(provider -> provider.name.equals("Aa"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Expected the grouped provider named Aa"));
+        assertEquals(2, grouped.location.size());
+        assertTrue(grouped.location.contains(firstLocation));
+        assertTrue(grouped.location.contains(secondLocation));
+
+        update(cpu, new Resource(1, 0), 0);
+        assertEquals(1, info.interfaceStarted.size());
+        assertTrue(info.interfaceStarted.containsKey(grouped));
+        update(cpu, new Resource(2, 0), 0);
+        assertTrue(info.interfaceStarted.isEmpty());
+        assertEquals(2, info.interfaceShare.size());
+        assertEquals(
+            1,
+            info.interfaceShare.get(grouped)
+                .size());
+
+        push(cpu, "Aa", firstLocation, first);
+        update(cpu, first, 5);
+        update(cpu, new Resource(1, 0), 0);
+        assertEquals(
+            2,
+            info.interfaceShare.get(grouped)
+                .size());
+        assertEquals(2, grouped.location.size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void historyRetainsEachResourcesProviderGroupsAcrossDeliveriesAndJobTermination(boolean cancelled) {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
+        Resource first = new Resource(1, 0);
+        Resource second = new Resource(1, 1);
+        Resource unknownProvider = new Resource(2, 0);
+        DimensionalCoords firstLocation = new DimensionalCoords(0, 1, 2, 3);
+        DimensionalCoords secondLocation = new DimensionalCoords(0, 4, 5, 6);
+        push(cpu, "Aa", firstLocation, first, second);
+        push(cpu, "Aa", secondLocation, first);
+        push(cpu, "BB", firstLocation, first);
+        update(cpu, first, 10);
+        update(cpu, second, 20);
+        update(cpu, first, 0);
+        update(cpu, second, 0);
+        // A later processing cycle must retain the earlier groups and not duplicate names.
+        push(cpu, "Aa", firstLocation, first);
+        push(cpu, "Assembly", firstLocation, second);
+        update(cpu, first, 3);
+        update(cpu, second, 4);
+        AE2JobTracker.pushedPattern(cpu, null, pattern(unknownProvider));
+        update(cpu, unknownProvider, 2);
+        if (cancelled) AE2JobTracker.cancelCrafting(grid, cpu);
+        else AE2JobTracker.completeCrafting(grid, cpu);
+
+        flushHistory();
+        GetTracking request = new GetTracking();
+        request.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=1"));
+        JsonObject response = new JsonParser().parse(request.getJSON())
+            .getAsJsonObject();
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        JsonObject history = response.getAsJsonObject("data");
+        assertEquals(
+            cancelled,
+            history.get("wasCancelled")
+                .getAsBoolean());
+        HashMap<String, Set<String>> providersByResource = new HashMap<>();
+        for (JsonElement element : history.getAsJsonArray("items")) {
+            JsonObject item = element.getAsJsonObject();
+            Set<String> names = new LinkedHashSet<>();
+            assertNotNull(item.getAsJsonArray("providers"));
+            for (JsonElement name : item.getAsJsonArray("providers")) names.add(name.getAsString());
+            assertEquals(
+                names.size(),
+                item.getAsJsonArray("providers")
+                    .size());
+            providersByResource.put(
+                item.get("itemKey")
+                    .getAsString(),
+                names);
+        }
+        assertEquals(
+            new LinkedHashSet<>(Arrays.asList("Aa", "BB")),
+            providersByResource.get(
+                first.web$getKey()
+                    .toString()));
+        assertEquals(
+            new LinkedHashSet<>(Arrays.asList("Aa", "Assembly")),
+            providersByResource.get(
+                second.web$getKey()
+                    .toString()));
+        assertEquals(
+            Collections.emptySet(),
+            providersByResource.get(
+                unknownProvider.web$getKey()
+                    .toString()));
+        Set<String> groups = new LinkedHashSet<>();
+        for (JsonElement element : history.getAsJsonArray("interfaceShare")) {
+            JsonObject provider = element.getAsJsonObject();
+            String name = provider.get("name")
+                .getAsString();
+            groups.add(name);
+            if (name.equals("Aa")) assertEquals(
+                2,
+                provider.getAsJsonArray("location")
+                    .size());
+        }
+        assertEquals(new LinkedHashSet<>(Arrays.asList("Aa", "BB", "Assembly")), groups);
+        for (Set<String> names : providersByResource.values()) assertTrue(groups.containsAll(names));
+    }
+
+    private static void push(EqualCpu cpu, String name, DimensionalCoords location, Resource... resources) {
+        IPatternProviderViewable provider = new IPatternProviderViewable() {
+
+            @Override
+            public String web$getName() {
+                return name;
+            }
+
+            @Override
+            public DimensionalCoords web$getLocation() {
+                return location;
+            }
+        };
+        AE2JobTracker.pushedPattern(cpu, provider, pattern(resources));
+    }
+
+    private static IAECraftingPatternDetails pattern(Resource... resources) {
+        IAEGenericStack[] outputs = Arrays.stream(resources)
+            .map(resource -> new IAEGenericStack() {
+
+                @Override
+                public @NotNull IAEKey web$what() {
+                    return resource;
+                }
+
+                @Override
+                public long web$amount() {
+                    return 1;
+                }
+
+            })
+            .toArray(IAEGenericStack[]::new);
+        return () -> outputs;
+    }
+
+    private static void update(EqualCpu cpu, Resource resource, long remaining) {
+        cpu.waiting.put(resource, remaining);
+        AE2JobTracker.updateCraftingStatus(cpu, resource);
+    }
+
+    @Desugar
+    private record Resource(int id, int variant) implements IAEKey {
+
+        @Override
+        public int hashCode() {
+            return id;
+        }
+
+        @Override
+        public @NotNull StableKey web$getKey() {
+            return StableKey.create(
+                sink -> sink.putInt(id)
+                    .putInt(variant));
+        }
+
+        @Override
+        public @NotNull IAEKey web$copyIdentity() {
+            return this;
+        }
+
+        @Override
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        @Override
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
+            return "test:resource";
+        }
+
+        @Override
+        public @NotNull String web$getDisplayName() {
+            return "Resource";
+        }
+
+        @Override
+        public boolean web$isCraftable(IAEGrid grid) {
+            return true;
+        }
+    }
+
+    private static final class EqualCpu implements ICraftingCPUCluster {
+
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
+
+        public @NotNull StableKey web$getKey() {
+            return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        }
+
+        private IAEGenericStack output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);
+        private final HashMap<IAEKey, Long> waiting = new HashMap<>();
+        private final IStackList waitingList = new IStackList() {
+
+            @Override
+            public long web$getAmount(IAEKey key) {
+                return waiting.getOrDefault(key, 0L);
+            }
+
+            @Override
+            public Iterable<IAEGenericStack> web$stacks() {
+                return Collections.emptyList();
+            }
+        };
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof EqualCpu;
+        }
+
+        @Override
+        public int hashCode() {
+            return 1;
+        }
+
+        @Override
+        public String web$getName() {
+            return "cpu";
+        }
+
+        @Override
+        public long web$getAvailableStorage() {
+            return 0;
+        }
+
+        @Override
+        public long web$getUsedStorage() {
+            return 0;
+        }
+
+        @Override
+        public long web$getCoProcessors() {
+            return 0;
+        }
+
+        @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
+        }
+
+        @Override
+        public boolean web$isBusy() {
+            return true;
+        }
+
+        @Override
+        public void web$cancel() {}
+
+        @Override
+        public IAEGenericStack web$getFinalOutput() {
+            return output;
+        }
+
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {}
+
+        @Override
+        public IStackList web$getWaitingFor() {
+            return waitingList;
+        }
+    }
+}

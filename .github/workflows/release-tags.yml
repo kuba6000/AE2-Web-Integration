@@ -1,188 +1,75 @@
 name: Release tagged build
-
 on:
   push:
-    tags: ['*']
-
+    tags: ["[0-9]*"]
 permissions:
   contents: read
-
+  actions: read
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-source-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    permissions:
-      contents: write
-    outputs:
-      snapshot: ${{ steps.notes.outputs.snapshot }}
-    env:
-      VERSION: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          persist-credentials: false
-
-      - name: Prepare shared release description
-        id: notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 .github/scripts/release_notes.py \
-            --tag "$VERSION" --minecraft '1.21.1' --loader 'neoforge' \
-            --repository "$GITHUB_REPOSITORY" --output build/release/notes.md \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Set up Node.js for frontend compilation
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: |
-            21
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Build and prepare release artifacts
-        run: |
-          chmod +x gradlew
-          ./gradlew --build-cache --no-configuration-cache --stacktrace \
-            assemble prepareRelease \
-            -PreleaseType="${{ steps.notes.outputs.release_type }}" \
-            -PreleaseNotesFile=build/release/notes.md
-
-      - name: Stage verified production JAR and description
-        run: |
-          python3 .github/scripts/release_bundle.py stage \
-            --manifest build/release/manifest.json --metadata build/release/metadata.json \
-            --output build/release/bundle
-          cat build/release/notes.md >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-1.21.1
-          path: build/release/bundle/
-          if-no-files-found: error
-          retention-days: 14
-
-  github:
-    needs: build
+  prepare:
     if: github.repository == 'kuba6000/AE2-Web-Integration'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+      notes_sha: ${{ steps.plan.outputs.notes_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-1.21.1
-          path: release-bundle
-      - name: Create or verify GitHub release
+      - id: plan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_TAG: ${{ github.ref_name }}
+          MAIN_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          python3 .github/scripts/release_bundle.py github \
-            --bundle release-bundle --repository "$GITHUB_REPOSITORY" --publish
-
-  portals:
-    needs: build
-    if: >-
-      github.repository == 'kuba6000/AE2-Web-Integration' &&
-      needs.build.outputs.snapshot != 'true'
+          sha=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          if gh run download "$GITHUB_RUN_ID" --name release-plan --dir frozen-plan; then
+            cp frozen-plan/release-plan.json release-plan.json
+          else
+            # A failed preflight may be retried before any tags were published. Once publication
+            # started, missing/expired evidence must never silently select newer authored notes.
+            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" > attempts.json
+            python3 -c 'import json; jobs=[j for p in json.load(open("attempts.json")) for j in p["jobs"]]; assert not any(s["name"] == "Publish variant tags" and s["status"] != "queued" and s.get("conclusion") != "skipped" for j in jobs for s in j.get("steps", [])), "Frozen release plan is missing after publication started"'
+            python3 .github/scripts/coordinate_release.py prepare --repository "$GITHUB_REPOSITORY" --source-tag "$SOURCE_TAG" --core-sha "$sha" --branch "$MAIN_BRANCH" --plan release-plan.json
+            echo "new_plan=true" >> "$GITHUB_OUTPUT"
+          fi
+          python3 -c 'import json,os; p=json.load(open("release-plan.json")); f=open(os.environ["GITHUB_OUTPUT"],"a"); print("targets="+json.dumps(p["targets"]),file=f); print("notes_sha="+p["notes_sha"],file=f)'
+      - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.new_plan == 'true'
+        with:
+          name: release-plan
+          path: release-plan.json
+          retention-days: 90
+      - name: Publish variant tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_TAG: ${{ github.ref_name }}
+          MAIN_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          sha=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          python3 .github/scripts/coordinate_release.py publish --repository "$GITHUB_REPOSITORY" --source-tag "$SOURCE_TAG" --core-sha "$sha" --branch "$MAIN_BRANCH" --plan release-plan.json
+  publish:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        platform: [modrinth, curseforge]
-    name: Publish to ${{ matrix.platform }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      VERSION: ${{ github.ref_name }}
-    steps:
-      - name: Check portal credentials
-        id: portal
-        env:
-          PLATFORM: ${{ matrix.platform }}
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-        run: |
-          if [[ "$PLATFORM" == 'modrinth' ]]; then
-            token="$MODRINTH_TOKEN"
-          else
-            token="$CURSEFORGE_TOKEN"
-          fi
-          if [[ -z "${token//[[:space:]]/}" ]]; then
-            echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            message="Skipping $PLATFORM publication: no token is configured."
-            echo "::notice::$message"
-            echo "$message" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'enabled=true' >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v4
-        if: steps.portal.outputs.enabled == 'true'
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        if: steps.portal.outputs.enabled == 'true'
-        with:
-          name: release-1.21.1
-          path: release-bundle
-      - name: Verify immutable release bundle
-        if: steps.portal.outputs.enabled == 'true'
-        id: bundle
-        run: |
-          python3 .github/scripts/release_bundle.py export \
-            --bundle release-bundle --github-output "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@v4
-        if: steps.portal.outputs.enabled == 'true'
-        with:
-          distribution: temurin
-          java-version: |
-            21
-      - uses: gradle/actions/setup-gradle@v4
-        if: steps.portal.outputs.enabled == 'true'
-      - name: Publish to Modrinth
-        if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'modrinth'
-        env:
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-          RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
-          RELEASE_NOTES: ${{ steps.bundle.outputs.notes }}
-          RELEASE_SHA512: ${{ steps.bundle.outputs.sha512 }}
-          RELEASE_MANIFEST: ${{ steps.bundle.outputs.manifest }}
-          RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-configuration-cache --stacktrace releaseModrinth \
-            -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
-            -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
-            -PreleaseBundleManifest="$RELEASE_MANIFEST" \
-            -PreleaseNotesFile="$RELEASE_NOTES"
-      - name: Publish to CurseForge
-        if: steps.portal.outputs.enabled == 'true' && matrix.platform == 'curseforge'
-        env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-          RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
-          RELEASE_NOTES: ${{ steps.bundle.outputs.notes }}
-          RELEASE_SHA512: ${{ steps.bundle.outputs.sha512 }}
-          RELEASE_MANIFEST: ${{ steps.bundle.outputs.manifest }}
-          RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-configuration-cache --stacktrace releaseCurseforge \
-            -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
-            -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
-            -PreleaseBundleManifest="$RELEASE_MANIFEST" \
-            -PreleaseNotesFile="$RELEASE_NOTES"
+        target: ${{ fromJSON(needs.prepare.outputs.targets) }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-variant.yml
+    with:
+      tag: ${{ matrix.target.tag }}
+      directory: ${{ matrix.target.directory }}
+      minecraft: ${{ matrix.target.minecraft }}
+      loader: ${{ matrix.target.loader }}
+      sha: ${{ matrix.target.sha }}
+      notes_sha: ${{ needs.prepare.outputs.notes_sha }}
+    secrets: inherit

@@ -1,6 +1,10 @@
 AE2 Web Integration - Minecraft addon
 Copyright (C) 2024  kuba6000
 
+This license applies to the project code. Bundled third-party assets retain
+their respective licenses; see the License section of README.md and the
+license notices accompanying those assets.
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
 License as published by the Free Software Foundation; either

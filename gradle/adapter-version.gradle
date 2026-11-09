@@ -1,0 +1,34 @@
+// Release builds supply the exact variant tag. Developer versions include the branch and commit.
+def explicitVersion = providers.environmentVariable('VERSION').getOrNull()
+if (explicitVersion) {
+    version = explicitVersion
+} else {
+    def variant = projectDir.name
+    def described = providers.exec {
+        workingDir rootDir
+        commandLine 'git', 'describe', '--tags', '--match', "*-${variant}", '--always', '--long', '--dirty'
+    }.standardOutput.asText.get().trim()
+    def revision = described =~ /^(.*)-([0-9]+)-g([0-9a-f]+)(-dirty)?$/
+    def tagged = revision.matches()
+    if (tagged && revision.group(2) == '0' && !revision.group(4)) {
+        version = revision.group(1)
+    } else {
+        def branch = providers.exec {
+            workingDir rootDir
+            commandLine 'git', 'branch', '--show-current'
+        }.standardOutput.asText.get().trim().replaceAll('[^a-zA-Z0-9-]+', '-')
+        if (tagged && branch) {
+            def tag = revision.group(1)
+            def distance = revision.group(2)
+            def hash = revision.group(3)
+            def dirty = revision.group(4) ?: ''
+            def hashSeparator = tag.contains('+') ? '.' : '+'
+            version = "${tag}-${branch}.${distance}${hashSeparator}${hash}${dirty}"
+        } else if (tagged) {
+            version = described
+        } else {
+            def branchPrefix = branch ? "${branch}-" : ''
+            version = "0.0.0-${variant}-dev-${branchPrefix}${described}"
+        }
+    }
+}

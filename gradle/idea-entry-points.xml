@@ -1,15 +1,31 @@
 <component name="EntryPointsManager">
-  <!-- Forge constructs these mod entry points and sided proxies reflectively. -->
+  <!-- Mod loaders construct these entry points and proxies reflectively. -->
   <entry_points version="2.0">
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration AE2WebIntegration()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.ClientProxy ClientProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy CommonProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.client.ClientBootstrap ClientBootstrap()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.client.JeiPlugin JeiPlugin()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.GeneratorProxy GeneratorProxy()" />
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod IconGeneratorMod()" />
   </entry_points>
-  <list size="3">
-    <item index="0" class="java.lang.String" itemvalue="net.neoforged.fml.common.Mod" />
-    <item index="1" class="java.lang.String" itemvalue="net.neoforged.fml.common.EventBusSubscriber" />
-    <item index="2" class="java.lang.String" itemvalue="net.neoforged.bus.api.SubscribeEvent" />
+  <list size="12">
+    <item index="0" class="java.lang.String" itemvalue="cpw.mods.fml.common.eventhandler.SubscribeEvent" />
+    <item index="1" class="java.lang.String" itemvalue="cpw.mods.fml.common.Mod" />
+    <item index="2" class="java.lang.String" itemvalue="cpw.mods.fml.common.Mod.EventHandler" />
+    <item index="3" class="java.lang.String" itemvalue="mezz.jei.api.JEIPlugin" />
+    <item index="4" class="java.lang.String" itemvalue="net.minecraftforge.eventbus.api.SubscribeEvent" />
+    <item index="5" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.eventhandler.SubscribeEvent" />
+    <item index="6" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.Mod" />
+    <item index="7" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.Mod.EventBusSubscriber" />
+    <item index="8" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.Mod.EventHandler" />
+    <item index="9" class="java.lang.String" itemvalue="net.neoforged.bus.api.SubscribeEvent" />
+    <item index="10" class="java.lang.String" itemvalue="net.neoforged.fml.common.EventBusSubscriber" />
+    <item index="11" class="java.lang.String" itemvalue="net.neoforged.fml.common.Mod" />
   </list>
   <writeAnnotations>
+    <writeAnnotation name="cpw.mods.fml.common.SidedProxy" />
+    <writeAnnotation name="net.minecraftforge.fml.common.SidedProxy" />
     <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.Body" />
     <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.PathParam" />
   </writeAnnotations>

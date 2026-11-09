@@ -1,0 +1,349 @@
+package pl.kuba6000.ae2webintegration.core.config;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.EnumGetMethod;
+import com.electronwill.nightconfig.core.UnmodifiableConfig;
+import com.electronwill.nightconfig.core.conversion.ObjectConverter;
+import com.electronwill.nightconfig.core.conversion.Path;
+import com.electronwill.nightconfig.core.io.ParsingMode;
+import com.electronwill.nightconfig.toml.TomlFormat;
+import com.electronwill.nightconfig.toml.TomlParser;
+import com.electronwill.nightconfig.toml.TomlWriter;
+
+import pl.kuba6000.ae2webintegration.core.PasswordHelper;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
+import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
+
+public class Config {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+
+    private static final ObjectConverter CONVERTER = new ObjectConverter();
+
+    /** Replaced as a whole on init, reload and web save. Fields of a published instance are read-only. */
+    public static volatile ConfigSettings INSTANCE = new ConfigSettings();
+
+    private static File configDirectory;
+    private static String revision = PasswordHelper.generateToken(32);
+
+    // --- Directory / file setup ---
+
+    public static synchronized void init(File configDirectory) {
+        init(configDirectory, () -> null);
+    }
+
+    /** Imports legacy settings only when the TOML configuration does not exist. */
+    public static synchronized void init(File configDirectory, Supplier<ILegacyConfigProvider> legacyProvider) {
+        File directory = new File(configDirectory, "ae2webintegration");
+        File file = new File(directory, "config.toml");
+        try {
+            boolean wasMigrated = false;
+            ILegacyConfigProvider legacyReader = null;
+            CommentedConfig document;
+            if (file.exists()) {
+                document = read(file);
+            } else {
+                legacyReader = legacyProvider.get();
+                if (legacyReader != null && legacyReader.isAvailable()) {
+                    document = migrate(legacyReader);
+                    wasMigrated = true;
+                } else {
+                    document = newDocument();
+                    CONVERTER.toConfig(new ConfigSettings(), document);
+                }
+            }
+            publish(file, document);
+            if (wasMigrated) {
+                legacyReader.markAsMigrated();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not load configuration: " + file, e);
+        }
+        Config.configDirectory = directory;
+    }
+
+    /** Loads a complete configuration before replacing the settings visible to request threads. */
+    public static synchronized void reload() {
+        File file = getConfigFile("config.toml");
+        try {
+            publish(file, read(file));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not reload configuration: " + file, e);
+        }
+    }
+
+    /** Returns a read-only view of active settings without exposing secret values. */
+    public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() {
+        ConfigSettings loaded = INSTANCE;
+        return new ServerSettingsSnapshot(
+            revision,
+            new EditableServerSettings(loaded),
+            new ServerSettingsSnapshot.ReadOnly(
+                loaded.general.port,
+                loaded.general.allowServerSettingsEditing,
+                loaded.general.publicMode,
+                loaded.general.allowNoPasswordOnLocalhost,
+                loaded.general.trustedProxies,
+                loaded.general.maxRequestsBeforeLoggedInPerMinute,
+                !loaded.general.password.isEmpty(),
+                !loaded.discord.webhook.isEmpty(),
+                !loaded.ntfy.password.isEmpty()));
+    }
+
+    /** Returns null when another configuration publication superseded the submitted revision. */
+    public static synchronized @Nullable ServerSettingsSnapshot saveServerSettings(@NotNull String expectedRevision,
+        @NotNull EditableServerSettings settings, @Nullable EditableServerSettings.SecretUpdates secrets)
+        throws IOException {
+        if (!revision.equals(expectedRevision)) return null;
+        File file = getConfigFile("config.toml");
+        CommentedConfig document = read(file);
+        applyWebEdits(document, settings.config(), INSTANCE);
+        if (secrets != null) {
+            if (secrets.discordWebhook() != null) document.set("discord.webhook", secrets.discordWebhook());
+            if (secrets.ntfyPassword() != null) document.set("ntfy.password", secrets.ntfyPassword());
+        }
+        publish(file, document, true);
+        return readServerSettings();
+    }
+
+    private static void applyWebEdits(CommentedConfig document, ConfigSettings settings, ConfigSettings active) {
+        try {
+            applyWebFields(document, settings, active);
+        } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("Cannot read editable configuration fields", failure);
+        }
+    }
+
+    private static void applyWebFields(CommentedConfig document, Object settings, Object active)
+        throws IllegalAccessException {
+        for (Field field : settings.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting access = field.getAnnotation(WebSetting.class);
+            if (access != null && access.value() == WebSetting.Access.FILE_ONLY) continue;
+            Path path = field.getAnnotation(Path.class);
+            String key = path == null ? field.getName() : path.value();
+            Object value = field.get(access != null && access.value() == WebSetting.Access.SECRET ? active : settings);
+            if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
+                Object existing = document.get(key);
+                if (existing == null) {
+                    existing = newDocument();
+                    document.set(key, existing);
+                }
+                if (!(existing instanceof CommentedConfig target)) {
+                    throw new IllegalArgumentException("Expected a configuration table");
+                }
+                applyWebFields(target, value, field.get(active));
+            } else {
+                document.set(key, value);
+            }
+        }
+    }
+
+    private static void preserveFileOnlySettings(Object loaded, Object active) throws IllegalAccessException {
+        for (Field field : loaded.getClass()
+            .getDeclaredFields()) {
+            if (!isConfigField(field)) continue;
+            WebSetting setting = field.getAnnotation(WebSetting.class);
+            if (setting != null && setting.value() == WebSetting.Access.FILE_ONLY) {
+                field.set(loaded, field.get(active));
+            } else if (field.getType()
+                .getEnclosingClass() == ConfigSettings.class) {
+                    preserveFileOnlySettings(field.get(loaded), field.get(active));
+                }
+        }
+    }
+
+    private static boolean isConfigField(Field field) {
+        return !Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers());
+    }
+
+    private static CommentedConfig newDocument() {
+        return CommentedConfig.of(LinkedHashMap::new, TomlFormat.instance());
+    }
+
+    /** Persists this preference without reloading other file edits or restarting the web server. */
+    public static synchronized void setTelemetryEnabled(boolean enabled) throws IOException {
+        File file = getConfigFile("config.toml");
+        CommentedConfig document = read(file);
+        document.set("telemetry.enabled", enabled);
+        ConfigSettings updated = new ConfigSettings();
+        CommentedConfig current = newDocument();
+        CONVERTER.toConfig(INSTANCE, current);
+        CONVERTER.toObject(current, updated);
+        updated.telemetry.enabled = enabled;
+        write(file, document);
+        INSTANCE = updated;
+    }
+
+    private static CommentedConfig read(File file) throws IOException {
+        CommentedConfig document = newDocument();
+        try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            new TomlParser().parse(reader, document, ParsingMode.REPLACE);
+        }
+        return document;
+    }
+
+    @Deprecated
+    private static final Map<String, String> LEGACY_KEYS = new LinkedHashMap<>();
+
+    static {
+        LEGACY_KEYS.put("port", "general.port");
+        LEGACY_KEYS.put("password", "general.password");
+        LEGACY_KEYS.put("allow_no_password_on_localhost", "general.allow_no_password_on_localhost");
+        LEGACY_KEYS.put("trusted_proxies", "general.trusted_proxies");
+        LEGACY_KEYS.put("public_mode", "general.public_mode");
+        LEGACY_KEYS.put("max_requests_before_logged_in_per_minute", "general.max_requests_before_logged_in_per_minute");
+        LEGACY_KEYS.put("check_for_updates", "general.check_for_updates");
+        LEGACY_KEYS.put("discord_webhook", "discord.webhook");
+        LEGACY_KEYS.put("discord_role_id", "discord.role_id");
+        LEGACY_KEYS.put("discord_minimum_crafting_duration_seconds", "notifications.minimum_crafting_duration_seconds");
+        LEGACY_KEYS.put("discord_minimum_crafting_amount", "notifications.minimum_crafting_amount");
+    }
+
+    @Deprecated
+    private static CommentedConfig migrate(ILegacyConfigProvider legacy) {
+        LOG.info("LEGACY CONFIG MIGRATION INIT");
+        CommentedConfig document = newDocument();
+        CONVERTER.toConfig(new ConfigSettings(), document);
+        for (Map.Entry<String, String> entry : LEGACY_KEYS.entrySet()) {
+            Object value = legacy.get(entry.getKey());
+            if (value == null) {
+                continue;
+            }
+            document.set(entry.getValue(), value);
+            LOG.info("Mapped {} to {}", entry.getKey(), entry.getValue());
+        }
+        return document;
+    }
+
+    private static void publish(File file, CommentedConfig document) throws IOException {
+        publish(file, document, false);
+    }
+
+    private static void publish(File file, CommentedConfig document, boolean preserveFileOnlySettings)
+        throws IOException {
+        document.remove("tracking");
+        ConfigSettings loaded = new ConfigSettings();
+        CommentedConfig defaults = newDocument();
+        CONVERTER.toConfig(loaded, defaults);
+        fillDefaults(document, defaults, "");
+        CONVERTER.toObject(document, loaded);
+        loaded.validate();
+        addComments(document, loaded);
+        if (preserveFileOnlySettings) {
+            try {
+                preserveFileOnlySettings(loaded, INSTANCE);
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException("Cannot preserve active file-only configuration fields", failure);
+            }
+        }
+        write(file, document);
+        INSTANCE = loaded;
+    }
+
+    private static void write(File file, CommentedConfig document) throws IOException {
+        TomlWriter serializer = new TomlWriter();
+        serializer.setIndent("");
+        serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
+        disableMultilineStrings(serializer);
+        String nextRevision = PasswordHelper.generateToken(32);
+        AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
+        revision = nextRevision;
+    }
+
+    private static boolean useLiteralString(String value) {
+        boolean literal = true;
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            switch (character) {
+                case '\'', '\b', '\f', '\n', '\r', '\t' -> literal = false;
+                default -> {
+                    // 3.6.4 emits these raw instead of escaping them, making its next read fail.
+                    if (character < ' ' || character == '\u007f') {
+                        throw new IllegalArgumentException("Unsupported control character in TOML configuration");
+                    }
+                }
+            }
+        }
+        return literal;
+    }
+
+    private static void disableMultilineStrings(TomlWriter serializer) {
+        // Newer NightConfig normalizes line endings in multiline strings, changing stored passwords.
+        try {
+            TomlWriter.class.getMethod("setWriteStringMultilinePredicate", Predicate.class)
+                .invoke(serializer, (Predicate<String>) value -> false);
+        } catch (NoSuchMethodException ignored) {
+            // 3.6.4 always writes escaped single-line strings and has no multiline setting.
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not configure lossless TOML string writing", e);
+        }
+    }
+
+    private static void fillDefaults(CommentedConfig document, UnmodifiableConfig defaults, String prefix) {
+        for (UnmodifiableConfig.Entry entry : defaults.entrySet()) {
+            String key = entry.getKey();
+            Object defaultValue = entry.getValue();
+            if (!document.contains(key)) {
+                document.set(key, defaultValue);
+            } else if (defaultValue instanceof UnmodifiableConfig section) {
+                Object value = document.get(key);
+                if (!(value instanceof CommentedConfig existing)) {
+                    throw new IllegalArgumentException("Expected a configuration table: " + key);
+                }
+                fillDefaults(existing, section, prefix + key + ".");
+            } else if (defaultValue instanceof Enum<?> defaultEnum
+                && !EnumGetMethod.NAME_IGNORECASE.validate(document.get(key), defaultEnum.getDeclaringClass())) {
+                    document.set(key, defaultValue);
+                    LOG.warn("Invalid enum setting {}; using default {}", prefix + key, defaultEnum.name());
+                }
+        }
+    }
+
+    private static void addComments(CommentedConfig document, Object model) {
+        for (Field field : model.getClass()
+            .getDeclaredFields()) {
+            Path path = field.getAnnotation(Path.class);
+            String key = path == null ? field.getName() : path.value();
+            Comment comment = field.getAnnotation(Comment.class);
+            if (comment != null && document.getComment(key) == null) {
+                document.setComment(key, " " + String.join("\n ", comment.value()));
+            }
+            if (document.get(key) instanceof CommentedConfig section) {
+                try {
+                    addComments(section, field.get(model));
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException("Cannot read configuration descriptions", e);
+                }
+            }
+        }
+    }
+
+    public static File getConfigDirectory() {
+        return configDirectory;
+    }
+
+    public static File getConfigFile(String fileName) {
+        return new File(configDirectory, fileName);
+    }
+}

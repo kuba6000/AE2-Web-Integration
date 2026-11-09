@@ -3,6 +3,7 @@
 *.[jJ][aA][rR]          binary
 
 *.[pP][nN][gG]          binary
+*.[wW][eE][bB][pP]      binary
 *.[jJ][pP][gG]          binary
 *.[jJ][pP][eE][gG]      binary
 *.[gG][iI][fF]          binary
@@ -26,6 +27,7 @@
 *.[tT][aA][rR]          binary
 *.[tT][gG][zZ]          binary
 *.[zZ][iI][pP]          binary
+*.ae2wi-icons           binary
 
 *.[tT][cC][nN]          binary
 *.[sS][oO]              binary
@@ -34,6 +36,8 @@
 *.[pP][sS][dD]          binary
 *.[tT][tT][fF]          binary
 *.[oO][tT][fF]          binary
+*.[wW][oO][fF][fF]      binary
+*.[wW][oO][fF][fF]2     binary
 
 *.[pP][aA][tT][cC][hH]  -text
 

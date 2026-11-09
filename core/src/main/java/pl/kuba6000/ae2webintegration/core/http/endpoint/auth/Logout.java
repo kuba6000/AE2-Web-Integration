@@ -1,0 +1,64 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
+
+import java.net.HttpURLConnection;
+
+import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+
+/**
+ * Log out.
+ * <p>
+ * Revokes the current session. Browser clients should return to the website to clear its session cookie.
+ * 
+ * @response 200 {@link Response} Session revoked.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required.
+ * @response 403 {@link ErrorResponse} CSRF_REJECTED: cookie or trusted localhost requests require X-AE2-Request: true.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link Response} SERVER_STOPPING: server stopping.
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
+ * @responseExample 403 {"status":"CSRF_REJECTED","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ */
+@Endpoint(method = HttpMethod.POST, path = "/api/auth/logout")
+public final class Logout extends IAsyncRequest {
+
+    /**
+     * Logout result.
+     * 
+     * @param status {@code OK} when the logout request completed
+     * @param data   always {@code null}; logout returns no additional data
+     * @example status OK
+     * @example data null
+     */
+    @Desugar
+    public record Response(ApiStatus status, @Nullable Void data) implements IResponseBody {}
+
+    @Override
+    public void handle() {
+        if (!AuthService.logout(context)) {
+            respond(HttpURLConnection.HTTP_UNAVAILABLE, new Response(ApiStatus.SERVER_STOPPING, null));
+            return;
+        }
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+    }
+}

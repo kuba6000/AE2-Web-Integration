@@ -1,0 +1,805 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.lang.reflect.Proxy;
+import java.net.HttpURLConnection;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.*;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
+
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
+class ItemIdentityRequestTest extends GridTestScope {
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void missingNativeIdentityStillDisplaysTerminalAndCapturedResources(boolean supportsType) {
+        Resource metadata = new Resource("unkeyed", 21, true);
+        IAEKey resource = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$supportsStableIdentity")) return supportsType;
+                if (method.getName()
+                    .equals("web$getKey")) return null;
+                if (method.getName()
+                    .equals("web$copyIdentity")) {
+                    assertTrue(supportsType, "Unsupported types must remain displayable without copying");
+                    return proxy;
+                }
+                return method.invoke(metadata, args);
+            });
+        Grid grid = new Grid(910015);
+        grid.rows.add(new IAEGenericStack() {
+
+            public @NotNull IAEKey web$what() {
+                return resource;
+            }
+
+            public long web$amount() {
+                return 21;
+            }
+        });
+        JsonObject row = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "unkeyed",
+            row.get("displayName")
+                .getAsString());
+        assertEquals(
+            21,
+            row.get("quantity")
+                .getAsLong());
+        assertTrue(
+            row.get("itemKey")
+                .isJsonNull());
+        assertTrue(
+            row.get("icon")
+                .isJsonNull());
+        ResourceSnapshot captured = ResourceSnapshot.capture(resource, 21);
+        assertNull(
+            captured.description()
+                .itemKey());
+        assertNull(
+            captured.description()
+                .baseKey());
+        assertEquals(
+            "unkeyed",
+            captured.description()
+                .displayName());
+        assertEquals(21, captured.quantity());
+    }
+
+    @Test
+    void itemSnapshotIsDiscardedWhenItsHttpLifecycleEndsBeforeDelivery() {
+        Grid grid = new Grid(910013, new Resource("iron", Long.MAX_VALUE, true));
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        AE2Controller.stopHTTPServer();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAVAILABLE,
+            request.getResponse()
+                .httpStatus());
+        assertEquals(
+            "SERVER_STOPPING",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void itemSnapshotRetainsExactCapturedValuesAfterNativeStorageChanges() throws Exception {
+        Thread owner = Thread.currentThread();
+        Resource resource = new Resource("Żelazo", Long.MAX_VALUE, true) {
+
+            @Override
+            public long web$amount() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$amount();
+            }
+
+            @Override
+            public @NotNull String web$getDisplayName() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$getDisplayName();
+            }
+        };
+        Grid grid = new Grid(910014, resource);
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        grid.rows.clear();
+        ExecutorService http = Executors.newSingleThreadExecutor();
+        try {
+            String json = http.submit(request::getJSON)
+                .get(1, TimeUnit.SECONDS);
+            JsonObject row = new JsonParser().parse(json)
+                .getAsJsonObject()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                Long.MAX_VALUE,
+                row.get("quantity")
+                    .getAsLong());
+            assertEquals(
+                "Żelazo",
+                row.get("displayName")
+                    .getAsString());
+            assertEquals(
+                resource.web$getKey()
+                    .toString(),
+                row.get("itemKey")
+                    .getAsString());
+            assertTrue(
+                row.get("craftable")
+                    .getAsBoolean());
+        } finally {
+            http.shutdownNow();
+        }
+    }
+
+    @Test
+    void listingExposesTheResourceTypeForTerminalFiltering() {
+        Resource fluid = new Resource("virtual:fluid_drop", 8000, true) {
+
+            @Override
+            public int web$getDamage() {
+                return 0;
+            }
+
+            @Override
+            public int web$getComponentCount() {
+                return 0;
+            }
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Resource other = new Resource("addon:chemical", 42, false) {
+
+            @Override
+            public @Nullable String web$getRegistryNamespace() {
+                return null;
+            }
+
+            @Override
+            public @Nullable String web$getRegistryPath() {
+                return null;
+            }
+
+            @Override
+            public int web$getComponentCount() {
+                return 0;
+            }
+
+            @Override
+            public int web$getDamage() {
+                return 0;
+            }
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.OTHER;
+            }
+
+            @Override
+            public @NotNull StableKey web$getKey() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+        };
+        Resource recipe = new Resource("fluid:recipe", 0, true) {
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Grid grid = new Grid(910012, new Resource("minecraft:water_bucket", 5, false), fluid, other);
+        grid.recipes = Collections.singleton(recipe);
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        assertEquals(4, rows.size());
+        assertEquals(
+            "ITEM",
+            rows.get(0)
+                .getAsJsonObject()
+                .get("resourceType")
+                .getAsString());
+        JsonObject fluidRow = rows.get(1)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            fluidRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            8000,
+            fluidRow.get("quantity")
+                .getAsLong());
+        assertEquals(
+            0,
+            fluidRow.get("damage")
+                .getAsInt());
+        assertEquals(
+            0,
+            fluidRow.get("componentCount")
+                .getAsInt());
+        JsonObject otherRow = rows.get(2)
+            .getAsJsonObject();
+        assertEquals(
+            "OTHER",
+            otherRow.get("resourceType")
+                .getAsString());
+        assertFalse(otherRow.has("identityStatus"));
+        assertTrue(
+            otherRow.get("itemKey")
+                .isJsonNull());
+        assertEquals(
+            "addon:chemical",
+            otherRow.get("displayName")
+                .getAsString());
+        for (String field : new String[] { "registryNamespace", "registryPath" }) {
+            assertTrue(
+                otherRow.get(field)
+                    .isJsonNull());
+        }
+        assertEquals(
+            0,
+            otherRow.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            0,
+            otherRow.get("damage")
+                .getAsInt());
+        JsonObject recipeRow = rows.get(3)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            recipeRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            0,
+            recipeRow.get("quantity")
+                .getAsLong());
+        assertTrue(
+            recipeRow.get("craftable")
+                .getAsBoolean());
+    }
+
+    @Test
+    @SuppressWarnings("BusyWait") // Wait for GC to release ownership, bounded by the deadline below.
+    void completeListingsReplaceOwnershipWithoutDiscardingAnotherGridsSharedKey() throws Exception {
+        Grid first = new Grid(910009, new Resource("iron", 5, true));
+        Grid second = new Grid(910010, new Resource("iron", 8, true) {
+
+            @Override
+            public @NotNull StableKey web$getKey() {
+                throw new AssertionError("Warm shared identity must not encode native data again");
+            }
+        });
+        String key = run(new GetItems(), first, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        assertEquals(
+            key,
+            run(new GetItems(), second, "").getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .get("itemKey")
+                .getAsString());
+        first.rows.clear();
+        assertEquals(
+            "OK",
+            run(new GetItems(), first, "").get("status")
+                .getAsString());
+        System.gc();
+        assertEquals(
+            "OK",
+            run(new CreateCraftingPlan(), second, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
+        second.rows.clear();
+        assertEquals(
+            "OK",
+            run(new GetItems(), second, "").get("status")
+                .getAsString());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        String status;
+        do {
+            System.gc();
+            Thread.sleep(10);
+            status = run(new CreateCraftingPlan(), second, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString();
+        } while (status.equals("ITEM_NOT_FOUND") && System.nanoTime() < deadline);
+        assertEquals("ITEM_IDENTITY_UNKNOWN", status);
+        assertEquals(1, second.jobs);
+    }
+
+    @Test
+    void failedListingTraversalPreservesPreviouslyCompletedOwnership() {
+        Grid grid = new Grid(910011, new Resource("iron", 5, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        grid.rows.clear();
+        grid.rows.add(new Resource("gold", 2, true));
+        grid.rows.add(new Resource("broken", 1, false) {
+
+            @Override
+            public @NotNull String web$getDisplayName() {
+                throw new IllegalStateException("Native traversal failed");
+            }
+        });
+        assertThrows(IllegalStateException.class, () -> run(new GetItems(), grid, ""));
+        System.gc();
+        grid.rows.clear();
+        grid.rows.add(new Resource("iron", 5, true));
+        assertEquals(
+            "OK",
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
+    }
+
+    @Test
+    void storedAndRecipeRowsMergeOnlyForPreciselyEqualResources() {
+        Resource stored = new Resource("variantA", 5, true);
+        Grid grid = new Grid(910008, stored);
+        grid.recipes = new LinkedHashSet<>(
+            Arrays.asList(new Resource("variantA", 0, true), new Resource("variantB", 0, true)));
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        assertEquals(2, rows.size());
+        assertEquals(
+            5,
+            rows.get(0)
+                .getAsJsonObject()
+                .get("quantity")
+                .getAsLong());
+        assertEquals(
+            "variantB",
+            rows.get(1)
+                .getAsJsonObject()
+                .get("registryPath")
+                .getAsString());
+    }
+
+    @Test
+    void orderingRequiresTheRawItemKeyAndRejectsFormerInputs() {
+        Grid grid = new Grid(910007, new Resource("iron", 1, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        assertEquals(
+            "BAD_PARAM",
+            run(new CreateCraftingPlan(), grid, "&item=2112&quantity=1").get("status")
+                .getAsString());
+        assertEquals(
+            "BAD_PARAM",
+            run(new CreateCraftingPlan(), grid, "&itemKey=2112&quantity=1").get("status")
+                .getAsString());
+        assertEquals(
+            "BAD_PARAM",
+            run(new CreateCraftingPlan(), grid, "&itemKey=ik1:" + key + "&quantity=1").get("status")
+                .getAsString());
+        assertEquals(0, grid.jobs);
+        assertEquals(
+            "OK",
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
+    }
+
+    @BeforeEach
+    void clear() {
+        AE2Controller.itemIdentities.clear();
+    }
+
+    @Test
+    void identityIsIndependentOfCraftabilityAndUnavailableRowsKeepTheirDisplay() {
+        Grid grid = new Grid(910003, new Resource("iron", 20, false), new Resource("unsupported", 3, true) {
+
+            @Override
+            public @NotNull StableKey web$getKey() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+        });
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        JsonObject normal = rows.get(0)
+            .getAsJsonObject();
+        assertTrue(normal.has("itemKey"));
+        assertEquals(
+            "example",
+            normal.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            normal.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            normal.get("damage")
+                .getAsInt());
+        assertFalse(normal.has("itemId"));
+        assertFalse(normal.has("itemName"));
+        assertEquals(
+            "iron",
+            normal.get("registryPath")
+                .getAsString());
+        assertEquals(
+            "iron",
+            normal.get("displayName")
+                .getAsString());
+        assertFalse(normal.has("itemid"));
+        assertFalse(normal.has("itemname"));
+        assertFalse(normal.has("identityStatus"));
+        assertFalse(normal.has("hashcode"));
+        assertFalse(
+            normal.get("craftable")
+                .getAsBoolean());
+        JsonObject unsupported = rows.get(1)
+            .getAsJsonObject();
+        assertTrue(
+            unsupported.get("itemKey")
+                .isJsonNull());
+        assertFalse(unsupported.has("hashcode"));
+        assertFalse(unsupported.has("identityStatus"));
+        assertEquals(
+            3,
+            unsupported.get("quantity")
+                .getAsLong());
+        assertEquals(
+            "unsupported",
+            unsupported.get("displayName")
+                .getAsString());
+    }
+
+    @Test
+    void ordinaryHashCollisionsDoNotMergeStableKeys() {
+        Grid grid = new Grid(910004, new Resource("Aa", 1, true), new Resource("BB", 1, true));
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        String first = rows.get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        String second = rows.get(1)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        assertNotEquals(first, second);
+        assertEquals(
+            "OK",
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + first + "&quantity=1").get("status")
+                .getAsString());
+        assertEquals("Aa", grid.ordered.web$getRegistryPath());
+    }
+
+    @Test
+    void malformedAndUnknownIdsDoNotStartJobs() {
+        Grid grid = new Grid(910005, new Resource("iron", 1, true));
+        assertEquals(
+            "BAD_PARAM",
+            run(new CreateCraftingPlan(), grid, "&itemKey=broken&quantity=1").get("status")
+                .getAsString());
+        assertEquals(
+            "ITEM_IDENTITY_UNKNOWN",
+            run(new CreateCraftingPlan(), grid, "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1").get("status")
+                .getAsString());
+        assertEquals(0, grid.jobs);
+    }
+
+    @Test
+    void authorizationHappensBeforeIdentityResolution() {
+        Grid grid = new Grid(910006, new Resource("iron", 1, true));
+        CreateCraftingPlan request = new CreateCraftingPlan();
+        assertTrue(
+            request.init(
+                TestGridFixtures.context(
+                    42,
+                    "grid=" + TestGridFixtures.resolvedKey(grid) + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1")));
+        request.runOnServerThread(TestGridFixtures.ae(grid));
+        assertEquals(
+            "NO_PERMISSIONS",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+        assertEquals(0, grid.jobs);
+    }
+
+    @Test
+    void listIdentitySurvivesAnotherGridAndOrderUsesCurrentCraftability() {
+        Resource iron = new Resource("iron", 0, true);
+        Grid first = new Grid(910001, iron);
+        Grid second = new Grid(910002, new Resource("gold", 64, false));
+        JsonObject row = run(new GetItems(), first, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        String key = row.get("itemKey")
+            .getAsString();
+        assertEquals(
+            0,
+            row.get("quantity")
+                .getAsLong());
+        assertTrue(
+            row.get("craftable")
+                .getAsBoolean());
+        run(new GetItems(), second, "");
+        first.currentCraftable = false;
+        assertEquals(
+            "ITEM_NOT_FOUND",
+            run(new CreateCraftingPlan(), first, "&itemKey=" + key + "&quantity=2").get("status")
+                .getAsString());
+        assertEquals(0, first.jobs);
+        first.currentCraftable = true;
+        assertEquals(
+            "OK",
+            run(new CreateCraftingPlan(), first, "&itemKey=" + key + "&quantity=2147483648").get("status")
+                .getAsString());
+        assertEquals(1, first.jobs);
+        assertEquals(2147483648L, first.orderedAmount);
+        assertEquals("iron", first.ordered.web$getRegistryPath());
+    }
+
+    @Test
+    void creatingAPlanReturnsAcceptedAndAnIdentifier() {
+        Grid grid = new Grid(910011, new Resource("iron", 1, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        CreateCraftingPlan request = new CreateCraftingPlan();
+        JsonObject result = run(request, grid, "&itemKey=" + key + "&quantity=1");
+        assertEquals(
+            HttpURLConnection.HTTP_ACCEPTED,
+            request.getResponse()
+                .httpStatus());
+        assertEquals(
+            "OK",
+            result.get("status")
+                .getAsString());
+        assertTrue(
+            result.getAsJsonObject("data")
+                .has("jobId"));
+        assertFalse(
+            result.getAsJsonObject("data")
+                .has("jobID"));
+        assertEquals(1, grid.jobs);
+    }
+
+    private JsonObject run(ISyncedRequest request, Grid grid, String params) {
+        IAE ae = new TestGridFixtures.TestAE(grid) {
+
+            @Override
+            public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+                return new IAEGenericStack() {
+
+                    public @NotNull IAEKey web$what() {
+                        return key;
+                    }
+
+                    public long web$amount() {
+                        return amount;
+                    }
+
+                };
+            }
+        };
+        AE2Controller.AE2Interface = ae;
+        if (request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid) + params)))
+            request.runOnServerThread(ae);
+        return new JsonParser().parse(request.getJSON())
+            .getAsJsonObject();
+    }
+
+    static class Resource implements IAEKey, IAEGenericStack {
+
+        final String id;
+        final long quantity;
+        final boolean craftable;
+
+        Resource(String id, long quantity, boolean craftable) {
+            this.id = id;
+            this.quantity = quantity;
+            this.craftable = craftable;
+        }
+
+        public @NotNull StableKey web$getKey() {
+            return StableKey.create(sink -> sink.putBytes(id.getBytes(StandardCharsets.UTF_8)));
+        }
+
+        public @NotNull IAEKey web$copyIdentity() {
+            return new Resource(id, 0, false);
+        }
+
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        public @Nullable String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @Nullable String web$getRegistryPath() {
+            return id;
+        }
+
+        public @NotNull String web$getDisplayName() {
+            return id;
+        }
+
+        public boolean web$isCraftable(IAEGrid grid) {
+            return craftable;
+        }
+
+        public @NotNull IAEKey web$what() {
+            return this;
+        }
+
+        public long web$amount() {
+            return quantity;
+        }
+
+        @Override
+        public int hashCode() {
+            return id.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Resource && id.equals(((Resource) other).id);
+        }
+    }
+
+    static final class Grid extends TestGridFixtures.TestGrid implements IAECraftingGrid, IAEStorageGrid {
+
+        private StorageCapture storageCapture;
+
+        public StorageCapture web$getStorageCapture() {
+            return storageCapture;
+        }
+
+        public void web$setStorageCapture(StorageCapture capture) {
+            storageCapture = capture;
+        }
+
+        final List<IAEGenericStack> rows;
+        Set<IAEKey> recipes = Collections.emptySet();
+        boolean currentCraftable = true;
+        int jobs;
+        int storageReads;
+        long orderedAmount;
+        IAEKey ordered;
+
+        Grid(long id, Resource... rows) {
+            super(id, false, AEControllerState.CONTROLLER_ONLINE);
+            this.rows = new ArrayList<>(Arrays.asList(rows));
+        }
+
+        public IAECraftingGrid web$getCraftingGrid() {
+            return this;
+        }
+
+        public IAEStorageGrid web$getStorageGrid() {
+            return this;
+        }
+
+        public boolean web$isCurrentlyCraftable(IAEKey key) {
+            return currentCraftable && rows.stream()
+                .anyMatch(
+                    row -> row.web$what()
+                        .equals(key));
+        }
+
+        public int web$getCPUCount() {
+            return 1;
+        }
+
+        public Set<ICraftingCPUCluster> web$getCPUs() {
+            return Collections.singleton(
+                (ICraftingCPUCluster) Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] { ICraftingCPUCluster.class },
+                    (proxy, method, args) -> {
+                        if (method.getName()
+                            .equals("web$isBusy")) return false;
+                        if (method.getName()
+                            .equals("web$acceptsPlayerJobs")) return true;
+                        throw new AssertionError("Unexpected CPU operation: " + method.getName());
+                    }));
+        }
+
+        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
+            CraftingOptions options) {
+            jobs++;
+            ordered = key;
+            orderedAmount = amount;
+            return new CompletableFuture<>();
+        }
+
+        public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean power, IAEGrid grid) {
+            throw new AssertionError();
+        }
+
+        public Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+            return recipes;
+        }
+
+        public IAEMeInventoryItem web$getInventory() {
+            throw new AssertionError();
+        }
+
+        public IStackList web$getStorageList() {
+            storageReads++;
+            return new IStackList() {
+
+                public long web$getAmount(IAEKey key) {
+                    return rows.stream()
+                        .filter(
+                            row -> row.web$what()
+                                .equals(key))
+                        .mapToLong(IAEGenericStack::web$amount)
+                        .sum();
+                }
+
+                public Iterable<IAEGenericStack> web$stacks() {
+                    return rows;
+                }
+            };
+        }
+    }
+}

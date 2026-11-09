@@ -1,0 +1,210 @@
+package pl.kuba6000.ae2webintegration.core.identity;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+
+/** Server-thread-only shared identities retained for the lifetime of their consumer owners. */
+public final class ItemIdentityRegistry {
+
+    // Values must not refer back to their owner: that would defeat the weak owner key.
+    private final Cache<IIdentityHolder, Map<StableKey, Entry>> owners = CacheBuilder.newBuilder()
+        .weakKeys()
+        .build();
+    private final Cache<StableKey, Entry> entries = CacheBuilder.newBuilder()
+        .weakValues()
+        .build();
+    private final Cache<IAEKey, Entry> reverse = CacheBuilder.newBuilder()
+        .weakValues()
+        .build();
+    // Remember observed conflicts until world teardown, without retaining native resource data.
+    private final Set<StableKey> ambiguous = new HashSet<>();
+
+    /** Retain an encodable identity until the next owner snapshot; known unsupported resources return null. */
+    public @Nullable StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
+        Entry entry = findOrCreate(resource);
+        if (entry == null) return null;
+        owners.asMap()
+            .computeIfAbsent(owner, ignored -> new HashMap<>())
+            .put(entry.key, entry);
+        return entry.key;
+    }
+
+    /** Release one owner's need without invalidating another owner or an in-progress listing. */
+    public void release(@NotNull IIdentityHolder owner, @NotNull StableKey key) {
+        Map<StableKey, Entry> retained = owners.getIfPresent(owner);
+        if (retained != null) retained.remove(key);
+    }
+
+    /** End an owner's lifetime without invalidating another owner or an in-progress listing. */
+    public void release(@NotNull IIdentityHolder owner) {
+        owners.invalidate(owner);
+    }
+
+    /** Start a replacement list; the previous list stays owned until commit succeeds. */
+    public @NotNull Listing beginListing(@NotNull IIdentityHolder owner) {
+        return new Listing(owner);
+    }
+
+    /** Resolve the optional base variant once per retained identity, including absence or normalization failure. */
+    public @Nullable StableKey resolveBaseKey(@NotNull StableKey key) {
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        return resolveBaseKey(entry);
+    }
+
+    private static @Nullable StableKey resolveBaseKey(Entry entry) {
+        if (!entry.baseComputed) {
+            try {
+                entry.base = entry.identity.web$getBaseKey();
+            } catch (RuntimeException unavailable) {
+                // A failing optional native normalizer must neither break the listing nor run every poll.
+                entry.base = null;
+            }
+            entry.baseComputed = true;
+        }
+        return entry.base;
+    }
+
+    /** Detached metadata shared by retained consumers, including the optional base variant. */
+    public @Nullable ResourceDescriptor describe(@NotNull StableKey key) {
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        return describe(entry);
+    }
+
+    /** Capture detached metadata without retaining native data; unavailable identities remain unkeyed. */
+    public @NotNull ResourceDescriptor describe(@NotNull IAEKey resource) {
+        Entry entry;
+        try {
+            entry = findOrCreate(resource);
+        } catch (RuntimeException unavailable) {
+            entry = null;
+        }
+        return entry == null ? ResourceDescriptor.capture(resource, null, null) : describe(entry);
+    }
+
+    private static @NotNull ResourceDescriptor describe(Entry entry) {
+        if (entry.description == null) {
+            entry.description = ResourceDescriptor.capture(entry.identity, entry.key, resolveBaseKey(entry));
+        }
+        return entry.description;
+    }
+
+    public @Nullable IAEKey resolve(@NotNull StableKey key) {
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        return entry == null ? null : entry.identity;
+    }
+
+    public void clear() {
+        owners.invalidateAll();
+        entries.invalidateAll();
+        reverse.invalidateAll();
+        ambiguous.clear();
+    }
+
+    private @Nullable Entry findOrCreate(@NotNull IAEKey resource) {
+        Entry remembered = reverse.getIfPresent(resource);
+        if (remembered != null) {
+            if (ambiguous.contains(remembered.key)) throw new Ambiguous();
+            return remembered;
+        }
+        if (!resource.web$supportsStableIdentity()) return null;
+        IAEKey copy = resource.web$copyIdentity();
+        StableKey key = copy.web$getKey();
+        if (key == null) return null;
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry existing = entries.getIfPresent(key);
+        if (existing != null) {
+            if (!existing.identity.equals(copy)) {
+                entries.invalidate(key);
+                reverse.invalidate(existing.identity);
+                ambiguous.add(key);
+                throw new Ambiguous();
+            }
+            return existing;
+        }
+        Entry entry = new Entry(key, copy);
+        entries.put(key, entry);
+        reverse.put(copy, entry);
+        return entry;
+    }
+
+    /** Periodic server-thread maintenance, independent of resource lookups and transfers. */
+    public void cleanUp() {
+        // Weak owner keys use instance identity. Remove collected owners before cleaning global
+        // weak-value indexes; neither operation scans the live item catalogues.
+        owners.cleanUp();
+        entries.cleanUp();
+        reverse.cleanUp();
+    }
+
+    /** Temporary ownership for one synchronous server-thread traversal; never retain across world cleanup. */
+    public final class Listing {
+
+        private IIdentityHolder owner;
+        private Map<StableKey, Entry> collected = new HashMap<>();
+
+        private Listing(@NotNull IIdentityHolder owner) {
+            this.owner = owner;
+        }
+
+        public @Nullable StableKey remember(@NotNull IAEKey resource) {
+            requireOpen();
+            Entry entry = findOrCreate(resource);
+            if (entry == null) return null;
+            collected.put(entry.key, entry);
+            return entry.key;
+        }
+
+        public void commit() {
+            requireOpen();
+            owners.put(owner, collected);
+            collected = null;
+            owner = null;
+        }
+
+        private void requireOpen() {
+            if (collected == null) throw new IllegalStateException("Listing already committed");
+        }
+    }
+
+    /** An observed conflict must never silently select either resource. */
+    public static final class Ambiguous extends IllegalArgumentException {
+
+        @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
+        private static final long serialVersionUID = 1L;
+
+        private Ambiguous() {
+            super("Ambiguous resource identity");
+        }
+    }
+
+    private static final class Entry {
+
+        private final StableKey key;
+        private final IAEKey identity;
+        private @Nullable ResourceDescriptor description;
+        private boolean baseComputed;
+        private @Nullable StableKey base;
+
+        private Entry(@NotNull StableKey key, @NotNull IAEKey identity) {
+            this.key = key;
+            this.identity = identity;
+        }
+    }
+}

@@ -1,0 +1,94 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
+
+import java.net.HttpURLConnection;
+
+import org.jetbrains.annotations.NotNull;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
+import pl.kuba6000.ae2webintegration.core.http.contract.Body;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+
+/**
+ * Register an account.
+ * <p>
+ * The player must be online. Confirm registration in Minecraft with {@code /ae2webintegration auth <token>},
+ * then log in to obtain a session.
+ * 
+ * @response 202 {@link Response} Confirmation token issued; registration is still pending.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input; INVALID_PASSWORD: password not accepted.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
+ * @response 409 {@link ErrorResponse} Player not online.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 409 {"status":"NOT_ONLINE","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_BUSY","data":null}
+ */
+@Endpoint(method = HttpMethod.POST, path = "/api/auth/register", authentication = Authentication.NONE)
+public final class Register extends IAsyncRequest {
+
+    /** Credentials for the account being registered by an online Minecraft player. */
+    @Body
+    @NotNull
+    Input input;
+
+    /**
+     * Requested account credentials.
+     * 
+     * @param username online Minecraft player name
+     * @param password password for the web account
+     * @example username ExamplePlayer
+     * @example password example-password
+     */
+    @Desugar
+    public record Input(String username, String password) {}
+
+    /**
+     * Pending registration to confirm from the requested player's Minecraft account.
+     *
+     * @param token confirmation value for {@code /ae2webintegration auth <token>}; not a session credential
+     * @example token exampleConfirmationTokenForDocumentationOnly
+     */
+    @Desugar
+    public record Confirmation(String token) {}
+
+    /**
+     * Registration result.
+     * 
+     * @param status {@code OK} when the confirmation token was issued; registration is still pending
+     * @param data   token required to confirm the registration in Minecraft
+     * @example status OK
+     */
+    @Desugar
+    public record Response(ApiStatus status, Confirmation data) implements IResponseBody {}
+
+    @Override
+    public void handle() {
+        RegistrationResult result = AuthService
+            .register(context.getLifecycleGeneration(), input.username(), input.password());
+        if (result.status() == ApiStatus.INVALID_PASSWORD) {
+            respond(HttpURLConnection.HTTP_BAD_REQUEST, new ErrorResponse(result.status(), null));
+        } else if (result.status() != ApiStatus.OK) {
+            deny(result.status());
+        } else {
+            respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new Confirmation(result.token())));
+        }
+    }
+}

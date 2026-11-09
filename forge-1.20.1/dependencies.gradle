@@ -1,0 +1,62 @@
+dependencies {
+    compileOnly(libs.jetbrains.annotations)
+
+    jarJar(implementation('org.xerial:sqlite-jdbc')) {
+        version {
+            strictly '[3.36.0.3,4.0)'
+            prefer '3.53.4.0'
+        }
+    }
+    additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.53.4.0'
+
+    // LDLib
+    //jarJar(modApi(forge.ldlib.get()))
+
+    // Registrate
+    //jarJar(modApi(forge.registrate.get()))
+
+    // Configuration
+    //jarJar(modApi(forge.configuration.get()))
+
+    // Mixin (& Extras)
+    annotationProcessor(variantOf(libs.mixin) { classifier("processor") })
+    compileOnly(annotationProcessor(forge.mixinExtras.common.get()))
+    jarJar(api(forge.mixinExtras.forge.get())).version {
+        require("[${forge.versions.mixinExtras.get()},)")
+    }
+
+    // Core submodule (pure Java — no Forge/MC/AE2 references)
+    implementation 'pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT'
+    // Dev runs load only this mod's classes dir; core must be on the run classpath for mixins
+    additionalRuntimeClasspath 'pl.kuba6000.ae2webintegration:core:1.0-SNAPSHOT'
+
+    // AE2
+    modImplementation(forge.ae2)
+    modCompileOnly(forge.ae2wtlib)
+
+
+    // AE addons for compatibility //
+    compileOnly(forge.advancedae)
+
+    // Standard runtime mods //
+    modLocalRuntime(forge.jade)
+    //modLocalRuntime(forge.ae2)
+    modLocalRuntime(forge.spark)
+    modLocalRuntime(forge.modernfix)
+    modLocalRuntime(forge.guideme)
+
+    // Runtime Recipe Viewers - uncomment whichever one you want to use //
+    modLocalRuntime(forge.emi)
+//    modLocalRuntime(forge.jei.forge.impl)
+//    modLocalRuntime(forge.bundles.rei.runtime)
+
+    // Client-only runtime mods //
+    modClientLocalRuntime(forge.embeddium)
+    modClientLocalRuntime(forge.oculus)
+    renderNurseCfg(libs.renderNurse)
+
+    // runtime test mods //
+    //localRuntime(forge.advancedae)
+    //localRuntime(forge.geckolib)
+
+}

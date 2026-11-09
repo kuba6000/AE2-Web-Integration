@@ -1,0 +1,5 @@
+apply from: 'icon-generator.gradle'
+
+apply from: '../gradle/idea-settings.gradle'
+idea.project.settings.taskTriggers.afterSync tasks.named('updateIdeaEntryPoints')
+apply from: 'gradle/release.gradle'

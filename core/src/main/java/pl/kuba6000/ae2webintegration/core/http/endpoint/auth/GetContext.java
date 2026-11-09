@@ -1,0 +1,136 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
+
+import java.net.HttpURLConnection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
+
+/**
+ * Get application context.
+ * <p>
+ * Returns server information and the current user. Authentication is optional; absent, invalid or expired
+ * credentials return a null user unless trusted localhost access is enabled.
+ *
+ * @response 200 {@link Response} Current application metadata and optional user.
+ * @response 400 {@link ErrorResponse} Invalid request body.
+ * @response 405 {@link ErrorResponse} Method not allowed.
+ * @response 413 {@link ErrorResponse} Request body too large.
+ * @response 429 {@link ErrorResponse} Request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} Unexpected failure.
+ * @response 503 {@link ErrorResponse} Server stopping.
+ * @responseExample 200
+ *                  {"status":"OK","data":{"publicMode":true,"modVersion":"1.2.0","isOutdated":false,"availableUpdate":null,"user":null,"capabilities":{}}}
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ */
+@Endpoint(method = HttpMethod.GET, path = "/api/context", authentication = Authentication.OPTIONAL)
+public final class GetContext extends IAsyncRequest {
+
+    /**
+     * Current user's display information.
+     *
+     * @param username display name, including Admin or localhost for those accounts
+     * @param isAdmin  whether the user has administrator access to all networks
+     */
+    @Desugar
+    public record User(@NotNull String username, boolean isAdmin) {}
+
+    /**
+     * Recommended release, visible only to administrators.
+     *
+     * @param version    recommended mod version
+     * @param tag        exact release identifier to pass when skipping this recommendation
+     * @param releaseUrl HTTPS release page
+     * @param skipped    whether the administrator suppressed this release or a newer one for this platform
+     */
+    @Desugar
+    public record AvailableUpdate(@NotNull String version, @NotNull String tag, @NotNull String releaseUrl,
+        boolean skipped) {}
+
+    /**
+     * Server information and available features.
+     *
+     * @param publicMode      whether individual player web accounts are enabled
+     * @param modVersion      installed mod version, or null if unavailable
+     * @param isOutdated      whether update checking is enabled and a newer mod release is currently known
+     * @param availableUpdate recommendation for authenticated administrators, or null when unavailable or disabled
+     * @param user            current user, or null when unauthenticated
+     * @param capabilities    supported features; empty for anonymous requests. Keys include
+     *                        craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
+     *                        and craftingPlanSteps (per-resource crafting step counts).
+     * @keyExample capabilities craftingLightMode
+     */
+    @Desugar
+    public record Metadata(boolean publicMode, @Nullable String modVersion, boolean isOutdated,
+        @Nullable AvailableUpdate availableUpdate, @Nullable User user, @NotNull Map<String, Boolean> capabilities) {}
+
+    /**
+     * Application context result.
+     *
+     * @param status OK when metadata is available
+     * @param data   public settings and the optional authenticated display identity
+     */
+    @Desugar
+    public record Response(@NotNull ApiStatus status, @NotNull Metadata data) implements IResponseBody {}
+
+    @Override
+    public void handle() {
+        if (!AE2Controller.isCurrentHTTPLifecycle(context.getLifecycleGeneration())) {
+            deny(ApiStatus.SERVER_STOPPING);
+            return;
+        }
+        WebPrincipal principal = context.getPrincipal();
+        User user = principal.equals(WebPrincipal.anonymous()) ? null
+            : new User(principal.getUsername(), principal.isAdmin());
+        Map<String, Boolean> capabilities = Collections.emptyMap();
+        if (user != null) {
+            capabilities = new LinkedHashMap<>();
+            for (Map.Entry<ServerCapability, Boolean> capability : AE2Controller.AE2Interface.web$getCapabilities()
+                .entrySet()) {
+                capabilities.put(
+                    capability.getKey()
+                        .wireName(),
+                    capability.getValue());
+            }
+        }
+        ReleaseManifest.Release release = Config.INSTANCE.general.checkForUpdates ? CoreEngine.getAvailableUpdate()
+            : null;
+        AvailableUpdate update = release != null && principal.isAdmin()
+            ? new AvailableUpdate(release.version, release.tag, release.releaseUrl, CoreEngine.isUpdateSkipped(release))
+            : null;
+        respond(
+            HttpURLConnection.HTTP_OK,
+            new Response(
+                ApiStatus.OK,
+                new Metadata(
+                    Config.INSTANCE.general.publicMode,
+                    CoreEngine.getModVersion(),
+                    release != null,
+                    update,
+                    user,
+                    capabilities)));
+    }
+}

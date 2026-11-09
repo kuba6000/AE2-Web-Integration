@@ -1,0 +1,2050 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.Reader;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.github.bsideup.jabel.Desugar;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
+import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
+import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
+import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.WebHandler;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Login;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+
+@SuppressWarnings("PMD.AvoidMagicNumbers")
+class ServerLifecycleHttpTest {
+
+    @Desugar
+    private record Response(int status, String body) {}
+
+    private static final class BlockingPlayerLookup implements IServerPlatform {
+
+        @Override
+        public java.nio.file.Path getModFile() {
+            return null;
+        }
+
+        @Override
+        public boolean isSingleplayer() {
+            return false;
+        }
+
+        @Override
+        public @NotNull String getModVersion() {
+            return "test-version";
+        }
+
+        @Override
+        public @NotNull String getLoader() {
+            return "forge";
+        }
+
+        @Override
+        public @NotNull String getMinecraftVersion() {
+            return "1.20.1";
+        }
+
+        @Override
+        public @NotNull String getIconPackCompatibilityVersion() {
+            return "test-compatibility";
+        }
+
+        private final UUID playerUuid;
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+
+        private BlockingPlayerLookup(UUID playerUuid) {
+            this.playerUuid = playerUuid;
+        }
+
+        @Override
+        public UUID getOnlinePlayerUUID(String username) {
+            return awaitLookup();
+        }
+
+        @Override
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
+        }
+
+        @Override
+        public File getConfigDirectory() {
+            return null;
+        }
+
+        @Override
+        public File getWorldDirectory() {
+            throw new AssertionError("This lookup-only fixture has no world lifecycle");
+        }
+
+        private UUID awaitLookup() {
+            entered.countDown();
+            try {
+                release.await();
+                return playerUuid;
+            } catch (InterruptedException e) {
+                Thread.currentThread()
+                    .interrupt();
+                return null;
+            }
+        }
+    }
+
+    private static class PostExchange extends TestGridFixtures.TestExchange {
+
+        private final byte[] requestBody;
+        private final URI uri;
+        private final ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
+        private volatile int responseCode = -1;
+
+        private PostExchange(String requestBody) {
+            this("/", requestBody);
+        }
+
+        private PostExchange(String path, String requestBody) {
+            super(null);
+            uri = URI.create(path);
+            this.requestBody = requestBody.getBytes(StandardCharsets.UTF_8);
+            getRequestHeaders().set(
+                "Content-Type",
+                path.startsWith("/api/") ? "application/json" : "application/x-www-form-urlencoded");
+        }
+
+        @Override
+        public String getRequestMethod() {
+            return "POST";
+        }
+
+        @Override
+        public URI getRequestURI() {
+            return uri;
+        }
+
+        @Override
+        public InputStream getRequestBody() {
+            return new ByteArrayInputStream(requestBody);
+        }
+
+        @Override
+        public OutputStream getResponseBody() {
+            return responseBody;
+        }
+
+        @Override
+        public void sendResponseHeaders(int responseCode, long responseLength) {
+            this.responseCode = responseCode;
+        }
+
+        @Override
+        public InetSocketAddress getRemoteAddress() {
+            return new InetSocketAddress("192.0.2.10", 12345);
+        }
+    }
+
+    private final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
+
+    @TempDir
+    File tempDirectory;
+
+    private ConfigTestFixture config;
+    private IServerPlatform previousServerPlatform;
+    private int port;
+
+    @BeforeEach
+    void setUp() {
+        CoreEngine.onServerStopped();
+        previousServerPlatform = AE2Controller.serverPlatform;
+
+        config = new ConfigTestFixture(tempDirectory);
+        config.write("general.password", "lifecycle-password");
+        config.write("general.allow_no_password_on_localhost", false);
+        config.write("general.public_mode", false);
+        config.write("general.check_for_updates", false);
+        Config.reload();
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        CoreEngine.onServerStopped();
+        AE2Controller.serverPlatform = previousServerPlatform;
+        config.close();
+        worlds.close();
+    }
+
+    @Test
+    void rememberedLoginLimitRevokesOldestWithoutAffectingOtherAccountsOrOrdinarySessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            String ordinary = login();
+            String playerToken = rememberedLogin("SessionPlayer", "player-password", ordinary);
+            String oldest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            TestGridFixtures.TestExchange retainedRequest = new TestGridFixtures.TestExchange(null);
+            retainedRequest.getRequestHeaders()
+                .set("Authorization", "Bearer " + oldest);
+            AE2Controller.RequestContext retainedContext = AuthService.authenticate(retainedRequest);
+            assertNotNull(retainedContext);
+            AuthSession retained = retainedContext.getSession();
+            assertNotNull(retained);
+            for (int i = 0; i < 19; i++) rememberedLogin("admin", "lifecycle-password", ordinary);
+            String laterOrdinary = login();
+            assertTrue(retained.isValid(System.currentTimeMillis()));
+            assertEquals(200, get("/api/themes", oldest).status());
+            String newest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            assertFalse(
+                retained.isValid(System.currentTimeMillis()),
+                "live subscriptions must see eviction immediately");
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", ordinary).status());
+            assertEquals(200, get("/api/themes", laterOrdinary).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+            try (Reader reader = Files.newBufferedReader(
+                Config.getConfigFile("sessions.json")
+                    .toPath(),
+                StandardCharsets.UTF_8)) {
+                assertEquals(
+                    21,
+                    new Gson().fromJson(reader, JsonObject.class)
+                        .getAsJsonArray("sessions")
+                        .size());
+            }
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void concurrentRememberedLoginsKeepOnlyTwentyUsableTokensAfterRestart() throws Exception {
+        startApi();
+        String ordinary = login();
+        ExecutorService clients = Executors.newFixedThreadPool(6);
+        List<String> tokens = new ArrayList<>();
+        try {
+            List<Future<String>> logins = new ArrayList<>();
+            for (int i = 0; i < 24; i++)
+                logins.add(clients.submit(() -> rememberedLogin("admin", "lifecycle-password", ordinary)));
+            for (Future<String> login : logins) tokens.add(login.get(30, TimeUnit.SECONDS));
+        } finally {
+            clients.shutdownNow();
+        }
+        int live = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) live++;
+        assertEquals(20, live);
+        try (Reader reader = Files.newBufferedReader(
+            Config.getConfigFile("sessions.json")
+                .toPath(),
+            StandardCharsets.UTF_8)) {
+            assertEquals(
+                20,
+                new Gson().fromJson(reader, JsonObject.class)
+                    .getAsJsonArray("sessions")
+                    .size());
+        }
+        CoreEngine.onServerStopped();
+        startApi();
+        int restored = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) restored++;
+        assertEquals(20, restored);
+    }
+
+    @Test
+    void rememberedLoginSurvivesWorldRestartAndLogoutDoesNot() throws Exception {
+        startApi();
+        String temporary = login();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String remembered = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", temporary).status());
+        assertEquals(200, get("/api/themes", remembered).status());
+        assertEquals(200, read(jsonPost("/api/auth/logout", remembered, "")).status());
+        CoreEngine.onServerStopped();
+        startApi();
+        assertEquals(401, get("/api/themes", remembered).status());
+    }
+
+    @Test
+    void adminCredentialChangeWhileStoppedRejectsPersistedToken() throws Exception {
+        startApi();
+        Response response = read(
+            jsonPost(
+                "/api/auth/login",
+                null,
+                "{\"username\":\"admin\",\"password\":\"lifecycle-password\",\"rememberMe\":true}"));
+        String token = new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+        CoreEngine.onServerStopped();
+        config.set("general.password", "new-password");
+        startApi();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void browserCookieRetentionMatchesRememberMeWithoutChangingMountScope() throws Exception {
+        startApi();
+        HttpURLConnection ordinary = browserForm("/", "username=admin&password=lifecycle-password");
+        assertEquals(302, read(ordinary).status());
+        assertFalse(
+            ordinary.getHeaderField("Set-Cookie")
+                .contains("Max-Age"));
+        HttpURLConnection remembered = browserForm("/", "username=admin&password=lifecycle-password&remember=on");
+        assertEquals(302, read(remembered).status());
+        String cookie = remembered.getHeaderField("Set-Cookie");
+        assertTrue(cookie.contains("Max-Age=5184000"));
+        assertFalse(cookie.contains("Path="));
+    }
+
+    @Test
+    void credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword() throws Exception {
+        startApi();
+        String token = login();
+        config.set("general.password", "changed-password");
+        AuthService.reloadHttpSettings();
+        config.set("general.password", "lifecycle-password");
+        AuthService.reloadHttpSettings();
+        assertEquals(401, get("/api/themes", token).status());
+    }
+
+    @Test
+    void playerPasswordAndPublicModeChangesRevokeRememberedSessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            Response response = read(
+                jsonPost(
+                    "/api/auth/login",
+                    null,
+                    "{\"username\":\"SessionPlayer\",\"password\":\"player-password\",\"rememberMe\":true}"));
+            String token = new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("token")
+                .getAsString();
+            assertEquals(200, get("/api/themes", token).status());
+            CoreData.setPassword(player, "");
+            assertEquals(401, get("/api/themes", token).status());
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            String second = login("SessionPlayer", "player-password");
+            config.set("general.public_mode", false);
+            AuthService.reloadHttpSettings();
+            config.set("general.public_mode", true);
+            AuthService.reloadHttpSettings();
+            assertEquals(401, get("/api/themes", second).status());
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", token).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void compiledFrontendModulesAreAvailableThroughTheWebServer() throws Exception {
+        startApi();
+        for (String path : new String[] { "/assets/web/app/main.js", "/assets/web/app/api.js",
+            "/assets/web/themes/default/view.js" }) {
+            HttpURLConnection module = connection(path, null);
+            Response response = read(module);
+            assertEquals(HttpURLConnection.HTTP_OK, response.status(), path);
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            assertFalse(
+                response.body()
+                    .isEmpty(),
+                path);
+        }
+    }
+
+    @Test
+    void browserModulesAndStylesLoadWithoutConsumingTheLoginRequestBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (int i = 0; i < 3; i++) {
+            HttpURLConnection module = connection("/assets/web/http-test.mjs", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(module).status());
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            HttpURLConnection style = connection("/assets/web/http-test.css", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+            assertEquals("text/css; charset=UTF-8", style.getHeaderField("Content-Type"));
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+        assertEquals(429, get("/", null).status());
+    }
+
+    @Test
+    void themeFrameLoadsAsSvgAndSupportsHeadWithoutConsumingLoginBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String path = "/assets/web/themes/default/window-frame.svg";
+        HttpURLConnection image = connection(path, null);
+        Response content = read(image);
+        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        assertEquals("image/svg+xml", image.getHeaderField("Content-Type"));
+        assertEquals("nosniff", image.getHeaderField("X-Content-Type-Options"));
+        assertTrue(
+            content.body()
+                .startsWith("<svg"));
+        HttpURLConnection head = connection(path, null);
+        head.setRequestMethod("HEAD");
+        Response metadata = read(head);
+        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals("image/svg+xml", head.getHeaderField("Content-Type"));
+        assertEquals("", metadata.body());
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+    }
+
+    @Test
+    void themeFontsLoadWithBinaryContentAndSupportHeadWithoutConsumingLoginBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (String weight : new String[] { "Regular", "Bold" }) {
+            String path = "/assets/web/themes/default/fonts/monocraft/Monocraft-" + weight + ".woff2";
+            HttpURLConnection font = connection(path, null);
+            assertEquals(HttpURLConnection.HTTP_OK, font.getResponseCode());
+            assertEquals("font/woff2", font.getHeaderField("Content-Type"));
+            assertEquals("nosniff", font.getHeaderField("X-Content-Type-Options"));
+            byte[] content;
+            try (InputStream input = font.getInputStream()) {
+                content = IOUtils.toByteArray(input);
+            }
+            assertEquals("wOF2", new String(content, 0, 4, StandardCharsets.US_ASCII));
+            HttpURLConnection head = connection(path, null);
+            head.setRequestMethod("HEAD");
+            Response metadata = read(head);
+            assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+            assertEquals("", metadata.body());
+            assertEquals(content.length, head.getContentLength());
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+    }
+
+    @Test
+    void bundledFontLicensesAreAvailableForStandaloneImageExports() throws Exception {
+        startApi();
+        for (String family : new String[] { "monocraft", "lato" }) {
+            String path = "/assets/web/themes/default/fonts/" + family + "/LICENSE";
+            HttpURLConnection license = connection(path, null);
+            Response content = read(license);
+            assertEquals(HttpURLConnection.HTTP_OK, content.status());
+            assertEquals("text/plain; charset=UTF-8", license.getHeaderField("Content-Type"));
+            assertTrue(
+                content.body()
+                    .contains("SIL OPEN FONT LICENSE"));
+            assertTrue(
+                content.body()
+                    .contains("Copyright"));
+            HttpURLConnection head = connection(path, null);
+            head.setRequestMethod("HEAD");
+            assertEquals(HttpURLConnection.HTTP_OK, head.getResponseCode());
+            assertEquals(
+                content.body()
+                    .getBytes(StandardCharsets.UTF_8).length,
+                head.getContentLength());
+        }
+    }
+
+    @Test
+    void browserAssetsSupportHeadAndRejectWritesMissingFilesAndPrivateResources() throws Exception {
+        startApi();
+        HttpURLConnection get = connection("/assets/web/http-test.mjs", null);
+        Response content = read(get);
+        HttpURLConnection head = connection("/assets/web/http-test.mjs", null);
+        head.setRequestMethod("HEAD");
+        Response metadata = read(head);
+        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals("", metadata.body());
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+        assertEquals(get.getHeaderField("Content-Type"), head.getHeaderField("Content-Type"));
+        HttpURLConnection write = connection("/assets/web/http-test.mjs", null);
+        write.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, read(write).status());
+        assertEquals("GET, HEAD", write.getHeaderField("Allow"));
+        for (String path : new String[] { "/assets/web/missing.mjs", "/assets/web/index.html",
+            "/assets/web/../login.html", "/assets/web/%2e%2e/login.html", "/assets/web/../../junit-platform.properties",
+            "/assets/web/%2e%2e%5clogin.html", "/assets/web/config.toml" }) {
+            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, null).status(), path);
+        }
+    }
+
+    @Test
+    void browserAssetsAreRevalidatedWithEtagsInsteadOfLeftToHeuristicCaching() throws Exception {
+        startApi();
+        String path = "/assets/web/http-test.mjs";
+        HttpURLConnection first = connection(path, null);
+        Response content = read(first);
+        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        String etag = first.getHeaderField("ETag");
+        assertNotNull(etag);
+        assertEquals("no-cache", first.getHeaderField("Cache-Control"));
+        assertEquals("nosniff", first.getHeaderField("X-Content-Type-Options"));
+
+        HttpURLConnection unchanged = connection(path, null);
+        unchanged.setRequestProperty("If-None-Match", etag);
+        Response notModified = read(unchanged);
+        assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, notModified.status());
+        assertEquals("", notModified.body());
+        assertEquals(etag, unchanged.getHeaderField("ETag"));
+        assertEquals("no-cache", unchanged.getHeaderField("Cache-Control"));
+
+        for (String validator : new String[] { "W/" + etag, "\"other\", " + etag, "*" }) {
+            HttpURLConnection listed = connection(path, null);
+            listed.setRequestProperty("If-None-Match", validator);
+            assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, read(listed).status(), validator);
+        }
+
+        HttpURLConnection changed = connection(path, null);
+        changed.setRequestProperty("If-None-Match", "\"stale\"");
+        Response refreshed = read(changed);
+        assertEquals(HttpURLConnection.HTTP_OK, refreshed.status());
+        assertEquals(content.body(), refreshed.body());
+        assertEquals(etag, changed.getHeaderField("ETag"));
+
+        HttpURLConnection head = connection(path, null);
+        head.setRequestMethod("HEAD");
+        assertEquals(HttpURLConnection.HTTP_OK, read(head).status());
+        assertEquals(etag, head.getHeaderField("ETag"));
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+
+        HttpURLConnection style = connection("/assets/web/http-test.css", null);
+        assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+        assertNotEquals(etag, style.getHeaderField("ETag"));
+    }
+
+    @Test
+    void browserLoginRedirectsWithoutPropagatingObsoleteUiSelectors() throws Exception {
+        startApi();
+        for (String selector : new String[] { "", "?ui=next", "?ui=previous" }) {
+            HttpURLConnection failure = browserForm("/" + selector, "username=admin&password=wrong");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(failure).status());
+            assertEquals("?INVALID_PASSWORD", failure.getHeaderField("Location"));
+            HttpURLConnection success = browserForm("/" + selector, "username=admin&password=lifecycle-password");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(success).status());
+            assertEquals(".", success.getHeaderField("Location"));
+            assertTrue(
+                success.getHeaderField("Set-Cookie")
+                    .contains("HttpOnly"));
+        }
+    }
+
+    @Test
+    void browserRegistrationRedirectsToConfirmationWithoutObsoleteUiSelectors() throws Exception {
+        BlockingPlayerLookup platform = new BlockingPlayerLookup(
+            UUID.fromString("11111111-2222-3333-4444-555555555555"));
+        platform.release.countDown();
+        AE2Controller.serverPlatform = platform;
+        config.set("general.public_mode", true);
+        startApi();
+        HttpURLConnection registration = browserForm("/?ui=next", "register=Player&password=player-password");
+        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
+        String location = registration.getHeaderField("Location");
+        assertTrue(location.startsWith("?confirmregistration&token="));
+        assertFalse(location.contains("&ui="));
+        Response confirmation = get("/" + location, null);
+        assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
+        assertEquals(pageResource("/assets/login.html"), confirmation.body());
+    }
+
+    @Test
+    void defaultUiRequiresAuthenticationAndIgnoresObsoleteSelectors() throws Exception {
+        startApi();
+        String token = login();
+        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
+            Response loginPage = get(path, null);
+            assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
+            assertEquals(pageResource("/assets/login.html"), loginPage.body());
+            Response page = get(path, token);
+            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            assertEquals(pageResource("/assets/web/index.html"), page.body());
+        }
+    }
+
+    @Test
+    void contextProvidesPublicMetadataWithoutGrantingAccess() throws Exception {
+        startApi();
+        HttpURLConnection connection = connection("/api/context", null);
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
+        assertEquals(
+            "OK",
+            envelope.get("status")
+                .getAsString());
+        JsonObject data = envelope.getAsJsonObject("data");
+        assertEquals(
+            6,
+            data.entrySet()
+                .size());
+        assertEquals(new JsonObject(), data.getAsJsonObject("capabilities"));
+        assertFalse(
+            data.get("publicMode")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isOutdated")
+                .getAsBoolean());
+        assertTrue(data.has("modVersion"));
+        assertTrue(
+            data.get("user")
+                .isJsonNull());
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", null).status());
+        assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get("/api/bootstrap", null).status());
+
+        config.set("general.public_mode", true);
+        JsonObject publicData = new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+            .getAsJsonObject("data");
+        assertTrue(
+            publicData.get("publicMode")
+                .getAsBoolean());
+        assertTrue(
+            publicData.get("user")
+                .isJsonNull());
+        assertEquals(new JsonObject(), publicData.getAsJsonObject("capabilities"));
+    }
+
+    @Test
+    void contextReportsNativeCapabilitySupportOnlyToAnAuthenticatedPrincipal() throws Exception {
+        startApi();
+        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Map<ServerCapability, Boolean> web$getCapabilities() {
+                Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
+                for (ServerCapability capability : ServerCapability.values()) {
+                    capabilities.put(capability, true);
+                }
+                return capabilities;
+            }
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                throw new AssertionError("Context must not read live game state");
+            }
+        };
+        assertEquals(
+            new JsonObject(),
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities"));
+        JsonObject expected = new JsonObject();
+        expected.addProperty("craftingLightMode", true);
+        expected.addProperty("craftingIgnoreMissing", true);
+        expected.addProperty("craftingPlanSteps", true);
+        expected.addProperty("cpuSelectionMode", true);
+        assertEquals(
+            expected,
+            new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities"));
+    }
+
+    @Test
+    void contextReturnsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection connection = connection("/api/context", token);
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingIgnoreMissing")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("cpuSelectionMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
+                .getAsBoolean());
+        JsonObject user = contextUser(response.body());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size(),
+            "the context must not expose session credentials or account IDs");
+        assertEquals(
+            "Admin",
+            user.get("username")
+                .getAsString());
+        assertTrue(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertFalse(
+            response.body()
+                .contains(token));
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
+    }
+
+    @Test
+    void contextKeepsPlayerNamesAsDataAndPagesStatic() throws Exception {
+        String username = "Player</script><img src=x onerror=\"alert(1)\">&'\u2028"
+            + "_REPLACE_ME_USERNAME_REPLACE_ME_IS_ADMIN_REPLACE_ME_USER";
+        config.set("general.public_mode", true);
+        CoreDataTestFixture.reset();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(UUID.fromString("99999999-8888-7777-6666-555555555555"), username),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+        startApi();
+        String token = login(username, "player-password");
+        Response page = get("/", token);
+        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        JsonObject user = contextUser(get("/api/context", token).body());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
+                .getAsBoolean());
+        assertEquals(
+            username,
+            user.get("username")
+                .getAsString());
+        assertFalse(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size());
+        assertEquals(pageResource("/assets/web/index.html"), page.body());
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "2.7.4-native-test",
+            "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
+    void contextReturnsRuntimeModVersionWithoutChangingPageBytes(String version) throws Exception {
+        IServerPlatform platform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
+            public @NotNull String getModVersion() {
+                return version;
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        try {
+            CoreEngine.init(platform);
+            startApi();
+            String token = login();
+            Response page = get("/", token);
+            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            Response context = get("/api/context", token);
+            JsonObject metadata = new Gson().fromJson(context.body(), JsonObject.class)
+                .getAsJsonObject("data");
+            assertEquals(
+                version,
+                metadata.get("modVersion")
+                    .getAsString());
+            assertEquals(
+                "Admin",
+                contextUser(context.body()).get("username")
+                    .getAsString());
+            assertEquals(pageResource("/assets/web/index.html"), page.body());
+            assertEquals(pageResource("/assets/login.html"), get("/", null).body());
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
+
+    private static JsonObject contextUser(String json) {
+        return new Gson().fromJson(json, JsonObject.class)
+            .getAsJsonObject("data")
+            .getAsJsonObject("user");
+    }
+
+    private static String pageResource(String path) throws IOException {
+        try (InputStream input = ServerLifecycleHttpTest.class.getResourceAsStream(path)) {
+            return IOUtils.toString(input, StandardCharsets.UTF_8);
+        }
+    }
+
+    @Test
+    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
+        startApi();
+        String token = login();
+        for (String path : new String[] { "/", "/index.html" }) {
+            HttpURLConnection anonymous = connection(path, null);
+            assertEquals(pageResource("/assets/login.html"), read(anonymous).body());
+            assertEquals("no-store", anonymous.getHeaderField("Cache-Control"));
+            HttpURLConnection authenticated = connection(path, token);
+            String expected = pageResource("/assets/web/index.html");
+            assertEquals(expected, read(authenticated).body());
+            assertEquals("no-store", authenticated.getHeaderField("Cache-Control"));
+            HttpURLConnection head = connection(path, token);
+            head.setRequestMethod("HEAD");
+            assertEquals("", read(head).body());
+            assertEquals(expected.getBytes(StandardCharsets.UTF_8).length, head.getContentLength());
+        }
+    }
+
+    @Test
+    void logoutInvalidatesRetainedLoginSessionButNotOtherLoginOfSameAccount() throws Exception {
+        startApi();
+        String first = login();
+        String second = login();
+        TestGridFixtures.TestExchange firstRequest = new TestGridFixtures.TestExchange(null);
+        firstRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + first);
+        TestGridFixtures.TestExchange secondRequest = new TestGridFixtures.TestExchange(null);
+        secondRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + second);
+        AE2Controller.RequestContext firstContext = AuthService.authenticate(firstRequest);
+        AE2Controller.RequestContext secondContext = AuthService.authenticate(secondRequest);
+        assertNotNull(firstContext);
+        assertNotNull(secondContext);
+        assertNotNull(firstContext.getSession());
+        assertNotNull(secondContext.getSession());
+        assertNotSame(firstContext.getSession(), secondContext.getSession());
+        HttpURLConnection logout = connection("/api/auth/logout", first);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertFalse(
+            firstContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertTrue(
+            secondContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertEquals(HttpURLConnection.HTTP_OK, get("/api/context", second).status());
+    }
+
+    @Test
+    void contextUsesCurrentCredentialsAndPreservesExplicitAuthorizationPrecedence() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection cookie = connection("/api/context", null);
+        cookie.setRequestProperty("Cookie", "authenticationToken=" + token);
+        assertEquals(
+            "Admin",
+            contextUser(read(cookie).body()).get("username")
+                .getAsString());
+        HttpURLConnection invalidBearer = connection("/api/context", "invalid-session");
+        invalidBearer.setRequestProperty("Cookie", "authenticationToken=" + token);
+        assertTrue(
+            new Gson().fromJson(read(invalidBearer).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
+        HttpURLConnection logout = connection("/api/auth/logout", token);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertTrue(
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+
+        config.set("general.allow_no_password_on_localhost", true);
+        JsonObject local = contextUser(get("/api/context", null).body());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
+                .getAsBoolean());
+        assertEquals(
+            "localhost",
+            local.get("username")
+                .getAsString());
+        assertTrue(
+            local.get("isAdmin")
+                .getAsBoolean());
+        assertTrue(
+            new Gson().fromJson(get("/api/context", "invalid-session").body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
+    }
+
+    @Test
+    void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
+        startApi();
+        String token = login();
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+
+        config.writeRaw("[general\nport = 2324");
+        assertFalse(
+            CommandProcessor.reload()
+                .isSuccess());
+
+        assertEquals(port, Config.INSTANCE.general.port);
+        assertEquals("lifecycle-password", Config.INSTANCE.general.password);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+    }
+
+    @Test
+    void secondServerLifecycleRebindsRejectsTheOldTokenAndServesANewSession() throws Exception {
+        IAE processInterface = TestGridFixtures.ae();
+        AE2Controller.AE2Interface = processInterface;
+
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        String token = login();
+        Response firstWorld = performSyncedRequest(token);
+        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
+        assertTrue(
+            firstWorld.body()
+                .contains("\"status\":\"OK\""));
+
+        CoreEngine.onServerStopping();
+        CoreEngine.onServerStopped();
+
+        assertSame(processInterface, AE2Controller.AE2Interface);
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+
+        Response secondWorld = get("/api/grids", token);
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            secondWorld.status(),
+            "a token issued for the old world must no longer authorize");
+
+        String secondWorldToken = login();
+        Response secondWorldAuthorized = performSyncedRequest(secondWorldToken);
+        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status());
+        assertTrue(
+            secondWorldAuthorized.body()
+                .contains("\"status\":\"OK\""));
+    }
+
+    @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
+    void pendingRegistrationLookupIsRejectedWhenTheServerStops() throws Exception {
+        BlockingPlayerLookup platform = new BlockingPlayerLookup(
+            UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+        AE2Controller.serverPlatform = platform;
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        PostExchange exchange = new PostExchange(
+            "/api/auth/register",
+            "{\"username\":\"Player\",\"password\":\"test-password\"}");
+        ExecutorService oldWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> oldRequest = oldWorker.submit(() -> {
+                try {
+                    authRouter().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !oldRequest.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(oldRequest.isDone(), "the worker should be waiting for the queued lookup");
+
+            CoreEngine.onServerStopping();
+            oldRequest.get(5, TimeUnit.SECONDS);
+
+            assertEquals(
+                HttpURLConnection.HTTP_UNAVAILABLE,
+                exchange.responseCode,
+                "stopping must release a worker waiting for PlayerList");
+            assertEquals("SERVER_STOPPING", responseStatus(exchange));
+            assertEquals(1L, platform.entered.getCount(), "shutdown must not touch live PlayerList state");
+        } finally {
+            platform.release.countDown();
+            oldWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
+    void registrationLookupTimeoutReturnsServiceUnavailableInsteadOfNotOnline() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
+            public @NotNull String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        PostExchange exchange = new PostExchange(
+            "/api/auth/register",
+            "{\"username\":\"Player\",\"password\":\"test-password\"}");
+
+        authRouter().handle(exchange);
+
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+        assertEquals("SERVER_BUSY", responseStatus(exchange));
+        assertEquals(0, playerListLookups.get(), "a timed-out queued lookup must not run later");
+        assertTrue(AE2Controller.requests.isEmpty());
+    }
+
+    @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
+    void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        fillServerThreadQueue();
+        PostExchange exchange = new PostExchange(
+            "/api/auth/register",
+            "{\"username\":\"Player\",\"password\":\"test-password\"}");
+
+        assertTimeout(Duration.ofSeconds(1), () -> authRouter().handle(exchange));
+
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+        assertEquals("SERVER_BUSY", responseStatus(exchange));
+        assertEquals(32, AE2Controller.requests.size());
+    }
+
+    @Test
+    void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        String token = login();
+        fillServerThreadQueue();
+
+        Response response = get("/api/grids", token);
+
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status());
+        assertTrue(
+            response.body()
+                .contains("\"status\":\"SERVER_BUSY\""));
+        assertEquals(32, AE2Controller.requests.size());
+    }
+
+    @Test
+    // Keep Java 8 charset/HttpExchange APIs; the fake close() is a no-op and queue polling has a deadline.
+    @SuppressWarnings({ "BusyWait", "CharsetObjectCanBeUsed", "resource" })
+    void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
+            public @NotNull String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        AE2Controller.AE2Interface = TestGridFixtures.ae();
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        PostExchange exchange = new PostExchange(
+            "/api/auth/register",
+            "{\"username\":\"MissingPlayer\",\"password\":\"test-password\"}");
+        ExecutorService httpWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> request = httpWorker.submit(() -> {
+                try {
+                    authRouter().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(request.isDone(), "HTTP must wait for the server-thread lookup");
+            assertEquals(0, playerListLookups.get(), "the HTTP worker must not inspect PlayerList");
+
+            CoreEngine.onServerTick();
+            request.get(2, TimeUnit.SECONDS);
+
+            assertEquals(1, playerListLookups.get());
+            assertEquals(HttpURLConnection.HTTP_CONFLICT, exchange.responseCode);
+            assertEquals("NOT_ONLINE", responseStatus(exchange));
+        } finally {
+            httpWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
+    void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
+            public @NotNull String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        AE2Controller.AE2Interface = TestGridFixtures.ae();
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
+        ExecutorService httpWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> request = httpWorker.submit(() -> {
+                try {
+                    new WebHandler().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(request.isDone());
+
+            CoreEngine.onServerTick();
+            request.get(2, TimeUnit.SECONDS);
+
+            assertEquals(1, playerListLookups.get());
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, exchange.responseCode);
+            assertEquals(
+                "?NOT_ONLINE",
+                exchange.getResponseHeaders()
+                    .getFirst("Location"));
+        } finally {
+            httpWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
+    void publicLoginUsesStoredIdentityWithoutConsultingServerState() throws Exception {
+        UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
+        AE2Controller.serverPlatform = platform;
+        config.set("general.public_mode", true);
+        AE2Controller.AE2Interface = null;
+        CoreDataTestFixture.reset();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(playerUuid, "Player"),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        PostExchange exchange = new PostExchange(
+            "/api/auth/login",
+            "{\"username\":\"Player\",\"password\":\"player-password\"}");
+        ExecutorService oldWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> oldRequest = oldWorker.submit(() -> {
+                try {
+                    authRouter().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            oldRequest.get(2, TimeUnit.SECONDS);
+
+            assertEquals(HttpURLConnection.HTTP_OK, exchange.responseCode);
+            JsonObject response = new Gson()
+                .fromJson(exchange.responseBody.toString(StandardCharsets.UTF_8.name()), JsonObject.class)
+                .getAsJsonObject("data");
+            assertFalse(
+                response.get("isAdmin")
+                    .getAsBoolean(),
+                "a player account must never inherit the old admin sentinel");
+            assertEquals(
+                "Player",
+                response.get("username")
+                    .getAsString());
+            assertEquals(1L, platform.entered.getCount(), "login must use the account name stored by CoreData");
+        } finally {
+            platform.release.countDown();
+            oldWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    void contextUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
+        UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        config.set("general.public_mode", true);
+        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                throw new AssertionError("Context must not read live game state");
+            }
+        };
+        CoreDataTestFixture.reset();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(playerUuid, "CanonicalPlayer"),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+        String token = login("canonicalplayer", "player-password");
+        Response response = get("/api/context", token);
+
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(
+            "CanonicalPlayer",
+            contextUser(response.body()).get("username")
+                .getAsString());
+    }
+
+    @Test
+    void apiGridListingAcceptsBearerAndReturnsJson() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection connection = connection("/api/grids", token);
+        Response response = performSyncedRequest(() -> read(connection));
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertTrue(
+            connection.getHeaderField("Content-Type")
+                .startsWith("application/json"));
+        JsonObject body = new Gson().fromJson(response.body(), JsonObject.class);
+        assertEquals(
+            "OK",
+            body.get("status")
+                .getAsString());
+        assertEquals(
+            0,
+            body.getAsJsonArray("data")
+                .size());
+    }
+
+    @Test
+    void apiCookieReadDoesNotPerformLegacyLogoutOrParseLegacyGridParameter() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection connection = connection("/api/grids?logout&grid=not-a-key", null);
+        connection.setRequestProperty("Cookie", "other=value;authenticationToken=" + token);
+        Response response = performSyncedRequest(() -> read(connection));
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(() -> get("/api/grids", token)).status());
+    }
+
+    @Test
+    void cookieLogoutRequiresAMutationMarkerAndRevokesOnlyAfterPost() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection unmarked = connection("/api/auth/logout", null);
+        unmarked.setRequestMethod("POST");
+        unmarked.setRequestProperty("Cookie", "authenticationToken=" + token);
+        assertEquals(HttpURLConnection.HTTP_FORBIDDEN, read(unmarked).status());
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+
+        HttpURLConnection marked = connection("/api/auth/logout", null);
+        marked.setRequestMethod("POST");
+        marked.setRequestProperty("Cookie", "authenticationToken=" + token);
+        marked.setRequestProperty("X-AE2-Request", "true");
+        Response logout = read(marked);
+        assertEquals(HttpURLConnection.HTTP_OK, logout.status());
+        JsonObject envelope = new Gson().fromJson(logout.body(), JsonObject.class);
+        assertEquals(
+            "OK",
+            envelope.get("status")
+                .getAsString());
+        assertTrue(
+            envelope.get("data")
+                .isJsonNull());
+        assertNull(marked.getHeaderField("Set-Cookie"), "nested API routes must not install page cookies");
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+    }
+
+    @Test
+    void bearerLogoutNeedsNoBrowserMarkerAndLegacyLogoutCannotRevoke() throws Exception {
+        startApi();
+        String token = login();
+        for (String path : new String[] { "/auth", "/auth?revoke", "/grids" }) {
+            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, token).status());
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?logout", token).status());
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, get("/api/auth/logout", token).status());
+        HttpURLConnection logout = connection("/api/auth/logout", token);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+    }
+
+    @Test
+    void registrationReturnsAnAcceptedTokenWithoutInstallingACookie() throws Exception {
+        UUID player = UUID.fromString("12121212-3434-5656-7878-909090909090");
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public java.nio.file.Path getModFile() {
+                return null;
+            }
+
+            @Override
+            public boolean isSingleplayer() {
+                return false;
+            }
+
+            @Override
+            public @NotNull String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                return player;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        startApi();
+        HttpURLConnection registration = jsonPost(
+            "/api/auth/register",
+            null,
+            "{\"username\":\"Player\",\"password\":\"player-password\"}");
+        Response response = performSyncedRequest(() -> read(registration));
+        assertEquals(HttpURLConnection.HTTP_ACCEPTED, response.status());
+        JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
+        assertEquals(
+            "OK",
+            envelope.get("status")
+                .getAsString());
+        assertFalse(
+            envelope.getAsJsonObject("data")
+                .get("token")
+                .getAsString()
+                .isEmpty());
+        assertNull(registration.getHeaderField("Set-Cookie"));
+    }
+
+    @Test
+    void jsonLoginRetainsItsDomainFailureCode() throws Exception {
+        startApi();
+        Response response = read(
+            jsonPost("/api/auth/login", null, "{\"username\":\"admin\",\"password\":\"incorrect\"}"));
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, response.status());
+        assertEquals(
+            "INVALID_PASSWORD",
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+        config.set("general.public_mode", true);
+        CoreDataTestFixture.reset();
+        Response missing = read(
+            jsonPost("/api/auth/login", null, "{\"username\":\"MissingPlayer\",\"password\":\"incorrect\"}"));
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, missing.status());
+        assertEquals(
+            "INVALID_USER",
+            new Gson().fromJson(missing.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void apiRejectsInvalidExplicitCredentialsWithoutCookieFallback() throws Exception {
+        startApi();
+        String token = login();
+        for (String authorization : new String[] { "Bearer invalid", token, "Basic " + token }) {
+            HttpURLConnection connection = connection("/api/grids", null);
+            connection.setRequestProperty("Authorization", authorization);
+            connection.setRequestProperty("Cookie", "authenticationToken=" + token);
+            Response response = read(connection);
+            assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, response.status());
+            assertEquals(
+                "UNAUTHORIZED",
+                new Gson().fromJson(response.body(), JsonObject.class)
+                    .get("status")
+                    .getAsString());
+            assertEquals("Bearer", connection.getHeaderField("WWW-Authenticate"));
+        }
+    }
+
+    @Test
+    void apiRoutingRejectsUnknownPathsAndUnsupportedMethods() throws Exception {
+        startApi();
+        for (String path : new String[] { "/api/grids/extra", "/api/gridsXYZ", "/api/openapi.json" }) {
+            Response response = get(path, null);
+            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, response.status());
+            assertEquals(
+                "NOT_FOUND",
+                new Gson().fromJson(response.body(), JsonObject.class)
+                    .get("status")
+                    .getAsString());
+        }
+        HttpURLConnection connection = connection("/api/grids", null);
+        connection.setRequestMethod("POST");
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, response.status());
+        assertTrue(
+            connection.getHeaderField("Allow")
+                .contains("GET"));
+        assertEquals(
+            "METHOD_NOT_ALLOWED",
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void apiReportsQueueSaturationAndHandlerFailureWithHttpErrors() throws Exception {
+        startApi();
+        String token = login();
+        fillServerThreadQueue();
+        Response busy = get("/api/grids", token);
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, busy.status());
+        assertEquals(
+            "SERVER_BUSY",
+            new Gson().fromJson(busy.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+        CoreEngine.onServerTick();
+        CoreEngine.GRID_IDENTITIES.clear();
+        Response failed = performSyncedRequest(() -> get("/api/grids", token));
+        assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, failed.status());
+        assertEquals(
+            "INTERNAL_ERROR",
+            new Gson().fromJson(failed.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void websiteLoginUsesTrustedProxySchemeAndPublicHostWithoutFetchMetadata() throws Exception {
+        startApi();
+        String[][] origins = { { "https://terminal.example", "terminal.example", "https", "302" },
+            { "https://terminal.example:8443", "terminal.example:8443", "https", "302" },
+            { "http://terminal.example", "terminal.example", "http", "302" },
+            { "http://terminal.example", "terminal.example", null, "302" },
+            { "https://terminal.example", "terminal.example", null, "403" },
+            { "https://other.example", "terminal.example", "https", "403" },
+            { "https://terminal.example:8443", "terminal.example", "https", "403" },
+            { "http://terminal.example", "terminal.example", "https", "403" },
+            { "https://terminal.example", "terminal.example", "https, http", "403" },
+            { "https://terminal.example", "terminal.example", "https\r\nX-Forwarded-Proto: https", "403" },
+            { "https://terminal.example", "terminal.example", "invalid", "403" },
+            { "https://terminal.example/path", "terminal.example", "https", "403" },
+            { "https://user@terminal.example", "terminal.example", "https", "403" },
+            { "null", "terminal.example", "https", "403" } };
+        for (String[] scenario : origins) {
+            // A raw HTTP request preserves Host and Origin, which HttpURLConnection restricts.
+            try (Socket socket = new Socket("127.0.0.1", port)) {
+                socket.setSoTimeout(5000);
+                String body = "username=admin&password=lifecycle-password";
+                String request = "POST / HTTP/1.1\r\nHost: " + scenario[1]
+                    + "\r\nOrigin: "
+                    + scenario[0]
+                    + (scenario[2] == null ? "" : "\r\nX-Forwarded-Proto: " + scenario[2])
+                    + "\r\nContent-Type: application/x-www-form-urlencoded\r\nConnection: close\r\nContent-Length: "
+                    + body.length()
+                    + "\r\n\r\n"
+                    + body;
+                socket.getOutputStream()
+                    .write(request.getBytes(StandardCharsets.US_ASCII));
+                BufferedReader response = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                assertEquals(
+                    scenario[3],
+                    response.readLine()
+                        .split(" ")[1],
+                    scenario[0] + " via " + scenario[2]);
+            }
+        }
+    }
+
+    @Test
+    void websiteLoginIgnoresForwardedSchemeFromUntrustedConnections() throws Exception {
+        config.set("general.trusted_proxies", "192.0.2.11");
+        startApi();
+        for (String peer : new String[] { "192.0.2.10", "192.0.2.11" }) {
+            PostExchange exchange = new PostExchange("username=admin&password=lifecycle-password") {
+
+                @Override
+                public InetSocketAddress getRemoteAddress() {
+                    return new InetSocketAddress(peer, 12345);
+                }
+            };
+            exchange.getRequestHeaders()
+                .set("Host", "terminal.example");
+            exchange.getRequestHeaders()
+                .set("Origin", "https://terminal.example");
+            exchange.getRequestHeaders()
+                .set("X-Forwarded-Proto", "https");
+            new WebHandler().handle(exchange);
+            assertEquals(
+                peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
+                exchange.responseCode,
+                peer);
+        }
+    }
+
+    @Test
+    void websiteLoginCookieCoversApiPathsAndRemainsHttpOnly() throws Exception {
+        startApi();
+        HttpURLConnection connection = connection("/", null);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        byte[] body = "username=admin&password=lifecycle-password".getBytes(StandardCharsets.UTF_8);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(body);
+        }
+        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(connection).status());
+        String cookie = connection.getHeaderField("Set-Cookie");
+        assertFalse(
+            cookie.toLowerCase()
+                .contains("path="));
+        assertTrue(cookie.contains("HttpOnly"));
+        CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        cookies.put(
+            URI.create("https://terminal.example/ae2/"),
+            Collections.singletonMap("Set-Cookie", Collections.singletonList(cookie)));
+        Map<String, List<String>> scoped = cookies
+            .get(URI.create("https://terminal.example/ae2/api/grids"), Collections.emptyMap());
+        assertTrue(
+            scoped.get("Cookie")
+                .stream()
+                .anyMatch(value -> value.contains("authenticationToken=")));
+        Map<String, List<String>> unrelated = cookies
+            .get(URI.create("https://terminal.example/other/api/grids"), Collections.emptyMap());
+        assertTrue(
+            unrelated.getOrDefault("Cookie", Collections.emptyList())
+                .isEmpty());
+        HttpURLConnection api = connection("/api/grids", null);
+        api.setRequestProperty("Cookie", cookie.split(";", 2)[0]);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(() -> read(api)).status());
+    }
+
+    @Test
+    void apiHeadAndPreflightAdvertiseOnlySupportedMethods() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection preflight = connection("/api/grids", null);
+        preflight.setRequestMethod("OPTIONS");
+        preflight.setRequestProperty("Origin", "https://example.org");
+        assertEquals(HttpURLConnection.HTTP_NO_CONTENT, read(preflight).status());
+        assertTrue(
+            preflight.getHeaderField("Access-Control-Allow-Methods")
+                .contains("GET"));
+        assertEquals("*", preflight.getHeaderField("Access-Control-Allow-Origin"));
+        assertNull(preflight.getHeaderField("Access-Control-Allow-Credentials"));
+        HttpURLConnection head = connection("/api/grids", token);
+        head.setRequestMethod("HEAD");
+        Response response = performSyncedRequest(() -> read(head));
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals("", response.body());
+    }
+
+    @Test
+    void loginBodyReadInPreviousListenerCannotPublishIntoRestartedServer() throws Exception {
+        startHttpServer();
+        CountDownLatch readingBody = new CountDownLatch(1);
+        CountDownLatch releaseBody = new CountDownLatch(1);
+        PostExchange exchange = new PostExchange(
+            "/api/auth/login",
+            "{\"username\":\"admin\",\"password\":\"lifecycle-password\"}") {
+
+            @Override
+            public InputStream getRequestBody() {
+                readingBody.countDown();
+                try {
+                    assertTrue(releaseBody.await(5, TimeUnit.SECONDS));
+                } catch (InterruptedException exception) {
+                    Thread.currentThread()
+                        .interrupt();
+                    throw new IllegalStateException(exception);
+                }
+                return super.getRequestBody();
+            }
+        };
+        ApiRouter oldRouter = authRouter();
+        ExecutorService oldWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> oldRequest = oldWorker.submit(() -> {
+                try {
+                    oldRouter.handle(exchange);
+                } catch (IOException exception) {
+                    throw new IllegalStateException(exception);
+                }
+            });
+            assertTrue(readingBody.await(2, TimeUnit.SECONDS));
+            CoreEngine.onServerStopping();
+            CoreEngine.onServerStopped();
+            startHttpServer();
+            releaseBody.countDown();
+            oldRequest.get(3, TimeUnit.SECONDS);
+            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+            assertEquals("SERVER_STOPPING", responseStatus(exchange));
+        } finally {
+            releaseBody.countDown();
+            oldWorker.shutdownNow();
+        }
+    }
+
+    private static ApiRouter authRouter() {
+        ApiRouter router = new ApiRouter(exchange -> null, exchange -> false, ISyncedRequest::handle);
+        router.register(Login.class);
+        router.register(Register.class);
+        return router;
+    }
+
+    @SuppressWarnings("CharsetObjectCanBeUsed") // Tests also run with Java 8.
+    private static String responseStatus(PostExchange exchange) throws IOException {
+        return new Gson().fromJson(exchange.responseBody.toString(StandardCharsets.UTF_8.name()), JsonObject.class)
+            .get("status")
+            .getAsString();
+    }
+
+    private void startApi() throws IOException {
+        AE2Controller.AE2Interface = TestGridFixtures.ae();
+        worlds.initialize(new File(tempDirectory, "test-save"));
+        startHttpServer();
+    }
+
+    private String login() throws IOException {
+        return login("admin", "lifecycle-password");
+    }
+
+    private String rememberedLogin(String username, String password, String authenticatedToken) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("username", username);
+        body.addProperty("password", password);
+        body.addProperty("rememberMe", true);
+        Response response = read(jsonPost("/api/auth/login", authenticatedToken, body.toString()));
+        assertEquals(200, response.status());
+        return new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+    }
+
+    private static void fillServerThreadQueue() {
+        for (int i = 0; i < 32; i++) {
+            assertTrue(AE2Controller.requests.offer(new IServerThreadTask() {
+
+                @Override
+                public void runOnServerThread(IAE ae) {}
+
+                @Override
+                public void failIfPending(ApiStatus status) {}
+            }));
+        }
+    }
+
+    private String login(String username, String password) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("username", username);
+        body.addProperty("password", password);
+        HttpURLConnection connection = jsonPost("/api/auth/login", null, body.toString());
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertNull(
+            connection.getHeaderField("Set-Cookie"),
+            "API login returns a token without installing browser cookies");
+        JsonObject json = new Gson().fromJson(response.body(), JsonObject.class);
+        return json.getAsJsonObject("data")
+            .get("token")
+            .getAsString();
+    }
+
+    private HttpURLConnection jsonPost(String path, String token, String body) throws IOException {
+        HttpURLConnection connection = connection(path, token);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setDoOutput(true);
+        byte[] encoded = body.getBytes(StandardCharsets.UTF_8);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(encoded);
+        }
+        return connection;
+    }
+
+    private HttpURLConnection browserForm(String path, String body) throws IOException {
+        HttpURLConnection connection = connection(path, null);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        connection.setDoOutput(true);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+        return connection;
+    }
+
+    private Response performSyncedRequest(String token) throws Exception {
+        return performSyncedRequest(() -> get("/api/grids", token));
+    }
+
+    @SuppressWarnings("BusyWait") // Wait for the request to reach the tick queue, bounded by a deadline.
+    private Response performSyncedRequest(Callable<Response> request) throws Exception {
+        ExecutorService client = Executors.newSingleThreadExecutor();
+        try {
+            Future<Response> response = client.submit(request);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !response.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(AE2Controller.requests.isEmpty(), "the authenticated request should reach the tick queue");
+            CoreEngine.onServerTick();
+            return response.get(3, TimeUnit.SECONDS);
+        } finally {
+            client.shutdownNow();
+        }
+    }
+
+    private Response get(String path, String token) throws IOException {
+        return read(connection(path, token));
+    }
+
+    private HttpURLConnection connection(String path, String token) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + path)
+            .toURL()
+            .openConnection();
+        connection.setConnectTimeout(2_000);
+        connection.setReadTimeout(3_000);
+        if (token != null) {
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+        }
+        return connection;
+    }
+
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
+    private static Response read(HttpURLConnection connection) throws IOException {
+        int status = connection.getResponseCode();
+        InputStream stream = status >= HttpURLConnection.HTTP_BAD_REQUEST ? connection.getErrorStream()
+            : connection.getInputStream();
+        if (stream == null) {
+            return new Response(status, "");
+        }
+        try (InputStream input = stream; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                output.write(buffer, 0, read);
+            }
+            return new Response(status, output.toString(StandardCharsets.UTF_8.name()));
+        }
+    }
+
+    private void startHttpServer() {
+        if (port == 0) {
+            port = HttpServerTestFixture.start(config);
+        } else {
+            AE2Controller.startHTTPServer();
+        }
+    }
+}

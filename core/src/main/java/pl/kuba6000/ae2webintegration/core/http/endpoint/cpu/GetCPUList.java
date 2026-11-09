@@ -1,0 +1,183 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
+
+import java.net.HttpURLConnection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+
+/**
+ * List CPUs.
+ *
+ * <p>
+ * Returns crafting CPUs in the network, including idle CPUs.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 200 {@link Response} Successful response.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found or unavailable.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @response 503 {@link ErrorResponse} SERVER_BUSY, SERVER_STOPPING or TIMEOUT: server unavailable or request timed out.
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
+ * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
+ * @responseExample 404 {"status":"GRID_NOT_FOUND","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_BUSY","data":null}
+ */
+@Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus")
+public final class GetCPUList extends ISyncedRequest {
+
+    /** Include product icons and atlas metadata; defaults to false. */
+    @QueryParam("icons")
+    boolean icons;
+
+    /**
+     * @param status {@code OK} for a successful request
+     * @param data   CPU summaries keyed by stable CPU identifier; empty when the network has no crafting CPUs
+     * @param icons  atlas metadata for product references; null when not requested or no pack is available
+     * @example status OK
+     * @keyExample data AQEBAQEBAQEBAQEBAQEBAQ
+     */
+    @Desugar
+    public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data,
+        @Nullable IconMappings icons) implements IResponseBody {}
+
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
+    public static class CpuInfo {
+
+        /**
+         * Display name of the crafting CPU.
+         *
+         * @example Main Crafting CPU
+         */
+        public String name;
+        /**
+         * Whether the CPU is currently crafting.
+         *
+         * @example true
+         */
+        public boolean isBusy;
+        /**
+         * Whether this CPU can accept player jobs, including compatible job merges where supported.
+         * A true value does not guarantee the requested job will fit or be accepted.
+         */
+        public boolean acceptsPlayerJobs;
+        /** Automatic CPU selection policy; null when unavailable. Does not determine submission permissions. */
+        public @Nullable CpuSelectionMode selectionMode;
+        /** Whether this CPU supports pausing the scheduling of its current job. */
+        public boolean supportsPause;
+        /** Whether the active job is paused; false for idle or unsupported CPUs. */
+        public boolean isPaused;
+        /** Requested output; null when idle or unavailable. */
+        public @Nullable ResourceStack finalOutput;
+        /**
+         * Total CPU crafting storage in bytes.
+         *
+         * @example 16384
+         */
+        public long availableStorage;
+        /**
+         * Currently used storage in bytes, or -1 when the platform cannot report it.
+         *
+         * @example 4096
+         */
+        public long usedStorage;
+        /**
+         * Number of crafting coprocessors.
+         *
+         * @example 4
+         */
+        public long coProcessors;
+        /**
+         * Whether measurements are available for the active job.
+         *
+         * @example true
+         */
+        public boolean hasTrackingInfo = false;
+        /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+        public @NotNull List<CraftingRequester> requesters = Collections.emptyList();
+        /** Requester name from AE2 when no tracked requesters are available; null when unavailable. */
+        public @Nullable String nativeRequesterName;
+        /**
+         * Crafting start time in Unix epoch milliseconds; zero when unavailable.
+         *
+         * @example 1700000000000
+         */
+        public long timeStarted = 0L;
+    }
+
+    @Override
+    protected void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny(ApiStatus.GRID_NOT_FOUND);
+            return;
+        }
+        Map<StableKey, ICraftingCPUCluster> clusters = CpuReader.list(grid.web$getCraftingGrid());
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        LinkedHashMap<StableKey, CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
+        for (Map.Entry<StableKey, ICraftingCPUCluster> entry : clusters.entrySet()) {
+            CpuInfo cpuInfo = new CpuInfo();
+            ICraftingCPUCluster cluster = entry.getValue();
+            cpuInfo.name = cluster.web$getName();
+            cpuInfo.availableStorage = cluster.web$getAvailableStorage();
+            cpuInfo.usedStorage = cluster.web$getUsedStorage();
+            cpuInfo.coProcessors = cluster.web$getCoProcessors();
+            cpuInfo.isBusy = cluster.web$isBusy();
+            cpuInfo.acceptsPlayerJobs = cluster.web$acceptsPlayerJobs();
+            cpuInfo.selectionMode = cluster.web$getSelectionMode();
+            cpuInfo.supportsPause = cluster instanceof IPausableCraftingCPU;
+            cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
+                && pausable.web$isPaused();
+            if (cpuInfo.isBusy) {
+                ResourceSnapshot output = CpuReader.readOutput(cluster, cluster.web$getFinalOutput());
+                cpuInfo.finalOutput = output == null ? null : new ResourceStack(output, mappings);
+                AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
+                if (trackingInfo != null) {
+                    cpuInfo.hasTrackingInfo = true;
+                    cpuInfo.timeStarted = trackingInfo.timeStarted;
+                    cpuInfo.requesters = trackingInfo.getRequesters();
+                }
+            }
+            cpuInfo.nativeRequesterName = CpuReader.nativeRequesterName(cluster, cpuInfo.isBusy, cpuInfo.requesters);
+            cpuList.put(entry.getKey(), cpuInfo);
+        }
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));
+    }
+
+}

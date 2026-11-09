@@ -1,0 +1,62 @@
+.list-theme {
+    font:
+        16px/1.5 system-ui,
+        sans-serif;
+    color: #202b35;
+    background: #f5f6f8;
+    max-width: 960px;
+    margin: 24px auto;
+    padding: 24px;
+}
+.list-theme header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.list-theme h1 {
+    margin-right: auto;
+}
+.list-theme button,
+.list-theme input,
+.list-theme select {
+    font: inherit;
+    padding: 8px;
+}
+.list-theme a {
+    color: #145d87;
+}
+.list-theme label {
+    display: block;
+    margin-block: 8px;
+}
+.list-theme .version,
+.list-theme .status {
+    color: #465563;
+}
+.list-theme .items {
+    padding: 0;
+    list-style: none;
+}
+.list-theme .items li {
+    border-bottom: 1px solid #ccd4da;
+}
+.list-theme .items button {
+    text-align: left;
+    width: 100%;
+    color: inherit;
+    background: transparent;
+    border: 0;
+}
+.list-theme .items button[aria-pressed='true'] {
+    background: #d6eaf4;
+}
+.list-theme [hidden] {
+    display: none !important;
+}
+@media (max-width: 600px) {
+    .list-theme {
+        margin: 0;
+        padding: 12px;
+    }
+}

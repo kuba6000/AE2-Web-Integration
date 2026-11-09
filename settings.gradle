@@ -1,24 +1,8 @@
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-    }
-}
+rootProject.name = 'ae2-web-integration'
 
-plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
-}
-
-dependencyResolutionManagement {
-    repositories {
-        mavenCentral()
-    }
-    versionCatalogs {
-        neoforge {
-            from(files("gradle/forge.versions.toml"))
-        }
-    }
-}
-
-rootProject.name = "${mod_id}"
-
-include ':core'
+includeBuild('core')
+includeBuild('forge-1.7.10')
+includeBuild('forge-1.12.2')
+includeBuild('forge-1.20.1')
+includeBuild('neoforge-1.21.1')
+includeBuild('neoforge-26.1.2')

@@ -1,0 +1,116 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
+
+import java.net.HttpURLConnection;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
+import pl.kuba6000.ae2webintegration.core.http.contract.Body;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
+
+/**
+ * Log in.
+ * <p>
+ * Use the returned token as a Bearer credential; this endpoint does not set cookies.
+ * Sessions expire after one idle hour or twelve hours from login. With rememberMe, sessions survive restarts
+ * and expire after seven idle days or sixty days from login. Authenticated requests, including live subscription
+ * renewals, reset the idle timeout.
+ * 
+ * @response 200 {@link Response} Session created.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid input.
+ * @response 401 {@link ErrorResponse} INVALID_USER or INVALID_PASSWORD.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: JSON required.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: request rate limit exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected failure.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: server stopping.
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 401 {"status":"INVALID_PASSWORD","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ */
+@Endpoint(method = HttpMethod.POST, path = "/api/auth/login", authentication = Authentication.NONE)
+public final class Login extends IAsyncRequest {
+
+    /** Account credentials and the requested session lifetime. */
+    @Body
+    @NotNull
+    Input input;
+
+    /**
+     * Login credentials.
+     * 
+     * @param username   account name, or Admin
+     * @param password   account password
+     * @param rememberMe persist the session across restarts and use the seven-day idle window; omitted means false
+     * @example username ExamplePlayer
+     * @example password example-password
+     * @example rememberMe false
+     */
+    @Desugar
+    public record Input(String username, String password, @OptionalInput @Nullable Boolean rememberMe) {}
+
+    /**
+     * Session credentials and display information.
+     *
+     * @param token      opaque session credential for the {@code Authorization: Bearer} header
+     * @param username   authenticated account's display name; {@code Admin} for administrator sessions
+     * @param isAdmin    whether this session has administrator access to all networks
+     * @param isOutdated whether update checking is enabled and a newer mod release is currently known
+     * @example token exampleSessionTokenForDocumentationOnly
+     * @example username ExamplePlayer
+     * @example isAdmin false
+     * @example isOutdated false
+     */
+    @Desugar
+    public record Session(String token, String username, boolean isAdmin, boolean isOutdated) {}
+
+    /**
+     * Login result.
+     * 
+     * @param status {@code OK} when a session was created
+     * @param data   session token and information about the authenticated account
+     * @example status OK
+     */
+    @Desugar
+    public record Response(ApiStatus status, Session data) implements IResponseBody {}
+
+    @Override
+    public void handle() {
+        LoginResult result = AuthService.login(
+            context.getLifecycleGeneration(),
+            input.username(),
+            input.password(),
+            Boolean.TRUE.equals(input.rememberMe()));
+        WebPrincipal principal = result.principal();
+        if (principal == null) {
+            deny(result.status());
+            return;
+        }
+        Session session = new Session(
+            result.token(),
+            principal.getUsername(),
+            principal.isAdmin(),
+            Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null);
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, session));
+    }
+}

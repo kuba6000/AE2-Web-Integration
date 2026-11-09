@@ -1,3 +1,5 @@
+webdata.json
+griddata.json
 .gradle
 .settings
 # Share inspection policy; keep SDKs, modules and personal IDE state local.
@@ -41,5 +43,6 @@ addon.local.gradle.kts
 addon.late.local.gradle
 addon.late.local.gradle.kts
 layout.json
-.testy/
-.worktrees/
+/node_modules/
+__pycache__/
+*.pyc

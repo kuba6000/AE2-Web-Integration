@@ -1,0 +1,100 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Test;
+
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+
+@SuppressWarnings("PMD.AvoidMagicNumbers")
+class CoreEngineMaintenanceTest {
+
+    private static final StableKey GRID_KEY = TestGridFixtures.key(900_301L);
+
+    @Test
+    void idleServerMaintenanceEventuallyEvictsAnAbandonedCompletedPlan() {
+        CoreEngine.onServerStopped();
+        GridData gridData = GridData.getOrCreate(GRID_KEY);
+        CompletableFuture<IAECraftingJob> plan = CompletableFuture.completedFuture(null);
+        int id = gridData.addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        CraftingPlanRegistry.Entry entry = gridData.getJob(id);
+        assertNotNull(entry);
+        assertSame(plan, entry.plan);
+
+        long afterRetention = System.nanoTime() + TimeUnit.MINUTES.toNanos(16);
+        for (int i = 0; i < 100; i++) {
+            CoreEngine.runPlanMaintenance(afterRetention);
+        }
+
+        assertNull(gridData.getJob(id));
+    }
+
+    @Test
+    void maintenanceNeverAgeEvictsAPlanThatIsStillCalculating() {
+        CoreEngine.onServerStopped();
+        GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_302L));
+        CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
+        int id = gridData.addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+
+        long muchLater = System.nanoTime() + TimeUnit.DAYS.toNanos(1);
+        for (int i = 0; i < 100; i++) {
+            CoreEngine.runPlanMaintenance(muchLater);
+        }
+
+        CraftingPlanRegistry.Entry entry = gridData.getJob(id);
+        assertNotNull(entry);
+        assertSame(pending, entry.plan);
+    }
+
+    @Test
+    void aLargeGridSetIsSweptInSmallResumableBatches() {
+        CoreEngine.onServerStopped();
+        List<GridData> grids = new ArrayList<>();
+        List<Integer> planIds = new ArrayList<>();
+        int planCount = CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK + 1;
+        for (int i = 0; i < planCount; i++) {
+            GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_401L + i));
+            int id = gridData.addJob(
+                CompletableFuture.completedFuture(null),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+            gridData.getJob(id);
+            grids.add(gridData);
+            planIds.add(id);
+        }
+
+        long afterRetention = System.nanoTime() + TimeUnit.MINUTES.toNanos(16);
+        CoreEngine.runPlanMaintenance(afterRetention);
+
+        int remaining = 0;
+        for (int i = 0; i < planCount; i++) {
+            if (grids.get(i)
+                .getJob(planIds.get(i)) != null) {
+                remaining++;
+            }
+        }
+        assertTrue(remaining > 0, "one tick must not scan more grids than the fixed batch size");
+
+        for (int i = 0; i < 100; i++) {
+            CoreEngine.runPlanMaintenance(afterRetention);
+        }
+        for (int i = 0; i < planCount; i++) {
+            assertNull(
+                grids.get(i)
+                    .getJob(planIds.get(i)));
+        }
+    }
+}

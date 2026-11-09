@@ -9,8 +9,8 @@ import subprocess
 from pathlib import Path
 
 
-TARGETS = {"1.7.10": "forge", "1.12.2": "forge", "1.20.1": "forge", "1.21.1": "neoforge"}
-TAG = re.compile(r"(.+)-(forge|neoforge)(-pre)?-(1\.7\.10|1\.12\.2|1\.20\.1|1\.21\.1)(-pre)?")
+TARGETS = {"1.7.10": "forge", "1.12.2": "forge", "1.20.1": "forge", "1.21.1": "neoforge", "26.1.2": "neoforge"}
+TAG = re.compile(r"(.+)-(forge|neoforge)(-pre)?-(1\.7\.10|1\.12\.2|1\.20\.1|1\.21\.1|26\.1\.2)(-pre)?")
 VERSION = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?"
@@ -68,7 +68,9 @@ def previous_tag(checkout, current, minecraft, loader):
             continue
         if (tag_minecraft, tag_loader) == (minecraft, loader) and "snapshot" not in tag.lower():
             candidates.setdefault(commit, tag)
-    for commit in git(checkout, "rev-list", "--first-parent", anchor).splitlines():
+    history = git(checkout, "rev-list", "--first-parent", anchor).splitlines()
+    history += git(checkout, "rev-list", "--topo-order", anchor).splitlines()
+    for commit in history:
         if commit in candidates:
             return candidates[commit], anchor
     return None, anchor
@@ -77,6 +79,13 @@ def previous_tag(checkout, current, minecraft, loader):
 def generated_notes(args, checkout, previous, anchor):
     if args.changelog_file:
         return (checkout / args.changelog_file).read_text(encoding="utf-8")
+    # Legacy adapter tags live on imported ancestry. Preserve the full migration-range notes once;
+    # after both ends use the monorepo layout, omit changes affecting only other adapters.
+    if previous and git(checkout, "ls-tree", "--format=%(objecttype)", previous, "--", "core") == "tree":
+        paths = ["core/", f"{args.loader}-{args.minecraft}/", ".github/", "gradle/", "README.md",
+                 "build.gradle", "settings.gradle", "gradlew", "gradlew.bat"]
+        return "## Changes\n\n" + git(checkout, "log", "--first-parent", "--format=- %s (%h)",
+                                       f"{previous}..{anchor}", "--", *paths)
     if not previous:
         return "## Changes\n\n" + git(checkout, "log", "--first-parent", "--format=- %s (%h)", anchor, "--")
     payload = {"tag_name": args.tag, "target_commitish": anchor, "previous_tag_name": previous}

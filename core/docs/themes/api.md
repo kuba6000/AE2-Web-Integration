@@ -1,0 +1,225 @@
+# Theme API guide
+
+Run `npm run build:theme-sdk` to generate the complete TypeScript declarations in
+`build/theme-sdk/types/app/theme-api.d.ts`.
+
+## Definition and mount
+
+Export a `ThemeDefinition` containing `id`, `name`, `supportedModVersion`, `views` and
+`mount(root, application, context)`. Mount once and update the DOM from subscriptions. The root belongs
+to this presentation; the theme must clean up anything it attaches outside it, including stylesheets,
+dialogs, document listeners, timers and observers.
+
+`context.lifetime.signal` aborts when the presentation ends.
+`context.lifetime.onCleanup(callback)` registers cleanup, including for partially failed mounts.
+Register cleanup immediately after acquiring the resource.
+
+## State and actions
+
+### Action notifications
+
+`application.notifications.subscribe(listener)` supplies the current transient notifications immediately
+and when they change. Each entry has an `id`, `kind` (`success`, `error` or `warning`), a common translation key
+in `message`, and optional `subject` and `quantity`. Treat subject text as data, never HTML.
+Use `context.i18n.forLanguage(language).common(message)` for the message.
+
+The application keeps up to three notifications across route changes and expires them automatically.
+Themes choose placement and appearance, call `dismiss(id)` for a close button, and call
+`pause(id, true/false)` while a notification is hovered or focused. Release any pause when unmounting.
+Subscription cleanup is handled by the theme host. Notifications do not replace persistent errors,
+uncertain-action guards or form validation; render those from the corresponding state fields.
+
+### Shared state
+
+`application.state` and the value delivered immediately by `application.subscribe(listener)` have the
+same `ThemeState` contract. It includes route, grids, raw resources, selection, preferences,
+capabilities, icon-pack status, refresh status, last update time, crafting, CPUs, home, history and
+network settings. State is borrowed readonly data, not a separately cloned snapshot. Derive new
+arrays when presenting it. `subscribe` returns an early-unsubscribe function; host cleanup also removes
+the subscription.
+
+`itemSnapshotRevision` changes when a full terminal snapshot is accepted; SSE deltas leave it unchanged.
+Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
+the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
+
+While the selected CPU follows live updates, `cpus.stream` reports the connection and is null otherwise.
+Its `detail` changes on every update, and a busy CPU's elapsed time, time spent crafting, time shares and
+rates advance about once a second without network requests, so render them from `cpus.detail` on each
+state notification.
+
+Network `settings.current` contains confirmed values and `settings.draft` contains editable values.
+`settings.limits` supplies the server's `min`, `max` and `defaultValue` for stock and flow intervals
+and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
+Use those limits for controls and validation; pass only editable fields to `settings.edit`.
+
+Server configuration is available at `#/server-settings` only for `context.user.isAdmin`.
+Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
+an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
+without automatic polling. Edits survive navigation within the application; they are not stored in
+the browser. The administrator password, web port, player-account access and password-free localhost
+access, trusted proxies and the unauthenticated request limit cannot be edited here.
+
+`state.serverSettings.readOnly` contains confirmed metadata: `port`, `publicMode`,
+`allowNoPasswordOnLocalhost`, `trustedProxies`, `maxRequestsBeforeLoggedInPerMinute`, `adminPasswordConfigured`, `discordWebhookConfigured` and
+`ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
+Secret values and lengths are never returned; the configured flags only indicate whether a value is
+set. Keep this metadata outside the editable draft. The HTTP write contract is
+`{revision, settings, secrets?}`; `readOnly` is response-only. Values and metadata describe the active
+configuration in memory. The opaque revision changes after each successful configuration load, reload
+or web save. Manual file edits alone do not change the active values or revision.
+
+Notification credentials are write-only. Use `serverSettings.editSecret(name, value)` for a replacement,
+`removeSecret(name)` for explicit deletion, and `resetSecret(name)` to undo a pending credential change.
+Names are `discordWebhook` and `ntfyPassword`. An empty replacement input cancels its pending change;
+it never deletes the stored secret. `state.serverSettings.secretChanges` contains only pending edits:
+an absent key means keep the stored value, and an empty string means explicit removal. Saving submits
+these changes separately and clears their values on success. Successful reload, denial and disposal
+also clear them; an unconfirmed save retains them until explicitly reconciled. Never persist these
+values in browser storage or log them.
+
+Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
+`serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh
+preserves a dirty draft. A `CONFIG_CHANGED` conflict or an uncertain save retains edits and requires
+an explicit reload before another save. Render these states visibly; do not retry mutations automatically.
+
+| Service                                                                    | Purpose                                                   |
+| -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |
+| `search(value)`, `select(resource)`                                        | Set terminal search and selection                         |
+| `preference(name, value)`                                                  | Save a shared browser preference                          |
+| `displayIcons(enabled)`                                                    | Tell the data layer whether this presentation needs icons |
+| `crafting.create(resource, quantity, automatic, lightMode, ignoreMissing)` | Calculate a plan using supported server options           |
+| `crafting.recalculate(automatic, ignoreMissing)`                           | Recalculate the current plan request                      |
+| `crafting.selectCpu(key)`, `submit()`, `remove()`                          | Choose CPU, start or cancel a plan                        |
+| `crafting.search(value)`, `sort(value)`, `reverse()`                       | Set standard plan presentation preferences                |
+| `cpus.pause(key, paused)`, `cpus.cancel(key)`                              | Operate on CPU work                                       |
+| `settings.edit(field, value)`, `settings.save()`                           | Edit and save network settings                            |
+| `pins.add(gridKey, itemKey, placement)`                                    | Pin a resource in the terminal or on Home                  |
+| `pins.update(pinKey, update)`, `pins.remove(pinKey)`                       | Change placement, order or Home display; remove a pin      |
+
+Actions retain the shared validation, capability checks, pending state and API error handling.
+Render the appropriate state error fields and pending indicators. Automatic polling must not disable
+unrelated actions or clear existing content. A theme supplies its own dialogs and confirmation flow.
+
+Navigation uses the application's existing hash routes, for example `#/`,
+`#/grids/<encoded-key>/items` and `#/web-settings`. `Route` and `ThemeView` expose the supported route
+union. URL-encode keys. A theme's declared views affect its navigation; they do not disable server
+authorization or eliminate all background data requests.
+
+### Account pins
+
+`state.pins.items` contains the current account's saved resource pins. `terminalOrder` is scoped to
+the pin's network; `homeOrder` spans all networks independently of the selected network. A null order
+means that placement is disabled. Adding one placement preserves the other. Use
+`pins.update(pinKey, { move: { placement: 'terminal', direction: 'earlier' } })` to change one order.
+Home display options are replaced together through `homeConfig`; copy the current configuration
+before changing selected fields.
+
+`state.pins.icons` supplies the atlas metadata for pin descriptions. Unavailable pins retain their
+identifier and settings but have null resource/network metadata. Render an unavailable entry and
+allow removal; do not keep displaying previously cached metadata after access is lost.
+
+On Home, `state.pins.histories[pinKey][rangeMillis]` supplies recorded history for the required
+ranges. `homeConfig.flowRangeMillis` selects historical flow totals independently of the chart's
+`rangeMillis`; equal ranges share one result. `showRecentFlow` controls the separate recent flow
+summary from `pin.recent`, which contains only that resource's detached tracking measurements.
+A null recent summary or null counters mean unknown, not zero. Recent flow never starts inventory
+reads or a terminal subscription. Stock values are samples with timestamps, not live inventory
+counts. Pinning does not enable tracking.
+The application owns request cancellation, bounded history reads and automatic refresh; themes
+choose the presentation and must preserve the distinction between missing measurements and zero.
+
+## Optional helpers
+
+Available through `context.helpers`:
+
+| Helper                                    | Behavior                                            |
+| ----------------------------------------- | --------------------------------------------------- |
+| `registryId(resource)`                    | Readable native registry identifier, if known       |
+| `filterResources(resources, options)`     | Search plus stored/craftable and item/fluid filters |
+| `sortResources(resources, options)`       | Name, quantity or identifier ordering               |
+| `selectResources(resources, options)`     | Apply those filters and ordering together           |
+| `selectPlanResources(resources, options)` | Search and standard plan grouping/ordering          |
+
+Resource filtering options are `search`, `language`, `filter` (`all`, `stored`, `craftable`),
+`showItems` and `showFluids`. Ordering options are `language`, `sort` (`name`, `quantity`, `id`) and
+`sortOrder` (`ascending`, `descending`). Plan options use `search`, `language`, `sort`
+(`name`, `quantity`, `steps`) and `sortOrder`. Set `groupByState: false` to sort a plan without state groups.
+
+Array helpers accept readonly inputs, return new arrays and preserve resource object references and
+additional theme fields. They do not mutate application state and can be used independently.
+
+## Context services
+
+`context.user` supplies username/admin status; `modVersion` supplies the reported mod version or null.
+`logout()` performs the shared session action. Catch failures in the calling event handler.
+
+`context.settings.get(key, fallback)`, `set(key, jsonValue)` and `remove(key)` manage theme-local browser
+preferences. `set` reports whether saving succeeded; browser storage can be unavailable. Validate read
+values before using them, since they can come from older theme versions or manual browser edits.
+
+`context.i18n.register(dictionaries)` registers theme translations. `forLanguage(language)` returns
+the translator/formatting service. The generated `Dictionaries` and `Translator` types describe the
+available calls; raw server text must be rendered as text, not interpolated as trusted HTML.
+
+`context.updateNotice` exposes update metadata, visibility, pending/error state, subscription and
+`dismiss(snooze?)` / `skip()` actions. The theme chooses notice placement and presentation.
+
+## Icons
+
+Use `application.icons.observe(container, paint)` to obtain an `IconView`. Pass visible targets and
+their response metadata to `update(targets, metadata)`. The host manages observation, atlas loading and
+cleanup. The paint callback receives the target element and `IconSprite | null`; it supplies rendering
+coordinates and image URL, while the theme chooses CSS/layout and its missing-icon appearance.
+Do not persist temporary blob URLs. Explicit `dispose()` permits early release; mount cleanup also
+releases observers. Call `displayIcons(false)` if your theme never renders resource icons.
+
+For canvas rendering, `application.icons.resolve(references, metadata, signal)` loads drawable atlas
+crops. The returned `icons` map uses the supplied reference objects as keys; unavailable or invalid
+icons are omitted. Each value supplies `image`, `x`, `y`, `width` and `height` for `drawImage`.
+Decoded images contain only the requested sprite crops, rather than retaining whole atlas pages.
+Call the result's `dispose()` after drawing. Its images remain valid independently of normal icon
+cache eviction; theme disposal also releases them. Aborting rejects the pending resolution.
+
+## Crafting plan PNG export
+
+`application.exportPlan(request, signal)` downloads one PNG and returns its actual `PlanExportLayout`.
+Pass the loaded plan, icon metadata, `PlanExportSettings`, grid choice, language, translated title and
+metric labels, a quantity formatter, and `PlanExportStyle` (rectangular cell geometry, font/spacing
+metrics, palette, state tints and bevel colours).
+The theme owns the controls and appearance. The export ignores the plan view's search and uses the
+request's ordering and optional missing-only filter. It does not submit or modify the crafting plan.
+An abort signal cancels the operation; unmounting the theme also cancels it.
+
+`context.helpers` supplies `defaultPlanExportSettings`, `readPlanExportSettings(get)`,
+`planExportLayout(count, settings, grid, geometry)`, `planExportRatio(width, height)`, `planExportFits(layout)` and
+`smallerPlanExportLayout(layout, geometry)` for controls and size previews. Geometry supplies unscaled
+cell width, cell height and header height. Layout is `null` for an
+empty selection or invalid grid dimensions. Use `readPlanExportSettings(key => context.settings.get(key))`
+to validate persisted `planExport.*` values independently. Store the chosen ratio, not row/column counts,
+to reuse it with differently sized plans.
+
+Exports have a 64-megapixel allocation budget and a 16384-pixel side limit. Smaller browser limits are
+probed at runtime. If needed, the whole grid is scaled down while the chosen rows and columns stay
+fixed; the returned layout reports the resulting resolution. Cells touch and unused final-row cells
+are framed like the rest of the grid. Missing icons are optional. Catch failures and display a
+translated error in the theme.
+
+## Theme selection and package assets
+
+`context.themes?.open()` opens the theme picker. Provide an entry in your settings or navigation.
+The picker offers the built-in theme, server-installed themes and the server default.
+See [recovery](packages.md#recovery) for access when a theme is unusable.
+
+`context.assets?.url('images/logo.png')` is an optional convenience for resolving a path from the
+package root, for example when setting an image's `src` from JavaScript. A bare relative DOM URL resolves
+against the page URL, not the theme module. You can also use `new URL('./images/logo.png', import.meta.url)`
+for a module-relative URL. Relative ES module imports and stylesheet `url(...)`/`@import` references
+resolve normally from their containing files; include the referenced files in the package.
+
+## Development host
+
+The SDK's `./host` export provides `boot(root, definition, base?, builtinAssetBase?)` for local previews.
+It initializes the API session and returns a cleanup function. The optional fourth argument sets the
+asset directory for the initial theme. Use the [preview tool](../../tools/theme-preview/README.md) to
+run a theme locally.

@@ -1,0 +1,285 @@
+package pl.kuba6000.ae2webintegration.core.tracking;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.google.common.collect.MapMaker;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting.Interval;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+
+public class AE2JobTracker {
+
+    public static class AEInterface {
+
+        public String name;
+        public HashSet<DimensionalCoords> location = new HashSet<>();
+
+        AEInterface(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public int hashCode() {
+            return name.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof AEInterface)) return false;
+            return ((AEInterface) obj).name.equals(this.name);
+        }
+    }
+
+    public static class JobTrackingInfo {
+
+        public volatile @NotNull ResourceSnapshot finalOutput;
+        public long timeStarted;
+        public long timeDone;
+        public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
+        /** Detached metadata captured before completed measurements are published to HTTP readers. */
+        public final HashMap<IAEKey, ResourceSnapshot> resourceSnapshots = new HashMap<>();
+        public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
+        public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
+        public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
+        public HashMap<IAEKey, ArrayList<Interval>> itemShare = new HashMap<>();
+        /** Provider groups used for each output, retained after the active waiting intervals are removed. */
+        public final HashMap<IAEKey, HashSet<String>> resourceProviders = new HashMap<>();
+        public HashMap<AEInterface, ArrayList<Interval>> interfaceShare = new HashMap<>();
+        public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
+        public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
+        public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
+        public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
+        private volatile List<CraftingRequester> requesters = Collections.emptyList();
+
+        public @NotNull List<CraftingRequester> getRequesters() {
+            return requesters;
+        }
+
+        private void rememberRequester(@NotNull CraftingRequester requester) {
+            List<CraftingRequester> updated = new ArrayList<>(requesters);
+            for (int i = 0; i < updated.size(); i++) {
+                CraftingRequester existing = updated.get(i);
+                if (existing.source() == requester.source()
+                    && (existing.player() == null || existing.player().uuid.equals(requester.player().uuid))) {
+                    updated.set(i, requester);
+                    requesters = Collections.unmodifiableList(updated);
+                    return;
+                }
+            }
+            updated.add(requester);
+            requesters = Collections.unmodifiableList(updated);
+        }
+
+        public boolean isDone = false;
+        public boolean wasCancelled = false;
+
+        public JobTrackingInfo(@NotNull ResourceSnapshot finalOutput) {
+            this.finalOutput = finalOutput;
+            this.timeStarted = System.currentTimeMillis();
+        }
+
+        public long getTimeSpentOn(IAEKey key) {
+            Long time = timeSpentOn.get(key);
+            if (time == null) return 0L;
+            Long additionalTime = startedWaitingFor.get(key);
+            if (additionalTime != null) {
+                time += System.currentTimeMillis() - additionalTime;
+            }
+            return time;
+        }
+
+    }
+
+    private static final ConcurrentMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new MapMaker().weakKeys()
+        .makeMap();
+
+    public static JobTrackingInfo findActiveJob(ICraftingCPUCluster cpu) {
+        return trackingInfoMap.get(cpu);
+    }
+
+    public static void clearActiveJobs() {
+        trackingInfoMap.clear();
+    }
+
+    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging,
+        @NotNull CraftingRequester requester) {
+        if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
+        JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
+        if (isMerging && info == null) return;
+        if (!isMerging) {
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (data == null || !data.getSettings()
+                .isTracked()) return;
+        }
+        ResourceSnapshot finalOutput = ResourceSnapshot.capture(cpuCluster.web$getFinalOutput());
+        if (finalOutput == null) {
+            trackingInfoMap.remove(cpuCluster);
+            return;
+        }
+        if (isMerging) {
+            info.finalOutput = finalOutput;
+        } else {
+            info = new JobTrackingInfo(finalOutput);
+            trackingInfoMap.put(cpuCluster, info);
+        }
+        info.rememberRequester(requester);
+    }
+
+    public static void updateCraftingStatus(ICraftingCPUCluster cpu, @NotNull IAEKey keyDiff) {
+        JobTrackingInfo info = trackingInfoMap.get(cpu);
+        if (info == null) return;
+        IStackList waitingFor = cpu.web$getWaitingFor();
+        long waitingAmount = waitingFor.web$getAmount(keyDiff);
+        if (waitingAmount > 0L) {
+            if (!info.startedWaitingFor.containsKey(keyDiff)) {
+                info.startedWaitingFor.put(keyDiff, System.currentTimeMillis());
+                info.timeSpentOn.putIfAbsent(keyDiff, 0L);
+                info.waitingFor.put(keyDiff, waitingAmount);
+            } else {
+                long previous = info.waitingFor.get(keyDiff);
+                if (previous > waitingAmount) {
+                    info.craftedTotal.merge(keyDiff, previous - waitingAmount, Long::sum);
+                }
+                info.waitingFor.put(keyDiff, waitingAmount);
+            }
+        } else {
+            if (info.startedWaitingFor.containsKey(keyDiff)) {
+                long started = info.startedWaitingFor.remove(keyDiff);
+                long ended = System.currentTimeMillis();
+                long elapsed = ended - started;
+                long endedReal = System.currentTimeMillis();
+                info.timeSpentOn.merge(keyDiff, elapsed, Long::sum);
+                info.craftedTotal.merge(keyDiff, info.waitingFor.remove(keyDiff), Long::sum);
+                info.itemShare.computeIfAbsent(keyDiff, k -> new ArrayList<>())
+                    .add(new Interval(started, endedReal));
+                if (info.interfaceWaitingForLookup.containsKey(keyDiff)) {
+                    for (Map.Entry<AEInterface, HashSet<IAEKey>> entry : info.interfaceWaitingForLookup.get(keyDiff)
+                        .entrySet()) {
+                        AEInterface aeInterface = entry.getKey();
+                        HashSet<IAEKey> itemList = entry.getValue();
+                        itemList.remove(keyDiff);
+                        if (itemList.isEmpty()) {
+                            info.interfaceWaitingFor.remove(aeInterface);
+                            long interfaceStarted = info.interfaceStarted.remove(aeInterface);
+                            info.interfaceShare.computeIfAbsent(aeInterface, k -> new ArrayList<>())
+                                .add(new Interval(interfaceStarted, endedReal));
+                        }
+                    }
+                    info.interfaceWaitingForLookup.remove(keyDiff);
+                }
+            }
+        }
+    }
+
+    public static void pushedPattern(ICraftingCPUCluster cpu, IPatternProviderViewable provider,
+        IAECraftingPatternDetails details) {
+        JobTrackingInfo info = trackingInfoMap.get(cpu);
+        if (info == null) return;
+        if (provider != null) {
+            String name = provider.web$getName();
+            if (name == null) name = "[NULL]";
+            final AEInterface aeInterface = info.interfaceLookup.computeIfAbsent(name, AEInterface::new);
+            aeInterface.location.add(provider.web$getLocation());
+            info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
+            final HashSet<IAEKey> itemList = info.interfaceWaitingFor
+                .computeIfAbsent(aeInterface, k -> new HashSet<>());
+
+            IAEGenericStack[] condensedOutputs = details.web$getCondensedOutputs();
+            for (IAEGenericStack out : condensedOutputs) {
+                IAEKey outKey = out.web$what();
+                info.resourceProviders.computeIfAbsent(outKey, k -> new HashSet<>())
+                    .add(aeInterface.name);
+                info.interfaceWaitingForLookup.computeIfAbsent(outKey, k -> new HashMap<>())
+                    .putIfAbsent(aeInterface, itemList);
+                itemList.add(outKey);
+            }
+        }
+    }
+
+    public static void completeCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
+        JobTrackingInfo info = trackingInfoMap.remove(cpu);
+        if (info == null || grid == null) return;
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        if (data == null || !data.getSettings()
+            .isTracked()) return;
+        for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {
+            info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
+        }
+        info.waitingFor.clear();
+        final long now = System.currentTimeMillis();
+        for (Map.Entry<IAEKey, Long> entry : info.startedWaitingFor.entrySet()) {
+            info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
+            info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                .add(new Interval(entry.getValue(), now));
+        }
+        for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
+            info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                .add(new Interval(entry.getValue(), now));
+        }
+        info.interfaceStarted.clear();
+        info.interfaceWaitingFor.clear();
+        info.interfaceWaitingForLookup.clear();
+        info.interfaceLookup.clear();
+        info.startedWaitingFor.clear();
+        info.isDone = true;
+        info.timeDone = now;
+        for (IAEKey resource : info.timeSpentOn.keySet()) {
+            info.resourceSnapshots.put(resource, ResourceSnapshot.capture(resource, info.craftedTotal.get(resource)));
+        }
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        if (history != null) history.enqueue(key, CompletedCrafting.capture(info));
+        long durationMillis = info.timeDone - info.timeStarted;
+        long craftedAmount = info.finalOutput.quantity();
+        if (!Config.INSTANCE.general.publicMode
+            && NotificationManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
+            // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
+            grid.web$getCraftingGrid()
+                .web$getCPUs();
+            String gridName = data.getSettings()
+                .getName();
+            NotificationManager.postMessageNonBlocking(
+                new CraftingMessage(
+                    gridName.isEmpty() ? key.toString() : gridName,
+                    cpu.web$getName(),
+                    info.finalOutput,
+                    NotificationManager.formatDuration(durationMillis),
+                    info.wasCancelled,
+                    info.getRequesters()));
+        }
+    }
+
+    public static void cancelCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
+        JobTrackingInfo info = trackingInfoMap.get(cpu);
+        if (info == null) return;
+        info.wasCancelled = true;
+        completeCrafting(grid, cpu);
+    }
+
+}

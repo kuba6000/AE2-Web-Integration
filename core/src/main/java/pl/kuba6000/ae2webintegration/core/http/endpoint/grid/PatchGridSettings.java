@@ -1,0 +1,184 @@
+package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
+
+import java.io.IOException;
+import java.net.HttpURLConnection;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.contract.Body;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
+import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+
+/**
+ * Update network settings.
+ *
+ * <p>
+ * Omitted settings remain unchanged. Returns the applied settings.
+ *
+ * @pathParam gridKey Persistent network identifier.
+ * @response 200 {@link Response} Updated network settings.
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
+ * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
+ *           configured-local mutations require X-AE2-Request: true.
+ * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found.
+ * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
+ * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
+ * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
+ *           application/json.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
+ * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
+ * @responseExample 400 {"status":"BAD_PARAM","data":null}
+ * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
+ * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
+ * @responseExample 404 {"status":"GRID_NOT_FOUND","data":null}
+ * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
+ * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
+ * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
+ * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
+ * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ */
+@Endpoint(method = HttpMethod.PATCH, path = "/api/grids/{gridKey}/settings")
+public final class PatchGridSettings extends IAsyncRequest {
+
+    private static final int MAX_NAME_LENGTH = 128;
+    // Explicit ECMAScript whitespace keeps Java 8's older Unicode categories from trimming U+180E.
+    // C0/C1 controls, including tabs and line breaks, are rejected before trimming.
+    private static final String NAME_WHITESPACE = " \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
+
+    /**
+     * @param status {@code OK} for a successful request
+     * @param data   updated network settings
+     * @example status OK
+     */
+    @Desugar
+    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsView data) implements IResponseBody {}
+
+    /**
+     * Settings to update; omitted members remain unchanged.
+     *
+     * @param isTracked                    whether the network should collect crafting history
+     * @param trackMachineCrafting         whether new machine-origin jobs are recorded while crafting tracking is
+     *                                     enabled
+     * @param isStorageTracked             whether the network should collect periodic resource quantities
+     * @param isFlowTracked                whether the network should collect accepted input/output history
+     * @param stockSampleIntervalSeconds   seconds between stock samples, within the active server bounds
+     * @param flowFlushIntervalSeconds     seconds between saved flow totals, within the server bounds
+     * @param historyRetentionDays         resource history days, within the active server bounds
+     * @param craftingHistoryRetentionDays completed crafting history days, within the active server bounds
+     * @param name                         custom network name; empty clears it. Leading and trailing whitespace is
+     *                                     trimmed.
+     *                                     Maximum 128 UTF-16 code units after trimming; control characters and null
+     *                                     are rejected.
+     * @example isTracked true
+     * @example name Factory
+     */
+    @Desugar
+    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name,
+        @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
+        @OptionalInput @Nullable Integer stockSampleIntervalSeconds,
+        @OptionalInput @Nullable Integer flowFlushIntervalSeconds,
+        @OptionalInput @Nullable Integer historyRetentionDays, @OptionalInput @Nullable Boolean trackMachineCrafting,
+        @OptionalInput @Nullable Integer craftingHistoryRetentionDays) {}
+
+    @Body
+    @NotNull
+    Input input;
+
+    @Override
+    public void handle() {
+        String name;
+        try {
+            name = input.name() == null ? null : normalizeName(input.name());
+        } catch (IllegalArgumentException e) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
+        if (gridKey == null) {
+            deny(ApiStatus.GRID_NOT_FOUND);
+            return;
+        }
+        GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        GridSettingsView result;
+        synchronized (registry) {
+            GridPersistentData data = registry.getPersistentData(gridKey);
+            if (data == null) {
+                deny(ApiStatus.GRID_NOT_FOUND);
+                return;
+            }
+            try {
+                ResourceHistory policy = registry.getDataPolicy();
+                if (input.stockSampleIntervalSeconds() != null)
+                    policy.stockSampleIntervalSeconds.validate(input.stockSampleIntervalSeconds());
+                if (input.flowFlushIntervalSeconds() != null)
+                    policy.flowFlushIntervalSeconds.validate(input.flowFlushIntervalSeconds());
+                if (input.historyRetentionDays() != null)
+                    policy.historyRetentionDays.validate(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    registry.getCraftingHistoryPolicy().historyRetentionDays
+                        .validate(input.craftingHistoryRetentionDays());
+            } catch (IllegalArgumentException e) {
+                deny(ApiStatus.BAD_PARAM);
+                return;
+            }
+            GridSettingsData settings = data.getSettings();
+            try {
+                if (name != null) settings.setName(name);
+                if (input.isTracked() != null) {
+                    settings.setTracked(input.isTracked());
+                }
+                if (input.trackMachineCrafting() != null)
+                    settings.setTrackMachineCrafting(input.trackMachineCrafting());
+                if (input.isStorageTracked() != null) settings.setStorageTracked(input.isStorageTracked());
+                if (input.isFlowTracked() != null) settings.setFlowTracked(input.isFlowTracked());
+                if (input.stockSampleIntervalSeconds() != null)
+                    settings.setStockSampleIntervalSeconds(input.stockSampleIntervalSeconds());
+                if (input.flowFlushIntervalSeconds() != null)
+                    settings.setFlowFlushIntervalSeconds(input.flowFlushIntervalSeconds());
+                if (input.historyRetentionDays() != null)
+                    settings.setHistoryRetentionDays(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    settings.setCraftingHistoryRetentionDays(input.craftingHistoryRetentionDays());
+                if (input.name() != null || input.isTracked() != null
+                    || input.trackMachineCrafting() != null
+                    || input.isStorageTracked() != null
+                    || input.isFlowTracked() != null
+                    || input.stockSampleIntervalSeconds() != null
+                    || input.flowFlushIntervalSeconds() != null
+                    || input.historyRetentionDays() != null
+                    || input.craftingHistoryRetentionDays() != null) registry.saveIfDirty();
+                result = GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy());
+            } catch (IOException e) {
+                deny(ApiStatus.INTERNAL_ERROR);
+                return;
+            }
+        }
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
+    }
+
+    private static @NotNull String normalizeName(@NotNull String name) {
+        for (int index = 0; index < name.length(); index++) {
+            if (Character.isISOControl(name.charAt(index))) throw new IllegalArgumentException("Control in grid name");
+        }
+        int start = 0;
+        int end = name.length();
+        while (start < end && NAME_WHITESPACE.indexOf(name.charAt(start)) >= 0) start++;
+        while (end > start && NAME_WHITESPACE.indexOf(name.charAt(end - 1)) >= 0) end--;
+        if (end - start > MAX_NAME_LENGTH) throw new IllegalArgumentException("Grid name is too long");
+        return name.substring(start, end);
+    }
+}
