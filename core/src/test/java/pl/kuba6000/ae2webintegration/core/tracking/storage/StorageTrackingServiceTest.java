@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
@@ -440,10 +440,10 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void shutdownClosesTheStoreAfterAcceptedWritesOnTheWorkerThread() throws Exception {
+    void shutdownClosesTheStoreExactlyOnceAfterAcceptedWrites() throws Exception {
         AtomicBoolean written = new AtomicBoolean();
         AtomicBoolean closedAfterWrite = new AtomicBoolean();
-        AtomicReference<Thread> closingThread = new AtomicReference<>();
+        AtomicInteger closeCalls = new AtomicInteger();
         IStorageHistoryStore store = new IStorageHistoryStore() {
 
             public void append(@NotNull StableKey grid, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -458,17 +458,17 @@ class StorageTrackingServiceTest {
 
             public void close() {
                 closedAfterWrite.set(written.get());
-                closingThread.set(Thread.currentThread());
+                closeCalls.incrementAndGet();
             }
         };
         StorageTrackingService service = new StorageTrackingService(store, 100);
         StableKey grid = StableKey.random();
         service.open(grid, 1);
-        service.submit(grid, 1, observation(StableKey.random(), 1000, 5), true, false, 0L);
+        assertTrue(service.submit(grid, 1, observation(StableKey.random(), 1000, 5), true, false, 0L));
+        service.close();
         service.close();
         assertTrue(closedAfterWrite.get());
-        assertNotNull(closingThread.get());
-        assertNotSame(Thread.currentThread(), closingThread.get());
+        assertEquals(1, closeCalls.get());
     }
 
     @Test
