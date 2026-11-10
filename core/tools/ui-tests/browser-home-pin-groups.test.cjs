@@ -102,11 +102,12 @@ test('Home group and card ordering are independent and unavailable cards remain 
     await machines.locator('.home-pin-card').first().waitFor();
     await ores.locator('.home-pin-group-actions').getByRole('button', { name: 'Move earlier', exact: true }).click();
     await serverState(() => options.groups.find((group) => group.groupKey === 'ores').ordinal, 0);
-    assert.deepEqual(await page.locator('.home-pin-group-heading h3').allTextContents(), [
-        'Ores',
-        'Machines',
-        'Ungrouped'
-    ]);
+    assert.deepEqual(
+        await page
+            .locator('.home-pin-group')
+            .evaluateAll((groups) => groups.map((group) => group.getAttribute('aria-label'))),
+        ['Ores', 'Machines', 'Ungrouped']
+    );
     const quartzCard = machines.locator('.home-pin-card').filter({ hasText: 'Certus Quartz Crystal' });
     await quartzCard.getByRole('button', { name: 'Move earlier', exact: true }).click();
     await serverState(() => options.pins.find((value) => value.pinKey === 'quartz-pin').homeOrder, 0);
@@ -185,4 +186,216 @@ test('a rejected group edit retains the draft and existing pin placement', async
     assert.equal(await add.getByRole('textbox').inputValue(), 'Ores');
     assert.equal(await page.getByRole('region', { name: 'Ores', exact: true }).locator('.home-pin-card').count(), 1);
     assert.equal(options.pins[0].homeGroupKey, 'ores');
+});
+
+test('Home group collapse survives reload and keyboard toggling preserves cards, charts and history', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [
+        { ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production', homeConfig: { ...config, showChart: true } }
+    ];
+    options.resourceHistory = {
+        baseline: null,
+        complete: true,
+        truncated: false,
+        points: [
+            {
+                kind: 'STOCK',
+                observedAt: Date.now() - 10000,
+                flowFrom: null,
+                generation: 1,
+                resource: { ...iron, quantity: '100' }
+            }
+        ]
+    };
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    const card = group.locator('.home-pin-card');
+    await card.locator('canvas').waitFor();
+    const canvas = await card.locator('canvas').elementHandle();
+    const reads = () => options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
+    const before = reads();
+    const toggle = group.getByRole('button', { name: 'Production', exact: true });
+    assert.equal(await toggle.count(), 1, 'a named group provides an accessible collapse button');
+    await toggle.click();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(await card.isVisible(), false);
+    assert.equal(await canvas.evaluate((node) => node.isConnected), true);
+    await toggle.press('Space');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(await card.isVisible(), true);
+    assert.equal(await canvas.evaluate((node) => node.isConnected), true);
+    assert.equal(reads(), before, 'presentation toggles reuse recorded history');
+    await toggle.press('Enter');
+    await page.reload();
+    const restored = page.getByRole('region', { name: 'Production', exact: true });
+    await restored.waitFor();
+    assert.equal(
+        await restored.getByRole('button', { name: 'Production', exact: true }).getAttribute('aria-expanded'),
+        'false'
+    );
+    assert.equal(await restored.locator('.home-pin-card').isVisible(), false);
+    await restored.getByRole('button', { name: 'Rename group', exact: true }).click();
+    await restored.locator('.home-pin-group-rename input').fill('Machines');
+    await restored.getByRole('button', { name: 'Save', exact: true }).click();
+    const renamed = page.getByRole('region', { name: 'Machines', exact: true });
+    await renamed.waitFor();
+    assert.equal(
+        await renamed.getByRole('button', { name: 'Machines', exact: true }).getAttribute('aria-expanded'),
+        'false'
+    );
+});
+
+test('collapsed Home groups show recorded stock and net for the configured period, with unknown resources kept unknown', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [
+        {
+            ...pin('iron-pin', gridA, iron, 0),
+            homeGroupKey: 'production',
+            homeConfig: { ...config, flowRangeMillis: 900000 }
+        },
+        {
+            ...pin('unknown-pin', null, iron, 1),
+            homeGroupKey: 'production',
+            available: false,
+            itemKey: null,
+            resource: null
+        }
+    ];
+    const now = Date.now();
+    const flow = {
+        kind: 'FLOW',
+        flowFrom: now - 15000,
+        generation: 1,
+        resource: null,
+        inputOperations: '1',
+        outputOperations: '1'
+    };
+    options.resourceHistory = {
+        baseline: { kind: 'STOCK', observedAt: now - 20000, resource: { ...iron, quantity: '100' } },
+        complete: true,
+        truncated: false,
+        points: [
+            { ...flow, observedAt: now - 3600000, input: '1000', output: '0' },
+            { ...flow, observedAt: now - 10000, input: '12', output: '4' },
+            { kind: 'STOCK', observedAt: now - 5000, resource: { ...iron, quantity: '123' } },
+            { kind: 'STOCK', observedAt: now + 100000, resource: { ...iron, quantity: '999' } }
+        ]
+    };
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    const toggle = group.getByRole('button', { name: 'Production', exact: true });
+    await toggle.click();
+    assert.equal(await group.locator('.home-pin-compact-row').count(), 2);
+    const row = group.locator('.home-pin-compact-row').filter({ hasText: 'Iron Ingot' });
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-stock')?.textContent === '123');
+    assert.equal(await row.locator('.home-pin-compact-net').textContent(), '+8');
+    const unknown = group.locator('.home-pin-compact-row').filter({ hasText: 'Unavailable resource' });
+    assert.equal(await unknown.locator('.home-pin-compact-stock').textContent(), '—');
+    assert.equal(await unknown.locator('.home-pin-compact-net').textContent(), '—');
+    assert.equal(await unknown.getByRole('link').count(), 0);
+    await row.focus();
+    await page.getByRole('tooltip').filter({ hasText: '15 min' }).waitFor();
+    const reads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
+    assert.equal(
+        reads,
+        1,
+        'one shared range supplies compact metrics even when optional full-card sections are hidden'
+    );
+    await toggle.click();
+    assert.equal(await group.locator('.home-pin-card').first().isVisible(), true);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, reads);
+    options.resourceHistory = {
+        baseline: null,
+        complete: true,
+        truncated: false,
+        points: [
+            { kind: 'STOCK', observedAt: now - 5000, resource: { ...iron, quantity: '0' } },
+            { kind: 'FLOW_OBSERVATION', observedAt: now - 5000, flowFrom: now - 10000 }
+        ]
+    };
+    await page.locator('#refresh').click();
+    await toggle.click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-stock')?.textContent === '0');
+    assert.equal(await row.locator('.home-pin-compact-net').textContent(), '0');
+    options.resourceHistory.points.push({ ...flow, observedAt: now - 5000, input: '2', output: '9' });
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '−7');
+});
+
+for (const width of [1440, 390]) {
+    test(`Home group forms align their controls and section frames fit at ${width}px`, async (t) => {
+        const { page, base, options } = await fixture(t, '', { viewport: { width, height: 900 } });
+        options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+        options.pins = [{ ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' }];
+        await page.goto(base);
+        const group = page.getByRole('region', { name: 'Production', exact: true });
+        await group.waitFor();
+        const aligned = async (form) => {
+            const input = await form.getByRole('textbox').boundingBox();
+            const button = await form.getByRole('button', { name: /Add group|Save/, exact: true }).boundingBox();
+            assert.ok(Math.abs(input.y - button.y) <= 1, 'input and submit button share their top edge');
+            assert.ok(Math.abs(input.height - button.height) <= 1, 'controls have equal height');
+        };
+        await aligned(page.locator('.home-pin-group-add'));
+        await group.getByRole('button', { name: 'Rename group', exact: true }).click();
+        await aligned(group.locator('.home-pin-group-rename'));
+        const frame = await group.evaluate((node) => ({
+            border: parseFloat(getComputedStyle(node).borderTopWidth),
+            right: node.getBoundingClientRect().right,
+            overflow: document.documentElement.scrollWidth > innerWidth
+        }));
+        assert.equal(frame.border, 1, 'named sections have a thin visible frame');
+        assert.ok(frame.right <= width);
+        assert.equal(frame.overflow, false);
+        await group.getByRole('button', { name: 'Production', exact: true }).click();
+        const name = await group.locator('.home-pin-compact-name').boundingBox();
+        assert.ok(name.width >= 80, 'item names keep usable space when no icon is displayed');
+    });
+}
+
+test('expanding a refreshed Home group repaints its chart from the already accepted history', async (t) => {
+    const { page, base, options } = await fixture(t);
+    const now = Math.floor(Date.now() / 60000) * 60000;
+    await page.clock.setFixedTime(now);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [
+        {
+            ...pin('iron-pin', gridA, iron, 0),
+            homeGroupKey: 'production',
+            homeConfig: { ...config, showChart: true, rangeMillis: 900000, flowRangeMillis: 900000 }
+        }
+    ];
+    const stock = (age, quantity) => ({
+        kind: 'STOCK',
+        observedAt: now - age,
+        resource: { ...iron, quantity: String(quantity) }
+    });
+    options.resourceHistory = {
+        baseline: null,
+        complete: true,
+        truncated: false,
+        points: [stock(900000, 10), stock(450000, 100), stock(10000, 10)]
+    };
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    const canvas = group.locator('.home-pin-chart canvas');
+    await canvas.waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const before = await canvas.evaluate((node) => node.toDataURL());
+    const toggle = group.getByRole('button', { name: 'Production', exact: true });
+    await toggle.click();
+    options.resourceHistory.points = [stock(900000, 10), stock(450000, 20), stock(10000, 200)];
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-stock')?.textContent === '200');
+    const reads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
+    await toggle.click();
+    await canvas.waitFor();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.ok(
+        (await canvas.evaluate((node) => node.toDataURL())) !== before,
+        'the visible chart reflects the changed recorded data'
+    );
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, reads);
 });

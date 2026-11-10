@@ -45,10 +45,9 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         reading = undefined;
     }
     function historyRanges(pin: ResourcePin) {
-        const ranges = new Set<number>();
+        // The compact Home row always displays history net, independently of full-card sections.
+        const ranges = new Set<number>([pin.homeConfig.flowRangeMillis]);
         if (pin.homeConfig.showChart) ranges.add(pin.homeConfig.rangeMillis);
-        if (pin.homeConfig.showFlow) ranges.add(pin.homeConfig.flowRangeMillis);
-        if (pin.homeConfig.showStock && !ranges.size) ranges.add(pin.homeConfig.rangeMillis);
         return ranges;
     }
     function accept(result: ResourceResponse<ResourcePin[]>) {
@@ -72,14 +71,7 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         if (route.view !== 'home') return;
         const until = Date.now();
         const queue = state.items
-            .filter(
-                (pin) =>
-                    pin.available &&
-                    pin.homeOrder !== null &&
-                    pin.gridKey &&
-                    pin.itemKey &&
-                    (pin.homeConfig.showStock || pin.homeConfig.showFlow || pin.homeConfig.showChart)
-            )
+            .filter((pin) => pin.available && pin.homeOrder !== null && pin.gridKey && pin.itemKey)
             .flatMap((pin) => [...historyRanges(pin)].map((rangeMillis) => ({ pin, rangeMillis })));
         async function worker() {
             while (queue.length && version === generation && !signal.aborted) {

@@ -1,4 +1,5 @@
 import { createHomePinFlow } from './home-pin-flow.js';
+import { historicalFlow, recordedStock } from './home-pin-metrics.js';
 import { thumbtackIcon } from './icons/hackernoon/thumbtack.js';
 import type { ThemeApplication, ThemeSettings, ThemeState, Translator, PinHomeConfig } from '../../app/theme-api.js';
 import { element } from './dom.js';
@@ -50,6 +51,13 @@ export function createHomePins(
         if (key) section.dataset.groupKey = key;
         const header = element('div', '', 'home-pin-group-heading');
         const heading = element('h3');
+        const toggle = element('button', '', 'home-pin-group-toggle');
+        toggle.type = 'button';
+        const marker = element('span');
+        marker.setAttribute('aria-hidden', 'true');
+        const title = element('span');
+        toggle.append(marker, title);
+        heading.append(toggle);
         const actions = element('div', '', 'home-pin-group-actions');
         const earlier = element('button', '←'),
             later = element('button', '→'),
@@ -73,7 +81,25 @@ export function createHomePins(
         label.append(nameText, name);
         edit.append(label, save, cancel);
         const content = element('div', '', 'home-pins');
-        section.append(header, edit, content);
+        const preview = element('div', '', 'home-pin-group-preview');
+        content.id = `home-pin-group-${key || 'ungrouped'}`;
+        preview.id = `${content.id}-preview`;
+        toggle.setAttribute('aria-controls', `${content.id} ${preview.id}`);
+        const collapseKey = `homeGroupCollapsed:${key || 'ungrouped'}`;
+        let collapsed = settings.get(collapseKey) === true;
+        function renderCollapse() {
+            const closed = !header.hidden && collapsed;
+            content.hidden = closed;
+            preview.hidden = !closed;
+            toggle.setAttribute('aria-expanded', String(!closed));
+            marker.textContent = closed ? '▸' : '▾';
+        }
+        toggle.onclick = () => {
+            collapsed = !collapsed;
+            settings.set(collapseKey, collapsed);
+            renderCollapse();
+        };
+        section.append(header, edit, preview, content);
         earlier.onclick = () => void application.pins.updateGroup(key, { move: 'earlier' });
         later.onclick = () => void application.pins.updateGroup(key, { move: 'later' });
         remove.onclick = () => void application.pins.removeGroup(key);
@@ -103,10 +129,13 @@ export function createHomePins(
         return {
             section,
             content,
-            render(title: string, index: number, count: number) {
-                section.setAttribute('aria-label', title);
-                heading.textContent = title;
+            preview,
+            render(label: string, index: number, count: number) {
+                section.setAttribute('aria-label', label);
+                title.textContent = label;
                 header.hidden = !key && !count;
+                section.classList.toggle('home-pin-group-flat', header.hidden);
+                renderCollapse();
                 actions.hidden = !key;
                 if (!key) return;
                 earlier.setAttribute('aria-label', locale.common('moveEarlier'));
@@ -124,6 +153,18 @@ export function createHomePins(
     }
     function createCard(key: string) {
         const card = element('article', '', 'inset-frame home-pin-card');
+        const compact = element('div', '', 'home-pin-compact-row');
+        compact.tabIndex = 0;
+        const compactName = element('a', '', 'home-pin-compact-name');
+        const compactStock = element('span', '', 'home-pin-compact-stock');
+        const compactNet = element('span', '', 'home-pin-compact-net');
+        const separator = element('span', '|', 'home-pin-compact-separator');
+        separator.setAttribute('aria-hidden', 'true');
+        const compactIdentity = element('span', '', 'home-pin-compact-identity tracking-resource');
+        compactIdentity.append(createResourceIcon(), compactName);
+        compact.append(compactIdentity, compactStock, separator, compactNet);
+        let compactTip: Node[] = [];
+        bindTooltip(compact, () => compactTip);
         const identity = element('div', '', 'home-pin-identity tracking-resource');
         const icon = createResourceIcon(),
             name = element('a', '', 'home-pin-name'),
@@ -316,31 +357,52 @@ export function createHomePins(
             const histories = available ? state.pins.histories[pin.pinKey] : undefined;
             const history = histories?.[pin.homeConfig.rangeMillis];
             const flowHistory = histories?.[pin.homeConfig.flowRangeMillis];
-            flow.render(pin, flowHistory, locale);
+            const { stock, until: stockUntil } = recordedStock(pin.itemKey, [history, flowHistory]);
+            const totals = historicalFlow(flowHistory);
+            flow.render(pin, flowHistory, locale, totals);
+            compactName.replaceChildren(
+                ...(available
+                    ? [renderMinecraftText(pin.resource!.displayName)]
+                    : [document.createTextNode(locale.common('pinUnavailable'))])
+            );
+            if (available) compactName.href = trackingHref(pin.gridKey!, pin.itemKey!);
+            else compactName.removeAttribute('href');
+            const number = new Intl.NumberFormat(state.preferences.language);
+            const short = new Intl.NumberFormat(state.preferences.language, {
+                notation: 'compact',
+                maximumFractionDigits: 1
+            });
+            const quantity = stock?.resource ? BigInt(stock.resource.quantity) : null;
+            const net = totals.observed ? totals.input - totals.output : null;
+            const sign = net === null || net === 0n ? '' : net > 0n ? '+' : '−';
+            const magnitude = net === null ? null : net < 0n ? -net : net;
+            const exactStock = quantity === null ? '—' : number.format(quantity);
+            const exactNet = magnitude === null ? '—' : sign + number.format(magnitude);
+            compactStock.textContent = quantity === null ? '—' : short.format(quantity);
+            compactStock.setAttribute('aria-label', `${locale.common('pinSampledStock')}: ${exactStock}`);
+            compactNet.textContent = magnitude === null ? '—' : sign + short.format(magnitude);
+            compactNet.className = `home-pin-compact-net ${net === null || net === 0n ? 'tracking-neutral' : net > 0n ? 'tracking-positive' : 'tracking-negative'}`;
+            const netLabel = `${locale.t('trackingNet')} (${locale.duration(pin.homeConfig.flowRangeMillis)})`;
+            compactNet.setAttribute('aria-label', `${netLabel}: ${exactNet}`);
+            compactTip = [
+                element('strong', compactName.textContent || ''),
+                element('span', `${locale.common('pinSampledStock')}: ${exactStock}`),
+                element('span', `${netLabel}: ${exactNet}`)
+            ];
+            if (stock)
+                compactTip.push(
+                    element(
+                        'span',
+                        `${locale.common('pinSampleTime')}: ${locale.dateTime(stock.observedAt, stockUntil)}`
+                    )
+                );
+            if (flowHistory?.truncated) compactTip.push(element('span', locale.common('resourceHistoryTruncated')));
             if (!available) {
                 clearChart();
                 return;
             }
-            const number = new Intl.NumberFormat(state.preferences.language);
             const stat = (label: string, value: string) => summary.append(element('dt', label), element('dd', value));
             if (pin.homeConfig.showStock) {
-                let stock: ThemeState['resourceHistory']['baseline'] = null;
-                let stockUntil = 0;
-                for (const source of new Set([history, flowHistory])) {
-                    if (source?.status !== 'ready') continue;
-                    for (const point of [source.baseline, ...source.points]) {
-                        if (
-                            point?.kind !== 'STOCK' ||
-                            point.resource?.itemKey !== pin.itemKey ||
-                            point.observedAt > source.until
-                        )
-                            continue;
-                        if (!stock || point.observedAt > stock.observedAt) {
-                            stock = point;
-                            stockUntil = source.until;
-                        }
-                    }
-                }
                 stat(
                     locale.common('pinSampledStock'),
                     stock?.resource ? number.format(BigInt(stock.resource.quantity)) : '—'
@@ -387,11 +449,13 @@ export function createHomePins(
         }
         return {
             card,
+            compact,
             identity,
             render,
             dispose() {
                 clearChart();
                 card.remove();
+                compact.remove();
             }
         };
     }
@@ -444,7 +508,8 @@ export function createHomePins(
             const targets: Parameters<typeof icons.update>[0] = [];
             for (const bucket of members.values())
                 bucket.forEach((pin, index) => {
-                    const content = sections.get(pin.homeGroupKey ?? '')?.content ?? sections.get('')!.content;
+                    const section = sections.get(pin.homeGroupKey ?? '') ?? sections.get('')!;
+                    const content = section.content;
                     const card = cards.get(pin.pinKey) ?? createCard(pin.pinKey);
                     cards.set(pin.pinKey, card);
                     card.render(pin, index, bucket.length);
@@ -455,8 +520,13 @@ export function createHomePins(
                         content.insertBefore(card.card, content.children[index] ?? null);
                         focus?.focus({ preventScroll: true });
                     }
+                    if (section.preview.children[index] !== card.compact)
+                        section.preview.insertBefore(card.compact, section.preview.children[index] ?? null);
                     if (pin.available && pin.resource)
-                        targets.push({ element: card.identity, icon: pin.resource.icon });
+                        targets.push(
+                            { element: card.identity, icon: pin.resource.icon },
+                            { element: card.compact, icon: pin.resource.icon }
+                        );
                 });
             if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
             else if (focused && !focused.isConnected) addGroupButton.focus({ preventScroll: true });

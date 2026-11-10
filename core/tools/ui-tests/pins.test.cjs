@@ -181,7 +181,7 @@ test('pin mutations are single flight and apply independent placement and settin
     assert.equal(terminal.state.pins.pending, false);
 });
 
-test('Home pin display and order mutations reuse matching history and hidden cards request no history', async (t) => {
+test('Home pin display and order mutations reuse history while compact rows retain their recorded range', async (t) => {
     let data = [pin('iron')],
         reads = 0;
     const terminal = await app(t, {
@@ -209,8 +209,10 @@ test('Home pin display and order mutations reuse matching history and hidden car
     await terminal.pins.update('iron', {
         homeConfig: { ...config, showStock: false, showFlow: false, showChart: false }
     });
-    await terminal.refresh();
     assert.equal(reads, 2);
+    await terminal.refresh();
+    assert.equal(reads, 3, 'manual refresh updates the one range still displayed by the compact row');
+    assert.deepEqual(Object.keys(terminal.state.pins.histories.iron), [String(config.flowRangeMillis)]);
 });
 
 test('a revoked grid discards peer history failures without resurrecting metadata', async (t) => {

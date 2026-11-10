@@ -2,6 +2,7 @@ import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { element } from './dom.js';
 import type { Tooltips } from './tooltips.js';
 import { flowOperationLines } from './flow-operations.js';
+import type { historicalFlow } from './home-pin-metrics.js';
 
 type Pin = ThemeState['pins']['items'][number];
 type History = ThemeState['resourceHistory'];
@@ -64,7 +65,7 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
         }
     }
     return {
-        render(pin: Pin, history: History | undefined, locale: Translator) {
+        render(pin: Pin, history: History | undefined, locale: Translator, totals: ReturnType<typeof historicalFlow>) {
             recent.root.hidden = !pin.available || !pin.homeConfig.showRecentFlow;
             historical.root.hidden = !pin.available || !pin.homeConfig.showFlow;
             for (const section of [recent, historical])
@@ -117,23 +118,9 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
             }
             if (!historical.root.hidden) {
                 historical.heading.textContent = `${locale.common('pinHistoricalFlow')} ${locale.duration(pin.homeConfig.flowRangeMillis)}:`;
-                let input = 0n,
-                    output = 0n,
-                    inputOperations = 0n,
-                    outputOperations = 0n,
-                    observed = false;
+                const { input, output, inputOperations, outputOperations, observed } = totals;
                 const notes = [];
                 if (history?.status === 'ready') {
-                    for (const point of history.points) {
-                        if (point.observedAt <= history.from || point.observedAt > history.until) continue;
-                        if (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION') observed = true;
-                        if (point.kind === 'FLOW') {
-                            input += BigInt(point.input);
-                            output += BigInt(point.output);
-                            inputOperations += BigInt(point.inputOperations);
-                            outputOperations += BigInt(point.outputOperations);
-                        }
-                    }
                     if (!history.enabled) notes.push(locale.common('resourceHistoryDisabled'));
                     if (history.truncated) notes.push(locale.common('resourceHistoryTruncated'));
                 } else if (history?.error) notes.push(locale.common(history.error));
