@@ -61,6 +61,33 @@ def mute_client(game):
     options.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='')
 
 
+def write_eula(path):
+    reject_links(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('eula=true\n', encoding='utf-8', newline='')
+
+
+def require_eula(runtime_root, accept):
+    path = runtime_root.absolute().parent / 'eula.txt'
+    reject_links(path)
+    if path.is_file():
+        agreed = False
+        for line in path.read_text(encoding='utf-8').splitlines():
+            key, _, value = line.partition('=')
+            if key.strip() == 'eula':
+                agreed = value.strip().lower() == 'true'
+        if agreed:
+            return
+    if not accept:
+        try:
+            accept = input('Do you accept the Minecraft EULA (https://www.minecraft.net/eula)? [y/N] ').strip().lower() in ('y', 'yes')
+        except EOFError:
+            raise ValueError('Accept Minecraft EULA with --accept-eula or in ' + str(path)) from None
+    if not accept:
+        raise ValueError('Minecraft EULA was not accepted')
+    write_eula(path)
+
+
 def prepare_slot(args, slot):
     old_plan = slot / 'launch.json'
     reject_links(old_plan)
@@ -114,7 +141,7 @@ def prepare_slot(args, slot):
         lines = [line for line in previous.splitlines() if line.split('=', 1)[0].strip() not in settings]
         lines.extend(key + '=' + value for key, value in settings.items())
         properties.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='')
-        (game / 'eula.txt').write_text('eula=true\n', encoding='utf-8', newline='')
+        write_eula(game / 'eula.txt')
     else:
         mute_client(game)
     if args.content_only:
@@ -155,13 +182,13 @@ def main():
     parser.add_argument('--runtime-root', type=Path, required=True)
     parser.add_argument('--profile', required=True)
     parser.add_argument('--role', choices=['client', 'server'], required=True)
-    parser.add_argument('--accept-eula', action='store_true', help='Required for the dedicated server role')
+    parser.add_argument('--accept-eula', action='store_true', help='Remember Minecraft EULA acceptance for dedicated servers')
     parser.add_argument('--max-seconds', type=float)
     parser.add_argument('--stop-timeout', type=float, default=20)
     args = parser.parse_args()
     try:
-        if args.role == 'server' and not args.accept_eula:
-            raise ValueError('Explicit --accept-eula is required')
+        if args.role == 'server':
+            require_eula(args.runtime_root, args.accept_eula)
         if not math.isfinite(args.server_timeout) or args.server_timeout <= 0:
             raise ValueError('--server-timeout must be positive and finite')
         if args.join_server:
@@ -227,6 +254,8 @@ def main():
                     raise ValueError('Join address differs from the prepared command; prepare the client again')
                 if args.role == 'client':
                     mute_client(game)
+                else:
+                    write_eula(game / 'eula.txt')
             else:
                 plan = prepare_slot(args, slot)
             if args.command == 'prepare':

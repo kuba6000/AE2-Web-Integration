@@ -41,9 +41,6 @@ def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
         standardInput = System.in
         workingDir repository
         doFirst {
-            if (target[0] == 'server' && setting('fullpackAcceptEula', System.getenv('FULLPACK_ACCEPT_EULA') ?: 'false') != 'true') {
-                throw new GradleException('Accept Minecraft EULA with -PfullpackAcceptEula=true before running.')
-            }
             def runtimeFile = new File(profile, 'runtime.json')
             if (!runtimeFile.isFile()) throw new GradleException("Missing runtime profile: ${runtimeFile}")
             def runtime = new groovy.json.JsonSlurper().parse(runtimeFile, 'UTF-8')
@@ -63,7 +60,9 @@ def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
                 '--memory-mib', setting('fullpackMemoryMiB', target[0] == 'client' ? '6144' : '4096'),
                 '--port', setting('fullpackPort', '25585'),
                 '--web-port', setting('fullpackWebPort', target[0] == 'client' ? '23241' : '23240')]
-            if (target[0] == 'server') command.add('--accept-eula')
+            if (target[0] == 'server' && setting('fullpackAcceptEula', System.getenv('FULLPACK_ACCEPT_EULA') ?: 'false') == 'true') {
+                command.add('--accept-eula')
+            }
             if (target[0] == 'client') {
                 command.addAll(['--icon-generator-jar', generatorArtifact.get().archiveFile.get().asFile.path,
                     '--offline-user', setting('fullpackUser', 'FullpackTest')])

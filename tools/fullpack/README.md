@@ -1,8 +1,8 @@
 # Full modpack launchers
 
 Run a pinned full modpack with the production mod built from this checkout. Requires Python3.10+
-on `PATH` and the normal Java25/Node build prerequisites. Dedicated-server tasks also require
-explicit Minecraft EULA acceptance.
+on `PATH` and the normal Java25/Node build prerequisites. Dedicated-server tasks ask once for
+Minecraft EULA acceptance.
 Gradle selects the game's Java runtime through its toolchains; Python launcher dependencies are
 installed automatically in a local virtual environment.
 
@@ -12,14 +12,14 @@ Linux (Bash):
 
 ```bash
 ./gradlew :forge-1.7.10:runFullPack
-./gradlew :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
+./gradlew :forge-1.7.10:runFullServer
 ```
 
 Windows (PowerShell):
 
 ```powershell
 .\gradlew.bat :forge-1.7.10:runFullPack
-.\gradlew.bat :forge-1.7.10:runFullServer -PfullpackAcceptEula=true
+.\gradlew.bat :forge-1.7.10:runFullServer
 ```
 
 Linux needs Python's virtual-environment and `ensurepip` support. On Debian/Ubuntu, install
@@ -52,6 +52,13 @@ The default cache is `<checkout>/.gradle/fullpack`; prepared games are under
 `runtimes/<profile>/<client-or-server>/game`. `stop` in the server console saves and shuts down;
 Ctrl+C requests shutdown before enforcing the process deadline.
 
+The first server preparation or launch asks for EULA acceptance. The answer is saved as
+`eula=true` in `<fullpackHome>/eula.txt`, shared by all profiles and retained when instances reset.
+Each prepared server receives its own `eula.txt`. For noninteractive use, accept once with
+`-PfullpackAcceptEula=true` or `FULLPACK_ACCEPT_EULA=true`; later commands need no acceptance flag.
+The Python CLI stores the same file beside its `--runtime-root` directory and accepts
+`--accept-eula` for noninteractive use.
+
 When sharing a checkout between Windows and Linux/WSL, use a separate `fullpackHome` for each
 system, for example `-PfullpackHome="$HOME/.cache/ae2wi-fullpack"` in Bash. Installed Python/game
 runtimes and saved launch commands contain platform-specific paths.
@@ -70,8 +77,7 @@ runtimes and saved launch commands contain platform-specific paths.
 | `fullpackUser` | Offline client name; default `FullpackTest` |
 | `fullpackJoinServer` | Optional localhost address for modern/1.12.2 multiplayer startup |
 
-Relative paths are resolved from the repository root. Dedicated-server EULA acceptance may also
-be supplied through `FULLPACK_ACCEPT_EULA=true`; client tasks do not require this setting.
+Relative paths are resolved from the repository root. Client tasks do not require EULA acceptance.
 GTNH connects through Multiplayer → Direct Connect after the menu
 loads; its Forge startup-join path is unsupported by these Gradle tasks.
 
@@ -80,13 +86,13 @@ Restart a prepared instance without resetting its world or settings:
 Linux:
 
 ```bash
-.gradle/fullpack/python/bin/python tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server --accept-eula
+.gradle/fullpack/python/bin/python tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server
 ```
 
 Windows:
 
 ```powershell
-.gradle/fullpack/python/Scripts/python.exe tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server --accept-eula
+.gradle/fullpack/python/Scripts/python.exe tools/fullpack/run_fullpack.py execute --runtime-root .gradle/fullpack/runtimes --profile monifactory-0.13.8 --role server
 ```
 
 Direct CLI `prepare`/`run` also accepts locked

@@ -124,9 +124,35 @@ class LauncherTests(unittest.TestCase):
     def test_server_requires_acceptance_before_starting_or_creating_its_instance(self):
         command = self.command(self.plan("from pathlib import Path; Path('started').touch()"))
         command.remove('--accept-eula')
-        result = subprocess.run(command, capture_output=True, timeout=10)
-        self.assertNotEqual(0, result.returncode)
-        self.assertFalse((self.root / 'runtimes/fixture/server').exists())
+        for answer in [b'n\n', b'']:
+            result = subprocess.run(command, input=answer, capture_output=True, timeout=10)
+            self.assertNotEqual(0, result.returncode)
+            self.assertFalse((self.root / 'runtimes/fixture/server').exists())
+            self.assertFalse((self.root / 'eula.txt').exists())
+
+    def test_server_remembers_acceptance_across_resets_and_profiles(self):
+        lock = self.root / 'pack.lock.json'
+        lock.write_text(json.dumps({'lockVersion': 1, 'manifest': {'version': 1}}))
+        command = [sys.executable, str(SCRIPT), 'prepare', '--content-only', '--lock', str(lock),
+                   '--cache', str(self.root / 'cache'), '--runtime-root', str(self.root / 'runtimes'),
+                   '--profile', 'first', '--role', 'server']
+        for index, profile in enumerate(['first', 'first', 'second']):
+            command[command.index('--profile') + 1] = profile
+            arguments = command + (['--accept-eula'] if index == 0 else [])
+            result = subprocess.run(arguments, input='', capture_output=True, text=True, timeout=10)
+            self.assertEqual(0, result.returncode, result.stderr)
+            game = self.root / 'runtimes' / profile / 'server/game'
+            self.assertEqual('eula=true', (game / 'eula.txt').read_text().strip())
+            self.assertFalse((game / 'old-world').exists())
+            (game / 'old-world').touch()
+
+    def test_server_prompts_once_and_reuses_acceptance_on_execute(self):
+        plan = self.plan("from pathlib import Path; assert Path('eula.txt').read_text().strip() == 'eula=true'")
+        command = self.command(plan)
+        command.remove('--accept-eula')
+        for answer in ['y\n', '']:
+            result = subprocess.run(command, input=answer, capture_output=True, text=True, timeout=10)
+            self.assertEqual(0, result.returncode, result.stderr)
 
     def test_foreign_slot_is_not_used_or_modified(self):
         slot = self.root / 'runtimes/fixture/server'
