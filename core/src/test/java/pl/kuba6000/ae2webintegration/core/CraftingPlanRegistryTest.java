@@ -152,21 +152,47 @@ class CraftingPlanRegistryTest {
     }
 
     @Test
-    void onlyTheThreeNewestPlansRemainAddressable() {
+    void capacityEvictionCancelsOnlyTheDisplacedPendingPlan() {
         CraftingPlanRegistry registry = new CraftingPlanRegistry(() -> 0L);
         CompletableFuture<IAECraftingJob> oldest = new CompletableFuture<>();
+        CompletableFuture<IAECraftingJob> secondPlan = new CompletableFuture<>();
+        CompletableFuture<IAECraftingJob> thirdPlan = new CompletableFuture<>();
+        CompletableFuture<IAECraftingJob> fourthPlan = new CompletableFuture<>();
         int first = registry.add(oldest, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        int second = registry
-            .add(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        int third = registry
-            .add(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        int fourth = registry
-            .add(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        CraftingPlanRegistry.Entry displaced = registry.find(first);
+        assertNotNull(displaced);
+        int second = registry.add(secondPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        int third = registry.add(thirdPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        int fourth = registry.add(fourthPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
         assertNull(registry.find(first));
-        assertFalse(oldest.isCancelled(), "capacity eviction preserves the existing non-cancelling behavior");
+        assertFalse(displaced.isRetained());
+        assertTrue(oldest.isCancelled());
         assertNotNull(registry.find(second));
         assertNotNull(registry.find(third));
         assertNotNull(registry.find(fourth));
+        assertFalse(secondPlan.isCancelled());
+        assertFalse(thirdPlan.isCancelled());
+        assertFalse(fourthPlan.isCancelled());
+    }
+
+    @Test
+    void capacityEvictionReleasesACompletedPlanWithoutCancellingIt() {
+        CraftingPlanRegistry registry = new CraftingPlanRegistry(() -> 0L);
+        CompletedRecordingFuture completed = new CompletedRecordingFuture();
+        int first = registry.add(completed, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        CraftingPlanRegistry.Entry displaced = registry.find(first);
+        assertNotNull(displaced);
+        for (int i = 0; i < 3; i++) {
+            registry.add(
+                new CompletableFuture<>(),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
+        }
+
+        assertNull(registry.find(first));
+        assertFalse(displaced.isRetained());
+        assertFalse(completed.cancelCalled);
     }
 }
