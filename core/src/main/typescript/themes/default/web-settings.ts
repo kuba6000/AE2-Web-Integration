@@ -73,7 +73,7 @@ export function createWebSettings(
                         </select>
                     </label>
                     <p class="hint" id="icon-availability" role="status"></p>
-                    <div class="window-frame info-notice" id="icon-install-tip" role="note" hidden>
+                    <div class="info-notice" id="icon-install-tip" role="note" hidden>
                         ${infoCircle}
                         <p><span data-text="iconPackInstallTip"></span> <a href="https://ae2web.kuba6000.pl/icon-export" target="_blank" rel="noopener noreferrer" data-text="iconPackInstallGuide"></a></p>
                     </div>

@@ -1527,7 +1527,19 @@ label {
     display: none;
 }
 .web-preferences .info-notice {
-    margin: 0;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin: 8px 0 0;
+    border: 1px solid light-dark(#8ba7c7, #667d9a);
+    padding: 8px 10px;
+    background: var(--panel);
+    font-size: 13px;
+}
+.web-preferences .info-notice > .theme-icon {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
 }
 .about-view {
     overflow-wrap: anywhere;
