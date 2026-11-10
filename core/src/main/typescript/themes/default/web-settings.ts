@@ -63,6 +63,10 @@ export function createWebSettings(
             </section>
             <section class="web-preferences-section" aria-labelledby="terminal-options-title">
                 <h3 id="terminal-options-title" data-text="terminal"></h3>
+                <label>
+                    <span data-theme-text="resourcesPerPage"></span>
+                    <select id="terminal-page-size"></select>
+                </label>
                 <div class="web-preference-field">
                     <label>
                         <span data-theme-text="terminalDisplay"></span>
@@ -78,10 +82,6 @@ export function createWebSettings(
                         <p><span data-text="iconPackInstallTip"></span> <a href="https://ae2web.kuba6000.pl/icon-export" target="_blank" rel="noopener noreferrer" data-text="iconPackInstallGuide"></a></p>
                     </div>
                 </div>
-                <label>
-                    <span data-theme-text="resourcesPerPage"></span>
-                    <select id="terminal-page-size"></select>
-                </label>
                 <div class="web-preferences-section web-preference-field" id="animation-settings" role="group" aria-labelledby="animated-icons-label">
                     <label class="web-preference-toggle">
                         <span id="animated-icons-label" data-theme-text="animatedIcons"></span><input type="checkbox" id="animated-icons" aria-describedby="animation-availability">
