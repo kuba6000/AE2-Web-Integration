@@ -15,6 +15,9 @@ dependencies {
     // AE addons for compatibility //
     compileOnly(neoforge.advancedae)
 
+    // Runtime recipe viewer for development runs.
+    localRuntime(neoforge.jei)
+
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
     testImplementation 'org.mockito:mockito-core:5.20.0'
     testImplementation "net.neoforged:testframework:${libs.versions.neo.get()}"

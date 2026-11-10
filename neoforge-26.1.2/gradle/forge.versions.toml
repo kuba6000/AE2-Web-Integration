@@ -1,7 +1,9 @@
 [versions]
 ae2 = "26.1.13-beta"
 advancedae = "hPJMJOBd" # AdvancedAE 26.1.7 for Minecraft 26.1.2
+jei = "29.53.0.115"
 
 [libraries]
 ae2 = { module = "org.appliedenergistics:appliedenergistics2", version.ref = "ae2" }
 advancedae = { module = "maven.modrinth:advancedae", version.ref = "advancedae" }
+jei = { module = "mezz.jei:jei-26.1.2-neoforge", version.ref = "jei" }
