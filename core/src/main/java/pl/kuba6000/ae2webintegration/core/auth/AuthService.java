@@ -5,6 +5,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.common.net.InetAddresses;
 import com.sun.net.httpserver.HttpExchange;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
@@ -162,7 +164,62 @@ public final class AuthService {
     private static boolean isLocalAccess(@NotNull HttpExchange exchange, @NotNull InetAddress client) {
         return !exchange.getRequestHeaders()
             .containsKey("Authorization") && Config.INSTANCE.general.allowNoPasswordOnLocalhost
-            && client.isLoopbackAddress();
+            && client.isLoopbackAddress()
+            && hasMatchingLocalOrigin(exchange);
+    }
+
+    /** Loopback transport alone must not grant a foreign webpage implicit administrator access. */
+    private static boolean hasMatchingLocalOrigin(@NotNull HttpExchange exchange) {
+        List<String> hosts = exchange.getRequestHeaders()
+            .get("Host");
+        if (hosts == null || hosts.size() != 1) return false;
+        String scheme = "http";
+        List<String> forwarded = exchange.getRequestHeaders()
+            .get("X-Forwarded-Proto");
+        if (forwarded != null && isTrustedProxy(exchange)) {
+            if (forwarded.size() != 1) return false;
+            scheme = forwarded.get(0)
+                .trim();
+        }
+        URI target = parseHttpOrigin(scheme + "://" + hosts.get(0));
+        if (target == null) return false;
+        String host = target.getHost();
+        if (host.startsWith("[")) host = host.substring(1, host.length() - 1);
+        // Parse literal addresses only: resolving an arbitrary hostname would permit DNS rebinding.
+        if (!"localhost".equalsIgnoreCase(host) && !(InetAddresses.isInetAddress(host) && InetAddresses.forString(host)
+            .isLoopbackAddress())) return false;
+        List<String> origins = exchange.getRequestHeaders()
+            .get("Origin");
+        if (origins == null) return true; // Navigations, same-origin GETs and non-browser clients may omit Origin.
+        if (origins.size() != 1) return false;
+        URI source = parseHttpOrigin(origins.get(0));
+        return source != null && target.getScheme()
+            .equalsIgnoreCase(source.getScheme())
+            && target.getHost()
+                .equalsIgnoreCase(source.getHost())
+            && effectivePort(target) == effectivePort(source);
+    }
+
+    private static @Nullable URI parseHttpOrigin(@NotNull String value) {
+        try {
+            URI uri = URI.create(value);
+            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null
+                || uri.getRawUserInfo() != null
+                || !uri.getRawPath()
+                    .isEmpty()
+                || uri.getRawQuery() != null
+                || uri.getRawFragment() != null
+                || uri.getPort() > 65535
+                || value.endsWith(":")) return null;
+            return uri;
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private static int effectivePort(@NotNull URI origin) {
+        return origin.getPort() < 0 ? ("https".equalsIgnoreCase(origin.getScheme()) ? 443 : 80) : origin.getPort();
     }
 
     /** An explicit Authorization header always takes precedence over browser cookies. */

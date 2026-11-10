@@ -65,6 +65,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
@@ -1052,6 +1053,86 @@ class ServerLifecycleHttpTest {
         assertFalse(Config.INSTANCE.general.publicMode);
         assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         assertEquals(HTTP_OK, performSyncedRequest(token).status());
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "https://other.example", "http://other.example:2324", "http://localhost:2325",
+            "https://localhost:2324", "http://127.0.0.1:2324", "", "null", "http://localhost:2324/path",
+            "http://user@localhost:2324", "http://localhost:2324?query", "http://localhost:2324#fragment",
+            "http://localhost:2324 http://other.example", "http://localhost:2324\r\nOrigin: http://other.example" })
+    void localAdminRejectsForeignOrMalformedOrigins(String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus("Host: localhost:2324\r\nOrigin: " + origin));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "other.example", "localhost.other.example:2324", "127.0.0.1.other.example", "192.0.2.10:2324",
+            "[2001:db8::1]:2324", "user@localhost:2324", "localhost:2324/path", "localhost:2324?query",
+            "localhost:2324#fragment", "localhost:70000", "localhost:invalid", "localhost:",
+            "localhost:2324, other.example", "localhost:2324\r\nHost: other.example" })
+    void localAdminRejectsNonLocalOrMalformedAuthorities(String host) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus("Host: " + host));
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        value = { "localhost|", "LOCALHOST:2324|http://localhost:2324", "127.0.0.1:2324|",
+            "127.0.0.2:2324|http://127.0.0.2:2324", "[::1]:2324|http://[::1]:2324",
+            "[0:0:0:0:0:0:0:1]:2324|http://[0:0:0:0:0:0:0:1]:2324", "localhost|http://localhost:80",
+            "localhost:80|http://localhost" },
+        delimiter = '|')
+    void localAdminAcceptsLocalAuthoritiesAndMatchingOrigins(String host, String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            rawGetStatus("Host: " + host + (origin == null ? "" : "\r\nOrigin: " + origin)));
+    }
+
+    @Test
+    void explicitSessionsStillAuthenticateWithoutImplicitLocalTrust() throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        String token = login();
+        String headers = "Host: terminal.example\r\nOrigin: https://other.example";
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus(headers));
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers + "\r\nAuthorization: Bearer " + token));
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers + "\r\nCookie: authenticationToken=" + token));
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus(headers + "\r\nCookie: authenticationToken=" + token + "\r\nAuthorization: Bearer invalid"));
+    }
+
+    @Test
+    void localAdminAcceptsHttpsOriginFromTheTrustedLocalProxy() throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        String headers = "Host: localhost:2324\r\nOrigin: https://localhost:2324\r\nX-Forwarded-Proto: https";
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "invalid", "https, http", "https\r\nX-Forwarded-Proto: https" })
+    void localAdminRejectsAmbiguousForwardedProtocols(String protocol) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus("Host: localhost:2324\r\nOrigin: https://localhost:2324\r\nX-Forwarded-Proto: " + protocol));
+    }
+
+    @Test
+    void localAuthorityDoesNotOverrideTheResolvedRemoteClientAddress() throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus("Host: localhost:2324\r\nOrigin: http://localhost:2324\r\nX-Forwarded-For: 192.0.2.10"));
     }
 
     @Test
@@ -2083,6 +2164,19 @@ class ServerLifecycleHttpTest {
 
     private Response get(String path, String token) throws IOException {
         return read(connection(path, token));
+    }
+
+    private int rawGetStatus(String headers) throws IOException {
+        // A raw request preserves browser authority/origin headers restricted by HttpURLConnection.
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(5000);
+            socket.getOutputStream()
+                .write(("GET /api/themes HTTP/1.1\r\n" + headers + "\r\nConnection: close\r\n\r\n").getBytes(US_ASCII));
+            BufferedReader response = new BufferedReader(new InputStreamReader(socket.getInputStream(), US_ASCII));
+            return Integer.parseInt(
+                response.readLine()
+                    .split(" ")[1]);
+        }
     }
 
     private HttpURLConnection connection(String path, String token) throws IOException {
