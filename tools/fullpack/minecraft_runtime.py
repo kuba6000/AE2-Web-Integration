@@ -18,6 +18,7 @@ import zipfile
 
 import fullpack
 from process_containment import ProcessGroup
+from progress import Activity, installer_callbacks, status, wait_for_installation
 
 LIBRARY = '8.0'
 
@@ -167,13 +168,14 @@ def install_worker(role, destination, java, installer, lease_fd, runtime):
     options = ({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt'
                else {'start_new_session': True, 'pass_fds': (lease_fd,)})
     with (destination / 'installation.log').open('wb') as log, ProcessGroup() as group:
-        process = group.start([sys.executable, str(Path(__file__).resolve()), '_install',
+        process = group.start([sys.executable, '-u', str(Path(__file__).resolve()), '_install',
                                role, str(destination), str(java), str(installer),
                                runtime['kind'], runtime['minecraft'], runtime['loader']],
                               cwd=destination, env=clean_environment(), stdout=log,
                               stderr=subprocess.STDOUT, **options)
         try:
-            if process.wait(timeout=1800) != 0:
+            if wait_for_installation(process, destination / 'installation.log',
+                                     f'Installing {runtime["kind"]} {runtime["loader"]} ({role})') != 0:
                 raise RuntimeError('Minecraft installation failed; see ' + str(destination / 'installation.log'))
         finally:
             if os.name == 'nt':
@@ -223,7 +225,8 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user,
         raise ValueError('Memory must be between 1024 and 1048576 MiB')
     game = Path(pack_directory).resolve(strict=True)
     if role == 'server' and runtime['java'] == 8:
-        return bundled_legacy_server(game, java, runtime, memory_mib)
+        with Activity('Checking bundled legacy server runtime'):
+            return bundled_legacy_server(game, java, runtime, memory_mib)
     root = Path(runtime_cache).resolve()
     fullpack.disjoint(root, game)
     if role == 'client':
@@ -242,6 +245,7 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user,
             fullpack.write_json(ownership, owner)
         marker = cache / 'complete.json'
         if not marker.exists():
+            status('Minecraft/loader runtime is not cached; installation log: ' + str(cache / 'installation.log'))
             if kind == 'neoforge':
                 url = f'https://maven.neoforged.net/releases/net/neoforged/neoforge/{loader}/neoforge-{loader}-installer.jar'
             else:
@@ -260,7 +264,8 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user,
                 (cache / 'forge-install-profile.json').write_bytes(archive.read('install_profile.json'))
             install_worker(role, cache, java, installer, lease_fd, runtime)
             if role == 'client':
-                validate_client(cache, java, runtime)
+                with Activity('Verifying new Minecraft runtime installation'):
+                    validate_client(cache, java, runtime)
             else:
                 for name in ('win_args.txt', 'unix_args.txt'):
                     if not (cache / server_args_directory(runtime) / name).is_file():
@@ -268,12 +273,14 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user,
             fullpack.write_json(marker, {'minecraft': minecraft, kind: loader,
                                          'library': LIBRARY, 'installerSha256': installer.name})
         else:
+            status('Reusing cached Minecraft/loader runtime')
             expected = {'minecraft': minecraft, kind: loader, 'library': LIBRARY}
             actual = json.loads(marker.read_text(encoding='utf-8'))
             if any(actual.get(key) != value for key, value in expected.items()):
                 raise ValueError('Runtime cache completion metadata does not match profile')
         if role == 'client':
-            validate_client(cache, java, runtime)
+            with Activity('Verifying Minecraft assets and libraries'):
+                validate_client(cache, java, runtime)
             command = client_command(cache, game, java, offline_user, runtime, quick_play_multiplayer, memory_mib)
             if runtime['java'] == 8:
                 return LaunchPlan(short_legacy_classpath(command, game), game)
@@ -281,7 +288,8 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user,
         else:
             if (game / 'libraries').exists():
                 raise ValueError('Prepared server already contains a libraries directory')
-            shutil.copytree(cache / 'libraries', game / 'libraries')
+            with Activity('Copying server runtime libraries'):
+                shutil.copytree(cache / 'libraries', game / 'libraries')
             native_args = (server_args_directory(runtime) / ('win_args.txt' if os.name == 'nt' else 'unix_args.txt')).as_posix()
             # Java does not recursively expand @files inside another argument file.
             return LaunchPlan([str(java), f'-Xmx{memory_mib}M', '@' + native_args, 'nogui'], game)
@@ -316,10 +324,12 @@ def short_legacy_classpath(command, game):
 def worker(role, destination, java, installer, kind, minecraft, loader):
     if role == 'client':
         import minecraft_launcher_lib.mod_loader
-        minecraft_launcher_lib.mod_loader.get_mod_loader(kind).install(
-            minecraft, str(destination), loader_version=loader, java=str(java),
-            callback={'setStatus': lambda status: print(status, flush=True)})
+        with Activity('Minecraft/loader installer') as activity:
+            minecraft_launcher_lib.mod_loader.get_mod_loader(kind).install(
+                minecraft, str(destination), loader_version=loader, java=str(java),
+                callback=installer_callbacks(activity))
     else:
+        status('Running dedicated-server loader installer')
         subprocess.run([str(java), '-jar', str(installer), '--installServer', str(destination)],
                        cwd=destination, env=clean_environment(), check=True)
 

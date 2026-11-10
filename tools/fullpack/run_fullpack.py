@@ -11,6 +11,7 @@ import sys
 import zipfile
 from fullpack import disjoint, prepare, write_json
 from fullpack_lifecycle import owned_slot, reject_links, reset_game, run_process
+from progress import Activity, status
 
 
 def mod_ids(path):
@@ -92,19 +93,22 @@ def prepare_slot(args, slot):
     old_plan = slot / 'launch.json'
     reject_links(old_plan)
     old_plan.unlink(missing_ok=True)
-    game = reset_game(slot)
+    with Activity('Resetting the previous ' + args.role + ' instance'):
+        game = reset_game(slot)
     prepare(args.lock, game, args.cache)
     if args.world:
         destination = game / ('world' if args.role == 'server' else 'saves/fullpack')
         if destination.exists():
             raise ValueError('Pack contains a world at the fixture destination')
-        shutil.copytree(args.world, destination)
+        with Activity('Copying fixture world'):
+            shutil.copytree(args.world, destination)
     artifacts = {}
     if args.mod_jar:
         artifacts['ae2webintegration'] = (args.mod_jar, 'ae2webintegration-local.jar')
     if args.icon_generator_jar:
         artifacts['ae2webintegration_icon_generator'] = (args.icon_generator_jar, 'ae2webintegration-icon-generator-local.jar')
     if artifacts:
+        status('Installing locally built mod artifacts')
         mods = game / 'mods'
         mods.mkdir(exist_ok=True)
         mod_directories = [mods]
@@ -146,6 +150,7 @@ def prepare_slot(args, slot):
         mute_client(game)
     if args.content_only:
         return None
+    status('Preparing Minecraft ' + args.runtime['minecraft'] + ' / ' + args.runtime['kind'] + ' ' + args.runtime.get('loader', ''))
     if args.runtime['kind'] == 'gtnh':
         from gtnh_runtime import prepare_runtime
     else:
@@ -187,6 +192,7 @@ def main():
     parser.add_argument('--stop-timeout', type=float, default=20)
     args = parser.parse_args()
     try:
+        status(f'{args.command}: {args.profile} ({args.role})')
         if args.role == 'server':
             require_eula(args.runtime_root, args.accept_eula)
         if not math.isfinite(args.server_timeout) or args.server_timeout <= 0:
@@ -259,7 +265,7 @@ def main():
             else:
                 plan = prepare_slot(args, slot)
             if args.command == 'prepare':
-                print('Prepared ' + str(game))
+                print('Prepared ' + str(game), flush=True)
                 return 0
             join_server = plan.get('joinServer', args.join_server)
             if join_server:
@@ -270,7 +276,9 @@ def main():
                 protocol = plan.get('protocol', args.protocol)
                 if type(protocol) is not int or protocol < 0:
                     raise ValueError('Join launch plan must declare its Minecraft protocol; prepare it again')
-                wait_for_server(join_server, args.server_timeout, protocol)
+                with Activity('Waiting for Minecraft server readiness'):
+                    wait_for_server(join_server, args.server_timeout, protocol)
+            status('Starting Minecraft ' + args.role + '; game output follows')
             return run_process(plan['command'], game, args.role, args.stop_timeout, args.max_seconds, lease_fd)
     except KeyboardInterrupt:
         print('Fullpack launch cancelled', file=sys.stderr)

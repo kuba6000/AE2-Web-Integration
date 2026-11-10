@@ -38,6 +38,9 @@ world appears in Singleplayer; select it there. No automated test suite is run b
 
 Missing modpack files, configuration, scripts, Minecraft assets and loader libraries are downloaded
 and cached. Every prepare/run replaces its own client or server game directory with a fresh copy.
+Preparation prints its current stage, file/byte progress and elapsed activity during longer waits.
+Loader installation keeps detailed output in the runtime cache's `installation.log` and reports
+progress to the console. Gradle's task percentage is separate from download or installation progress.
 The source world and download cache are retained. Client and server use separate owned directories;
 a second process cannot reset an instance that is already running. These instances are independent
 of Prism Launcher and personal account tokens.

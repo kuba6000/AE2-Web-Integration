@@ -92,14 +92,19 @@ class GtnhRuntimeTests(unittest.TestCase):
         self.assertTrue((mods / '1.12.2/unrelated-version.jar').is_file())
         self.assertEqual(replacement.read_bytes(), (mods / 'ae2webintegration-local.jar').read_bytes())
 
-    def test_client_prepares_from_pinned_launcher_metadata_without_prism(self):
+    def client_fixture(self, hold_library=False):
         routes = {}
+        started = threading.Event()
+        release = threading.Event()
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 data = routes.get(self.path)
                 self.send_response(200 if data is not None else 404)
                 self.end_headers()
+                if hold_library and self.path == '/bootstrap.jar':
+                    started.set()
+                    release.wait(20)
                 if data is not None:
                     self.wfile.write(data)
 
@@ -137,6 +142,10 @@ class GtnhRuntimeTests(unittest.TestCase):
         command = self.command()
         command[command.index('--role') + 1] = 'client'
         command.extend(['--offline-user', 'FullpackTest', '--join-server', '127.0.0.1:25585'])
+        return command, started, release
+
+    def test_client_prepares_from_pinned_launcher_metadata_without_prism(self):
+        command, _, _ = self.client_fixture()
         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
         self.assertEqual(0, result.returncode, result.stderr)
         slot = self.root / 'runtimes/fixture/client'
@@ -147,6 +156,35 @@ class GtnhRuntimeTests(unittest.TestCase):
         self.assertIn('"-Xmx4096M"', arguments)
         self.assertIn('"--server"', arguments)
         self.assertIn('"127.0.0.1"', arguments)
+
+    def test_installer_reports_current_library_before_its_download_finishes(self):
+        command, started, release = self.client_fixture(hold_library=True)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        reported = threading.Event()
+        messages = []
+
+        def read_output():
+            for line in process.stdout:
+                messages.append(line)
+                if 'bootstrap-1.0.jar' in line:
+                    reported.set()
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        try:
+            self.assertTrue(started.wait(8), 'Installer did not request the library')
+            self.assertTrue(reported.wait(12), 'Installer progress was hidden while the download waited')
+            self.assertIsNone(process.poll())
+        finally:
+            release.set()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            reader.join(timeout=2)
+            process.stdout.close()
+        self.assertEqual(0, process.returncode, ''.join(messages))
 
 
 if __name__ == '__main__':

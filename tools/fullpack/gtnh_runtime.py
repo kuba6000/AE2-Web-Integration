@@ -12,6 +12,7 @@ import fullpack
 from minecraft_runtime import (LaunchPlan, check_java, cache_lock, clean_environment,
                                java_arguments, offline_options)
 from process_containment import ProcessGroup
+from progress import Activity, installer_callbacks, status, wait_for_installation
 
 
 def preflight(java, runtime):
@@ -44,7 +45,8 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user, *, 
     java = preflight(java, runtime)
     game = Path(pack_directory).resolve(strict=True)
     if role == 'server':
-        validate_server(game, runtime)
+        with Activity('Checking bundled GTNH server runtime'):
+            validate_server(game, runtime)
         return LaunchPlan([str(java), f'-Xmx{memory_mib}M', '-Dfml.readTimeout=180', '-Duser.language=en',
                            '@java9args.txt', '-jar', 'lwjgl3ify-forgePatches.jar', 'nogui'], game)
     if role != 'client':
@@ -83,12 +85,16 @@ def prepare_runtime(role, pack_directory, runtime_cache, java, offline_user, *, 
         fullpack.write_json(version, metadata)
         marker = cache / 'complete.json'
         if not marker.exists():
+            status('GTNH client runtime is not cached; installation log: ' + str(cache / 'installation.log'))
             install_client(cache, metadata['id'], lease)
-            validate_client(cache, metadata)
+            with Activity('Verifying new GTNH runtime installation'):
+                validate_client(cache, metadata)
             fullpack.write_json(marker, owner)
         elif json.loads(marker.read_text()) != owner:
             raise ValueError('GTNH runtime completion identity does not match')
-        validate_client(cache, metadata)
+        status('Checking prepared GTNH client runtime')
+        with Activity('Verifying GTNH assets and libraries'):
+            validate_client(cache, metadata)
         import minecraft_launcher_lib.command
         command = minecraft_launcher_lib.command.get_minecraft_command(metadata['id'], cache, options)
         if '--userType' in command:
@@ -154,10 +160,10 @@ def install_client(cache, version, lease):
     options = ({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt'
                else {'start_new_session': True, 'pass_fds': (lease,)})
     with (cache / 'installation.log').open('wb') as log, ProcessGroup() as group:
-        process = group.start([sys.executable, str(Path(__file__).resolve()), '_install', str(cache), version],
+        process = group.start([sys.executable, '-u', str(Path(__file__).resolve()), '_install', str(cache), version],
                               cwd=cache, env=clean_environment(), stdout=log, stderr=subprocess.STDOUT, **options)
         try:
-            if process.wait(timeout=1800) != 0:
+            if wait_for_installation(process, cache / 'installation.log', 'Installing GTNH client runtime') != 0:
                 raise RuntimeError('GTNH client runtime installation failed; see ' + str(cache / 'installation.log'))
         finally:
             if os.name == 'nt':
@@ -174,5 +180,6 @@ if __name__ == '__main__':
     if len(sys.argv) != 4 or sys.argv[1] != '_install':
         raise SystemExit('GTNH runtime helper is invoked by run_fullpack.py')
     import minecraft_launcher_lib.install
-    minecraft_launcher_lib.install.install_minecraft_version(sys.argv[3], sys.argv[2],
-        callback={'setStatus': lambda status: print(status, flush=True)})
+    with Activity('Minecraft/GTNH installer') as activity:
+        minecraft_launcher_lib.install.install_minecraft_version(sys.argv[3], sys.argv[2],
+            callback=installer_callbacks(activity))

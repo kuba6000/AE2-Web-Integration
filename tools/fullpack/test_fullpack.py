@@ -22,6 +22,8 @@ class AcquisitionTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.responses = {}
         self.requests = []
+        self.slow_started = threading.Event()
+        self.release_download = threading.Event()
         outer = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -32,6 +34,9 @@ class AcquisitionTests(unittest.TestCase):
                 if self.path == '/truncated':
                     self.send_header('Content-Length', '100')
                 self.end_headers()
+                if self.path == '/slow.jar':
+                    outer.slow_started.set()
+                    outer.release_download.wait(15)
                 if body is not None:
                     self.wfile.write(body)
 
@@ -67,6 +72,44 @@ class AcquisitionTests(unittest.TestCase):
                 archive.writestr(name, body)
         self.responses['/pack.zip'] = out.getvalue()
         return self.url + '/pack.zip'
+
+    def test_prepare_reports_current_artifact_before_download_finishes(self):
+        body = b'complete fixture mod'
+        self.responses['/slow.jar'] = body
+        lock = self.root / 'pack.lock.json'
+        lock.write_text(json.dumps({'lockVersion': 1, 'manifest': {'version': 1, 'files': [
+            {'path': 'mods/slow.jar', 'url': self.url + '/slow.jar',
+             'sha256': hashlib.sha256(body).hexdigest()}]}}))
+        output = self.root / 'prepared'
+        process = subprocess.Popen([sys.executable, str(SCRIPT), 'prepare', '--lock', str(lock),
+            '--output', str(output), '--cache', str(self.root / 'cache')],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        reported = threading.Event()
+        messages = []
+
+        def read_output():
+            for line in process.stdout:
+                messages.append(line)
+                if 'slow.jar' in line:
+                    reported.set()
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        try:
+            self.assertTrue(self.slow_started.wait(5), 'Download was not requested')
+            self.assertTrue(reported.wait(3), 'No artifact progress while download was waiting')
+            self.assertIsNone(process.poll())
+        finally:
+            self.release_download.set()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            reader.join(timeout=2)
+            process.stdout.close()
+        self.assertEqual(0, process.returncode, ''.join(messages))
+        self.assertEqual(body, (output / 'mods/slow.jar').read_bytes())
 
     def test_locked_daily_restores_scripts_config_and_mods_without_network(self):
         archive = self.archive({'config/test.cfg': 'original', 'scripts/recipe.zs': 'recipe'})

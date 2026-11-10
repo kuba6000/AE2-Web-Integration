@@ -16,6 +16,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from contextlib import nullcontext
+from progress import Activity, copy_stream, size, status
 
 
 def safe_path(name):
@@ -85,21 +87,34 @@ def disjoint(first, second):
         raise ValueError('Cache and output must not overlap')
 
 
-def digest(path, algorithm='sha256'):
+def digest(path, algorithm='sha256', progress=None, label=None):
     value = hashlib.new(algorithm)
+    read = 0
+    total = path.stat().st_size if progress else 0
     with path.open('rb') as source:
         for block in iter(lambda: source.read(1024 * 1024), b''):
             value.update(block)
+            if progress:
+                read += len(block)
+                progress.update(f'Checking {label or path.name}: {size(read)} / {size(total)}')
     return value.hexdigest()
 
 
-def download(url, cache, expected=None, allow_http=False):
+def download(url, cache, expected=None, allow_http=False, progress=None):
+    label = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit('/', 1)[-1]) or 'artifact'
+    with nullcontext(progress) if progress else Activity('Fetching ' + label) as activity:
+        return download_artifact(url, cache, expected, allow_http, activity, label)
+
+
+def download_artifact(url, cache, expected, allow_http, progress, label):
     safe_url(url, allow_http)
     if expected:
         cached = cache / expected
-        if cached.is_file() and digest(cached) == expected:
+        if cached.is_file() and digest(cached, progress=progress, label=label) == expected:
+            progress.update('Using cached ' + label)
             return cached
     cache.mkdir(parents=True, exist_ok=True)
+    progress.update('Downloading ' + label, force=True)
     with tempfile.NamedTemporaryFile(dir=cache, delete=False) as stream:
         temporary = Path(stream.name)
         try:
@@ -108,8 +123,9 @@ def download(url, cache, expected=None, allow_http=False):
                     request = urllib.request.Request(url, headers={'User-Agent': 'AE2WI-fullpack/1.0'})
                     with urllib.request.urlopen(request, timeout=60) as response:
                         safe_url(response.url, allow_http)
-                        shutil.copyfileobj(response, stream)
                         length = response.headers.get('Content-Length')
+                        copy_stream(response, stream, progress, 'Downloading ' + label,
+                                    int(length) if length is not None else None)
                         if length is not None and stream.tell() != int(length):
                             raise OSError('Incomplete download: response shorter than Content-Length')
                     break
@@ -119,13 +135,14 @@ def download(url, cache, expected=None, allow_http=False):
                         raise
                     stream.seek(0)
                     stream.truncate()
+                    progress.update(f'Retrying {label}: attempt {attempt + 2}/3 ({type(error).__name__})', force=True)
                     time.sleep(attempt + 1)
         except BaseException:
             stream.close()
             temporary.unlink(missing_ok=True)
             raise
     try:
-        actual = digest(temporary)
+        actual = digest(temporary, progress=progress, label=label)
         if expected and actual != expected:
             raise ValueError('Downloaded content does not match locked SHA256')
         target = cache / actual
@@ -173,6 +190,11 @@ def lock_pack(source, output, cache, source_provenance=None, allow_http=False):
 
 
 def prepare(lock, output, cache):
+    with Activity('Preparing modpack files') as progress:
+        return prepare_contents(lock, output, cache, progress)
+
+
+def prepare_contents(lock, output, cache, progress):
     disjoint(output, cache)
     payload = json.loads(lock.read_text(encoding='utf-8'))
     if payload.get('lockVersion') != 1:
@@ -203,14 +225,26 @@ def prepare(lock, output, cache):
                     raise ValueError('Case-colliding pack files: ' + partial + ' and ' + previous)
             return stage / name
 
-        for entry in manifest.get('files', []):
+        files = manifest.get('files', [])
+        archives = manifest.get('archives', [])
+        status(f'Modpack contains {len(files)} files and {len(archives)} archives; checking the download cache')
+        for index, entry in enumerate(files, 1):
+            progress.update(f'File {index}/{len(files)}: {entry["path"]}')
             target = destination(entry['path'])
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(download(entry['url'], cache, entry['sha256'], allow_http), target)
-        for entry in manifest.get('archives', []):
-            archive = download(entry['url'], cache, entry['sha256'], allow_http)
+            cached = download(entry['url'], cache, entry['sha256'], allow_http, progress)
+            label = f'Copying file {index}/{len(files)} from cache: {entry["path"]}'
+            progress.update(label, force=index in (1, len(files)))
+            with cached.open('rb') as source, target.open('wb') as sink:
+                copy_stream(source, sink, progress, label, cached.stat().st_size)
+        for index, entry in enumerate(archives, 1):
+            archive = download(entry['url'], cache, entry['sha256'], allow_http, progress)
+            label = urllib.parse.unquote(urllib.parse.urlsplit(entry['url']).path.rsplit('/', 1)[-1])
+            progress.update(f'Extracting archive {index}/{len(archives)}: {label}', force=True)
             with zipfile.ZipFile(archive) as zipped:
-                for info in zipped.infolist():
+                members = zipped.infolist()
+                for member, info in enumerate(members, 1):
+                    progress.update(f'Archive {index}/{len(archives)}, entry {member}/{len(members)}: {info.filename}')
                     name = safe_path(info.filename.rstrip('/'))
                     if stat.S_ISLNK(info.external_attr >> 16):
                         raise ValueError('Archive symlinks are not supported')
@@ -227,7 +261,7 @@ def prepare(lock, output, cache):
                     elif not (entry.get('keepExisting', False) and target.exists()):
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with zipped.open(info) as source, target.open('wb') as sink:
-                            shutil.copyfileobj(source, sink)
+                            copy_stream(source, sink, progress, f'Extracting {info.filename}', info.file_size)
                         if os.name != 'nt' and info.create_system == 3:
                             target.chmod(target.stat().st_mode | ((info.external_attr >> 16) & 0o111))
         for name, content in manifest.get('textFiles', {}).items():
@@ -235,6 +269,7 @@ def prepare(lock, output, cache):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding='utf-8', newline='')
         stage.rename(output)
+        status(f'Modpack ready: {len(files)} files, {len(archives)} archives')
 
 
 def main():

@@ -26,7 +26,7 @@ def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
     notCompatibleWithConfigurationCache('Resolves local Python launcher settings at execution time.')
     doFirst {
         commandLine setting('fullpackPython', windows ? 'python' : 'python3'),
-            new File(scripts, 'setup_runtime.py').path, '--home', home.path
+            '-u', new File(scripts, 'setup_runtime.py').path, '--home', home.path
     }
 }
 
@@ -51,7 +51,7 @@ def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
             def java = configuredJava ? path(configuredJava) : javaToolchains.launcherFor {
                 languageVersion = JavaLanguageVersion.of(runtime.java as int)
             }.get().executablePath.asFile
-            def command = [python.path, new File(scripts, 'run_fullpack.py').path, target[1],
+            def command = [python.path, '-u', new File(scripts, 'run_fullpack.py').path, target[1],
                 '--lock', new File(profile, "${target[0]}.lock.json").path,
                 '--runtime-config', runtimeFile.path, '--cache', new File(home, 'objects').path,
                 '--runtime-cache', new File(home, 'minecraft').path, '--runtime-root', new File(home, 'runtimes').path,

@@ -13,6 +13,7 @@ from fullpack import write_json
 from fullpack_lifecycle import reject_links
 from minecraft_runtime import cache_lock, clean_environment
 from process_containment import ProcessGroup
+from progress import Activity, status
 
 
 def install(command, lease):
@@ -58,11 +59,14 @@ def main():
                 write_json(ownership, {'version': 1})
             python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
             if marker.is_file() and python.is_file() and json.loads(marker.read_text()) == expected:
+                status('Reusing cached Python launcher environment')
                 return 0
-            venv.EnvBuilder(with_pip=False).create(environment)
-            install([str(python), '-m', 'ensurepip', '--upgrade'], lease)
-            install([str(python), '-m', 'pip', 'install', '--require-hashes',
-                     '--only-binary=:all:', '-r', str(requirements)], lease)
+            with Activity('Creating Python launcher environment'):
+                venv.EnvBuilder(with_pip=False).create(environment)
+                install([str(python), '-m', 'ensurepip', '--upgrade'], lease)
+            with Activity('Installing pinned Python launcher dependencies'):
+                install([str(python), '-m', 'pip', 'install', '--require-hashes',
+                         '--only-binary=:all:', '-r', str(requirements)], lease)
             write_json(marker, expected)
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
