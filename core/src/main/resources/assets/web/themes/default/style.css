@@ -1527,7 +1527,6 @@ label {
     display: none;
 }
 .web-preferences .info-notice {
-    align-items: flex-start;
     flex-wrap: nowrap;
     gap: 8px;
     margin: 8px 0 0;
