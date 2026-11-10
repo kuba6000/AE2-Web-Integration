@@ -47,7 +47,6 @@ export function createHomePins(
     };
     function createGroup(key: string) {
         const section = element('section', '', 'home-pin-group');
-        section.setAttribute('role', 'region');
         if (key) section.dataset.groupKey = key;
         const header = element('div', '', 'home-pin-group-heading');
         const heading = element('h3');
@@ -131,9 +130,15 @@ export function createHomePins(
             content,
             preview,
             render(label: string, index: number, count: number) {
-                section.setAttribute('aria-label', label);
                 title.textContent = label;
                 header.hidden = !key && !count;
+                if (header.hidden) {
+                    section.removeAttribute('role');
+                    section.removeAttribute('aria-label');
+                } else {
+                    section.setAttribute('role', 'region');
+                    section.setAttribute('aria-label', label);
+                }
                 section.classList.toggle('home-pin-group-flat', header.hidden);
                 renderCollapse();
                 actions.hidden = !key;
@@ -396,6 +401,8 @@ export function createHomePins(
                         `${locale.common('pinSampleTime')}: ${locale.dateTime(stock.observedAt, stockUntil)}`
                     )
                 );
+            if (flowHistory?.status === 'ready' && !flowHistory.enabled)
+                compactTip.push(element('span', locale.common('resourceHistoryDisabled')));
             if (flowHistory?.truncated) compactTip.push(element('span', locale.common('resourceHistoryTruncated')));
             if (!available) {
                 clearChart();

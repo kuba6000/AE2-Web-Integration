@@ -49,6 +49,7 @@ test('Home groups persist cross-network placement, rename and deletion without u
     await quartzCard.locator('summary').click();
     await quartzCard.getByRole('combobox', { name: 'Group', exact: true }).selectOption({ label: 'Production' });
     await serverState(() => options.pins.filter((value) => value.homeGroupKey).length, 2);
+    await group.locator('.home-pin-name').filter({ hasText: 'Certus Quartz Crystal' }).waitFor();
     assert.deepEqual(await group.locator('.home-pin-name').allTextContents(), ['Iron Ingot', 'Certus Quartz Crystal']);
     assert.equal(await originalCard.evaluate((node) => node.isConnected), true, 'existing card survives regrouping');
     await group.getByRole('button', { name: 'Rename group', exact: true }).click();
@@ -79,6 +80,40 @@ test('Home groups persist cross-network placement, rename and deletion without u
     );
 });
 
+test('Home without named groups presents plain cards even after deleting the last group with Ungrouped collapsed', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.pins = [pin('iron-pin', gridA, iron, 0)];
+    await page.goto(base);
+    const card = page.locator('.home-pin-card');
+    const plainCards = async () => {
+        await card.waitFor();
+        assert.equal(await page.getByRole('region', { name: 'Ungrouped', exact: true }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Ungrouped', exact: true }).count(), 0);
+        assert.equal(
+            await card
+                .locator('..')
+                .locator('..')
+                .evaluate((node) => getComputedStyle(node).borderTopWidth),
+            '0px'
+        );
+    };
+    await plainCards();
+    const add = page.locator('.home-pin-group-add');
+    await add.getByRole('textbox').fill('Production');
+    await add.getByRole('button', { name: 'Add group', exact: true }).click();
+    const ungrouped = page.getByRole('region', { name: 'Ungrouped', exact: true });
+    await ungrouped.getByRole('button', { name: 'Ungrouped', exact: true }).click();
+    assert.equal(await card.isVisible(), false);
+    await page
+        .getByRole('region', { name: 'Production', exact: true })
+        .getByRole('button', { name: 'Delete group', exact: true })
+        .click();
+    await serverState(() => options.groups.length, 0);
+    await plainCards();
+    await page.reload();
+    await plainCards();
+});
+
 test('Home group and card ordering are independent and unavailable cards remain manageable on phones', async (t) => {
     const { page, base, options } = await fixture(t, '', { viewport: { width: 390, height: 780 } });
     options.groups = [
@@ -102,6 +137,11 @@ test('Home group and card ordering are independent and unavailable cards remain 
     await machines.locator('.home-pin-card').first().waitFor();
     await ores.locator('.home-pin-group-actions').getByRole('button', { name: 'Move earlier', exact: true }).click();
     await serverState(() => options.groups.find((group) => group.groupKey === 'ores').ordinal, 0);
+    await page
+        .locator('.home-pin-group')
+        .first()
+        .filter({ has: page.getByRole('button', { name: 'Ores', exact: true }) })
+        .waitFor();
     assert.deepEqual(
         await page
             .locator('.home-pin-group')
@@ -111,6 +151,7 @@ test('Home group and card ordering are independent and unavailable cards remain 
     const quartzCard = machines.locator('.home-pin-card').filter({ hasText: 'Certus Quartz Crystal' });
     await quartzCard.getByRole('button', { name: 'Move earlier', exact: true }).click();
     await serverState(() => options.pins.find((value) => value.pinKey === 'quartz-pin').homeOrder, 0);
+    await machines.locator('.home-pin-name').first().filter({ hasText: 'Certus Quartz Crystal' }).waitFor();
     assert.deepEqual(await machines.locator('.home-pin-name').allTextContents(), [
         'Certus Quartz Crystal',
         'Iron Ingot'
@@ -119,10 +160,11 @@ test('Home group and card ordering are independent and unavailable cards remain 
     await unavailable.locator('summary').click();
     await unavailable.getByRole('combobox', { name: 'Group', exact: true }).selectOption({ label: 'Machines' });
     await serverState(() => options.pins.find((value) => value.pinKey === 'unavailable-pin').homeGroupKey, 'machines');
+    const moved = machines.locator('.home-pin-card').filter({ hasText: 'Unavailable resource' });
+    await moved.waitFor();
     assert.equal(await machines.locator('.home-pin-card').count(), 3);
     assert.equal(await ores.locator('.home-pin-card').count(), 0, 'empty named group remains visible');
     assert.equal(await ores.isVisible(), true);
-    const moved = machines.locator('.home-pin-card').filter({ hasText: 'Unavailable resource' });
     assert.equal(
         await moved.locator('.home-pin-settings-group:visible').count(),
         0,
@@ -130,6 +172,7 @@ test('Home group and card ordering are independent and unavailable cards remain 
     );
     await moved.getByRole('combobox', { name: 'Group', exact: true }).selectOption({ label: 'Ungrouped' });
     await serverState(() => options.pins.find((value) => value.pinKey === 'unavailable-pin').homeGroupKey, null);
+    await page.getByRole('region', { name: 'Ungrouped', exact: true }).locator('.home-pin-card').waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     assert.deepEqual(
         options.pins.slice(0, 2).map((value) => value.terminalOrder),
@@ -322,6 +365,50 @@ test('collapsed Home groups show recorded stock and net for the configured perio
     options.resourceHistory.points.push({ ...flow, observedAt: now - 5000, input: '2', output: '9' });
     await page.locator('#refresh').click();
     await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '−7');
+});
+
+test('collapsed Home groups explain disabled tracking while retaining recorded net and unknown unmeasured values', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.settings[gridA].isStorageTracked = false;
+    options.settings[gridA].isFlowTracked = false;
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [{ ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' }];
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    await group.getByRole('button', { name: 'Production', exact: true }).click();
+    const row = group.locator('.home-pin-compact-row');
+    await row.focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: /tracking is off/i })
+        .waitFor();
+    assert.equal(await row.locator('.home-pin-compact-stock').textContent(), '—');
+    assert.equal(await row.locator('.home-pin-compact-net').textContent(), '—');
+    const now = Date.now();
+    options.resourceHistory.points = [
+        { kind: 'STOCK', observedAt: now - 5000, resource: { ...iron, quantity: '24' } },
+        {
+            kind: 'FLOW',
+            observedAt: now - 5000,
+            flowFrom: now - 10000,
+            resource: null,
+            input: '12',
+            output: '5'
+        }
+    ];
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '+7');
+    assert.equal(await row.locator('.home-pin-compact-stock').textContent(), '24');
+    await row.focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: /tracking is off/i })
+        .waitFor();
+    assert.equal(
+        options.requests.filter((request) => /\/(?:items|cpus)(?:\/|$)/.test(request.path)).length,
+        0,
+        'Home summaries never fall back to native inventory or CPU reads'
+    );
 });
 
 for (const width of [1440, 390]) {
