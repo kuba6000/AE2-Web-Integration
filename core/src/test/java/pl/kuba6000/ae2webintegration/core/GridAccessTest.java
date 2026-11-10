@@ -5,6 +5,7 @@ import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,55 @@ class GridAccessTest extends GridTestScope {
             online,
             views.get(0)
                 .grid());
+    }
+
+    @Test
+    void keyedLookupResolvesAValidatedGridAndExcludesItWhileBooting() throws Exception {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        GridAccess.View view = GridAccess.find(key);
+        assertNotNull(view);
+        assertSame(grid, view.grid());
+        assertEquals(key, view.key());
+        assertTrue(view.allows(TestGridFixtures.principal(42)));
+        grid.booting();
+        assertNull(GridAccess.find(key));
+    }
+
+    @Test
+    void keyedLookupExcludesUnusableControllerStatesAndMissingPathing() throws Exception {
+        TestGridFixtures.TestGrid conflicted = TestGridFixtures.grid(1);
+        TestGridFixtures.TestGrid noController = TestGridFixtures.grid(2);
+        TestGridFixtures.TestGrid noPathing = TestGridFixtures.grid(3);
+        StableKey conflictedKey = CoreEngine.GRID_IDENTITIES.getKey(conflicted);
+        StableKey noControllerKey = CoreEngine.GRID_IDENTITIES.getKey(noController);
+        StableKey noPathingKey = CoreEngine.GRID_IDENTITIES.getKey(noPathing);
+        assertNotNull(conflictedKey);
+        assertNotNull(noControllerKey);
+        assertNotNull(noPathingKey);
+        conflicted.controllerState(CONTROLLER_CONFLICT);
+        noController.noController();
+        noPathing.withoutPathingGrid();
+        assertNull(GridAccess.find(conflictedKey));
+        assertNull(GridAccess.find(noControllerKey));
+        assertNull(GridAccess.find(noPathingKey));
+    }
+
+    @Test
+    void keyedLookupExcludesMissingAndRetiredIdentities() throws Exception {
+        assertNull(GridAccess.find(TestGridFixtures.key(99)));
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        assertNull(GridAccess.find(key));
+    }
+
+    @Test
+    void keyedLookupRequiresAnInitializedSave() {
+        CoreEngine.GRID_IDENTITIES.clear();
+        assertThrows(IOException.class, () -> GridAccess.find(TestGridFixtures.key(1)));
     }
 
     @Test

@@ -61,8 +61,7 @@ public final class InputValues {
         JsonObject body = context.getBody();
         if (body == null) throw new IllegalArgumentException("Missing JSON body");
         validate.accept(body);
-        return GSONUtils.GSON_BUILDER.create()
-            .fromJson(body, type);
+        return GSONUtils.GSON.fromJson(body, type);
     }
 
     public static JsonObject object(@Nullable JsonElement value, String name) {
