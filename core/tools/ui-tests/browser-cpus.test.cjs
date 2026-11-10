@@ -437,7 +437,7 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     );
 });
 
-test('CPU tiles show processing shares and sort by precise shares through refresh and tracking changes', async (t) => {
+test('CPU tiles show elapsed shares and retain precise processing-share sorting through refresh and tracking changes', async (t) => {
     const { page, options, base } = await refreshingFixture(t);
     const items = [
         {
@@ -445,14 +445,18 @@ test('CPU tiles show processing shares and sort by precise shares through refres
             displayName: 'Alpha',
             registryNamespace: 'example',
             registryPath: 'alpha',
-            shareInCraftingTime: 0.12441
+            timeSpentCrafting: 12441,
+            shareInCraftingTime: 0.12441,
+            shareInCraftingTimeCombined: 0.062205
         },
         {
             ...cpuWork.items[0],
             displayName: 'Beta',
             registryNamespace: 'example',
             registryPath: 'beta',
-            shareInCraftingTime: 0.12449
+            timeSpentCrafting: 12449,
+            shareInCraftingTime: 0.12449,
+            shareInCraftingTimeCombined: 0.062245
         },
         {
             ...cpuWork.items[0],
@@ -461,7 +465,9 @@ test('CPU tiles show processing shares and sort by precise shares through refres
             registryPath: 'stored',
             active: 0,
             pending: 0,
-            shareInCraftingTime: 0.7511
+            timeSpentCrafting: 75110,
+            shareInCraftingTime: 0.7511,
+            shareInCraftingTimeCombined: 0.37555
         },
         {
             ...cpuWork.items[0],
@@ -469,16 +475,18 @@ test('CPU tiles show processing shares and sort by precise shares through refres
             registryNamespace: 'example',
             registryPath: 'waiting',
             active: 0,
-            shareInCraftingTime: 0
+            timeSpentCrafting: 0,
+            shareInCraftingTime: 0,
+            shareInCraftingTimeCombined: 0
         }
     ];
-    options.cpuDetails['cpu-a'] = { ...cpuWork, items };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, timeElapsed: 200000, items };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
     const alpha = resources.getByRole('button', { name: /^Alpha/ });
     await alpha.waitFor();
-    assert.match(await alpha.innerText(), /12\.4%/);
-    assert.match(await alpha.getAttribute('aria-label'), /Share of processing time: 12\.4%/);
+    assert.match(await alpha.innerText(), /6\.2%/);
+    assert.match(await alpha.getAttribute('aria-label'), /Share of elapsed time: 6\.2%/);
     assert.match(await resources.getByRole('button', { name: /^Waiting/ }).innerText(), /0%/);
     const names = async () =>
         (await resources.getByRole('button').allTextContents()).map(
@@ -493,13 +501,15 @@ test('CPU tiles show processing shares and sort by precise shares through refres
     await activeFirst.click();
     options.cpuDetails['cpu-a'].items = items.map((item, i) => ({
         ...item,
-        shareInCraftingTime: [0.9, 0.01, 0.09, 0][i]
+        timeSpentCrafting: [90000, 1000, 9000, 0][i],
+        shareInCraftingTime: [0.9, 0.01, 0.09, 0][i],
+        shareInCraftingTimeCombined: [0.45, 0.005, 0.045, 0][i]
     }));
     let refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await refreshed).request());
     assert.deepEqual(await names(), ['Alpha', 'Stored', 'Beta', 'Waiting']);
-    assert.match(await alpha.innerText(), /90%/);
+    assert.match(await alpha.innerText(), /45%/);
     options.cpuDetails['cpu-a'].hasTrackingInfo = false;
     refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
