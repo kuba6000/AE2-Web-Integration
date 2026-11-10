@@ -331,6 +331,7 @@ public class CoreEngine {
 
     public static void onServerStopping() {
         serverRunning = false;
+        NotificationManager.shutdown();
         stopTelemetry();
         stopVersionChecker();
         stopLiveStreams();
@@ -344,6 +345,7 @@ public class CoreEngine {
 
     public static synchronized void onServerStopped() {
         serverRunning = false;
+        NotificationManager.shutdown();
         stopTelemetry();
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.

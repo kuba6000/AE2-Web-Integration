@@ -36,7 +36,8 @@ public class NtfyDestination implements INotificationDestination {
 
         // If no protocol is set in config, assume https
         String host = settings.ntfy.host;
-        if (!host.contains("http")) host = "https://" + host;
+        if (!host.regionMatches(true, 0, "https://", 0, "https://".length())
+            && !host.regionMatches(true, 0, "http://", 0, "http://".length())) host = "https://" + host;
 
         NtfyPayload payload = null;
         if (message instanceof CraftingMessage craftingMessage) {
