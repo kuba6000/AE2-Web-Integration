@@ -2459,8 +2459,13 @@ code {
     .terminal-heading h2 {
         font-size: 18px;
     }
-    .search input {
+    .search input,
+    .cpu-overview-search input {
         padding-block: 5px;
+    }
+    .cpu-overview-controls .tool-button,
+    .cpu-overview-search input {
+        height: 29px;
     }
     :is(.cpu-overview, .history-view, .settings-view, .page-view) > .terminal-heading {
         min-height: 33px;

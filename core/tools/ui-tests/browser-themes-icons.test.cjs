@@ -782,7 +782,10 @@ test('unavailable icons override the saved mode and recover without losing it', 
     await mode.selectOption('icons');
     options.pack = { available: false, packId: null, width: 0, height: 0 };
     await page.reload();
-    await page.getByText(/server.*not.*icon pack/i).waitFor();
+    await page
+        .locator('#icon-availability')
+        .filter({ hasText: /server.*not.*icon pack/i })
+        .waitFor();
     assert.equal(await mode.inputValue(), 'names');
     assert.equal(
         await mode.getByRole('option', { name: 'Icons only', exact: true }).evaluate((option) => option.disabled),
@@ -835,7 +838,10 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     options.packError = true;
     await poll(page);
     await clickTab(page, 'Web settings');
-    await page.getByText(/could not check.*icon/i).waitFor();
+    await page
+        .locator('#icon-availability')
+        .filter({ hasText: /could not check.*icon/i })
+        .waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
 });
 
@@ -860,19 +866,20 @@ test('initial icon discovery error stays distinct from absence and recovers', as
     options.packError = true;
     await page.goto(`${base}#/web-settings`);
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
-    await page.getByText(/could not check.*icon/i).waitFor();
-    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+    const availability = page.locator('#icon-availability');
+    await availability.filter({ hasText: /could not check.*icon/i }).waitFor();
+    assert.equal(await availability.filter({ hasText: /server.*not.*icon pack/i }).isVisible(), false);
     assert.equal(await mode.inputValue(), 'names');
     options.packError = false;
     await poll(page);
     await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both');
     options.pack = { available: false, packId: null, width: 0, height: 0 };
     await poll(page);
-    await page.getByText(/server.*not.*icon pack/i).waitFor();
+    await availability.filter({ hasText: /server.*not.*icon pack/i }).waitFor();
     options.packError = true;
     await poll(page);
-    await page.getByText(/could not check.*icon/i).waitFor();
-    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+    await availability.filter({ hasText: /could not check.*icon/i }).waitFor();
+    assert.equal(await availability.filter({ hasText: /server.*not.*icon pack/i }).isVisible(), false);
     assert.equal(await mode.inputValue(), 'names');
 });
 
@@ -893,7 +900,13 @@ test('superseded slow discovery cannot overwrite recovered availability after a 
     await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both');
     await settleResponse(page, oldRequest);
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
-    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+    assert.equal(
+        await page
+            .locator('#icon-availability')
+            .filter({ hasText: /server.*not.*icon pack/i })
+            .isVisible(),
+        false
+    );
 });
 
 for (const saved of [
