@@ -93,7 +93,7 @@ final class RegistrationTestFixture implements AutoCloseable {
             body.addProperty("password", password);
             Register request = new Register();
             AE2Controller.RequestContext context = new AE2Controller.RequestContext(
-                null,
+                new TestGridFixtures.TestExchange(null),
                 WebPrincipal.anonymous(),
                 Collections.emptyMap(),
                 body);

@@ -256,6 +256,7 @@ class ServerLifecycleHttpTest {
         CoreDataTestFixture.reset();
         try {
             config.set("general.public_mode", true);
+            config.set("general.max_requests_before_logged_in_per_minute", 100);
             PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
             CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
             startApi();
@@ -304,6 +305,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void concurrentRememberedLoginsKeepOnlyTwentyUsableTokensAfterRestart() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 100);
         startApi();
         String ordinary = login();
         ExecutorService clients = Executors.newFixedThreadPool(6);
@@ -1645,6 +1647,68 @@ class ServerLifecycleHttpTest {
                 .getAsString()
                 .isEmpty());
         assertNull(registration.getHeaderField("Set-Cookie"));
+    }
+
+    @Test
+    void validSessionDoesNotBypassLoginAttemptLimit() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            config.set("general.max_requests_before_logged_in_per_minute", 2);
+            CoreData.setPassword(
+                new PlayerIdentity(UUID.randomUUID(), "SessionPlayer"),
+                PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            String token = login("SessionPlayer", "player-password");
+            String guess = "{\"username\":\"admin\",\"password\":\"incorrect\"}";
+
+            assertEquals(401, read(jsonPost("/api/auth/login", token, guess)).status());
+            Response denied = read(jsonPost("/api/auth/login", token, guess));
+
+            assertEquals(429, denied.status());
+            assertEquals(
+                "TOO_MANY_REQUESTS",
+                new Gson().fromJson(denied.body(), JsonObject.class)
+                    .get("status")
+                    .getAsString());
+            assertEquals(200, get("/api/themes", token).status(), "ordinary authenticated reads remain usable");
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void credentialBudgetAlsoProtectsRegistrationBeforeGameThreadAdmission() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String token = login();
+        fillServerThreadQueue();
+
+        Response denied = read(
+            jsonPost("/api/auth/register", token, "{\"username\":\"Player\",\"password\":\"player-password\"}"));
+
+        assertEquals(429, denied.status());
+        assertEquals(
+            "TOO_MANY_REQUESTS",
+            new Gson().fromJson(denied.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "username=admin&password=incorrect", "register=Player&password=player-password" })
+    void browserFormsShareCredentialBudgetWithJsonAttempts(String form) throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 2);
+        startApi();
+        String token = login();
+        assertEquals(
+            401,
+            read(jsonPost("/api/auth/login", token, "{\"username\":\"admin\",\"password\":\"incorrect\"}")).status());
+
+        Response denied = read(browserForm("/", form));
+
+        assertEquals(429, denied.status());
+        assertEquals(200, get("/api/themes", token).status(), "credential admission does not revoke the session");
     }
 
     @Test

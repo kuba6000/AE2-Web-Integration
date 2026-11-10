@@ -95,11 +95,8 @@ public final class Login extends IAsyncRequest {
 
     @Override
     public void handle() {
-        AuthService.LoginResult result = AuthService.login(
-            context.getLifecycleGeneration(),
-            input.username(),
-            input.password(),
-            Boolean.TRUE.equals(input.rememberMe()));
+        AuthService.LoginResult result = AuthService
+            .login(context, input.username(), input.password(), Boolean.TRUE.equals(input.rememberMe()));
         WebPrincipal principal = result.principal();
         if (principal == null) {
             deny(result.status());

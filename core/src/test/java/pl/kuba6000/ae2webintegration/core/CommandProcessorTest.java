@@ -3,6 +3,9 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -84,6 +87,36 @@ class CommandProcessorTest {
             CommandProcessor.registerPlayer(TEST_PLAYER, token)
                 .isSuccess(),
             "confirmation tokens are single-use");
+    }
+
+    @Test
+    void registrationConfirmationCanRetryAfterAccountDataRecovery() throws Exception {
+        CoreData.loadData();
+        String token = registrations.begin(TEST_PLAYER, "test-password");
+        Path dataFile = Config.getConfigFile("webdata.json")
+            .toPath();
+        byte[] recovery = Files.readAllBytes(dataFile);
+        Files.write(dataFile, "{broken".getBytes(StandardCharsets.UTF_8));
+        CoreData.loadData();
+
+        assertFalse(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess(),
+            "confirmation must fail when account storage is quarantined");
+        assertNull(CoreData.getAccount(TEST_PLAYER.name));
+
+        Files.write(dataFile, recovery);
+        CoreData.loadData();
+
+        assertTrue(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess(),
+            "the same confirmation token remains usable after explicit data recovery");
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount(TEST_PLAYER.name), "test-password"));
+        assertFalse(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess(),
+            "successful confirmation still consumes the token");
     }
 
     @Test

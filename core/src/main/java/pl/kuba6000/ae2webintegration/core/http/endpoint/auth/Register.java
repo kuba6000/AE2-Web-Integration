@@ -81,8 +81,7 @@ public final class Register extends IAsyncRequest {
 
     @Override
     public void handle() {
-        AuthService.RegistrationResult result = AuthService
-            .register(context.getLifecycleGeneration(), input.username(), input.password());
+        AuthService.RegistrationResult result = AuthService.register(context, input.username(), input.password());
         if (result.status() == ApiStatus.INVALID_PASSWORD) {
             respond(HTTP_BAD_REQUEST, new ErrorResponse(result.status(), null));
         } else if (result.status() != ApiStatus.OK) {
