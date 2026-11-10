@@ -6,7 +6,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -16,6 +15,8 @@ import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.JDBC;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
@@ -75,18 +76,51 @@ class WorldSchemaMigrationTest {
     }
 
     @Test
-    void aSchemaNineMarkerOnADifferentTableShapeIsRejectedWithoutChangingTheFile() throws Exception {
-        Path file = directory.resolve("wrong-shape.sqlite");
+    void schemaVersionControlsTheUpgradeWithoutRejectingAdditionalColumns() throws Exception {
+        Path file = directory.resolve("extended.sqlite");
         createReleasedDatabase(file, false);
         try (Connection db = connect(file); Statement sql = db.createStatement()) {
-            sql.execute("ALTER TABLE resource_pins ADD COLUMN unexpected TEXT");
+            sql.execute("ALTER TABLE resource_pins ADD COLUMN extension TEXT");
+            sql.execute("UPDATE resource_pins SET extension = 'Preserved extension'");
         }
-        byte[] original = Files.readAllBytes(file);
+        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            database.open();
+            database.read(db -> {
+                assertScalar(db, "SELECT version FROM world_schema", "10");
+                assertScalar(db, "SELECT extension FROM resource_pins", "Preserved extension");
+                assertScalar(db, "SELECT home_group_key IS NULL FROM resource_pins", "1");
+                return null;
+            });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void missingRequiredTableAbortsLoadingWithoutCommittingAnUpgrade(boolean upgrade) throws Exception {
+        Path file = directory.resolve("missing-table.sqlite");
+        if (upgrade) createReleasedDatabase(file, false);
+        else {
+            try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+                database.open();
+            }
+        }
+        try (Connection db = connect(file); Statement sql = db.createStatement()) {
+            sql.execute("DROP TABLE crafting_provider_intervals");
+        }
         try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
             assertThrows(IOException.class, database::open);
         }
-        assertArrayEquals(original, Files.readAllBytes(file));
-        assertFalse(Files.exists(file.resolveSibling(file.getFileName() + "-wal")));
+        try (Connection db = connect(file)) {
+            assertScalar(db, "SELECT version FROM world_schema", upgrade ? "9" : "10");
+            assertScalar(db, "SELECT count(*) FROM sqlite_master WHERE name = 'crafting_provider_intervals'", "0");
+            if (upgrade) {
+                assertScalar(db, "SELECT count(*) FROM sqlite_master WHERE name = 'home_pin_groups'", "0");
+                assertScalar(
+                    db,
+                    "SELECT count(*) FROM pragma_table_info('resource_pins') WHERE name = 'home_group_key'",
+                    "0");
+            }
+        }
     }
 
     private static void createReleasedDatabase(Path file, boolean rejectNewVersion) throws Exception {

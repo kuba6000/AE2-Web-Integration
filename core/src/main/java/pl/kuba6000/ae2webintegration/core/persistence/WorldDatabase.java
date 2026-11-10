@@ -252,12 +252,11 @@ public final class WorldDatabase implements AutoCloseable {
             if (existing) {
                 try (Connection validation = connect(address, true)) {
                     requireSupportedEngine(validation);
-                    WorldSchema.validate(validation);
+                    DatabaseMigrations.sourceVersion(validation);
                 }
             }
             opened = connect(address, false);
             if (!existing) requireSupportedEngine(opened);
-            WorldSchema.validate(opened);
             try (Statement sql = opened.createStatement();
                 ResultSet mode = sql.executeQuery("PRAGMA journal_mode = WAL")) {
                 if (!mode.next() || !"wal".equalsIgnoreCase(mode.getString(1)))
@@ -269,7 +268,7 @@ public final class WorldDatabase implements AutoCloseable {
                 sql.execute("PRAGMA wal_autocheckpoint = 1000");
             }
             opened.setAutoCommit(false);
-            WorldSchema.initialize(opened);
+            DatabaseMigrations.initialize(opened);
             WorldGridStore.normalizePolicy(opened, policy);
             WorldGridStore.normalizeCraftingPolicy(opened, craftingPolicy);
             opened.commit();

@@ -2,23 +2,19 @@ package pl.kuba6000.ae2webintegration.core.persistence;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
 
-/** Current schema and explicitly supported upgrades; all DDL shares the world startup transaction. */
+/** Current schema creation and required tables; historical upgrades belong to registered migrations. */
 final class WorldSchema {
 
-    private static final int VERSION = 10;
-    private static final List<DatabaseMigration> MIGRATIONS = Collections.singletonList(new HomePinGroupsMigration());
+    static final int VERSION = 10;
     private static final Set<String> TABLES = new HashSet<>(
         Arrays.asList(
             "world_schema",
@@ -43,116 +39,19 @@ final class WorldSchema {
             "crafting_resource_intervals",
             "crafting_provider_intervals"));
 
-    private static final Set<String> PIN_COLUMNS = new HashSet<>(
-        Arrays.asList(
-            "pin_key",
-            "owner",
-            "grid_id",
-            "resource_id",
-            "terminal_order",
-            "home_order",
-            "show_stock",
-            "show_flow",
-            "show_chart",
-            "series_stock",
-            "series_input",
-            "series_output",
-            "series_net",
-            "range_millis",
-            "show_recent_flow",
-            "flow_range_millis"));
-
     private WorldSchema() {}
 
-    /** Validate before changing journal mode or making any other persistent modification. */
-    static void validate(@NotNull Connection db) throws SQLException, IOException {
-        inspect(db);
-    }
-
-    private static int inspect(@NotNull Connection db) throws SQLException, IOException {
-        Set<String> existing = new HashSet<>();
+    static void requireTables(@NotNull Connection db) throws SQLException, IOException {
+        Set<String> missing = new HashSet<>(TABLES);
         try (Statement sql = db.createStatement(); ResultSet objects = sql.executeQuery("""
-            SELECT name, type FROM sqlite_master
-            WHERE type IN ('table', 'view', 'trigger') AND name NOT GLOB 'sqlite_*'
+            SELECT name FROM sqlite_master WHERE type = 'table'
             """)) {
-            while (objects.next()) {
-                if (!"table".equals(objects.getString(2)))
-                    throw new IOException("World database contains unknown objects");
-                existing.add(objects.getString(1));
-            }
+            while (objects.next()) missing.remove(objects.getString(1));
         }
-        if (existing.isEmpty()) return 0;
-        if (!existing.contains("world_schema")) throw new IOException("World database schema is unrecognized");
-        long version;
-        try (Statement sql = db.createStatement(); ResultSet rows = sql.executeQuery("""
-            SELECT singleton, version, identities_imported,
-                typeof(singleton) = 'integer' AND typeof(version) = 'integer'
-                    AND typeof(identities_imported) = 'integer' AND identities_imported IN (0, 1)
-            FROM world_schema
-            """)) {
-            if (!rows.next() || rows.getLong(1) != 1 || !rows.getBoolean(4))
-                throw new IOException("Unsupported world database schema metadata");
-            version = rows.getLong(2);
-            if (rows.next()) throw new IOException("Unsupported world database schema metadata");
-        }
-        if (version != 9 && version != VERSION) throw new IOException("Unsupported world database schema version");
-        int source = (int) version;
-        Set<String> tables = new HashSet<>(TABLES);
-        Set<String> pinColumns = new HashSet<>(PIN_COLUMNS);
-        if (source == 9) tables.remove("home_pin_groups");
-        else {
-            pinColumns.add("home_group_key");
-            requireColumns(
-                db,
-                "home_pin_groups",
-                new HashSet<>(Arrays.asList("group_key", "owner", "name", "ordinal")));
-        }
-        if (!existing.equals(tables)) throw new IOException("World database schema is incomplete or unrecognized");
-        requireColumns(db, "resource_pins", pinColumns);
-        for (int step = source; step != VERSION;) step = migrationFrom(step).toVersion();
-        return source;
+        if (!missing.isEmpty()) throw new IOException("World database is missing required tables: " + missing);
     }
 
-    private static void requireColumns(Connection db, String table, Set<String> expected)
-        throws SQLException, IOException {
-        Set<String> columns = new HashSet<>();
-        try (Statement sql = db.createStatement();
-            ResultSet rows = sql.executeQuery("PRAGMA table_info(" + table + ")")) {
-            while (rows.next()) columns.add(rows.getString("name"));
-        }
-        if (!columns.equals(expected)) throw new IOException("Unrecognized world database table: " + table);
-    }
-
-    private static DatabaseMigration migrationFrom(int version) throws IOException {
-        DatabaseMigration selected = null;
-        for (DatabaseMigration migration : MIGRATIONS) {
-            if (migration.fromVersion() != version) continue;
-            if (selected != null || migration.toVersion() <= version || migration.toVersion() > VERSION)
-                throw new IOException("Invalid world database migration registration");
-            selected = migration;
-        }
-        if (selected == null) throw new IOException("Unsupported world database schema version");
-        return selected;
-    }
-
-    static void initialize(@NotNull Connection db) throws SQLException, IOException {
-        int source = inspect(db);
-        if (source != 0) {
-            while (source != VERSION) {
-                DatabaseMigration migration = migrationFrom(source);
-                migration.migrate(db);
-                try (PreparedStatement update = db
-                    .prepareStatement("UPDATE world_schema SET version = ? WHERE singleton = 1 AND version = ?")) {
-                    update.setInt(1, migration.toVersion());
-                    update.setInt(2, source);
-                    if (update.executeUpdate() != 1)
-                        throw new IOException("World database schema changed during upgrade");
-                }
-                source = migration.toVersion();
-            }
-            validate(db);
-            return;
-        }
+    static void create(@NotNull Connection db) throws SQLException {
         try (Statement sql = db.createStatement()) {
             sql.execute("""
                 CREATE TABLE world_schema (
@@ -249,7 +148,16 @@ final class WorldSchema {
                         kind TEXT NOT NULL CHECK (typeof(kind) = 'text' AND length(kind) <= 16) CHECK (kind IN ('GAP', 'OBSERVATION', 'FLOW_OBSERVATION'))
                     )
                     """);
-            HomePinGroupsMigration.createGroupTable(sql);
+            sql.execute(
+                """
+                    CREATE TABLE home_pin_groups (
+                        group_key TEXT NOT NULL CHECK (typeof(group_key) = 'text' AND length(group_key) <= 22) PRIMARY KEY,
+                        owner TEXT NOT NULL CHECK (typeof(owner) = 'text' AND length(owner) <= 36),
+                        name TEXT NOT NULL CHECK (typeof(name) = 'text' AND length(name) BETWEEN 1 AND 128 AND name = trim(name)),
+                        ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 2147483647),
+                        UNIQUE (owner, name)
+                    )
+                    """);
             sql.execute(
                 """
                     CREATE TABLE resource_pins (
@@ -387,7 +295,7 @@ final class WorldSchema {
             sql.execute("CREATE INDEX history_flow_resource ON history_flow(resource_id, measurement_id, id)");
             sql.execute("CREATE INDEX resource_pins_grid ON resource_pins(grid_id)");
             sql.execute("CREATE INDEX resource_pins_resource ON resource_pins(resource_id)");
-            sql.execute(HomePinGroupsMigration.GROUP_INDEX);
+            sql.execute("CREATE INDEX resource_pins_home_group ON resource_pins(home_group_key)");
             sql.execute("CREATE INDEX crafting_resources_resource ON crafting_resources(resource_id)");
             sql.execute(
                 "CREATE INDEX crafting_resource_providers_resource ON crafting_resource_providers(job_id, crafting_resource_id)");

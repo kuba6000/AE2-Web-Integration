@@ -335,7 +335,7 @@ class WorldDatabaseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 1, 2, 3, 4, 5, 6, 7, 999 })
+    @ValueSource(ints = { 1, 2, 3, 4, 5, 6, 7, 8, 999 })
     void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");

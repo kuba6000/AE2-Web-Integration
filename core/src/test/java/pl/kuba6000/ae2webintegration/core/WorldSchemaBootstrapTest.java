@@ -103,6 +103,40 @@ class WorldSchemaBootstrapTest {
         assertFalse(Files.exists(file.resolveSibling(file.getFileName() + "-wal")));
     }
 
+    @Test
+    void currentSchemaReopensWithoutRejectingAdditionalColumnsOrObjects() throws Exception {
+        Path file = directory.resolve("extended-current.sqlite");
+        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            database.write(db -> {
+                try (Statement sql = db.createStatement()) {
+                    sql.execute("ALTER TABLE resource_pins ADD COLUMN extension TEXT");
+                    sql.execute("CREATE TABLE extension_data (value INTEGER)");
+                    sql.execute("INSERT INTO extension_data VALUES (42)");
+                    sql.execute("CREATE VIEW extension_view AS SELECT value FROM extension_data");
+                    sql.execute(
+                        "CREATE TRIGGER extension_write AFTER UPDATE ON world_schema BEGIN INSERT INTO extension_data VALUES (99); END");
+                }
+                return null;
+            });
+        }
+        try (WorldDatabase reopened = new WorldDatabase(file, new ResourceHistory())) {
+            reopened.open();
+            reopened.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT value FROM extension_view")) {
+                    assertTrue(rows.next());
+                    assertEquals(42, rows.getInt(1));
+                    assertFalse(rows.next(), "opening the current version does not update its schema marker");
+                }
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT extension FROM resource_pins")) {
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+        }
+    }
+
     private static Connection connect(Path file) throws Exception {
         return new JDBC().connect("jdbc:sqlite:" + file.toUri(), new Properties());
     }
