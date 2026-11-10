@@ -47,7 +47,8 @@ of Prism Launcher and personal account tokens.
 
 Clients start muted under the offline name `FullpackTest`. Servers bind the game port to localhost,
 disable whitelist enforcement and use offline mode. Our HTTP API has a generated administrator
-password with localhost bypass disabled. Its default port is23240 on the server and23241 in the
+password and allow password-free access over loopback. Connections through a LAN address require
+login. Its default port is23240 on the server and23241 in the
 client's local world; the HTTP listener binds all interfaces. Find its password in the instance's
 `config/ae2webintegration/config.toml`. Our telemetry and update checker are disabled.
 

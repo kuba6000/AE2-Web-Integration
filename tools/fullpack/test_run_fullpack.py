@@ -385,7 +385,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(23245, config['general']['port'])
         self.assertGreaterEqual(len(config['general']['password']), 32)
         self.assertFalse(config['general']['public_mode'])
-        self.assertFalse(config['general']['allow_no_password_on_localhost'])
+        self.assertTrue(config['general']['allow_no_password_on_localhost'])
         self.assertFalse(config['general']['check_for_updates'])
         self.assertFalse(config['telemetry']['enabled'])
         self.assertNotIn(config['general']['password'], result.stdout + result.stderr)

@@ -132,7 +132,7 @@ def prepare_slot(args, slot):
                           f'port = {web_port}\n'
                           f'password = "{password}"\n'
                           'public_mode = false\n'
-                          'allow_no_password_on_localhost = false\n'
+                          'allow_no_password_on_localhost = true\n'
                           'check_for_updates = false\n\n'
                           '[telemetry]\n'
                           'enabled = false\n', encoding='utf-8', newline='')
