@@ -231,6 +231,31 @@ test('a rejected group edit retains the draft and existing pin placement', async
     assert.equal(options.pins[0].homeGroupKey, 'ores');
 });
 
+for (const language of ['en', 'pl']) {
+    for (const status of ['GROUP_NAME_TAKEN', 'GROUP_LIMIT_REACHED', 'BAD_PARAM']) {
+        test(`Home group errors are readable beside the retained form draft (${language}/${status})`, async (t) => {
+            const { page, base, options } = await fixture(t);
+            options.groups = [{ groupKey: 'ores', name: 'Ores', ordinal: 0 }];
+            options.groupMutationStatus = status;
+            await page.addInitScript((language) => {
+                localStorage.setItem('ae2web:/:ui', JSON.stringify({ language, autoRefresh: false }));
+            }, language);
+            await page.goto(base);
+            const add = page.locator('.home-pin-group-add');
+            await add.getByRole('textbox').fill('Ores');
+            await add.getByRole('button').click();
+            const error = add.getByRole('alert');
+            await error.waitFor({ timeout: 3000 });
+            assert.ok((await error.textContent()).trim());
+            assert.doesNotMatch(await error.textContent(), /BAD_PARAM|GROUP_NAME_TAKEN|GROUP_LIMIT_REACHED/);
+            assert.equal(await add.getByRole('textbox').inputValue(), 'Ores');
+            await add.getByRole('textbox').fill('New name');
+            assert.equal(await error.isVisible(), false, 'editing the draft clears the previous validation error');
+            assert.equal(await page.locator('html').getAttribute('lang'), language);
+        });
+    }
+}
+
 test('Home group collapse survives reload and keyboard toggling preserves cards, charts and history', async (t) => {
     const { page, base, options } = await fixture(t);
     options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
@@ -289,6 +314,76 @@ test('Home group collapse survives reload and keyboard toggling preserves cards,
     );
 });
 
+test('compact Home pins have one keyboard stop with their recorded tooltip', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [
+        { ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' },
+        { ...pin('quartz-pin', gridA, quartz, 1), homeGroupKey: 'production' }
+    ];
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    await group.getByRole('button', { name: 'Production', exact: true }).click();
+    const first = group.getByRole('link', { name: 'Iron Ingot', exact: true });
+    const second = group.getByRole('link', { name: 'Certus Quartz Crystal', exact: true });
+    await first.focus();
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.evaluate(() => !!document.activeElement.closest('.home-pin-compact-row')), false);
+    await first.focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await second.evaluate((node) => node === document.activeElement), true);
+    await page.getByRole('tooltip').filter({ hasText: 'Certus Quartz Crystal' }).waitFor();
+});
+
+test('deleting a Home group clears its collapse preference only after successful deletion', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [{ ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' }];
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    await group.getByRole('button', { name: 'Production', exact: true }).click();
+    const collapsed = () =>
+        page.evaluate(
+            () => JSON.parse(localStorage.getItem('ae2web:/:theme:default'))['homeGroupCollapsed:production']
+        );
+    assert.equal(await collapsed(), true);
+    options.groupMutationStatus = 'BAD_PARAM';
+    const rejected = page.waitForResponse((response) => response.request().method() === 'DELETE');
+    await group.getByRole('button', { name: 'Delete group', exact: true }).click();
+    await rejected;
+    await page.waitForFunction(() => document.querySelector('.home-pin-group-add button')?.disabled === false);
+    assert.equal(await collapsed(), true, 'a rejected deletion preserves the saved presentation');
+    options.groupMutationStatus = null;
+    await group.getByRole('button', { name: 'Delete group', exact: true }).click();
+    await group.waitFor({ state: 'detached' });
+    assert.equal(await collapsed(), undefined);
+    assert.equal(await page.locator('.home-pin-card').isVisible(), true);
+});
+
+test('confirmed remote group deletion clears its preference while navigation does not', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [{ ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' }];
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    await group.getByRole('button', { name: 'Production', exact: true }).click();
+    const collapsed = () =>
+        page.evaluate(
+            () => JSON.parse(localStorage.getItem('ae2web:/:theme:default'))['homeGroupCollapsed:production']
+        );
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items > li').first().waitFor();
+    assert.equal(await collapsed(), true);
+    await page.goto(base);
+    await group.waitFor();
+    assert.equal(await collapsed(), true);
+    options.groups = [];
+    options.pins[0].homeGroupKey = null;
+    await page.locator('#refresh').click();
+    await group.waitFor({ state: 'detached' });
+    assert.equal(await collapsed(), undefined);
+});
+
 test('collapsed Home groups show recorded stock and net for the configured period, with unknown resources kept unknown', async (t) => {
     const { page, base, options } = await fixture(t);
     options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
@@ -338,7 +433,7 @@ test('collapsed Home groups show recorded stock and net for the configured perio
     assert.equal(await unknown.locator('.home-pin-compact-stock').textContent(), '—');
     assert.equal(await unknown.locator('.home-pin-compact-net').textContent(), '—');
     assert.equal(await unknown.getByRole('link').count(), 0);
-    await row.focus();
+    await row.locator('.home-pin-compact-name').focus();
     await page.getByRole('tooltip').filter({ hasText: '15 min' }).waitFor();
     const reads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
     assert.equal(
@@ -377,7 +472,7 @@ test('collapsed Home groups explain disabled tracking while retaining recorded n
     const group = page.getByRole('region', { name: 'Production', exact: true });
     await group.getByRole('button', { name: 'Production', exact: true }).click();
     const row = group.locator('.home-pin-compact-row');
-    await row.focus();
+    await row.locator('.home-pin-compact-name').focus();
     await page
         .getByRole('tooltip')
         .filter({ hasText: /tracking is off/i })
@@ -399,7 +494,7 @@ test('collapsed Home groups explain disabled tracking while retaining recorded n
     await page.locator('#refresh').click();
     await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '+7');
     assert.equal(await row.locator('.home-pin-compact-stock').textContent(), '24');
-    await row.focus();
+    await row.locator('.home-pin-compact-name').focus();
     await page
         .getByRole('tooltip')
         .filter({ hasText: /tracking is off/i })
@@ -409,6 +504,36 @@ test('collapsed Home groups explain disabled tracking while retaining recorded n
         0,
         'Home summaries never fall back to native inventory or CPU reads'
     );
+});
+
+test('cached Home measurements become unknown on read failure and recover with new exact values', async (t) => {
+    const { page, base, options } = await fixture(t);
+    options.groups = [{ groupKey: 'production', name: 'Production', ordinal: 0 }];
+    options.pins = [{ ...pin('iron-pin', gridA, iron, 0), homeGroupKey: 'production' }];
+    const now = Date.now();
+    const stock = (quantity) => ({ kind: 'STOCK', observedAt: now - 5000, resource: { ...iron, quantity } });
+    const flow = (input) => ({
+        kind: 'FLOW',
+        observedAt: now - 5000,
+        flowFrom: now - 10000,
+        input,
+        output: '2',
+        resource: null
+    });
+    options.resourceHistory.points = [stock('10'), flow('8')];
+    await page.goto(base);
+    const group = page.getByRole('region', { name: 'Production', exact: true });
+    await group.getByRole('button', { name: 'Production', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '+6');
+    options.resourceHistoryError = 'INTERNAL_ERROR';
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '—');
+    assert.equal(await group.locator('.home-pin-compact-stock').textContent(), '—');
+    options.resourceHistoryError = null;
+    options.resourceHistory.points = [stock('20'), flow('11')];
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-compact-net')?.textContent === '+9');
+    assert.equal(await group.locator('.home-pin-compact-stock').textContent(), '20');
 });
 
 for (const width of [1440, 390]) {

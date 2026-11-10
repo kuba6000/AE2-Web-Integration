@@ -53,6 +53,41 @@ class ResourcePinGroupsTest extends GridTestScope {
     }
 
     @Test
+    void homeGroupLimitIsPerOwnerAndDeletingAGroupFreesItsSlot() throws Exception {
+        ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
+        WebPrincipal owner = WebPrincipal.admin();
+        HomeGroup first = store.createGroup(owner, "Group 0");
+        for (int index = 1; index < 64; index++) store.createGroup(owner, "Group " + index);
+        assertThrows(IllegalArgumentException.class, () -> store.createGroup(owner, "One too many"));
+        assertEquals(
+            64,
+            store.snapshot(owner)
+                .groups()
+                .size());
+        WebPrincipal other = TestGridFixtures.principal(4);
+        assertEquals(
+            0,
+            store.createGroup(other, "Other owner")
+                .ordinal());
+        assertTrue(store.updateGroup(owner, first.groupKey(), "Renamed at capacity", Direction.LATER));
+        store.removeGroup(owner, first.groupKey());
+        assertEquals(
+            63,
+            store.createGroup(owner, "Replacement")
+                .ordinal());
+        assertEquals(
+            64,
+            store.snapshot(owner)
+                .groups()
+                .size());
+        assertEquals(
+            1,
+            store.snapshot(other)
+                .groups()
+                .size());
+    }
+
+    @Test
     void groupEditingValidatesNamesAndKeepsAnIndependentCompactAccountOrder() throws Exception {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();

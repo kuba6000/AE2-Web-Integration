@@ -16,11 +16,13 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 /**
  * Create Home pin group.
  * <p>
- * Adds a named group for the current account. Groups can contain Home pins from different networks.
+ * Adds a named group for the current account, up to 64 groups. Groups can contain Home pins from different networks.
  *
  * @response 200 {@link Response} Updated account pins and groups.
- * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: empty, duplicate or overlong
+ * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: empty or overlong
  *           name.
+ * @response 409 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} GROUP_NAME_TAKEN or GROUP_LIMIT_REACHED:
+ *           name is already used or the account has 64 groups.
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/resource-pin-groups")
 public final class PostResourcePinGroup extends ResourcePinRequest {
@@ -42,6 +44,10 @@ public final class PostResourcePinGroup extends ResourcePinRequest {
         try {
             store.createGroup(context.getPrincipal(), input.name());
             reply(store);
+        } catch (ResourcePinStore.GroupNameTaken conflict) {
+            deny(ApiStatus.GROUP_NAME_TAKEN);
+        } catch (ResourcePinStore.GroupLimitReached full) {
+            deny(ApiStatus.GROUP_LIMIT_REACHED);
         } catch (IllegalArgumentException invalid) {
             deny(ApiStatus.BAD_PARAM);
         } catch (IOException failure) {

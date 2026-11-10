@@ -1,5 +1,5 @@
 import { createHomePinFlow } from './home-pin-flow.js';
-import { historicalFlow, recordedStock } from './home-pin-metrics.js';
+import { createHomePinMetrics } from './home-pin-metrics.js';
 import { thumbtackIcon } from './icons/hackernoon/thumbtack.js';
 import type { ThemeApplication, ThemeSettings, ThemeState, Translator, PinHomeConfig } from '../../app/theme-api.js';
 import { element } from './dom.js';
@@ -37,11 +37,44 @@ export function createHomePins(
     const cards = new Map<string, ReturnType<typeof createCard>>();
     const sections = new Map<string, ReturnType<typeof createGroup>>();
     let state: ThemeState, locale: Translator;
+    let formatLanguage: string | undefined;
+    let formats: { number: Intl.NumberFormat; short: Intl.NumberFormat };
+    let choices: { groupKey: string; name: string }[] = [];
+    let choicesSource: ThemeState['pins']['groups'] | undefined, choicesLocale: Translator | undefined;
+    let confirmedSource: ThemeState['pins']['groups'] | undefined;
+    let confirmedGroups = new Set<string>();
+    function groupNameError(input: HTMLInputElement, id: string) {
+        const message = element('p', '', 'api-error home-pin-group-error');
+        message.id = id;
+        message.role = 'alert';
+        message.hidden = true;
+        input.setAttribute('aria-describedby', id);
+        let code: string | null = null;
+        function render() {
+            message.textContent = code ? locale.common(code) : '';
+            message.hidden = !code;
+            if (code === 'BAD_PARAM' || code === 'GROUP_NAME_TAKEN') input.setAttribute('aria-invalid', 'true');
+            else input.removeAttribute('aria-invalid');
+        }
+        function show(next: string | null) {
+            code = next;
+            render();
+        }
+        input.addEventListener('input', () => show(null));
+        return { message, show, render };
+    }
+    const addError = groupNameError(groupName, 'home-pin-group-add-error');
+    addGroup.append(addError.message);
     addGroup.onsubmit = (event) => {
         event.preventDefault();
         const name = groupName.value.trim();
-        if (!name) return;
+        addError.show(null);
+        if (!name) {
+            addError.show('BAD_PARAM');
+            return;
+        }
         void application.pins.addGroup(name).then(() => {
+            addError.show(state.pins.error);
             if (!state.pins.error && state.pins.groups.some((group) => group.name === name)) groupName.value = '';
         });
     };
@@ -78,7 +111,8 @@ export function createHomePins(
         save.type = 'submit';
         cancel.type = 'button';
         label.append(nameText, name);
-        edit.append(label, save, cancel);
+        const nameError = groupNameError(name, `home-pin-group-error-${key}`);
+        edit.append(label, save, cancel, nameError.message);
         const content = element('div', '', 'home-pins');
         const preview = element('div', '', 'home-pin-group-preview');
         content.id = `home-pin-group-${key || 'ungrouped'}`;
@@ -103,6 +137,7 @@ export function createHomePins(
         later.onclick = () => void application.pins.updateGroup(key, { move: 'later' });
         remove.onclick = () => void application.pins.removeGroup(key);
         rename.onclick = () => {
+            nameError.show(null);
             name.value = state.pins.groups.find((group) => group.groupKey === key)?.name ?? '';
             edit.hidden = false;
             name.focus();
@@ -114,8 +149,13 @@ export function createHomePins(
         edit.onsubmit = (event) => {
             event.preventDefault();
             const value = name.value.trim();
-            if (!value) return;
+            nameError.show(null);
+            if (!value) {
+                nameError.show('BAD_PARAM');
+                return;
+            }
             void application.pins.updateGroup(key, { name: value }).then(() => {
+                nameError.show(state.pins.error);
                 if (
                     !state.pins.error &&
                     state.pins.groups.some((group) => group.groupKey === key && group.name === value)
@@ -143,6 +183,7 @@ export function createHomePins(
                 renderCollapse();
                 actions.hidden = !key;
                 if (!key) return;
+                nameError.render();
                 earlier.setAttribute('aria-label', locale.common('moveEarlier'));
                 later.setAttribute('aria-label', locale.common('moveLater'));
                 rename.textContent = locale.common('renamePinGroup');
@@ -159,8 +200,8 @@ export function createHomePins(
     function createCard(key: string) {
         const card = element('article', '', 'inset-frame home-pin-card');
         const compact = element('div', '', 'home-pin-compact-row');
-        compact.tabIndex = 0;
         const compactName = element('a', '', 'home-pin-compact-name');
+        compactName.tabIndex = 0;
         const compactStock = element('span', '', 'home-pin-compact-stock');
         const compactNet = element('span', '', 'home-pin-compact-net');
         const separator = element('span', '|', 'home-pin-compact-separator');
@@ -169,7 +210,7 @@ export function createHomePins(
         compactIdentity.append(createResourceIcon(), compactName);
         compact.append(compactIdentity, compactStock, separator, compactNet);
         let compactTip: Node[] = [];
-        bindTooltip(compact, () => compactTip);
+        bindTooltip(compact, () => compactTip, compactName);
         const identity = element('div', '', 'home-pin-identity tracking-resource');
         const icon = createResourceIcon(),
             name = element('a', '', 'home-pin-name'),
@@ -181,7 +222,8 @@ export function createHomePins(
         identity.append(icon, labels, pinMark);
         const summary = element('dl', '', 'home-pin-summary');
         const flowHost = element('div');
-        const flow = createHomePinFlow(flowHost, bindTooltip);
+        const flow = createHomePinFlow(flowHost, bindTooltip, () => formats);
+        const measurements = createHomePinMetrics();
         const message = element('p', '', 'hint');
         message.role = 'status';
         const period = element('p', '', 'home-pin-period');
@@ -270,6 +312,8 @@ export function createHomePins(
         toolbar.append(earlier, later, remove);
         card.append(identity, summary, flowHost, period, message, legend, chartHost, toolbar, disclosure);
         let chart: ReturnType<typeof createTrackingChart> | undefined;
+        let renderedInputs: unknown[] | undefined;
+        let renderedChoices: typeof choices | undefined;
         function clearChart() {
             chart?.dispose();
             chart = undefined;
@@ -277,6 +321,32 @@ export function createHomePins(
         }
         function render(pin: ThemeState['pins']['items'][number], index: number, count: number) {
             const available = pin.available && !!pin.resource && !!pin.gridKey && !!pin.itemKey;
+            const histories = available ? state.pins.histories[pin.pinKey] : undefined;
+            const history = histories?.[pin.homeConfig.rangeMillis];
+            const flowHistory = histories?.[pin.homeConfig.flowRangeMillis];
+            const pixelated = settings.get('chartStroke', 'pixel') !== 'smooth';
+            const inputsForRender = [
+                pin,
+                index,
+                count,
+                state.pins.pending,
+                locale,
+                choices,
+                pixelated,
+                ...[history, flowHistory].flatMap((source) => [
+                    source,
+                    source?.points,
+                    source?.baseline,
+                    source?.status,
+                    source?.error,
+                    source?.icons,
+                    source?.from,
+                    source?.until
+                ])
+            ];
+            if (renderedInputs && inputsForRender.every((value, position) => value === renderedInputs![position]))
+                return;
+            renderedInputs = inputsForRender;
             name.replaceChildren(
                 ...(available
                     ? [renderMinecraftText(pin.resource!.displayName)]
@@ -296,11 +366,7 @@ export function createHomePins(
             remove.disabled = state.pins.pending;
             settingsLabel.textContent = locale.common('pinSettings');
             groupText.textContent = locale.common('pinGroup');
-            const choices = [{ groupKey: '', name: locale.common('ungroupedPins') }, ...state.pins.groups];
-            if (
-                JSON.stringify([...groupChoice.options].map((option) => [option.value, option.textContent])) !==
-                JSON.stringify(choices.map((group) => [group.groupKey, group.name]))
-            ) {
+            if (renderedChoices !== choices) {
                 groupChoice.replaceChildren(
                     ...choices.map((group) => {
                         const option = element('option', group.name);
@@ -308,6 +374,7 @@ export function createHomePins(
                         return option;
                     })
                 );
+                renderedChoices = choices;
             }
             if (!state.pins.pending) groupChoice.value = pin.homeGroupKey ?? '';
             fields.disabled = state.pins.pending;
@@ -359,11 +426,7 @@ export function createHomePins(
             summary.replaceChildren();
             message.textContent = '';
             chartHost.hidden = true;
-            const histories = available ? state.pins.histories[pin.pinKey] : undefined;
-            const history = histories?.[pin.homeConfig.rangeMillis];
-            const flowHistory = histories?.[pin.homeConfig.flowRangeMillis];
-            const { stock, until: stockUntil } = recordedStock(pin.itemKey, [history, flowHistory]);
-            const totals = historicalFlow(flowHistory);
+            const { stock, until: stockUntil, totals } = measurements(pin.itemKey, history, flowHistory);
             flow.render(pin, flowHistory, locale, totals);
             compactName.replaceChildren(
                 ...(available
@@ -372,11 +435,7 @@ export function createHomePins(
             );
             if (available) compactName.href = trackingHref(pin.gridKey!, pin.itemKey!);
             else compactName.removeAttribute('href');
-            const number = new Intl.NumberFormat(state.preferences.language);
-            const short = new Intl.NumberFormat(state.preferences.language, {
-                notation: 'compact',
-                maximumFractionDigits: 1
-            });
+            const { number, short } = formats;
             const quantity = stock?.resource ? BigInt(stock.resource.quantity) : null;
             const net = totals.observed ? totals.input - totals.output : null;
             const sign = net === null || net === 0n ? '' : net > 0n ? '+' : '−';
@@ -436,13 +495,7 @@ export function createHomePins(
                         legend.append(key);
                     }
                     chart ??= createTrackingChart(chartHost, false, () => {}, 220);
-                    chart.render(
-                        history,
-                        locale,
-                        settings.get('chartStroke', 'pixel') !== 'smooth',
-                        pin.pinKey,
-                        pin.homeConfig
-                    );
+                    chart.render(history, locale, pixelated, pin.pinKey, pin.homeConfig);
                 } else clearChart();
             } else {
                 message.textContent = history?.error
@@ -470,6 +523,32 @@ export function createHomePins(
         render(next: ThemeState, translator: Translator) {
             state = next;
             locale = translator;
+            if (formatLanguage !== state.preferences.language) {
+                formatLanguage = state.preferences.language;
+                formats = {
+                    number: new Intl.NumberFormat(formatLanguage),
+                    short: new Intl.NumberFormat(formatLanguage, { notation: 'compact', maximumFractionDigits: 1 })
+                };
+            }
+            if (choicesSource !== state.pins.groups || choicesLocale !== locale) {
+                const nextChoices = [{ groupKey: '', name: locale.common('ungroupedPins') }, ...state.pins.groups];
+                if (
+                    nextChoices.length !== choices.length ||
+                    nextChoices.some(
+                        (group, index) =>
+                            group.groupKey !== choices[index].groupKey || group.name !== choices[index].name
+                    )
+                )
+                    choices = nextChoices;
+                choicesSource = state.pins.groups;
+                choicesLocale = locale;
+            }
+            if (state.pins.status === 'ready' && confirmedSource !== state.pins.groups) {
+                const current = new Set(state.pins.groups.map((group) => group.groupKey));
+                for (const key of confirmedGroups) if (!current.has(key)) settings.remove(`homeGroupCollapsed:${key}`);
+                confirmedGroups = current;
+                confirmedSource = state.pins.groups;
+            }
             const active = state.route.view === 'home';
             const pins = active
                 ? state.pins.items.filter((pin) => pin.homeOrder !== null).sort((a, b) => a.homeOrder! - b.homeOrder!)
@@ -477,6 +556,7 @@ export function createHomePins(
             const focused = list.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
             const groups = active ? [...state.pins.groups].sort((a, b) => a.ordinal - b.ordinal) : [];
             groupNameText.textContent = locale.common('pinGroupName');
+            addError.render();
             addGroupButton.textContent = locale.common('addPinGroup');
             groupName.disabled = addGroupButton.disabled = state.pins.pending || state.pins.status !== 'ready';
             addGroup.hidden = !active;

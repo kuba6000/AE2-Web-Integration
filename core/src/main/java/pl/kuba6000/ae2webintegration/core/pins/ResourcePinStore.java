@@ -29,6 +29,28 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 /** Account-owned resource placements; all values are detached and writes share the world transaction gate. */
 public final class ResourcePinStore {
 
+    private static final int MAX_HOME_GROUPS = 64;
+
+    public static final class GroupNameTaken extends IllegalArgumentException {
+
+        @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
+        private static final long serialVersionUID = 1L;
+
+        private GroupNameTaken() {
+            super("Group name is already in use");
+        }
+    }
+
+    public static final class GroupLimitReached extends IllegalArgumentException {
+
+        @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
+        private static final long serialVersionUID = 1L;
+
+        private GroupLimitReached() {
+            super("Home group limit reached");
+        }
+    }
+
     public enum Placement {
 
         TERMINAL,
@@ -138,6 +160,7 @@ public final class ResourcePinStore {
         return database.write(db -> {
             List<HomeGroup> groups = groups(db, owner);
             requireUniqueName(groups, label, null);
+            if (groups.size() >= MAX_HOME_GROUPS) throw new GroupLimitReached();
             HomeGroup group = new HomeGroup(StableKey.random(), label, groups.size());
             try (PreparedStatement insert = db
                 .prepareStatement("INSERT INTO home_pin_groups(group_key, owner, name, ordinal) VALUES (?, ?, ?, ?)")) {
@@ -168,7 +191,7 @@ public final class ResourcePinStore {
                     .equals(name)
                     && !group.groupKey()
                         .equals(except)))
-            throw new IllegalArgumentException("Group name is already in use");
+            throw new GroupNameTaken();
     }
 
     public boolean updateGroup(@NotNull WebPrincipal principal, @NotNull StableKey groupKey, @Nullable String name,

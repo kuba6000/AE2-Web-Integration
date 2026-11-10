@@ -1526,6 +1526,9 @@ label {
 .web-preference-field .hint:empty {
     display: none;
 }
+.web-preferences .info-notice {
+    margin: 0;
+}
 .about-view {
     overflow-wrap: anywhere;
 }
@@ -3722,6 +3725,10 @@ button.toast:hover {
 }
 .home-pin-group-add {
     margin-block: 0 16px;
+}
+.home-pin-group-error {
+    grid-column: 1 / -1;
+    margin: 0;
 }
 .home-pin-group-add label,
 .home-pin-group-rename label {

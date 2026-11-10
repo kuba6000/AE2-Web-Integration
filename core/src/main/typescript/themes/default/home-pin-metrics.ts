@@ -2,6 +2,29 @@ import type { ThemeState } from '../../app/theme-api.js';
 
 type History = ThemeState['resourceHistory'];
 
+/** One card retains only its current measurements; unrelated state updates reuse the derived totals. */
+export function createHomePinMetrics() {
+    let previous: unknown[] = [];
+    let result: (ReturnType<typeof recordedStock> & { totals: ReturnType<typeof historicalFlow> }) | undefined;
+    return (itemKey: string | null, history: History | undefined, flowHistory: History | undefined) => {
+        const inputs = [
+            itemKey,
+            ...[history, flowHistory].flatMap((source) => [
+                source?.points,
+                source?.baseline,
+                source?.status,
+                source?.from,
+                source?.until
+            ])
+        ];
+        if (!result || inputs.some((value, index) => value !== previous[index])) {
+            result = { ...recordedStock(itemKey, [history, flowHistory]), totals: historicalFlow(flowHistory) };
+            previous = inputs;
+        }
+        return result;
+    };
+}
+
 export function recordedStock(itemKey: string | null, sources: (History | undefined)[]) {
     let stock: History['baseline'] = null;
     let until = 0;

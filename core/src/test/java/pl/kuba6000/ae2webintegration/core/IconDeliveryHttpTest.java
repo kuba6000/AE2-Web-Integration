@@ -697,7 +697,13 @@ class IconDeliveryHttpTest {
                 .getAsJsonArray("data")
                 .size());
         assertEquals(created.body(), json(connection("/api/resource-pins")));
-        assertEquals(400, pinRequest("POST", path, "{\"name\":\"Production\"}", true).code());
+        PinReply duplicate = pinRequest("POST", path, "{\"name\":\"Production\"}", true);
+        assertEquals(409, duplicate.code());
+        assertEquals(
+            "GROUP_NAME_TAKEN",
+            duplicate.body()
+                .get("status")
+                .getAsString());
         assertEquals(400, pinRequest("POST", path, "{\"name\":\"  \"}", true).code());
         PinReply renamed = pinRequest("PATCH", path + "/" + key, "{\"name\":\"Machines\"}", true);
         assertEquals(200, renamed.code());
@@ -717,6 +723,40 @@ class IconDeliveryHttpTest {
             0,
             json(connection("/api/resource-pins")).getAsJsonArray("groups")
                 .size());
+    }
+
+    @Test
+    void groupNameConflictsAndQuotaHaveDistinctStatusesWithoutMutatingTheSnapshot() throws Exception {
+        port = HttpServerTestFixture.startWorld(config);
+        String path = "/api/resource-pin-groups";
+        String firstKey = null;
+        for (int index = 0; index < 64; index++) {
+            PinReply created = pinRequest("POST", path, "{\"name\":\"Group " + index + "\"}", true);
+            assertEquals(200, created.code());
+            if (index == 0) firstKey = created.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("groupKey")
+                .getAsString();
+        }
+        JsonObject before = json(connection("/api/resource-pins"));
+        PinReply full = pinRequest("POST", path, "{\"name\":\"Overflow\"}", true);
+        assertEquals(409, full.code());
+        assertEquals(
+            "GROUP_LIMIT_REACHED",
+            full.body()
+                .get("status")
+                .getAsString());
+        assertEquals(before, json(connection("/api/resource-pins")));
+        PinReply conflict = pinRequest("PATCH", path + "/" + firstKey, "{\"name\":\"Group 1\"}", true);
+        assertEquals(409, conflict.code());
+        assertEquals(
+            "GROUP_NAME_TAKEN",
+            conflict.body()
+                .get("status")
+                .getAsString());
+        assertEquals(before, json(connection("/api/resource-pins")));
     }
 
     @Test

@@ -8,7 +8,11 @@ type Pin = ThemeState['pins']['items'][number];
 type History = ThemeState['resourceHistory'];
 
 /** Exact counts and coverage for the two independently configured Home flow summaries. */
-export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind']) {
+export function createHomePinFlow(
+    host: HTMLElement,
+    bindTooltip: Tooltips['bind'],
+    formatting: () => { number: Intl.NumberFormat; short: Intl.NumberFormat }
+) {
     function section(className: string) {
         const root = element('section', '', className);
         const line = element('div', '', 'home-pin-flow-line');
@@ -33,11 +37,7 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
     ) {
         target.values.replaceChildren();
         target.tooltipContent.length = 0;
-        const number = new Intl.NumberFormat(document.documentElement.lang);
-        const compact = new Intl.NumberFormat(document.documentElement.lang, {
-            notation: 'compact',
-            maximumFractionDigits: 1
-        });
+        const { number, short: compact } = formatting();
         const net = input === null || output === null ? null : input - output;
         for (const [kind, label, value, sign] of [
             ['input', locale.common('resourceHistoryInput'), input, input],

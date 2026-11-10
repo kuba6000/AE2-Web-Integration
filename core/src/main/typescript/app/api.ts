@@ -40,6 +40,8 @@ const responseStatuses = new Set([
     'INVALID_ID',
     'CPU_PAUSE_UNSUPPORTED',
     'CPU_NOT_BUSY',
+    'GROUP_NAME_TAKEN',
+    'GROUP_LIMIT_REACHED',
     'AMBIGUOUS_ITEM_KEY',
     'JOB_NOT_DONE',
     'FAIL',

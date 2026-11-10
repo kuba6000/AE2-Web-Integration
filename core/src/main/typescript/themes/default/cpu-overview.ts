@@ -67,6 +67,8 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
     let locale: Translator;
     let gridKey = '';
     let searchOpen = false;
+    let overviewActive = false;
+    let readingPosition = 0;
     const savedSort = settings.get('cpuOverviewSort');
     let sort = cpuSortCriteria.find((criterion) => criterion.value === savedSort) || cpuSortCriteria[0];
     const availableCriteria = cpuSortCriteria.filter(
@@ -85,32 +87,32 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
     sortButton.addEventListener('click', () => {
         sort = availableCriteria[(availableCriteria.indexOf(effectiveSort()) + 1) % availableCriteria.length];
         settings.set('cpuOverviewSort', sort.value);
-        listScroll.scrollTop = 0;
+        readingPosition = listScroll.scrollTop = 0;
         renderList();
     });
     direction.addEventListener('click', () => {
         descending = !descending;
         settings.set('cpuOverviewSortOrder', descending ? 'descending' : 'ascending');
-        listScroll.scrollTop = 0;
+        readingPosition = listScroll.scrollTop = 0;
         renderList();
     });
     filterButton.addEventListener('click', () => {
         filter = filters[(filters.indexOf(filter) + 1) % filters.length];
         settings.set('cpuOverviewFilter', filter.value);
-        listScroll.scrollTop = 0;
+        readingPosition = listScroll.scrollTop = 0;
         renderList();
     });
     function setSearch(open: boolean) {
         searchOpen = open;
         if (!open) search.value = '';
-        listScroll.scrollTop = 0;
+        readingPosition = listScroll.scrollTop = 0;
         tips.hide();
         renderList();
         if (open) search.focus();
     }
     searchToggle.addEventListener('click', () => setSearch(!searchOpen));
     search.addEventListener('input', () => {
-        listScroll.scrollTop = 0;
+        readingPosition = listScroll.scrollTop = 0;
         tips.hide();
         renderList();
     });
@@ -122,7 +124,10 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
         searchToggle.focus();
         tips.hide();
     });
-    listScroll.addEventListener('scroll', tips.hide);
+    listScroll.addEventListener('scroll', () => {
+        tips.hide();
+        if (overviewActive && (state.cpus.length || state.status !== 'loading')) readingPosition = listScroll.scrollTop;
+    });
 
     function renderControls() {
         const t = locale.common;
@@ -173,7 +178,7 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
         listStatus.textContent = message;
         listStatus.hidden = !message;
         const current: Map<string, CpuRow> = new Map();
-        const scrollTop = listScroll.scrollTop;
+        const scrollTop = readingPosition;
         const focused =
             document.activeElement instanceof HTMLElement && list.contains(document.activeElement)
                 ? document.activeElement
@@ -188,6 +193,7 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
         rows = current;
         if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
         listScroll.scrollTop = scrollTop;
+        if (state.cpus.length || state.status !== 'loading') readingPosition = listScroll.scrollTop;
         overviewIcons.update(
             visible
                 .filter((cpu) => cpu.isBusy && cpu.finalOutput)
@@ -304,21 +310,18 @@ export function createCpuOverview(application: ThemeApplication, settings: Theme
             state = next;
             locale = translator;
             const selected = route.view === 'cpus' && !!route.cpuKey;
-            const nextGrid = route.view === 'cpus' && !selected ? route.gridKey : '';
+            overviewActive = route.view === 'cpus' && !selected;
+            const nextGrid = route.gridKey ?? '';
             if (gridKey !== nextGrid) {
                 gridKey = nextGrid;
                 searchOpen = false;
                 search.value = '';
-                listScroll.scrollTop = 0;
+                readingPosition = listScroll.scrollTop = 0;
             }
             overview.hidden = selected;
             if (route.view !== 'cpus' || selected) overviewIcons.update([], null);
             if (route.view !== 'cpus') return;
-            if (selected) {
-                list.replaceChildren();
-                rows.clear();
-                return;
-            }
+            if (selected) return;
             const t = locale.common;
             title.textContent = t('cpus');
             listScroll.setAttribute('aria-label', t('cpus'));

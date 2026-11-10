@@ -27,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
  * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: invalid name or move.
  * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} NOT_FOUND: the owned group does not
  *           exist.
+ * @response 409 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} GROUP_NAME_TAKEN: name is already used.
  */
 @Endpoint(method = HttpMethod.PATCH, path = "/api/resource-pin-groups/{groupKey}")
 public final class PatchResourcePinGroup extends ResourcePinRequest {
@@ -57,6 +58,8 @@ public final class PatchResourcePinGroup extends ResourcePinRequest {
                 return;
             }
             reply(store);
+        } catch (ResourcePinStore.GroupNameTaken conflict) {
+            deny(ApiStatus.GROUP_NAME_TAKEN);
         } catch (IllegalArgumentException invalid) {
             deny(ApiStatus.BAD_PARAM);
         } catch (IOException failure) {

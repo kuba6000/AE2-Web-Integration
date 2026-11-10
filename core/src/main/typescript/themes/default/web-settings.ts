@@ -2,6 +2,7 @@ import type { ThemeContext, ThemeApplication, ThemeState, ThemeSettings } from '
 import type { Translator } from '../../app/i18n.js';
 import { element } from './dom.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
+import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 export type TerminalDisplay = 'names' | 'both' | 'icons';
 
@@ -16,7 +17,7 @@ export function createWebSettings(
     root: HTMLElement,
     workspace: HTMLElement,
     application: ThemeApplication,
-    { settings, themes, lifetime }: Pick<ThemeContext, 'settings' | 'themes' | 'lifetime'>,
+    { settings, themes, lifetime, user }: Pick<ThemeContext, 'settings' | 'themes' | 'lifetime' | 'user'>,
     onDisplayChange: () => void,
     tooltips: Pick<TooltipBindings, 'bind'>
 ) {
@@ -72,6 +73,10 @@ export function createWebSettings(
                         </select>
                     </label>
                     <p class="hint" id="icon-availability" role="status"></p>
+                    <div class="window-frame info-notice" id="icon-install-tip" role="note" hidden>
+                        ${infoCircle}
+                        <p><span data-text="iconPackInstallTip"></span> <a href="https://ae2web.kuba6000.pl/icon-export" target="_blank" rel="noopener noreferrer" data-text="iconPackInstallGuide"></a></p>
+                    </div>
                 </div>
                 <label>
                     <span data-theme-text="resourcesPerPage"></span>
@@ -101,6 +106,7 @@ export function createWebSettings(
         animationLabel: root.querySelector<HTMLElement>('#animated-icons-label')!,
         animationAvailability: root.querySelector<HTMLParagraphElement>('#animation-availability')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
+        iconInstallTip: root.querySelector<HTMLElement>('#icon-install-tip')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
         font: root.querySelector<HTMLSelectElement>('#font')!,
@@ -233,6 +239,7 @@ export function createWebSettings(
     function render(state: ThemeState, locale: Translator): TerminalDisplay {
         uncappedLabel = locale.t('animationUncapped');
         const { available, hasAnimations, status } = state.iconPack;
+        controls.iconInstallTip.hidden = !user.isAdmin || status !== 'ready' || available !== false;
         let animationMessage = '';
         if (status === 'error') animationMessage = locale.t('iconsError');
         else if (available === false) animationMessage = locale.t('iconsUnavailable');

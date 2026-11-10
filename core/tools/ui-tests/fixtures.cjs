@@ -467,7 +467,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 response.end(JSON.stringify({ status: 'OK', data: null }));
             } else if (resource.startsWith('/api/resource-pin-groups')) {
                 if (options.groupMutationStatus) {
-                    response.writeHead(400).end(JSON.stringify({ status: options.groupMutationStatus, data: null }));
+                    const code = ['GROUP_NAME_TAKEN', 'GROUP_LIMIT_REACHED'].includes(options.groupMutationStatus)
+                        ? 409
+                        : 400;
+                    response.writeHead(code).end(JSON.stringify({ status: options.groupMutationStatus, data: null }));
                     return;
                 }
                 const input = options.requests.at(-1).body;

@@ -10,11 +10,53 @@ async function discoverPack(page, action) {
     await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
 }
 
+test('admins with a confirmed missing icon pack get a local setup guide in Web settings', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 1280, height: 1600 } });
+    options.isAdmin = true;
+    options.pack = { available: true, hasAnimations: false, packId: 'a'.repeat(64), width: 64, height: 64 };
+    await discoverPack(page, () => page.goto(`${base}#/web-settings`));
+    const tip = page.locator('#web-settings').getByRole('note');
+    assert.equal(await tip.isVisible(), false, 'An installed static pack does not need installation advice');
+    const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await display.selectOption('names');
+    await discoverPack(page, () => page.reload());
+    assert.equal(await display.inputValue(), 'names');
+    options.pack = { available: false, hasAnimations: false, packId: null, width: 0, height: 0 };
+    await discoverPack(page, () => page.getByRole('button', { name: 'Refresh', exact: true }).click());
+    assert.equal(await tip.count(), 1, 'Missing icons have a local informational tip for the signed-in admin');
+    assert.equal(await tip.isVisible(), true);
+    assert.equal(await tip.getByRole('link').getAttribute('href'), 'https://ae2web.kuba6000.pl/icon-export');
+    const englishTip = await tip.textContent();
+    assert.ok(englishTip.trim().length > 0);
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    assert.notEqual(await tip.textContent(), englishTip, 'The installation tip follows the selected language');
+    options.packError = true;
+    await discoverPack(page, () => page.locator('#refresh').click());
+    assert.equal(await tip.isVisible(), false, 'A failed lookup does not assert that the server has no icon pack');
+    options.packError = false;
+    await discoverPack(page, () => page.locator('#refresh').click());
+    assert.equal(await tip.isVisible(), true, 'A confirmed missing pack restores installation advice');
+    assert.equal(
+        options.requests.some((request) => request.path.endsWith('/items')),
+        false,
+        'The tip needs no inventory read'
+    );
+    await page.goto(`${base}#/`);
+    assert.equal(
+        await page.locator('a[href="https://ae2web.kuba6000.pl/icon-export"]').isVisible(),
+        false,
+        'The installation tip stays within Web settings'
+    );
+});
+
 test('animation settings remain unavailable when the server has no icon pack', async (t) => {
     const { page, base } = await fixture(t);
-    const discovery = page.waitForResponse((response) => response.url().endsWith('/api/icon-pack'));
-    await page.goto(`${base}#/web-settings`);
-    await (await discovery).finished();
+    await discoverPack(page, () => page.goto(`${base}#/web-settings`));
+    assert.equal(
+        await page.locator('#web-settings').getByRole('note').isVisible(),
+        false,
+        'Players do not get admin installation advice'
+    );
     const animations = page.getByRole('checkbox', { name: 'Animated resource icons', exact: true });
     const interval = page.getByRole('slider', { name: 'Animation update interval', exact: true });
     assert.equal(await animations.isDisabled(), true);
@@ -91,6 +133,7 @@ test('pack changes and reinstalls preserve disabled playback and its saved inter
 
 test('pending and failed discovery keep animation settings disabled until capability is confirmed', async (t) => {
     const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
     let intercepted;
     const held = new Promise((resolve) => {
         intercepted = resolve;
@@ -102,6 +145,8 @@ test('pending and failed discovery keep animation settings disabled until capabi
     const interval = page.getByRole('slider', { name: 'Animation update interval', exact: true });
     const help = page.locator('#animation-availability');
     await animations.waitFor();
+    const installTip = page.locator('#web-settings').getByRole('note');
+    assert.equal(await installTip.isVisible(), false, 'Pending discovery does not mean an icon pack is missing');
     assert.equal(await animations.isDisabled(), true);
     assert.equal(await interval.isDisabled(), true);
     const loadingHelp = await help.textContent();
@@ -114,6 +159,7 @@ test('pending and failed discovery keep animation settings disabled until capabi
     });
     await (await failure).finished();
     await settleFrames(page);
+    assert.equal(await installTip.isVisible(), false, 'Failed initial discovery does not mean an icon pack is missing');
     assert.equal(await animations.isDisabled(), true);
     assert.equal(await interval.isDisabled(), true);
     assert.notEqual(await help.textContent(), loadingHelp, 'A discovery failure is distinct from pending discovery');
