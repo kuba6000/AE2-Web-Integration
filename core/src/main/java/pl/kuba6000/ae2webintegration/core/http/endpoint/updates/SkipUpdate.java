@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.updates;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -76,7 +77,7 @@ public final class SkipUpdate extends IAsyncRequest {
                 deny(result);
                 return;
             }
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+            respond(HTTP_OK, new Response(ApiStatus.OK, null));
         } catch (IOException failure) {
             throw new UncheckedIOException("Failed to save skipped update", failure);
         }

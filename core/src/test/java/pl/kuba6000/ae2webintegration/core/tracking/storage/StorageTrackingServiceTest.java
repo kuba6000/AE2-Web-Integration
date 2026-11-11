@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.IOException;
@@ -9,7 +11,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -129,7 +130,7 @@ class StorageTrackingServiceTest {
             assertFalse(
                 history.points()
                     .stream()
-                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
+                    .anyMatch(point -> point.kind() == FLOW_OBSERVATION));
             StorageHistoryPoint flow = history.points()
                 .stream()
                 .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
@@ -680,7 +681,7 @@ class StorageTrackingServiceTest {
                 @NotNull List<StorageHistoryPoint> points) throws IOException {
                 entered.countDown();
                 try {
-                    if (!release.await(5, TimeUnit.SECONDS)) throw new IOException("Test writer did not resume");
+                    if (!release.await(5, SECONDS)) throw new IOException("Test writer did not resume");
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread()
                         .interrupt();
@@ -697,7 +698,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(blocked, 4)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 10, 5), true, true, 0L));
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            assertTrue(entered.await(5, SECONDS));
             assertTrue(service.submit(grid, 1, observation(item, 15, 7), true, true, 0L));
             service.setMaximumQueuedRows(1);
             assertFalse(service.submit(grid, 1, observation(item, 20, 9), true, true, 0L));
@@ -727,7 +728,7 @@ class StorageTrackingServiceTest {
             assertFalse(
                 recovery.points()
                     .stream()
-                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
+                    .anyMatch(point -> point.kind() == FLOW_OBSERVATION));
         } finally {
             release.countDown();
         }
@@ -924,7 +925,7 @@ class StorageTrackingServiceTest {
                     .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP));
             assertTrue(
                 resumed.stream()
-                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
+                    .anyMatch(point -> point.kind() == FLOW_OBSERVATION));
         }
     }
 
@@ -975,7 +976,7 @@ class StorageTrackingServiceTest {
         service.open(fence, 1);
         StorageObservation empty = StorageObservationFixtures
             .observation(0, true, true, Collections.emptyList(), Collections.emptyList());
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (!service.submit(fence, 1, empty, true, false, 0)) {
             if (System.nanoTime() >= deadline) throw new AssertionError("Worker did not release queue capacity");
             Thread.sleep(1);

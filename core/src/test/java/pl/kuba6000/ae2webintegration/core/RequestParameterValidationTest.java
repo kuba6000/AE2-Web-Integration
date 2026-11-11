@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
-import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.Map;
 
@@ -33,7 +34,7 @@ class RequestParameterValidationTest extends GridTestScope {
     void setUp() {
         TestGridFixtures.TestGrid liveGrid = TestGridFixtures.grid(10L, ME);
         AE2Controller.AE2Interface = TestGridFixtures.ae(liveGrid);
-        GRID = CoreEngine.GRID_IDENTITIES.getKey(liveGrid);
+        GRID = GRID_IDENTITIES.getKey(liveGrid);
         AE2Controller.itemIdentities.clear();
     }
 
@@ -75,7 +76,7 @@ class RequestParameterValidationTest extends GridTestScope {
                         .getAsJsonObject()));
             assertStatus("BAD_PARAM", request.getJSON());
             assertEquals(
-                HttpURLConnection.HTTP_BAD_REQUEST,
+                HTTP_BAD_REQUEST,
                 request.getResponse()
                     .httpStatus());
         }

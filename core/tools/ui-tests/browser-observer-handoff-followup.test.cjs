@@ -42,6 +42,7 @@ async function handoffFixture(t, frames) {
     const result = await fixture(t, '', { viewport: { width: 1000, height: 650 } });
     const { page, options } = result;
     await atlasFixture(page, options);
+    options.pack.hasAnimations = true;
     options.icons.pages.push({ digest: 'c'.repeat(64), width: 128, height: 64 });
     options.icons.animations = [{ page: 1, frames }];
     options.itemsA = [0, 1].map((index) => ({
@@ -52,7 +53,7 @@ async function handoffFixture(t, frames) {
     }));
     await controlVisibility(page);
     await page.goto(`${result.base}#/web-settings`);
-    await page.getByRole('slider', { name: 'Animation update interval', exact: true }).press('Home');
+    await page.getByRole('slider', { name: 'Animation update interval', exact: true }).fill('0');
     return result;
 }
 

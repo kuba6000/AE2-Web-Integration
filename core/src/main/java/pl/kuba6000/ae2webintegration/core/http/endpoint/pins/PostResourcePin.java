@@ -9,6 +9,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -26,8 +27,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
  * 
  * @pathParam gridKey Network identifier.
  * @response 200 {@link Response} Updated account pins.
- * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: invalid placement or input.
- * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} ITEM_NOT_FOUND: resource not found in
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid placement or input.
+ * @response 404 {@link ErrorResponse} ITEM_NOT_FOUND: resource not found in
  *           this network's records; refresh the terminal before retrying.
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/resource-pins")

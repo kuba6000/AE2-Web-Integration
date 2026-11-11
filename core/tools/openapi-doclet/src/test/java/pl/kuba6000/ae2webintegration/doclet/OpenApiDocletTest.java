@@ -54,8 +54,8 @@ class OpenApiDocletTest {
                  * @param unkeyed replacement list, or null when unchanged
                  * @example unkeyed null
                  */
-                private record Delta(java.util.Map<StableKey, Amount> updates,
-                    java.util.@org.jetbrains.annotations.Nullable List<String> unkeyed) {}
+                private record Delta(Map<StableKey, Amount> updates,
+                    @Nullable List<String> unkeyed) {}
                 /** @param quantity current stored quantity
                  * @example quantity 64
                  */
@@ -282,7 +282,7 @@ class OpenApiDocletTest {
                 public enum SelectionMode { PLAYER_ONLY, AUTOMATION_ONLY, ALL }
                 public static class Cpu {
                     /** Native automatic-selection policy; null when unsupported or unknown. */
-                    public @org.jetbrains.annotations.Nullable SelectionMode selectionMode;
+                    public @Nullable SelectionMode selectionMode;
                 }
             }
             """);
@@ -328,9 +328,9 @@ class OpenApiDocletTest {
             public class Grids {
                 public static class Description {
                     /** Native registry namespace; null when unavailable. */
-                    public @org.jetbrains.annotations.Nullable String registryNamespace;
+                    public @Nullable String registryNamespace;
                     /** Native registry path; null when unavailable. */
-                    public @org.jetbrains.annotations.Nullable String registryPath;
+                    public @Nullable String registryPath;
                     /** Resource display name.
                      * @example Iron Ingot
                      */
@@ -342,9 +342,9 @@ class OpenApiDocletTest {
                     /** Stable resource identifier; null when unavailable.
                      * @example AAAAAAAAAAAAAAAAAAAAAA
                      */
-                    public @org.jetbrains.annotations.Nullable StableKey itemKey;
+                    public @Nullable StableKey itemKey;
                     /** Atlas reference within this response; null when unavailable. */
-                    public @org.jetbrains.annotations.Nullable Icon icon;
+                    public @Nullable Icon icon;
                 }
                 public record Icon(int page, int x, int y) {}
                 public static class Resource extends Description {
@@ -442,7 +442,7 @@ class OpenApiDocletTest {
             public class Grids {
                 /** Include icon references; omitted means false. */
                 @QueryParam("icons") private boolean icons;
-                public record Response(String status, java.util.List<String> data) {}
+                public record Response(String status, List<String> data) {}
             }
             """);
         Path output = directory.resolve("query.json");
@@ -488,7 +488,7 @@ class OpenApiDocletTest {
              */
             @Endpoint(method = HttpMethod.GET, path = "/api/history")
             public class Grids {
-                @QueryParam("itemKey") private @org.jetbrains.annotations.Nullable StableKey itemKey;
+                @QueryParam("itemKey") private @Nullable StableKey itemKey;
                 @QueryParam("from") private long from;
                 @QueryParam("limit") private int limit = 200;
                 @QueryParam("icons") private boolean icons;
@@ -570,7 +570,7 @@ class OpenApiDocletTest {
              */
             @Endpoint(method = HttpMethod.GET, path = "/api/icon-page")
             public class Grids {
-                public record Failure(String status, @org.jetbrains.annotations.Nullable Void data) {}
+                public record Failure(String status, @Nullable Void data) {}
             }
             """);
         Path output = directory.resolve("binary.json");
@@ -687,13 +687,13 @@ class OpenApiDocletTest {
              */
             @Endpoint(method = HttpMethod.GET, path = "/api/grids")
             public class Grids {
-                public record Response(String status, java.util.List<GridInfo> data) {}
-                public record ErrorResponse(String status, @org.jetbrains.annotations.Nullable Void data) {}
+                public record Response(String status, List<GridInfo> data) {}
+                public record ErrorResponse(String status, @Nullable Void data) {}
                 public record GridInfo(StableKey key, int cpuCount, String owner, boolean isOwned,
-                    boolean isTrackingEnabled, java.util.Map<java.util.UUID, java.util.List<Source>> accessSources) {}
-                public record Source(Player player, @org.jetbrains.annotations.Nullable String side) {}
+                    boolean isTrackingEnabled, Map<UUID, List<Source>> accessSources) {}
+                public record Source(Player player, @Nullable String side) {}
                 public static class Player {
-                    public java.util.UUID uuid;
+                    public UUID uuid;
                     private String name;
                     public transient Object ignored = "hidden";
                     public static Object global = "hidden";
@@ -879,8 +879,8 @@ class OpenApiDocletTest {
 
     @ParameterizedTest
     @CsvSource({ "'@response nope',Malformed", "'@response 200 {@link Missing}',Unresolved",
-        "'@response 204 {@link String}',body", "'@response 200 {@link java.time.Instant}',Unsupported",
-        "'@queryParam key identifier',Unsupported", "'@response 200 {@link java.util.List}',Unsupported",
+        "'@response 204 {@link String}',body", "'@response 200 {@link Instant}',Unsupported",
+        "'@queryParam key identifier',Unsupported", "'@response 200 {@link List}',Unsupported",
         "'@response 200 {@link Object}',Unsupported" })
     void rejectsInvalidContractsWithoutReplacingOutput(String tag, String error) throws Exception {
         List<Path> sources = fixture(
@@ -935,11 +935,12 @@ class OpenApiDocletTest {
     @Test
     void rejectsCustomEnumAdaptersInsteadOfClaimingDefaultGsonShape() throws Exception {
         List<Path> sources = fixture("""
+            import com.google.gson.annotations.JsonAdapter;
             /** Endpoint.
              * @response 200 {@link State}
              */
             @Endpoint(method=HttpMethod.GET, path="/api/grids") public class Grids {
-                @com.google.gson.annotations.JsonAdapter(Object.class)
+                @JsonAdapter(Object.class)
                 public enum State { READY }
             }
             """);
@@ -1014,7 +1015,7 @@ class OpenApiDocletTest {
                 /** A Minecraft player. */
                 public static class Player {
                     /** Persistent Minecraft UUID. */
-                    public java.util.UUID uuid;
+                    public UUID uuid;
                     /** Last known username. */
                     public String name;
                 }
@@ -1077,13 +1078,13 @@ class OpenApiDocletTest {
                  * @keyExample accessSources 095be615-a8ad-4c33-8e9c-c7612fbf6c9f
                  */
                 public record Response(String status, int count, boolean enabled,
-                    @org.jetbrains.annotations.Nullable String note,
-                    java.util.Map<java.util.UUID, java.util.List<Player>> accessSources) {}
+                    @Nullable String note,
+                    Map<UUID, List<Player>> accessSources) {}
                 public static class Player {
                     /** Player identifier.
                      * @example 095be615-a8ad-4c33-8e9c-c7612fbf6c9f
                      */
-                    public java.util.UUID uuid;
+                    public UUID uuid;
                     /** Username.
                      * @example ExamplePlayer
                      */
@@ -1202,7 +1203,7 @@ class OpenApiDocletTest {
              * @response 201 {@link Endless}
              */
             @Endpoint(method=HttpMethod.GET, path="/api/grids") public class Grids {
-                public record Node(@org.jetbrains.annotations.Nullable Node next, java.util.List<Node> children) {}
+                public record Node(@Nullable Node next, List<Node> children) {}
                 public record Endless(Endless next) {}
             }
             """);
@@ -1241,7 +1242,7 @@ class OpenApiDocletTest {
                 /** Result.
                  * %s
                  */
-                public record Response(int count, boolean enabled, java.util.UUID uuid, String label) {}
+                public record Response(int count, boolean enabled, UUID uuid, String label) {}
             }
             """.formatted(tag));
         Result result = generate(sources, directory.resolve("invalid-field-example.json"));
@@ -1302,9 +1303,9 @@ class OpenApiDocletTest {
                  * @example cpuKey AAAAAAAAAAAAAAAAAAAAAA
                  * @example label Custom label
                  */
-                public record Payload(String name, @OptionalInput @org.jetbrains.annotations.Nullable Boolean enabled,
-                    @OptionalInput @org.jetbrains.annotations.Nullable StableKey cpuKey,
-                    @OptionalInput @org.jetbrains.annotations.Nullable String label) {}
+                public record Payload(String name, @OptionalInput @Nullable Boolean enabled,
+                    @OptionalInput @Nullable StableKey cpuKey,
+                    @OptionalInput @Nullable String label) {}
             }
             class Base {
                 @PathParam("gridKey") protected StableKey identity;
@@ -1476,7 +1477,7 @@ class OpenApiDocletTest {
         "'/api/grids/{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") StableKey a; @PathParam(\"gridKey\") StableKey b;', Duplicate",
         "'/api/grids/{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") static StableKey key;', Static",
         "'/api/grids/x{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") StableKey key;', placeholder",
-        "'/api/grids/{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") java.util.List<String> key;', Unsupported",
+        "'/api/grids/{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") List<String> key;', Unsupported",
         "'/api/grids/{gridKey}', '@pathParam gridKey Identifier.', '@PathParam(\"gridKey\") Payload key;', Unsupported",
         "'/api/grids', '', '@Body Payload a; @Body Payload b;', Multiple",
         "'/api/grids', '', '@Body String a;', concrete", "'/api/grids', '', '@Body static Payload a;', Static" })
@@ -1504,9 +1505,9 @@ class OpenApiDocletTest {
              * @response 200 {@link Response} Crafting details.
              */
             @Endpoint(method=HttpMethod.GET, path="/api/grids") public class Grids {
-                public record Response(java.util.@org.jetbrains.annotations.Nullable ArrayList<Item> items,
-                    java.util.HashSet<Position> positions) {}
-                public record Item(String name, java.util.ArrayList<Timing> timings) {}
+                public record Response(@Nullable ArrayList<Item> items,
+                    HashSet<Position> positions) {}
+                public record Item(String name, ArrayList<Timing> timings) {}
                 public record Timing(long start, long end) {}
                 public record Position(String dimension, int x) {}
             }
@@ -1585,6 +1586,7 @@ class OpenApiDocletTest {
         "OFFLINE,false" })
     void enumSchemasAndExamplesUseSerializedWireNames(String status, boolean valid) throws Exception {
         List<Path> sources = fixture("""
+            import com.google.gson.annotations.SerializedName;
             /** Auth operation.
              * @response 200 {@link Success} Successful request.
              * @response 401 {@link Failure} Authentication failed.
@@ -1594,9 +1596,9 @@ class OpenApiDocletTest {
             public class Grids {
                 public enum Status {
                     OK,
-                    @com.google.gson.annotations.SerializedName("unauthenticated") UNAUTHENTICATED,
-                    @com.google.gson.annotations.SerializedName("denied") DENIED,
-                    @com.google.gson.annotations.SerializedName("offline") OFFLINE
+                    @SerializedName("unauthenticated") UNAUTHENTICATED,
+                    @SerializedName("denied") DENIED,
+                    @SerializedName("offline") OFFLINE
                 }
                 /** @example status OK */
                 public record Success(Status status, Void data) {}
@@ -1606,7 +1608,9 @@ class OpenApiDocletTest {
             """.formatted(status));
         sources.add(source("com/google/gson/annotations/SerializedName.java", """
             package com.google.gson.annotations;
-            @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Target;
+            @Target(ElementType.FIELD)
             public @interface SerializedName { String value(); String[] alternate() default {}; }
             """));
         Path output = directory.resolve("enum-wire.json");
@@ -1658,20 +1662,24 @@ class OpenApiDocletTest {
     @Test
     void serverSettingsProjectionFiltersOnlyTheWebViewAndRetainsTypedInputs() throws Exception {
         List<Path> sources = fixture("""
+            import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+            import pl.kuba6000.ae2webintegration.core.config.EditableServerSettings;
             /** Edits settings.
              * @response 200 {@link Response} Settings.
              */
             @Endpoint(method = HttpMethod.POST, path = "/api/server/settings")
             public class Grids {
                 @Body private Input input;
-                public record Input(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings) {}
-                public record Response(pl.kuba6000.ae2webintegration.core.config.EditableServerSettings settings,
-                    pl.kuba6000.ae2webintegration.core.config.ConfigSettings raw) {}
+                public record Input(EditableServerSettings settings) {}
+                public record Response(EditableServerSettings settings,
+                    ConfigSettings raw) {}
             }
             """);
         sources.add(source("pl/kuba6000/ae2webintegration/core/config/WebSetting.java", """
             package pl.kuba6000.ae2webintegration.core.config;
-            @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Target;
+            @Target(ElementType.FIELD)
             public @interface WebSetting {
                 Access value();
                 enum Access { FILE_ONLY, SECRET }
@@ -1803,7 +1811,9 @@ class OpenApiDocletTest {
                 source(
                     "pl/kuba6000/ae2webintegration/core/http/contract/" + name + ".java",
                     "package pl.kuba6000.ae2webintegration.core.http.contract;\n"
-                        + "@java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)\n"
+                        + "import java.lang.annotation.ElementType;\n"
+                        + "import java.lang.annotation.Target;\n"
+                        + "@Target(ElementType.FIELD)\n"
                         + "public @interface "
                         + name
                         + " { "
@@ -1814,17 +1824,23 @@ class OpenApiDocletTest {
             package pl.kuba6000.ae2webintegration.core.identity;
             public final class StableKey { private long internal; }
             """));
-        files.add(
-            source(
-                "org/jetbrains/annotations/Nullable.java",
-                """
-                    package org.jetbrains.annotations;
-                    @java.lang.annotation.Target({java.lang.annotation.ElementType.TYPE_USE, java.lang.annotation.ElementType.FIELD,
-                        java.lang.annotation.ElementType.RECORD_COMPONENT})
-                    public @interface Nullable {}
-                    """));
+        files.add(source("org/jetbrains/annotations/Nullable.java", """
+            package org.jetbrains.annotations;
+            import java.lang.annotation.ElementType;
+            import java.lang.annotation.Target;
+            @Target({ElementType.TYPE_USE, ElementType.FIELD,
+                ElementType.RECORD_COMPONENT})
+            public @interface Nullable {}
+            """));
         files.add(source("fixture/Grids.java", """
             package fixture;
+            import java.time.Instant;
+            import java.util.ArrayList;
+            import java.util.HashSet;
+            import java.util.List;
+            import java.util.Map;
+            import java.util.UUID;
+            import org.jetbrains.annotations.Nullable;
             import pl.kuba6000.ae2webintegration.core.http.contract.*;
             import pl.kuba6000.ae2webintegration.core.identity.StableKey;
             """ + endpoint));

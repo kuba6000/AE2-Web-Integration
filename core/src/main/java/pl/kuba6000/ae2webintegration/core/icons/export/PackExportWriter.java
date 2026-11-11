@@ -23,6 +23,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter.CapacityException;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
@@ -169,7 +170,7 @@ public final class PackExportWriter {
             if (capture.kind() == CaptureKind.STATIC) {
                 try {
                     output.add(capture.key(), capture.pixels());
-                } catch (IconPackWriter.CapacityException limit) {
+                } catch (CapacityException limit) {
                     output.failure(
                         capture.key()
                             .toString(),
@@ -188,8 +189,8 @@ public final class PackExportWriter {
                                 if (unchanged) unchangedSamples.add(capture.key());
                             }
                         }
-                    } catch (IconPackWriter.CapacityException limit) {
-                        if (limit.scope() == IconPackWriter.CapacityException.Scope.EXPORT) animationsStopped = true;
+                    } catch (CapacityException limit) {
+                        if (limit.scope() == CapacityException.Scope.EXPORT) animationsStopped = true;
                         disabledAnimations.add(capture.key());
                         output.discardAnimation(capture.key());
                         output.failure(capture.key() + "/animation", limit.getMessage());

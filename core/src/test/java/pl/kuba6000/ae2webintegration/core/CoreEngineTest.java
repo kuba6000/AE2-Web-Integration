@@ -1,11 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
@@ -55,7 +56,7 @@ class CoreEngineTest {
         Config.INSTANCE.general.checkForUpdates = false;
         try {
             assertDoesNotThrow(CoreEngine::onServerStarted);
-            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertTrue(GRID_IDENTITIES.isInitialized());
             assertNotNull(CoreEngine.getResourcePins());
             assertNotNull(CoreEngine.getStorageTracking());
             assertNotNull(CoreEngine.getLiveStreams());
@@ -72,7 +73,7 @@ class CoreEngineTest {
         Config.INSTANCE.general.checkForUpdates = false;
         Path source = new File(platform.getWorldDirectory(), "ae2webintegration/grid-identities.json").toPath();
         Path databaseFile = source.resolveSibling("grids.sqlite");
-        byte[] invalid = "{broken".getBytes(StandardCharsets.UTF_8);
+        byte[] invalid = "{broken".getBytes(UTF_8);
         Files.createDirectories(source.getParent());
         Files.write(source, invalid);
         try {
@@ -82,7 +83,7 @@ class CoreEngineTest {
             assertTrue(
                 failure.getMessage()
                     .contains(databaseFile.toString()));
-            assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertFalse(GRID_IDENTITIES.isInitialized());
             assertNull(CoreEngine.getResourcePins());
             assertNull(CoreEngine.getStorageTracking());
             assertNull(CoreEngine.getCraftingHistory());
@@ -92,9 +93,9 @@ class CoreEngineTest {
             try (WorldDatabase released = new WorldDatabase(databaseFile, Config.INSTANCE.resourceHistory)) {
                 assertDoesNotThrow(released::open);
             }
-            Files.write(source, "{}".getBytes(StandardCharsets.UTF_8));
+            Files.write(source, "{}".getBytes(UTF_8));
             assertDoesNotThrow(CoreEngine::onServerStarted);
-            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertTrue(GRID_IDENTITIES.isInitialized());
             assertNotNull(CoreEngine.getResourcePins());
             assertNotNull(CoreEngine.getStorageTracking());
             assertNotNull(CoreEngine.getCraftingHistory());
@@ -110,7 +111,7 @@ class CoreEngineTest {
         Config.INSTANCE.general.port = 0;
         Config.INSTANCE.general.checkForUpdates = false;
         Path databaseFile = new File(platform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath();
-        byte[] original = "This existing file is not a SQLite database".getBytes(StandardCharsets.UTF_8);
+        byte[] original = "This existing file is not a SQLite database".getBytes(UTF_8);
         Files.createDirectories(databaseFile.getParent());
         Files.write(databaseFile, original);
         try {
@@ -120,7 +121,7 @@ class CoreEngineTest {
             assertTrue(
                 failure.getMessage()
                     .contains(databaseFile.toString()));
-            assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertFalse(GRID_IDENTITIES.isInitialized());
             assertNull(CoreEngine.getResourcePins());
             assertNull(CoreEngine.getStorageTracking());
             assertNull(CoreEngine.getCraftingHistory());
@@ -134,7 +135,7 @@ class CoreEngineTest {
             Config.INSTANCE.general.port = 0;
             Config.INSTANCE.general.checkForUpdates = false;
             assertDoesNotThrow(CoreEngine::onServerStarted);
-            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertTrue(GRID_IDENTITIES.isInitialized());
             assertNotNull(CoreEngine.getResourcePins());
             assertNotNull(CoreEngine.getStorageTracking());
             assertNotNull(CoreEngine.getCraftingHistory());
@@ -152,9 +153,9 @@ class CoreEngineTest {
             Config.reload();
             HttpServerTestFixture.startWorld(config);
             TestGridFixtures.TestGrid live = TestGridFixtures.grid(89503);
-            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(live);
+            StableKey key = GRID_IDENTITIES.getKey(live);
             assertNotNull(key);
-            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
             assertNotNull(data);
             GridSettingsData settings = data.getSettings();
             settings.setName("Keep");
@@ -166,7 +167,7 @@ class CoreEngineTest {
                     .isSuccess());
             assertEquals(90, settings.getStockSampleIntervalSeconds());
             assertEquals("Keep", settings.getName());
-            assertEquals(90, CoreEngine.GRID_IDENTITIES.getDataPolicy().stockSampleIntervalSeconds.max);
+            assertEquals(90, GRID_IDENTITIES.getDataPolicy().stockSampleIntervalSeconds.max);
             ConfigSettings published = Config.INSTANCE;
             config.write("resource_history.stock_sample_interval_seconds.default", 91);
             assertFalse(
@@ -226,7 +227,7 @@ class CoreEngineTest {
             };
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771003, iron, water, essentia);
             StableKey key = TestGridFixtures.resolvedKey(grid);
-            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
             assertNotNull(data);
             data.getSettings()
                 .setStorageTracked(true);
@@ -330,12 +331,12 @@ class CoreEngineTest {
         try {
             CoreEngine.onServerStarted();
             TestGridFixtures.TestGrid grid = TestGridFixtures.grid(771101);
-            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            StableKey key = GRID_IDENTITIES.getKey(grid);
             assertNotNull(key);
             CoreEngine.onServerStopping();
             CoreEngine.onServerStopped();
             CoreEngine.onServerStarted();
-            assertEquals(key, CoreEngine.GRID_IDENTITIES.findIdentity(grid.position()));
+            assertEquals(key, GRID_IDENTITIES.findIdentity(grid.position()));
         } finally {
             CoreEngine.onServerStopped();
         }
@@ -363,7 +364,7 @@ class CoreEngineTest {
             };
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771001, iron);
             StableKey key = TestGridFixtures.resolvedKey(grid);
-            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
             assertNotNull(data);
             data.getSettings()
                 .setStorageTracked(true);
@@ -482,7 +483,7 @@ class CoreEngineTest {
         }
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 

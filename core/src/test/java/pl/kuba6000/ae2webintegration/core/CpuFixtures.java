@@ -1,12 +1,14 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.BufferedReader;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -14,7 +16,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
@@ -24,7 +25,6 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -43,7 +43,7 @@ final class CpuFixtures {
 
     @SuppressWarnings("BusyWait") // Bounded polling is required for GC, which has no completion callback.
     static void awaitCollected(WeakReference<?> identity) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (identity.get() != null && System.nanoTime() < deadline) {
             System.gc();
             AE2Controller.itemIdentities.cleanUp();
@@ -84,7 +84,7 @@ final class CpuFixtures {
         }
 
         public @Nullable StableKey web$getKey() {
-            return stable ? StableKey.create(sink -> sink.putBytes(name.getBytes(StandardCharsets.UTF_8))) : null;
+            return stable ? StableKey.create(sink -> sink.putBytes(name.getBytes(UTF_8))) : null;
         }
 
         public @NotNull IAEKey web$copyIdentity() {
@@ -94,7 +94,7 @@ final class CpuFixtures {
         @Override
         public @NotNull StableKey web$getBaseKey() {
             baseKeyReads.incrementAndGet();
-            return StableKey.create(sink -> sink.putBytes(("base:" + name).getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes(("base:" + name).getBytes(UTF_8)));
         }
 
         public @NotNull String web$getRegistryNamespace() {
@@ -289,7 +289,7 @@ final class CpuFixtures {
         int cpuListReads;
 
         Grid(long id, Cpu... initial) {
-            super(id, false, AEControllerState.CONTROLLER_ONLINE);
+            super(id, false, CONTROLLER_ONLINE);
             Collections.addAll(cpus, initial);
         }
 

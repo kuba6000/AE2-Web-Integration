@@ -1,16 +1,20 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Channel;
 
 /** One server lifecycle's background checks and last completed recommendation. */
 public final class VersionChecker implements AutoCloseable {
@@ -31,7 +36,7 @@ public final class VersionChecker implements AutoCloseable {
     private static final long CHECK_INTERVAL_HOURS = 5;
     private static final long RETRY_DELAY_MINUTES = 5;
     // These bound connection and read inactivity, not total response duration.
-    private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
+    private static final int HTTP_TIMEOUT_MILLIS = (int) SECONDS.toMillis(5);
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
     private final @NotNull String currentVersion;
     private final @NotNull String loader;
@@ -111,12 +116,12 @@ public final class VersionChecker implements AutoCloseable {
                 if (release != null && (previous == null || !previous.tag.equals(release.tag))) {
                     LOG.warn(
                         "New {} release of AE2 Web Integration: {} at {}",
-                        release.channel == ReleaseManifest.Channel.STABLE ? "stable" : "prerelease",
+                        release.channel == Channel.STABLE ? "stable" : "prerelease",
                         release.tag,
                         release.releaseUrl);
                 }
                 pending = null;
-                scheduled = executor.schedule(this::checkForUpdates, CHECK_INTERVAL_HOURS, TimeUnit.HOURS);
+                scheduled = executor.schedule(this::checkForUpdates, CHECK_INTERVAL_HOURS, HOURS);
                 result.complete(release);
             }
         } catch (Exception e) {
@@ -124,7 +129,7 @@ public final class VersionChecker implements AutoCloseable {
                 if (closed) return;
                 LOG.debug("Could not check AE2 Web Integration releases", e);
                 pending = null;
-                scheduled = executor.schedule(this::checkForUpdates, RETRY_DELAY_MINUTES, TimeUnit.MINUTES);
+                scheduled = executor.schedule(this::checkForUpdates, RETRY_DELAY_MINUTES, MINUTES);
                 result.completeExceptionally(e);
             }
         }
@@ -141,12 +146,12 @@ public final class VersionChecker implements AutoCloseable {
         }
         try {
             int status = request.getResponseCode();
-            if (status != HttpURLConnection.HTTP_OK) throw new IOException("Release feed HTTP status: " + status);
+            if (status != HTTP_OK) throw new IOException("Release feed HTTP status: " + status);
             if (request.getContentLengthLong() > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
             try (InputStream body = request.getInputStream()) {
                 byte[] bytes = ByteStreams.toByteArray(ByteStreams.limit(body, MAX_RESPONSE_BYTES + 1));
                 if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
-                return ReleaseManifest.parse(new String(bytes, StandardCharsets.UTF_8), minecraftVersion);
+                return ReleaseManifest.parse(new String(bytes, UTF_8), minecraftVersion);
             }
         } finally {
             request.disconnect();

@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -7,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
@@ -179,19 +180,19 @@ class CoreDataTest {
         Files.createDirectories(
             file.getParentFile()
                 .toPath());
-        Files.write(file.toPath(), content.getBytes(StandardCharsets.UTF_8));
+        Files.write(file.toPath(), content.getBytes(UTF_8));
     }
 
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Files.readString requires Java 11; tests also target Java 8.
     private String readDataFile() throws Exception {
-        return new String(Files.readAllBytes(dataFile().toPath()), StandardCharsets.UTF_8);
+        return new String(Files.readAllBytes(dataFile().toPath()), UTF_8);
     }
 
     @Desugar
     private record TestPlatform(File configDirectory) implements IServerPlatform {
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 

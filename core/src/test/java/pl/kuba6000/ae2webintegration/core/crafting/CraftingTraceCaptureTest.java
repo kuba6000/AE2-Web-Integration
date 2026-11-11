@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.Limit.DESCRIPTION_CHARACTERS;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -171,7 +172,7 @@ class CraftingTraceCaptureTest {
                 .size());
         assertTrue(
             built.limits()
-                .contains(CraftingRecipeCapture.Limit.DESCRIPTION_CHARACTERS));
+                .contains(DESCRIPTION_CHARACTERS));
     }
 
     @Test

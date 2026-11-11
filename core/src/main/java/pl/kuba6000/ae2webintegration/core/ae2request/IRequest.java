@@ -12,7 +12,7 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -21,9 +21,9 @@ import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public abstract class IRequest {
 
-    protected RequestContext context;
+    protected AE2Controller.RequestContext context;
 
-    public boolean init(RequestContext context) {
+    public boolean init(AE2Controller.RequestContext context) {
         this.context = context;
         try {
             RequestInputs.bind(this, context);
@@ -45,7 +45,7 @@ public abstract class IRequest {
     private static final class ResponseResult {
 
         private final int httpStatus;
-        private final @Nullable RequestContext context;
+        private final @Nullable AE2Controller.RequestContext context;
         private @Nullable IResponseBody body;
         private @Nullable ApiResponse response;
 
@@ -55,7 +55,8 @@ public abstract class IRequest {
             this.response = response;
         }
 
-        private ResponseResult(int httpStatus, @NotNull IResponseBody body, @Nullable RequestContext context) {
+        private ResponseResult(int httpStatus, @NotNull IResponseBody body,
+            @Nullable AE2Controller.RequestContext context) {
             this.httpStatus = httpStatus;
             this.body = body;
             this.context = context;

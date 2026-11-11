@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_ACCEPTED;
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -8,7 +9,6 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -81,14 +81,14 @@ public final class Register extends IAsyncRequest {
 
     @Override
     public void handle() {
-        RegistrationResult result = AuthService
+        AuthService.RegistrationResult result = AuthService
             .register(context.getLifecycleGeneration(), input.username(), input.password());
         if (result.status() == ApiStatus.INVALID_PASSWORD) {
-            respond(HttpURLConnection.HTTP_BAD_REQUEST, new ErrorResponse(result.status(), null));
+            respond(HTTP_BAD_REQUEST, new ErrorResponse(result.status(), null));
         } else if (result.status() != ApiStatus.OK) {
             deny(result.status());
         } else {
-            respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new Confirmation(result.token())));
+            respond(HTTP_ACCEPTED, new Response(ApiStatus.OK, new Confirmation(result.token())));
         }
     }
 }

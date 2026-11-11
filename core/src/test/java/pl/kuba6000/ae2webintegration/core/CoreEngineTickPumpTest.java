@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.DRAIN_BUDGET_NANOS;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -132,7 +134,7 @@ class CoreEngineTickPumpTest {
         queue("b", null);
         queue("c", null);
         // The entry reading sets the deadline; the reading taken after the first request is past it.
-        CoreEngine.drainRequests(clock(0L, CoreEngine.DRAIN_BUDGET_NANOS + 1));
+        CoreEngine.drainRequests(clock(0L, DRAIN_BUDGET_NANOS + 1));
         assertEquals(Collections.singletonList("a"), ran);
         assertEquals(2, AE2Controller.requests.size());
 
@@ -167,7 +169,7 @@ class CoreEngineTickPumpTest {
     @Test
     void publicTickStillDrainsARequestWhenPlanMaintenanceIsDue() {
         CoreEngine.onServerStopped();
-        for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
+        for (int i = 0; i <= PLAN_SWEEP_GRIDS_PER_TICK; i++) {
             GridData.getOrCreate(TestGridFixtures.key(910_000L + i))
                 .addJob(
                     new CompletableFuture<>(),

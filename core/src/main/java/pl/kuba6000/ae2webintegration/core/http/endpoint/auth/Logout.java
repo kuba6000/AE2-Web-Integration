@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -56,9 +57,9 @@ public final class Logout extends IAsyncRequest {
     @Override
     public void handle() {
         if (!AuthService.logout(context)) {
-            respond(HttpURLConnection.HTTP_UNAVAILABLE, new Response(ApiStatus.SERVER_STOPPING, null));
+            respond(HTTP_UNAVAILABLE, new Response(ApiStatus.SERVER_STOPPING, null));
             return;
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+        respond(HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

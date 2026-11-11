@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.notification.message;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -21,6 +22,6 @@ public record CraftingMessage(@NotNull String gridName, @NotNull String cpuName,
                 .map(
                     requester -> requester.player() != null ? requester.player().name
                         : requester.source() == CraftingRequester.Source.WEB ? "Web" : "Automation")
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
     }
 }

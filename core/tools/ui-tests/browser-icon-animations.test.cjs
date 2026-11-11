@@ -7,6 +7,7 @@ async function animatedFixture(t, contextOptions = {}, autoRefresh = false) {
     const result = await fixture(t, '', contextOptions, { autoRefresh });
     const { page, options } = result;
     await atlasFixture(page, options);
+    options.pack.hasAnimations = true;
     options.icons.pages.push({ digest: 'c'.repeat(64), width: 128, height: 64 });
     options.icons.animations = [
         {
@@ -19,7 +20,7 @@ async function animatedFixture(t, contextOptions = {}, autoRefresh = false) {
     ];
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0, animation: 0 } }];
     await page.goto(`${result.base}#/web-settings`);
-    await page.getByRole('slider', { name: 'Animation update interval', exact: true }).press('Home');
+    await page.getByRole('slider', { name: 'Animation update interval', exact: true }).fill('0');
     return result;
 }
 

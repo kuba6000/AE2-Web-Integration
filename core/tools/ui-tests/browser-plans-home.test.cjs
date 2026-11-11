@@ -1677,7 +1677,7 @@ test('CPU overview aligns with the terminal and scrolls only real processor pane
         for (const key of viewport.width > 600 ? ['x', 'y'] : ['x'])
             assert.ok(
                 Math.abs(actual[key] - heading[key]) < 0.1,
-                `${key} heading position matches at ${viewport.width}x${viewport.height}`
+                `${key} heading position matches at ${viewport.width}x${viewport.height}: ${actual[key]} vs ${heading[key]}`
             );
         for (const key of ['fontSize', 'fontWeight', 'fontFamily', 'color']) assert.equal(actual[key], heading[key]);
         assert.equal(await page.getByRole('link', { name: 'Back to resources', exact: true }).count(), 0);

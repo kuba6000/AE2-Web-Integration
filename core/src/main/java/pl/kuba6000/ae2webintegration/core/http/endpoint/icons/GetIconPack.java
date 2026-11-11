@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.icons;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static pl.kuba6000.ae2webintegration.core.icons.IconPack.CONTENT_SIZE;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +29,8 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
  * @response 429 {@link ErrorResponse} Request rate limit exceeded.
  * @response 500 {@link ErrorResponse} Unexpected failure.
  * @response 503 {@link ErrorResponse} Server stopping.
- * @responseExample 200 {"status":"OK","data":{"available":false,"packId":null,"width":0,"height":0}}
+ * @responseExample 200
+ *                  {"status":"OK","data":{"available":false,"hasAnimations":false,"packId":null,"width":0,"height":0}}
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
@@ -41,13 +43,15 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 public final class GetIconPack extends IAsyncRequest {
 
     /**
-     * @param available whether a compatible icon pack is installed
-     * @param packId    installed pack identifier, or null when unavailable
-     * @param width     icon width in pixels, or zero when unavailable
-     * @param height    icon height in pixels, or zero when unavailable
+     * @param available     whether a compatible icon pack is installed
+     * @param hasAnimations whether the installed pack contains animated icons
+     * @param packId        installed pack identifier, or null when unavailable
+     * @param width         icon width in pixels, or zero when unavailable
+     * @param height        icon height in pixels, or zero when unavailable
      */
     @Desugar
-    public record Availability(boolean available, @Nullable String packId, int width, int height) {}
+    public record Availability(boolean available, boolean hasAnimations, @Nullable String packId, int width,
+        int height) {}
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull Availability data) implements IResponseBody {}
@@ -60,13 +64,14 @@ public final class GetIconPack extends IAsyncRequest {
         }
         IconPack pack = CoreEngine.getIconPack();
         respond(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 new Availability(
                     pack != null,
+                    pack != null && pack.hasAnimations(),
                     pack == null ? null : pack.packId(),
-                    pack == null ? 0 : IconPack.CONTENT_SIZE,
-                    pack == null ? 0 : IconPack.CONTENT_SIZE)));
+                    pack == null ? 0 : CONTENT_SIZE,
+                    pack == null ? 0 : CONTENT_SIZE)));
     }
 }

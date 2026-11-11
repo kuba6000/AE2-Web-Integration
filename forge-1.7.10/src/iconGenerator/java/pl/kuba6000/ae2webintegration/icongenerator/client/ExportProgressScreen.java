@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.input.Keyboard.KEY_ESCAPE;
+
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
@@ -61,7 +63,7 @@ final class ExportProgressScreen extends GuiScreen {
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) activate();
+        if (keyCode == KEY_ESCAPE) activate();
     }
 
     @Override

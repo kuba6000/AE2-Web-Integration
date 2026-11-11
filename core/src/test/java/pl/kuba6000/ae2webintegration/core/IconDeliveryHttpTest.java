@@ -1,8 +1,17 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
+import static pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle.SMALL_ICON;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
+import java.awt.AWTError;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -13,7 +22,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -25,7 +33,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,25 +57,23 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.ItemIdentityRequestTest.Grid;
-import pl.kuba6000.ae2webintegration.core.ItemIdentityRequestTest.Resource;
-import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePinGroup;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -86,8 +91,6 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.discord.Disco
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Pin;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
@@ -123,7 +126,7 @@ class IconDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -217,7 +220,7 @@ class IconDeliveryHttpTest {
             Config.INSTANCE.discord.webhook = "http://127.0.0.1:" + endpoint.getAddress()
                 .getPort() + "/";
             Config.INSTANCE.discord.roleId = "12345";
-            Config.INSTANCE.discord.craftingStyle = CraftingStyle.SMALL_ICON;
+            Config.INSTANCE.discord.craftingStyle = SMALL_ICON;
             CraftingMessage message = new CraftingMessage(
                 "Factory",
                 "CPU",
@@ -242,8 +245,7 @@ class IconDeliveryHttpTest {
 
                 @Override
                 protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                    if (scenario == 5 && name.equals("java.awt.Rectangle"))
-                        throw new java.awt.AWTError("Graphics unavailable");
+                    if (scenario == 5 && name.equals("java.awt.Rectangle")) throw new AWTError("Graphics unavailable");
                     if (name.equals("java.awt.Font")) throw new NoClassDefFoundError("Fonts unavailable");
                     if (!name.startsWith("pl.kuba6000.ae2webintegration.core.notification.destination.discord."))
                         return super.loadClass(name, resolve);
@@ -272,7 +274,7 @@ class IconDeliveryHttpTest {
                     contentType.get()
                         .startsWith("multipart/form-data;"),
                     contentType.get());
-                String wire = new String(body.get(), StandardCharsets.ISO_8859_1);
+                String wire = new String(body.get(), ISO_8859_1);
                 String boundary = contentType.get()
                     .substring(
                         contentType.get()
@@ -304,7 +306,7 @@ class IconDeliveryHttpTest {
                         .getAsString());
             } else {
                 assertEquals("application/json", contentType.get());
-                payload = new JsonParser().parse(new String(body.get(), StandardCharsets.UTF_8))
+                payload = new JsonParser().parse(new String(body.get(), UTF_8))
                     .getAsJsonObject();
                 assertEquals(
                     0,
@@ -343,9 +345,9 @@ class IconDeliveryHttpTest {
     void homeRecentFlowUsesDetachedTrackingWithoutInventoryOrGameDispatch() throws Exception {
         port = HttpServerTestFixture.startWorld(config);
         AtomicBoolean permitted = new AtomicBoolean(true);
-        Resource iron = new Resource("home-absent", 0, false);
-        Grid storage = new Grid(88501);
-        TestGrid grid = new TestGrid(88502, false, AEControllerState.CONTROLLER_ONLINE) {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("home-absent", 0, false);
+        ItemIdentityRequestTest.Grid storage = new ItemIdentityRequestTest.Grid(88501);
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(88502, false, CONTROLLER_ONLINE) {
 
             @Override
             public IAEStorageGrid web$getStorageGrid() {
@@ -359,7 +361,7 @@ class IconDeliveryHttpTest {
         };
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
         StableKey item = iron.web$getKey();
-        GridSettingsData settings = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey)
+        GridSettingsData settings = GRID_IDENTITIES.getPersistentData(gridKey)
             .getSettings();
         settings.setFlowTracked(true);
         AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
@@ -367,7 +369,7 @@ class IconDeliveryHttpTest {
         StorageCapture capture = storage.web$getStorageCapture();
         assertNotNull(capture);
         capture.recordFlow(iron, 17, 5);
-        WebPrincipal principal = TestGridFixtures.principal(TestGridFixtures.OWNER_ID);
+        WebPrincipal principal = TestGridFixtures.principal(OWNER_ID);
         ResourcePinStore pins = CoreEngine.getResourcePins();
         assertNotNull(pins);
         assertTrue(
@@ -390,7 +392,7 @@ class IconDeliveryHttpTest {
             .getPort();
         try {
             JsonObject entry = null;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            long deadline = System.nanoTime() + SECONDS.toNanos(8);
             while (System.nanoTime() < deadline) {
                 CoreEngine.onServerTick();
                 entry = json(connection("/api/resource-pins")).getAsJsonArray("data")
@@ -445,10 +447,10 @@ class IconDeliveryHttpTest {
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .get(0));
             assertEquals(reads, storage.storageReads, "HTTP only reads detached RAM and persisted pin metadata");
-            Pin savedPin = pins.list(principal)
+            ResourcePinStore.Pin savedPin = pins.list(principal)
                 .get(0);
-            HomeConfig current = savedPin.homeConfig();
-            HomeConfig muted = new HomeConfig(
+            ResourcePinStore.HomeConfig current = savedPin.homeConfig();
+            ResourcePinStore.HomeConfig muted = new ResourcePinStore.HomeConfig(
                 current.showStock(),
                 current.showFlow(),
                 current.showChart(),
@@ -459,21 +461,21 @@ class IconDeliveryHttpTest {
                 current.rangeMillis(),
                 false,
                 current.flowRangeMillis());
-            assertTrue(pins.update(principal, savedPin.pinKey(), null, null, null, muted));
+            assertTrue(pins.update(principal, savedPin.pinKey(), null, null, null, muted, null));
             assertTrue(
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .get(0)
                     .getAsJsonObject()
                     .get("recent")
                     .isJsonNull());
-            assertTrue(pins.update(principal, savedPin.pinKey(), true, false, null, current));
+            assertTrue(pins.update(principal, savedPin.pinKey(), true, false, null, current, null));
             assertTrue(
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .get(0)
                     .getAsJsonObject()
                     .get("recent")
                     .isJsonNull());
-            assertTrue(pins.update(principal, savedPin.pinKey(), false, true, null, null));
+            assertTrue(pins.update(principal, savedPin.pinKey(), false, true, null, null, null));
             permitted.set(false);
             JsonObject hidden = json(connection("/api/resource-pins")).getAsJsonArray("data")
                 .get(0)
@@ -493,7 +495,7 @@ class IconDeliveryHttpTest {
                     .get("recent")
                     .isJsonNull(),
                 "Disabling flow hides old publication before discovery");
-            long stopped = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            long stopped = System.nanoTime() + SECONDS.toNanos(3);
             do {
                 CoreEngine.onServerTick();
                 entry = json(connection("/api/resource-pins")).getAsJsonArray("data")
@@ -516,7 +518,7 @@ class IconDeliveryHttpTest {
     void playerPermissionRevocationRedactsPinsButOwnershipStillAllowsRemoval() throws Exception {
         port = HttpServerTestFixture.startWorld(config);
         AtomicBoolean permitted = new AtomicBoolean(true);
-        TestGrid grid = new TestGrid(88403, false, AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(88403, false, CONTROLLER_ONLINE) {
 
             @Override
             public boolean web$hasAccess(@NotNull UUID player) {
@@ -542,8 +544,7 @@ class IconDeliveryHttpTest {
                     item,
                     new ResourceDescriptor("test", "gold", 0, 0, "Gold", ResourceType.ITEM, item, item)),
                 Collections.emptyList()));
-        AtomicReference<WebPrincipal> principal = new AtomicReference<>(
-            TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+        AtomicReference<WebPrincipal> principal = new AtomicReference<>(TestGridFixtures.principal(OWNER_ID));
         ApiRouter router = new ApiRouter(
             exchange -> new AE2Controller.RequestContext(exchange, principal.get()),
             exchange -> false,
@@ -552,6 +553,9 @@ class IconDeliveryHttpTest {
         router.register(PostResourcePin.class);
         router.register(PatchResourcePin.class);
         router.register(DeleteResourcePin.class);
+        router.register(PostResourcePinGroup.class);
+        router.register(PatchResourcePinGroup.class);
+        router.register(DeleteResourcePinGroup.class);
         HttpServer endpoint = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         endpoint.createContext("/api", router);
         endpoint.start();
@@ -571,16 +575,52 @@ class IconDeliveryHttpTest {
                 .getAsJsonObject()
                 .get("pinKey")
                 .getAsString();
+            String groupPath = "/api/resource-pin-groups";
+            PinReply groupReply = pinRequest("POST", groupPath, "{\"name\":\"Machines\"}", true);
+            assertEquals(200, groupReply.code());
+            String groupKey = groupReply.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("groupKey")
+                .getAsString();
+            String assignment = "{\"homeGroup\":{\"groupKey\":\"" + groupKey + "\"}}";
+            PinReply assigned = pinRequest("PATCH", "/api/resource-pins/" + pinKey, assignment, true);
+            assertEquals(200, assigned.code());
+            assertEquals(
+                groupKey,
+                assigned.body()
+                    .getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("homeGroupKey")
+                    .getAsString());
+            JsonObject beforeInvalid = assigned.body();
+            for (String invalid : Arrays.asList(
+                "{\"homeGroup\":null}",
+                "{\"homeGroup\":{\"groupKey\":null}}",
+                "{\"homeGroup\":[]}",
+                "{\"homeGroup\":{\"groupKey\":\"" + StableKey.random() + "\"}}",
+                "{\"home\":false,\"homeGroup\":{}}")) {
+                assertEquals(400, pinRequest("PATCH", "/api/resource-pins/" + pinKey, invalid, true).code());
+                assertEquals(beforeInvalid, json(connection("/api/resource-pins")));
+            }
             principal.set(TestGridFixtures.principal(42));
             assertEquals(
                 0,
                 json(connection("/api/resource-pins")).getAsJsonArray("data")
                     .size());
+            assertEquals(
+                0,
+                json(connection("/api/resource-pins")).getAsJsonArray("groups")
+                    .size());
+            assertEquals(404, pinRequest("PATCH", groupPath + "/" + groupKey, "{\"name\":\"Stolen\"}", true).code());
+            assertEquals(200, pinRequest("DELETE", groupPath + "/" + groupKey, "", true).code());
             assertEquals(404, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"home\":false}", true).code());
             assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
-            principal.set(TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+            principal.set(TestGridFixtures.principal(OWNER_ID));
             permitted.set(false);
-            assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
+            assertSame(grid, GRID_IDENTITIES.getGrid(gridKey));
             JsonObject unavailable = json(connection("/api/resource-pins?icons=true")).getAsJsonArray("data")
                 .get(0)
                 .getAsJsonObject();
@@ -590,6 +630,32 @@ class IconDeliveryHttpTest {
             for (String field : Arrays.asList("gridKey", "itemKey", "gridName", "resource")) assertTrue(
                 unavailable.get(field)
                     .isJsonNull());
+            assertEquals(
+                groupKey,
+                unavailable.get("homeGroupKey")
+                    .getAsString());
+            assertEquals(200, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"homeGroup\":{}}", true).code());
+            assertTrue(
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("homeGroupKey")
+                    .isJsonNull());
+            assertEquals(200, pinRequest("PATCH", "/api/resource-pins/" + pinKey, assignment, true).code());
+            PinReply deletedGroup = pinRequest("DELETE", groupPath + "/" + groupKey, "", true);
+            assertEquals(200, deletedGroup.code());
+            JsonObject preserved = deletedGroup.body()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertTrue(
+                preserved.get("homeGroupKey")
+                    .isJsonNull());
+            assertEquals(
+                0,
+                preserved.get("homeOrder")
+                    .getAsInt());
+            assertEquals(unavailable.get("homeConfig"), preserved.get("homeConfig"));
             assertEquals(403, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"terminal\":true}", true).code());
             assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
             assertEquals(
@@ -603,10 +669,99 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void homePinGroupsRoundTripWithoutAnyLiveNetwork() throws Exception {
+        port = HttpServerTestFixture.startWorld(config);
+        String path = "/api/resource-pin-groups";
+        assertEquals(403, pinRequest("POST", path, "{\"name\":\"Production\"}", false).code());
+        PinReply created = pinRequest("POST", path, "{\"name\":\"  Production  \"}", true);
+        assertEquals(200, created.code());
+        JsonObject group = created.body()
+            .getAsJsonArray("groups")
+            .get(0)
+            .getAsJsonObject();
+        String key = group.get("groupKey")
+            .getAsString();
+        assertEquals(
+            "Production",
+            group.get("name")
+                .getAsString());
+        assertEquals(
+            0,
+            group.get("ordinal")
+                .getAsInt());
+        assertEquals(
+            0,
+            created.body()
+                .getAsJsonArray("data")
+                .size());
+        assertEquals(created.body(), json(connection("/api/resource-pins")));
+        PinReply duplicate = pinRequest("POST", path, "{\"name\":\"Production\"}", true);
+        assertEquals(409, duplicate.code());
+        assertEquals(
+            "GROUP_NAME_TAKEN",
+            duplicate.body()
+                .get("status")
+                .getAsString());
+        assertEquals(400, pinRequest("POST", path, "{\"name\":\"  \"}", true).code());
+        PinReply renamed = pinRequest("PATCH", path + "/" + key, "{\"name\":\"Machines\"}", true);
+        assertEquals(200, renamed.code());
+        assertEquals(
+            "Machines",
+            renamed.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("name")
+                .getAsString());
+        assertEquals(400, pinRequest("PATCH", path + "/" + key, "{\"move\":null}", true).code());
+        assertEquals(404, pinRequest("PATCH", path + "/" + StableKey.random(), "{\"name\":\"Other\"}", true).code());
+        assertEquals(200, pinRequest("DELETE", path + "/" + key, "", true).code());
+        assertEquals(200, pinRequest("DELETE", path + "/" + key, "", true).code());
+        assertEquals(
+            0,
+            json(connection("/api/resource-pins")).getAsJsonArray("groups")
+                .size());
+    }
+
+    @Test
+    void groupNameConflictsAndQuotaHaveDistinctStatusesWithoutMutatingTheSnapshot() throws Exception {
+        port = HttpServerTestFixture.startWorld(config);
+        String path = "/api/resource-pin-groups";
+        String firstKey = null;
+        for (int index = 0; index < 64; index++) {
+            PinReply created = pinRequest("POST", path, "{\"name\":\"Group " + index + "\"}", true);
+            assertEquals(200, created.code());
+            if (index == 0) firstKey = created.body()
+                .getAsJsonArray("groups")
+                .get(0)
+                .getAsJsonObject()
+                .get("groupKey")
+                .getAsString();
+        }
+        JsonObject before = json(connection("/api/resource-pins"));
+        PinReply full = pinRequest("POST", path, "{\"name\":\"Overflow\"}", true);
+        assertEquals(409, full.code());
+        assertEquals(
+            "GROUP_LIMIT_REACHED",
+            full.body()
+                .get("status")
+                .getAsString());
+        assertEquals(before, json(connection("/api/resource-pins")));
+        PinReply conflict = pinRequest("PATCH", path + "/" + firstKey, "{\"name\":\"Group 1\"}", true);
+        assertEquals(409, conflict.code());
+        assertEquals(
+            "GROUP_NAME_TAKEN",
+            conflict.body()
+                .get("status")
+                .getAsString());
+        assertEquals(before, json(connection("/api/resource-pins")));
+    }
+
+    @Test
     void resourcePinsUseDetachedMembershipAndRemainRemovableAfterGridRetirement() throws Exception {
         port = HttpServerTestFixture.startWorld(config);
-        TestGrid grid = new TestGrid(88401, false, AEControllerState.CONTROLLER_ONLINE);
-        TestGrid other = new TestGrid(88402, false, AEControllerState.CONTROLLER_ONLINE);
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(88401, false, CONTROLLER_ONLINE);
+        TestGridFixtures.TestGrid other = new TestGridFixtures.TestGrid(88402, false, CONTROLLER_ONLINE);
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
         StableKey otherKey = TestGridFixtures.resolvedKey(other);
         StableKey item = TestGridFixtures.key(81);
@@ -688,7 +843,7 @@ class IconDeliveryHttpTest {
             assertEquals(400, pinRequest("PATCH", "/api/resource-pins/" + pinKey, malformed, true).code());
             assertEquals(beforeInvalid, json(connection("/api/resource-pins")));
         }
-        CoreEngine.GRID_IDENTITIES.removeController(
+        GRID_IDENTITIES.removeController(
             grid.web$getControllers()
                 .iterator()
                 .next());
@@ -720,12 +875,12 @@ class IconDeliveryHttpTest {
                 + "Content-Type: application/json\r\n"
                 + (csrf ? "X-AE2-Request: true\r\n" : "")
                 + "Content-Length: "
-                + body.getBytes(StandardCharsets.UTF_8).length
+                + body.getBytes(UTF_8).length
                 + "\r\n\r\n"
                 + body;
             socket.getOutputStream()
-                .write(request.getBytes(StandardCharsets.UTF_8));
-            String response = IOUtils.toString(socket.getInputStream(), StandardCharsets.UTF_8);
+                .write(request.getBytes(UTF_8));
+            String response = IOUtils.toString(socket.getInputStream(), UTF_8);
             return new PinReply(
                 Integer.parseInt(response.split(" ", 3)[1]),
                 new Gson().fromJson(response.substring(response.indexOf("\r\n\r\n") + 4), JsonObject.class));
@@ -735,12 +890,12 @@ class IconDeliveryHttpTest {
     @Test
     void retentionPatchAppliesToInactiveHistoryAndSurvivesRestart() throws Exception {
         port = HttpServerTestFixture.startWorld(config);
-        TestGrid grid = new TestGrid(81079, false, AEControllerState.CONTROLLER_ONLINE);
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(81079, false, CONTROLLER_ONLINE);
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
         StableKey item = TestGridFixtures.key(121);
         StorageTrackingService service = CoreEngine.getStorageTracking();
         assertNotNull(service);
-        long observedAt = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        long observedAt = System.currentTimeMillis() - DAYS.toMillis(2);
         service.open(gridKey, 1);
         assertTrue(
             service.submit(
@@ -759,7 +914,7 @@ class IconDeliveryHttpTest {
                 true,
                 false,
                 observedAt));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (service.history(gridKey, item, 0, 100)
             .points()
             .isEmpty() && System.nanoTime() < deadline) Thread.sleep(5);
@@ -798,8 +953,8 @@ class IconDeliveryHttpTest {
                 + "\r\n\r\n"
                 + body;
             socket.getOutputStream()
-                .write(request.getBytes(StandardCharsets.UTF_8));
-            String response = IOUtils.toString(socket.getInputStream(), StandardCharsets.UTF_8);
+                .write(request.getBytes(UTF_8));
+            String response = IOUtils.toString(socket.getInputStream(), UTF_8);
             return Integer.parseInt(response.split(" ", 3)[1]);
         }
     }
@@ -812,7 +967,7 @@ class IconDeliveryHttpTest {
         StableKey missing = TestGridFixtures.key(123);
         if (installed) installPack(exact);
         port = HttpServerTestFixture.startWorld(config);
-        TestGrid grid = new TestGrid(81078, false, AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(81078, false, CONTROLLER_ONLINE) {
 
             @Override
             public IAEStorageGrid web$getStorageGrid() {
@@ -968,7 +1123,7 @@ class IconDeliveryHttpTest {
         assertTrue(
             disabled.get("icons")
                 .isJsonNull());
-        assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
+        assertSame(grid, GRID_IDENTITIES.getGrid(gridKey));
     }
 
     @Test
@@ -979,6 +1134,9 @@ class IconDeliveryHttpTest {
         JsonObject data = json(discovery).getAsJsonObject("data");
         assertTrue(
             data.get("available")
+                .getAsBoolean());
+        assertFalse(
+            data.get("hasAnimations")
                 .getAsBoolean());
         assertEquals(
             packId,
@@ -1068,6 +1226,10 @@ class IconDeliveryHttpTest {
         port = HttpServerTestFixture.startWorld(config);
         assertFalse(
             json(connection("/api/icon-pack")).getAsJsonObject("data")
+                .get("hasAnimations")
+                .getAsBoolean());
+        assertFalse(
+            json(connection("/api/icon-pack")).getAsJsonObject("data")
                 .get("available")
                 .getAsBoolean());
         CoreEngine.onServerStopped();
@@ -1120,7 +1282,7 @@ class IconDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -1204,8 +1366,12 @@ class IconDeliveryHttpTest {
         }
         Files.move(generated, directory.resolve("ae2webintegration/icons.ae2wi-icons"));
         port = HttpServerTestFixture.startWorld(config);
+        assertTrue(
+            json(connection("/api/icon-pack")).getAsJsonObject("data")
+                .get("hasAnimations")
+                .getAsBoolean());
         AtomicInteger normalized = new AtomicInteger();
-        Grid grid = new Grid(
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(
             88103,
             iconResource("exact-static", 12, exact, base, normalized),
             iconResource("base-animation", 7, TestGridFixtures.key(88104), base, normalized),
@@ -1263,7 +1429,7 @@ class IconDeliveryHttpTest {
             + page.get("digest")
                 .getAsString();
         try (InputStream input = connection(path).getInputStream()) {
-            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(input);
+            BufferedImage image = ImageIO.read(input);
             for (int index = 0; index < frames.size(); index++) {
                 JsonObject frame = frames.get(index)
                     .getAsJsonObject();
@@ -1289,10 +1455,15 @@ class IconDeliveryHttpTest {
         installPack(exactKey, baseKey);
         port = HttpServerTestFixture.startWorld(config);
         AtomicInteger normalized = new AtomicInteger();
-        Resource exact = iconResource("exact", 12, exactKey, baseKey, normalized);
-        Resource fallback = iconResource("worn", 7, TestGridFixtures.key(72), baseKey, normalized);
-        Resource missing = new Resource("missing", 3, false);
-        Grid grid = new Grid(31, exact, fallback, missing);
+        ItemIdentityRequestTest.Resource exact = iconResource("exact", 12, exactKey, baseKey, normalized);
+        ItemIdentityRequestTest.Resource fallback = iconResource(
+            "worn",
+            7,
+            TestGridFixtures.key(72),
+            baseKey,
+            normalized);
+        ItemIdentityRequestTest.Resource missing = new ItemIdentityRequestTest.Resource("missing", 3, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(31, exact, fallback, missing);
         AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
         String path = "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/items";
         JsonObject plain = syncedJson(path);
@@ -1354,8 +1525,9 @@ class IconDeliveryHttpTest {
         invalid.disconnect();
     }
 
-    private Resource iconResource(String id, long quantity, StableKey exact, StableKey base, AtomicInteger calls) {
-        return new Resource(id, quantity, false) {
+    private ItemIdentityRequestTest.Resource iconResource(String id, long quantity, StableKey exact, StableKey base,
+        AtomicInteger calls) {
+        return new ItemIdentityRequestTest.Resource(id, quantity, false) {
 
             public @NotNull IAEKey web$copyIdentity() {
                 return this;
@@ -1381,7 +1553,7 @@ class IconDeliveryHttpTest {
         AtomicInteger normalizations = new AtomicInteger();
         IAEKey[] resources = { iconResource("exact", 12, exact, base, normalizations),
             iconResource("fallback", 12, TestGridFixtures.key(153), base, normalizations),
-            new Resource("unavailable", 12, false) {
+            new ItemIdentityRequestTest.Resource("unavailable", 12, false) {
 
                 @Override
                 public @NotNull ResourceType web$getResourceType() {
@@ -1398,7 +1570,7 @@ class IconDeliveryHttpTest {
                     throw new IllegalStateException("Unsupported icon");
                 }
             } };
-        TestGrid grid = new TestGrid(154, false, AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(154, false, CONTROLLER_ONLINE) {
 
             private StorageCapture storageCapture;
 
@@ -1586,7 +1758,7 @@ class IconDeliveryHttpTest {
         port = HttpServerTestFixture.startWorld(config);
         AtomicInteger normalizations = new AtomicInteger();
         AtomicBoolean busy = new AtomicBoolean(true);
-        Resource resource = iconResource("worn", 7, exactKey, baseKey, normalizations);
+        ItemIdentityRequestTest.Resource resource = iconResource("worn", 7, exactKey, baseKey, normalizations);
         AtomicReference<IAEGenericStack> output = new AtomicReference<>(
             iconResource("product", 11, baseKey, baseKey, normalizations));
         AtomicReference<IStackList> resources = new AtomicReference<>(stacks(resource, resource));
@@ -1624,7 +1796,7 @@ class IconDeliveryHttpTest {
                 case "web$isCurrentlyCraftable" -> false;
                 default -> null;
             });
-        TestGrid grid = new TestGrid(93, false, AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(93, false, CONTROLLER_ONLINE) {
 
             private StorageCapture storageCapture;
 
@@ -1826,7 +1998,7 @@ class IconDeliveryHttpTest {
             missing.getAsJsonArray("items")
                 .size());
 
-        output.set(new Resource("unsupported-product", 19, false) {
+        output.set(new ItemIdentityRequestTest.Resource("unsupported-product", 19, false) {
 
             public @NotNull IAEKey web$copyIdentity() {
                 return this;
@@ -1857,7 +2029,7 @@ class IconDeliveryHttpTest {
                 .get("itemKey")
                 .getAsString());
 
-        output.set(new Resource("unidentified-product", 23, false) {
+        output.set(new ItemIdentityRequestTest.Resource("unidentified-product", 23, false) {
 
             public @NotNull IAEKey web$copyIdentity() {
                 throw new IllegalStateException("Unsupported identity");
@@ -1924,7 +2096,7 @@ class IconDeliveryHttpTest {
         StableKey base = TestGridFixtures.key(102);
         installPack(exact, base);
         port = HttpServerTestFixture.startWorld(config);
-        TestGrid grid = TestGridFixtures.grid(103);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(103);
         AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
         TestGridFixtures.track(grid);
         AtomicBoolean unavailable = new AtomicBoolean();
@@ -2018,7 +2190,7 @@ class IconDeliveryHttpTest {
         CraftingHistoryService history = CoreEngine.getCraftingHistory();
         assertNotNull(history);
         history.flush();
-        String path = "/api/grids/" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "/crafting-history";
+        String path = "/api/grids/" + GRID_IDENTITIES.getKey(grid) + "/crafting-history";
         JsonObject response = json(connection(path + "?icons=true"));
         assertEquals(
             packId,
@@ -2128,12 +2300,12 @@ class IconDeliveryHttpTest {
         ExecutorService client = Executors.newSingleThreadExecutor();
         try {
             Future<JsonObject> result = client.submit(() -> json(connection(path)));
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            long deadline = System.nanoTime() + SECONDS.toNanos(5);
             while (!result.isDone() && System.nanoTime() < deadline) {
                 CoreEngine.onServerTick();
                 Thread.sleep(1);
             }
-            return result.get(1, TimeUnit.SECONDS);
+            return result.get(1, SECONDS);
         } finally {
             client.shutdownNow();
         }
@@ -2182,7 +2354,7 @@ class IconDeliveryHttpTest {
         assertEquals(200, connection.getResponseCode());
         assertEquals("no-store", connection.getHeaderField("Cache-Control"));
         try (InputStream body = connection.getInputStream()) {
-            return new Gson().fromJson(IOUtils.toString(body, StandardCharsets.UTF_8), JsonObject.class);
+            return new Gson().fromJson(IOUtils.toString(body, UTF_8), JsonObject.class);
         }
     }
 }

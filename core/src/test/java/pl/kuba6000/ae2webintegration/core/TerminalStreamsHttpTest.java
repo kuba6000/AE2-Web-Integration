@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -7,6 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -19,7 +25,6 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,7 +34,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -42,7 +46,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -52,11 +55,9 @@ import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry.Bootstrap;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
@@ -79,8 +80,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
             @Override
             public void write(byte @NotNull [] bytes, int offset, int length) {
-                if (new String(bytes, offset, length, StandardCharsets.UTF_8).startsWith("event: heartbeat"))
-                    ready.countDown();
+                if (new String(bytes, offset, length, UTF_8).startsWith("event: heartbeat")) ready.countDown();
             }
         };
         TestGridFixtures.TestExchange exchange = new TestGridFixtures.TestExchange(null) {
@@ -99,7 +99,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             public void close() {
                 assertTrue(closeStarted.compareAndSet(false, true), "An HTTP response must finish only once");
                 closing.countDown();
-                assertTrue(Uninterruptibles.awaitUninterruptibly(releaseClose, 3, TimeUnit.SECONDS));
+                assertTrue(Uninterruptibles.awaitUninterruptibly(releaseClose, 3, SECONDS));
             }
         };
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
@@ -108,14 +108,14 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 StorageTopic.keyOf(fixture.grid),
                 fixture.reserve(),
                 false);
-            assertTrue(ready.await(2, TimeUnit.SECONDS));
+            assertTrue(ready.await(2, SECONDS));
             Future<?> reset = resets.submit(fixture.streams::reset);
             try {
-                assertTrue(closing.await(2, TimeUnit.SECONDS));
+                assertTrue(closing.await(2, SECONDS));
                 assertDoesNotThrow(fixture.streams::reset);
             } finally {
                 releaseClose.countDown();
-                reset.get(3, TimeUnit.SECONDS);
+                reset.get(3, SECONDS);
             }
             fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
             fixture.publish(2, Collections.emptyList());
@@ -141,8 +141,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
             @Override
             public void write(byte @NotNull [] bytes, int offset, int length) {
-                if (new String(bytes, offset, length, StandardCharsets.UTF_8).startsWith("event: heartbeat"))
-                    ready.countDown();
+                if (new String(bytes, offset, length, UTF_8).startsWith("event: heartbeat")) ready.countDown();
             }
         };
         TestGridFixtures.TestExchange failedClose = new TestGridFixtures.TestExchange(null) {
@@ -170,7 +169,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 StorageTopic.keyOf(fixture.grid),
                 fixture.reserve(),
                 false);
-            assertTrue(ready.await(2, TimeUnit.SECONDS));
+            assertTrue(ready.await(2, SECONDS));
             try (Connection healthy = fixture.open(fixture.reserve())) {
                 assertEquals("ready", readAnyEvent(healthy.input).name());
                 assertEquals("heartbeat", readAnyEvent(healthy.input).name());
@@ -193,8 +192,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
     void permissionFailureClosesOnlyItsSessionAndReclaimsAdmission() throws Exception {
         AtomicBoolean failFirst = new AtomicBoolean();
         CountDownLatch failedCheck = new CountDownLatch(1);
-        UUID firstUser = TestGridFixtures.playerIdentity(TestGridFixtures.OWNER_ID).uuid;
-        nativeGrid = new TestGridFixtures.TestGrid(77242, false, AEControllerState.CONTROLLER_ONLINE, 8) {
+        UUID firstUser = TestGridFixtures.playerIdentity(OWNER_ID).uuid;
+        nativeGrid = new TestGridFixtures.TestGrid(77242, false, CONTROLLER_ONLINE, 8) {
 
             @Override
             public boolean web$hasAccess(@NotNull UUID playerId) {
@@ -210,7 +209,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (
             Fixture fixture = new Fixture(
                 key,
-                TestGridFixtures.principal(TestGridFixtures.OWNER_ID),
+                TestGridFixtures.principal(OWNER_ID),
                 Collections.singletonList(row(iron, "Iron", 1)));
             Connection first = fixture.open(fixture.reserve())) {
             assertEquals("ready", readAnyEvent(first.input).name());
@@ -222,7 +221,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 assertEquals("heartbeat", readAnyEvent(second.input).name());
                 fixture.fillAdmission();
                 failFirst.set(true);
-                assertTrue(failedCheck.await(2, TimeUnit.SECONDS));
+                assertTrue(failedCheck.await(2, SECONDS));
                 assertClosedWithoutDelta(first.input);
                 assertNotNull(fixture.awaitAdmission());
                 for (int quantity = 2; quantity <= 3; quantity++) {
@@ -264,7 +263,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 }
 
                 boolean activeHeartbeat = false;
-                long deadline = initialHeartbeat + TimeUnit.SECONDS.toNanos(15);
+                long deadline = initialHeartbeat + SECONDS.toNanos(15);
                 for (int quantity = 4; System.nanoTime() < deadline; quantity++) {
                     fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
                     Event event = readAnyEvent(connection.input);
@@ -281,7 +280,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 }
                 assertTrue(activeHeartbeat, "Continuous deltas must not postpone the heartbeat");
                 assertTrue(
-                    System.nanoTime() - initialHeartbeat >= TimeUnit.SECONDS.toNanos(8),
+                    System.nanoTime() - initialHeartbeat >= SECONDS.toNanos(8),
                     "Deltas must not generate extra heartbeats between scheduled keepalives");
 
                 long lastHeartbeat = System.nanoTime();
@@ -297,7 +296,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     idle.data()
                         .toString());
                 assertTrue(
-                    System.nanoTime() - lastHeartbeat >= TimeUnit.SECONDS.toNanos(8),
+                    System.nanoTime() - lastHeartbeat >= SECONDS.toNanos(8),
                     "Idle keepalives retain the heartbeat interval");
             }
         }
@@ -310,7 +309,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(rows);
             RecentTrackingService recent = new RecentTrackingService(fixture.state, 100)) {
             recent.open(fixture.grid, 5, false, true, 100, 1000);
-            Bootstrap bootstrap = fixture.state
+            TerminalRegistry.Bootstrap bootstrap = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
             assertNull(bootstrap.recent());
@@ -414,7 +413,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     void changedOperationCountsPublishEvenWhenRecentQuantitiesAndTimesStayEqual() throws Exception {
         StableKey iron = TestGridFixtures.key(51);
         try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
-            Summary initial = new Summary(
+            RecentResourceActivity.Summary initial = new RecentResourceActivity.Summary(
                 120000,
                 3600000,
                 5000,
@@ -429,7 +428,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), initial);
             try (Connection connection = fixture.open(fixture.reserve())) {
                 assertEquals("ready", readEvent(connection.input).name());
-                Summary changed = initial.withResources(
+                RecentResourceActivity.Summary changed = initial.withResources(
                     Collections.singletonMap(iron, new RecentResourceActivity.Amount("10", "5", "2", "3", null)));
                 fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), changed);
                 JsonObject delta = readEvent(connection.input).data();
@@ -472,10 +471,10 @@ class TerminalStreamsHttpTest extends GridTestScope {
             RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
             recent.observe(observation(1000, rows), true, true);
             fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
-            Bootstrap bootstrap = fixture.state
+            TerminalRegistry.Bootstrap bootstrap = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
-            Summary initialRecent = bootstrap.recent();
+            RecentResourceActivity.Summary initialRecent = bootstrap.recent();
             assertNotNull(initialRecent);
             assertEquals(
                 "0",
@@ -568,7 +567,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
             AuthSession shortLogin = new AuthSession(fixture.principal, System.currentTimeMillis() + 600);
             fixture.requestSession.set(shortLogin);
-            Bootstrap snapshot = fixture.state
+            TerminalRegistry.Bootstrap snapshot = fixture.state
                 .reserve(fixture.grid, shortLogin, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             try (Connection connection = fixture.open(snapshot.subscription())) {
@@ -607,7 +606,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             AuthSession other = new AuthSession(fixture.principal, Long.MAX_VALUE);
             fixture.requestSession.set(other);
             assertEquals(400, fixture.status(first));
-            Bootstrap second = fixture.state
+            TerminalRegistry.Bootstrap second = fixture.state
                 .reserve(fixture.grid, other, false, null, null, System.currentTimeMillis());
             assertNotNull(second);
             fixture.session.invalidate();
@@ -628,7 +627,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
         TerminalRegistry state = new TerminalRegistry(hub);
         state.activate(grid, 5, System.currentTimeMillis());
         state.observed(grid, 5, observation(1, Collections.singletonList(row(iron, "Iron", 1))));
-        Bootstrap bootstrap = state.reserve(grid, session, false, null, null, System.currentTimeMillis());
+        TerminalRegistry.Bootstrap bootstrap = state
+            .reserve(grid, session, false, null, null, System.currentTimeMillis());
         assertNotNull(bootstrap);
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -643,12 +643,12 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
             @Override
             public void write(byte @NotNull [] bytes, int offset, int length) throws IOException {
-                String frame = new String(bytes, offset, length, StandardCharsets.UTF_8);
+                String frame = new String(bytes, offset, length, UTF_8);
                 if (!frame.startsWith("event: delta")) return;
                 if (deltas.isEmpty()) {
                     writing.countDown();
                     try {
-                        if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Writer not released");
+                        if (!release.await(3, SECONDS)) throw new IOException("Writer not released");
                     } catch (InterruptedException interrupted) {
                         throw new IOException(interrupted);
                     }
@@ -669,18 +669,18 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 return output;
             }
         };
-        try (LiveStreams streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null)) {
+        try (LiveStreams streams = new LiveStreams(hub, GRID_IDENTITIES, null)) {
             streams.open(
                 new AE2Controller.RequestContext(exchange, session),
                 StorageTopic.keyOf(grid),
                 bootstrap.subscription(),
                 false);
             state.observed(grid, 5, observation(2, Collections.singletonList(row(iron, "Iron", 10))));
-            assertTrue(writing.await(2, TimeUnit.SECONDS));
+            assertTrue(writing.await(2, SECONDS));
             state.observed(grid, 5, observation(3, Collections.singletonList(row(iron, "Iron", 20))));
             state.observed(grid, 5, observation(4, Collections.emptyList()));
             release.countDown();
-            assertTrue(sent.await(2, TimeUnit.SECONDS));
+            assertTrue(sent.await(2, SECONDS));
             Event first = readEvent(new BufferedReader(new StringReader(deltas.get(0))));
             Event second = readEvent(new BufferedReader(new StringReader(deltas.get(1))));
             assertEquals(
@@ -891,7 +891,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     @Test
     void expiredUnopenedReservationCannotOpenOrConsumeAdmissionForever() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            Bootstrap expired = fixture.state
+            TerminalRegistry.Bootstrap expired = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis() - 20_000);
             assertNotNull(expired);
             assertEquals(400, fixture.status(expired.subscription()));
@@ -1023,7 +1023,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             Connection connection = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(connection.input).name());
             assertTrue(
-                fixture.state.viewedGrids(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2))
+                fixture.state.viewedGrids(System.currentTimeMillis() + MINUTES.toMillis(2))
                     .isEmpty());
             assertEquals("reset", readEvent(connection.input).name());
             fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
@@ -1086,14 +1086,13 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     socket.getOutputStream()
                         .write(
                             ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                                .getBytes(StandardCharsets.UTF_8));
-                    BufferedReader input = new BufferedReader(
-                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                                .getBytes(UTF_8));
+                    BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), UTF_8));
                     assertEquals("ready", readEvent(input).name());
                 }
             }
-            Bootstrap replacement = null;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
+            TerminalRegistry.Bootstrap replacement = null;
+            long deadline = System.nanoTime() + SECONDS.toNanos(25);
             while (replacement == null && System.nanoTime() < deadline) {
                 fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
                 replacement = fixture.state
@@ -1121,11 +1120,11 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     socket.getOutputStream()
                         .write(
                             ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                                .getBytes(StandardCharsets.UTF_8));
+                                .getBytes(UTF_8));
                     socket.getOutputStream()
                         .flush();
                     int matched = 0;
-                    byte[] terminator = "\r\n\r\n".getBytes(StandardCharsets.UTF_8);
+                    byte[] terminator = "\r\n\r\n".getBytes(UTF_8);
                     while (matched < terminator.length) {
                         int value = socket.getInputStream()
                             .read();
@@ -1139,7 +1138,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 label[0] = 'y';
                 String secondLabel = new String(label);
                 long revision = 2;
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(18);
+                long deadline = System.nanoTime() + SECONDS.toNanos(18);
                 boolean recovered = false;
                 while (System.nanoTime() < deadline && !recovered) {
                     // A single event can fit entirely in an OS send buffer without blocking a writer.
@@ -1147,7 +1146,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     String name = (revision & 1) == 0 ? firstLabel : secondLabel;
                     fixture.publish(revision++, Collections.singletonList(row(TestGridFixtures.key(99), name, 1)));
                     fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
-                    Bootstrap reservation = fixture.state
+                    TerminalRegistry.Bootstrap reservation = fixture.state
                         .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
                     if (reservation == null) {
                         Thread.sleep(100);
@@ -1158,7 +1157,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                         int status = probe.getResponseCode();
                         if (status == 200) {
                             try (BufferedReader input = new BufferedReader(
-                                new InputStreamReader(probe.getInputStream(), StandardCharsets.UTF_8))) {
+                                new InputStreamReader(probe.getInputStream(), UTF_8))) {
                                 assertEquals("ready", readEvent(input).name());
                                 recovered = true;
                             }
@@ -1179,11 +1178,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     void nativePermissionRevocationClosesAllViewersWithoutServerTicks() throws Exception {
         TestGridFixtures.TestGrid nativeGrid = TestGridFixtures.grid(77241);
         StableKey key = TestGridFixtures.resolvedKey(nativeGrid);
-        try (
-            Fixture fixture = new Fixture(
-                key,
-                TestGridFixtures.principal(TestGridFixtures.OWNER_ID),
-                Collections.emptyList());
+        try (Fixture fixture = new Fixture(key, TestGridFixtures.principal(OWNER_ID), Collections.emptyList());
             Connection first = fixture.open(fixture.reserve());
             Connection second = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(first.input).name());
@@ -1249,7 +1244,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
         private Connection(HttpURLConnection connection) throws Exception {
             this.connection = connection;
-            input = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+            input = new BufferedReader(new InputStreamReader(connection.getInputStream(), UTF_8));
         }
 
         @Override
@@ -1276,7 +1271,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         private final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         private final LiveHub hub = new LiveHub();
         private final TerminalRegistry state = new TerminalRegistry(hub);
-        private final LiveStreams streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null);
+        private final LiveStreams streams = new LiveStreams(hub, GRID_IDENTITIES, null);
 
         private Fixture(List<StorageObservationFixtures.Row> rows) throws Exception {
             this(TestGridFixtures.grid(32), WebPrincipal.admin(), rows);
@@ -1284,7 +1279,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
         private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
             throws Exception {
-            this(CoreEngine.GRID_IDENTITIES.getGrid(grid), principal, rows);
+            this(GRID_IDENTITIES.getGrid(grid), principal, rows);
         }
 
         private Fixture(IAEGrid nativeGrid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
@@ -1318,7 +1313,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
 
         private String reserve(AuthSession login) {
-            Bootstrap snapshot = state.reserve(grid, login, false, null, null, System.currentTimeMillis());
+            TerminalRegistry.Bootstrap snapshot = state
+                .reserve(grid, login, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             return snapshot.subscription();
         }
@@ -1330,9 +1326,9 @@ class TerminalStreamsHttpTest extends GridTestScope {
             fail("Expected bounded live admission");
         }
 
-        private Bootstrap awaitAdmission() throws InterruptedException {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-            Bootstrap available;
+        private TerminalRegistry.Bootstrap awaitAdmission() throws InterruptedException {
+            long deadline = System.nanoTime() + SECONDS.toNanos(2);
+            TerminalRegistry.Bootstrap available;
             do {
                 available = state.reserve(grid, session, false, null, null, System.currentTimeMillis());
                 if (available != null) return available;

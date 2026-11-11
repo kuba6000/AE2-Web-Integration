@@ -1,10 +1,11 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraft.world.item.Items.AIR;
+
 import java.util.List;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraftforge.fluids.FluidStack;
@@ -172,7 +173,7 @@ final class EmiCatalogue {
     private @Nullable IconCandidate candidate(@NotNull EmiStack stack, @NotNull String context) {
         Object key = stack.getKey();
         if (key instanceof Item item) {
-            if (item == Items.AIR) return null;
+            if (item == AIR) return null;
             // Recipe catalysts can have amount zero; normalize a copy before native emptiness checks.
             EmiStack owned = stack.copy()
                 .setAmount(1);

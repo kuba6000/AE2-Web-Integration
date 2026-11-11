@@ -1,16 +1,18 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
@@ -25,7 +27,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
@@ -44,7 +45,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class OutputSnapshotTest extends GridTestScope {
@@ -61,7 +61,7 @@ class OutputSnapshotTest extends GridTestScope {
             CpuFixtures.Resource resource = new CpuFixtures.Resource("completed-" + job);
             ResourceSnapshot snapshot = ResourceSnapshot.capture(resource, 5);
             WeakReference<IAEKey> identity = new WeakReference<>(AE2Controller.itemIdentities.resolve(resource.key()));
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            long deadline = System.nanoTime() + SECONDS.toNanos(5);
             while (identity.get() != null && System.nanoTime() < deadline) {
                 System.gc();
                 AE2Controller.itemIdentities.cleanUp();
@@ -109,7 +109,7 @@ class OutputSnapshotTest extends GridTestScope {
         key.unavailable = true;
         stack.unavailable = true;
         JsonObject json = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(new ResourceStack(snapshot, null)))
             .getAsJsonObject();
         assertEquals(
@@ -188,7 +188,7 @@ class OutputSnapshotTest extends GridTestScope {
             IconMappings second = new IconMappings(pack);
             ResourceStack secondOutput = new ResourceStack(snapshot, second);
             ResourceStack withoutIcons = new ResourceStack(snapshot, null);
-            Gson gson = GSONUtils.GSON_BUILDER.create();
+            Gson gson = GSON_BUILDER.create();
             JsonObject firstJson = new JsonParser().parse(gson.toJson(firstOutput))
                 .getAsJsonObject();
             JsonObject secondJson = new JsonParser().parse(gson.toJson(secondOutput))
@@ -237,7 +237,7 @@ class OutputSnapshotTest extends GridTestScope {
         response.put("output", new ResourceStack(snapshot, null));
         response.put("unrelated", null);
         JsonObject json = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(response))
             .getAsJsonObject();
         JsonObject output = json.getAsJsonObject("output");
@@ -278,7 +278,7 @@ class OutputSnapshotTest extends GridTestScope {
         ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, 4)));
         assertNotNull(snapshot);
         JsonObject json = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(new ResourceStack(snapshot, null)))
             .getAsJsonObject();
         assertEquals(
@@ -327,10 +327,7 @@ class OutputSnapshotTest extends GridTestScope {
                     .equals("web$getCPUs")) return Collections.singleton(cpu);
                 throw new AssertionError("Unexpected crafting service operation");
             });
-        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-            990124,
-            false,
-            AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(990124, false, CONTROLLER_ONLINE) {
 
             @Override
             public IAECraftingGrid web$getCraftingGrid() {
@@ -409,11 +406,11 @@ class OutputSnapshotTest extends GridTestScope {
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         JsonObject before = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(new ResourceStack(initial, null)))
             .getAsJsonObject();
         JsonObject after = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(new ResourceStack(merged, null)))
             .getAsJsonObject();
         assertEquals(
@@ -478,8 +475,7 @@ class OutputSnapshotTest extends GridTestScope {
             available();
             if (brokenIdentity) throw new IllegalStateException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
-            return StableKey
-                .create(sink -> sink.putBytes(("resource:" + resourceType.name()).getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes(("resource:" + resourceType.name()).getBytes(UTF_8)));
         }
 
         public @NotNull IAEKey web$copyIdentity() {

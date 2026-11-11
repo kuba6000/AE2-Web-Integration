@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +11,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -121,7 +122,7 @@ public final class PatchGridSettings extends IAsyncRequest {
                 return;
             }
             try {
-                ResourceHistory policy = registry.getDataPolicy();
+                ConfigSettings.ResourceHistory policy = registry.getDataPolicy();
                 if (input.stockSampleIntervalSeconds() != null)
                     policy.stockSampleIntervalSeconds.validate(input.stockSampleIntervalSeconds());
                 if (input.flowFlushIntervalSeconds() != null)
@@ -167,7 +168,7 @@ public final class PatchGridSettings extends IAsyncRequest {
                 return;
             }
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
+        respond(HTTP_OK, new Response(ApiStatus.OK, result));
     }
 
     private static @NotNull String normalizeName(@NotNull String name) {

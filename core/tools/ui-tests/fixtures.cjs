@@ -182,6 +182,7 @@ function refreshingFixture(t, mount, contextOptions, flags) {
 async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, autoRefresh = false } = {}) {
     const options = {
         pins: [],
+        groups: [],
         delayA: 0,
         status: 200,
         requests: [],
@@ -255,6 +256,20 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
         accessSources: {}
     };
     const planRequests = new Map();
+    function compactHome() {
+        for (const key of new Set(options.pins.map((pin) => pin.homeGroupKey ?? null))) {
+            options.pins
+                .filter((pin) => pin.homeOrder !== null && (pin.homeGroupKey ?? null) === key)
+                .sort((a, b) => a.homeOrder - b.homeOrder)
+                .forEach((pin, order) => (pin.homeOrder = order));
+        }
+    }
+    const appendOrder = (placement, gridKey) =>
+        options.pins.filter(
+            (pin) =>
+                pin[`${placement}Order`] !== null &&
+                (placement === 'home' ? !pin.homeGroupKey : pin.gridKey === gridKey)
+        ).length;
     const server = http.createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
         if (!url.pathname.startsWith(mount + '/')) {
@@ -434,7 +449,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                     response.writeHead(503).end(JSON.stringify({ status: 'INTERNAL_ERROR', data: null }));
                     return;
                 }
-                const pack = options.pack || { available: false, packId: null, width: 0, height: 0 };
+                const pack = options.pack || {
+                    available: false,
+                    hasAnimations: false,
+                    packId: null,
+                    width: 0,
+                    height: 0
+                };
                 if (options.packDelay) await new Promise((resolve) => setTimeout(resolve, options.packDelay));
                 response.end(JSON.stringify({ status: 'OK', data: pack }));
             } else if (resource === '/api/auth/logout') {
@@ -444,6 +465,54 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 }
                 options.loggedOut = true;
                 response.end(JSON.stringify({ status: 'OK', data: null }));
+            } else if (resource.startsWith('/api/resource-pin-groups')) {
+                if (options.groupMutationStatus) {
+                    const code = ['GROUP_NAME_TAKEN', 'GROUP_LIMIT_REACHED'].includes(options.groupMutationStatus)
+                        ? 409
+                        : 400;
+                    response.writeHead(code).end(JSON.stringify({ status: options.groupMutationStatus, data: null }));
+                    return;
+                }
+                const input = options.requests.at(-1).body;
+                const key = resource.split('/').at(-1);
+                if (request.method === 'POST')
+                    options.groups.push({
+                        groupKey: `group-${options.groups.length}`,
+                        name: input.name.trim(),
+                        ordinal: options.groups.length
+                    });
+                if (request.method === 'PATCH') {
+                    const group = options.groups.find((value) => value.groupKey === key);
+                    if (input.name !== undefined) group.name = input.name.trim();
+                    if (input.move) {
+                        const ordered = [...options.groups].sort((a, b) => a.ordinal - b.ordinal);
+                        const index = ordered.indexOf(group),
+                            other = ordered[index + (input.move === 'earlier' ? -1 : 1)];
+                        if (other) [group.ordinal, other.ordinal] = [other.ordinal, group.ordinal];
+                    }
+                }
+                if (request.method === 'DELETE') {
+                    let index = options.pins.filter((pin) => pin.homeOrder !== null && !pin.homeGroupKey).length;
+                    for (const pin of options.pins
+                        .filter((pin) => pin.homeGroupKey === key)
+                        .sort((a, b) => a.homeOrder - b.homeOrder)) {
+                        pin.homeGroupKey = null;
+                        pin.homeOrder = index++;
+                    }
+                    options.groups = options.groups
+                        .filter((group) => group.groupKey !== key)
+                        .sort((a, b) => a.ordinal - b.ordinal);
+                    options.groups.forEach((group, ordinal) => (group.ordinal = ordinal));
+                    compactHome();
+                }
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: options.pins,
+                        groups: options.groups,
+                        icons: options.icons ?? null
+                    })
+                );
             } else if (resource.includes('/resource-pins')) {
                 const input = options.requests.at(-1).body;
                 if (request.method === 'POST') {
@@ -459,6 +528,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                             resource: options.itemsA.find((item) => item.itemKey === input.itemKey) ?? iron,
                             terminalOrder: null,
                             homeOrder: null,
+                            homeGroupKey: null,
                             homeConfig: {
                                 showStock: true,
                                 showFlow: true,
@@ -475,26 +545,34 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                         options.pins.push(pin);
                     }
                     if (pin[`${input.placement}Order`] === null)
-                        pin[`${input.placement}Order`] = options.pins.filter(
-                            (value) => value[`${input.placement}Order`] !== null
-                        ).length;
+                        pin[`${input.placement}Order`] = appendOrder(input.placement, pin.gridKey);
                 } else if (request.method === 'PATCH') {
                     const key = resource.split('/').at(-1);
                     const pin = options.pins.find((pin) => pin.pinKey === key);
                     for (const placement of ['home', 'terminal'])
                         if (input[placement] !== undefined)
                             pin[`${placement}Order`] = input[placement]
-                                ? (pin[`${placement}Order`] ??
-                                  options.pins.filter((value) => value[`${placement}Order`] !== null).length)
+                                ? (pin[`${placement}Order`] ?? appendOrder(placement, pin.gridKey))
                                 : null;
                     if (input.homeConfig) pin.homeConfig = input.homeConfig;
+                    if (input.homeGroup) {
+                        const target = input.homeGroup.groupKey ?? null;
+                        pin.homeOrder = options.pins.filter(
+                            (value) =>
+                                value !== pin && value.homeOrder !== null && (value.homeGroupKey ?? null) === target
+                        ).length;
+                        pin.homeGroupKey = target;
+                    }
+                    if (input.home === false) pin.homeGroupKey = null;
                     if (input.move) {
                         const property = `${input.move.placement}Order`;
                         const ordered = options.pins
                             .filter(
                                 (value) =>
                                     value[property] !== null &&
-                                    (input.move.placement === 'home' || value.gridKey === pin.gridKey)
+                                    (input.move.placement === 'home'
+                                        ? (value.homeGroupKey ?? null) === (pin.homeGroupKey ?? null)
+                                        : value.gridKey === pin.gridKey)
                             )
                             .sort((a, b) => a[property] - b[property]);
                         const index = ordered.indexOf(pin),
@@ -504,7 +582,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                     options.pins = options.pins.filter((pin) => pin.homeOrder !== null || pin.terminalOrder !== null);
                 } else if (request.method === 'DELETE')
                     options.pins = options.pins.filter((pin) => pin.pinKey !== resource.split('/').at(-1));
-                response.end(JSON.stringify({ status: 'OK', data: options.pins, icons: options.icons ?? null }));
+                if (request.method !== 'GET') compactHome();
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: options.pins,
+                        groups: options.groups,
+                        icons: options.icons ?? null
+                    })
+                );
             } else if (resource === '/api/grids') {
                 if (options.gridDelay) await new Promise((resolve) => setTimeout(resolve, options.gridDelay));
                 if (options.gridError === 'NETWORK_ERROR') {
@@ -897,7 +983,7 @@ async function atlasFixture(page, options) {
         height: 64,
         pages: [{ digest: 'b'.repeat(64), width: 128, height: 64 }]
     };
-    options.pack = { available: true, packId: options.icons.packId, width: 64, height: 64 };
+    options.pack = { available: true, hasAnimations: false, packId: options.icons.packId, width: 64, height: 64 };
 }
 
 // Public seam: API names become readable, safely styled browser content; section codes

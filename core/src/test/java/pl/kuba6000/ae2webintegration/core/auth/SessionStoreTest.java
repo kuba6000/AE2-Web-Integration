@@ -1,14 +1,14 @@
 package pl.kuba6000.ae2webintegration.core.auth;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.DAYS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -31,8 +31,7 @@ class SessionStoreTest {
         Map<String, AuthSession> sessions = new ConcurrentHashMap<>();
         sessions.put(SessionStore.hashToken("template"), AuthSession.create(WebPrincipal.admin(), true, 0, "password"));
         new SessionStore(file.toFile(), sessions).save(0);
-        JsonObject document = new Gson()
-            .fromJson(new String(Files.readAllBytes(file), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject document = new Gson().fromJson(new String(Files.readAllBytes(file), UTF_8), JsonObject.class);
         JsonObject template = document.getAsJsonArray("sessions")
             .get(0)
             .getAsJsonObject();
@@ -40,14 +39,14 @@ class SessionStoreTest {
         for (int i = 0; i < 21; i++) {
             JsonObject entry = new Gson().fromJson(template.toString(), JsonObject.class);
             entry.addProperty("hash", SessionStore.hashToken("token-" + i));
-            entry.addProperty("absolute", TimeUnit.DAYS.toMillis(60) + i);
+            entry.addProperty("absolute", DAYS.toMillis(60) + i);
             entries.add(entry);
         }
         document.add("sessions", entries);
         Files.write(
             file,
             document.toString()
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         sessions.clear();
         SessionStore store = new SessionStore(file.toFile(), sessions);
         store.load(1000, principal -> "password");
@@ -79,8 +78,7 @@ class SessionStoreTest {
         assertTrue(Files.exists(file));
         assertFalse(Files.exists(directory.resolve("sessions.json.bad")));
         store.saveIfNeeded(0);
-        JsonObject saved = new Gson()
-            .fromJson(new String(Files.readAllBytes(file), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject saved = new Gson().fromJson(new String(Files.readAllBytes(file), UTF_8), JsonObject.class);
         assertEquals(
             1,
             saved.getAsJsonArray("sessions")
@@ -93,8 +91,7 @@ class SessionStoreTest {
         Map<String, AuthSession> sessions = new ConcurrentHashMap<>();
         sessions.put(SessionStore.hashToken("template"), AuthSession.create(WebPrincipal.admin(), true, 0, "password"));
         new SessionStore(file.toFile(), sessions).save(0);
-        JsonObject document = new Gson()
-            .fromJson(new String(Files.readAllBytes(file), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject document = new Gson().fromJson(new String(Files.readAllBytes(file), UTF_8), JsonObject.class);
         JsonObject template = document.getAsJsonArray("sessions")
             .get(0)
             .getAsJsonObject();
@@ -102,7 +99,7 @@ class SessionStoreTest {
         for (int i = 0; i < 24; i++) {
             JsonObject entry = new Gson().fromJson(template.toString(), JsonObject.class);
             entry.addProperty("hash", SessionStore.hashToken("token-" + i));
-            entry.addProperty("absolute", TimeUnit.DAYS.toMillis(60) + i);
+            entry.addProperty("absolute", DAYS.toMillis(60) + i);
             if (i >= 22) entry.addProperty("uuid", "00000000-0000-0000-0000-000000000001");
             entries.add(entry);
         }
@@ -110,7 +107,7 @@ class SessionStoreTest {
         Files.write(
             file,
             document.toString()
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         sessions.clear();
         AtomicInteger credentialResolutions = new AtomicInteger();
         SessionStore store = new SessionStore(file.toFile(), sessions);
@@ -125,8 +122,7 @@ class SessionStoreTest {
         assertTrue(sessions.containsKey(SessionStore.hashToken("token-23")));
         assertEquals(22, credentialResolutions.get(), "discarded entries must not perform credential work");
         store.saveIfNeeded(1000);
-        JsonObject saved = new Gson()
-            .fromJson(new String(Files.readAllBytes(file), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject saved = new Gson().fromJson(new String(Files.readAllBytes(file), UTF_8), JsonObject.class);
         assertEquals(
             22,
             saved.getAsJsonArray("sessions")
@@ -136,15 +132,13 @@ class SessionStoreTest {
     @Test
     void malformedSessionsArePreservedAndCannotAuthenticate() throws Exception {
         Path file = directory.resolve("sessions.json");
-        Files.write(file, "not-json".getBytes(StandardCharsets.UTF_8));
+        Files.write(file, "not-json".getBytes(UTF_8));
         Map<String, AuthSession> sessions = new ConcurrentHashMap<>();
         SessionStore store = new SessionStore(file.toFile(), sessions);
         assertThrows(IOException.class, () -> store.load(0, principal -> "password"));
         assertTrue(sessions.isEmpty());
         assertFalse(Files.exists(file));
-        assertEquals(
-            "not-json",
-            new String(Files.readAllBytes(directory.resolve("sessions.json.bad")), StandardCharsets.UTF_8));
+        assertEquals("not-json", new String(Files.readAllBytes(directory.resolve("sessions.json.bad")), UTF_8));
         store.save(0);
         store.load(0, principal -> "password");
         assertTrue(sessions.isEmpty());
@@ -197,7 +191,7 @@ class SessionStoreTest {
             AuthSession.create(WebPrincipal.admin(), false, 0, "password"));
         SessionStore store = new SessionStore(file.toFile(), sessions);
         store.save(1);
-        String json = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        String json = new String(Files.readAllBytes(file), UTF_8);
         assertFalse(json.contains("remembered-secret"));
         assertFalse(json.contains("temporary-secret"));
         assertFalse(json.contains("password"));
@@ -219,7 +213,7 @@ class SessionStoreTest {
         sessions.put(SessionStore.hashToken("token"), AuthSession.create(WebPrincipal.admin(), true, 0, "password"));
         new SessionStore(file.toFile(), sessions).save(0);
         sessions.clear();
-        new SessionStore(file.toFile(), sessions).load(TimeUnit.DAYS.toMillis(7), principal -> "password");
+        new SessionStore(file.toFile(), sessions).load(DAYS.toMillis(7), principal -> "password");
         assertTrue(sessions.isEmpty());
     }
 }

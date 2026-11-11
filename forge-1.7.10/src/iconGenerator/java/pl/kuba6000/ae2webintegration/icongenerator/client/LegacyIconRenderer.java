@@ -1,5 +1,22 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.opengl.GL11.GL_ALPHA_TEST;
+import static org.lwjgl.opengl.GL11.GL_BLEND;
+import static org.lwjgl.opengl.GL11.GL_COLOR_WRITEMASK;
+import static org.lwjgl.opengl.GL11.GL_CULL_FACE;
+import static org.lwjgl.opengl.GL11.GL_DEPTH_TEST;
+import static org.lwjgl.opengl.GL11.GL_FOG;
+import static org.lwjgl.opengl.GL11.GL_GREATER;
+import static org.lwjgl.opengl.GL11.GL_LEQUAL;
+import static org.lwjgl.opengl.GL11.GL_LIGHTING;
+import static org.lwjgl.opengl.GL11.GL_MODELVIEW;
+import static org.lwjgl.opengl.GL11.GL_PROJECTION;
+import static org.lwjgl.opengl.GL11.GL_SCISSOR_TEST;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL12.GL_RESCALE_NORMAL;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
+
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -25,15 +42,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL21;
 
 import com.gtnewhorizon.gtnhlib.client.renderer.TessellatorManager;
 
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -79,11 +94,12 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         renderItem.renderWithColor = true;
     }
 
-    void item(@NotNull ItemStack stack, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
+    void item(@NotNull ItemStack stack, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, () -> {
             RenderHelper.enableGUIStandardItemLighting();
             // GuiContainer enables this for RenderItem's scaled 3D block normals.
-            GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+            GL11.glEnable(GL_RESCALE_NORMAL);
             try {
                 renderItem
                     .renderItemAndEffectIntoGUI(minecraft.fontRenderer, minecraft.getTextureManager(), stack, 0, 0);
@@ -94,8 +110,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, () -> {
             IIcon icon = stack.getFluid()
                 .getIcon(stack);
@@ -104,9 +120,9 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
                 .getColor(stack);
             minecraft.getTextureManager()
                 .bindTexture(TextureMap.locationBlocksTexture);
-            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL_LIGHTING);
             // One sprite needs no composition. Write straight RGB and texture alpha directly to the PNG target.
-            GL11.glDisable(GL11.GL_BLEND);
+            GL11.glDisable(GL_BLEND);
             Tessellator tessellator = Tessellator.instance;
             tessellator.startDrawingQuads();
             // Forge 1.7.10 fluid colors are RGB; the absent high byte is not transparency.
@@ -119,8 +135,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Runnable draw)
-        throws RenderFailure {
+    private void capture(@NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures,
+        @NotNull Runnable draw) throws IIconCapture.RenderFailure {
         if (!OpenGlHelper.isFramebufferEnabled())
             throw new IllegalStateException("Framebuffer rendering is unavailable");
         Throwable renderFailure = null;
@@ -172,40 +188,40 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
             }
         }
         // Only a draw failure followed by successful state restoration is safe to skip.
-        throw new RenderFailure(renderFailure);
+        throw new IIconCapture.RenderFailure(renderFailure);
     }
 
     private void setup() {
         long started = System.nanoTime();
         try {
-            if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
+            if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             Framebuffer framebuffer = framebuffer();
-            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            GL11.glDisable(GL_SCISSOR_TEST);
             GL11.glColorMask(true, true, true, true);
             GL11.glDepthMask(true);
             framebuffer.setFramebufferColor(0, 0, 0, 0);
             framebuffer.framebufferClear();
             framebuffer.bindFramebuffer(true);
-            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glMatrixMode(GL_PROJECTION);
             GL11.glLoadIdentity();
             GL11.glOrtho(0, GUI_SIZE, GUI_SIZE, 0, -GUI_DEPTH, GUI_DEPTH);
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glMatrixMode(GL_MODELVIEW);
             GL11.glLoadIdentity();
             OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            GL11.glDisable(GL_TEXTURE_2D);
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, FULL_BRIGHTNESS, FULL_BRIGHTNESS);
             OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
-            GL11.glMatrixMode(GL11.GL_TEXTURE);
+            GL11.glMatrixMode(GL_TEXTURE);
             GL11.glLoadIdentity();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
-            GL11.glDisable(GL11.GL_BLEND);
-            GL11.glDisable(GL11.GL_FOG);
-            GL11.glEnable(GL11.GL_DEPTH_TEST);
-            GL11.glDepthFunc(GL11.GL_LEQUAL);
-            GL11.glEnable(GL11.GL_ALPHA_TEST);
-            GL11.glAlphaFunc(GL11.GL_GREATER, 0);
-            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glMatrixMode(GL_MODELVIEW);
+            GL11.glEnable(GL_TEXTURE_2D);
+            GL11.glDisable(GL_BLEND);
+            GL11.glDisable(GL_FOG);
+            GL11.glEnable(GL_DEPTH_TEST);
+            GL11.glDepthFunc(GL_LEQUAL);
+            GL11.glEnable(GL_ALPHA_TEST);
+            GL11.glAlphaFunc(GL_GREATER, 0);
+            GL11.glDisable(GL_CULL_FACE);
             GL11.glColor4f(1, 1, 1, 1);
         } finally {
             setupNanos += System.nanoTime() - started;
@@ -214,16 +230,16 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
         candidate.render(this, key, captures);
     }
 
     @Override
     public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
-        throws RenderFailure {
+        throws IIconCapture.RenderFailure {
         IIconAnimation animation = null;
-        RenderFailure preparationFailure = null;
+        IIconCapture.RenderFailure preparationFailure = null;
         try (RenderState ignored = state.snapshot()) {
             try {
                 animation = candidate.animation(this, key);
@@ -248,17 +264,17 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         return NativeIconAnimation.sampled(this, candidate, key);
     }
 
-    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+    static @NotNull IIconCapture.RenderFailure animationFailure(@NotNull Throwable failure) {
         Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
             ? failure.getCause()
             : failure;
         if (cause instanceof VirtualMachineError fatal) throw fatal;
         if (cause instanceof ThreadDeath fatal) throw fatal;
-        return new RenderFailure(cause == null ? failure : cause);
+        return new IIconCapture.RenderFailure(cause == null ? failure : cause);
     }
 
-    void animationFrame(IconCandidate candidate, StableKey key, List<Capture> captures, CaptureKind kind, long duration,
-        LongSupplier clock) throws RenderFailure {
+    void animationFrame(IconCandidate candidate, StableKey key, List<PackExportWriter.Capture> captures,
+        CaptureKind kind, long duration, LongSupplier clock) throws IIconCapture.RenderFailure {
         captureKind = kind;
         frameDuration = duration;
         drawClock = clock;
@@ -272,7 +288,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void drain(@NotNull List<Capture> captures) {
+    public void drain(@NotNull List<PackExportWriter.Capture> captures) {
         readback.drain(captures);
     }
 
@@ -329,7 +345,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         public void renderEffect(TextureManager manager, int x, int y) {
             // LWJGL 2 requires room for sixteen values even for the four-component write mask.
             mask.clear();
-            GL11.glGetBoolean(GL11.GL_COLOR_WRITEMASK, mask);
+            GL11.glGetBoolean(GL_COLOR_WRITEMASK, mask);
             GL11.glColorMask(mask.get(0) != 0, mask.get(1) != 0, mask.get(2) != 0, false);
             try {
                 // Native glint uses ZERO/ZERO alpha blending, erasing the item on transparent targets.

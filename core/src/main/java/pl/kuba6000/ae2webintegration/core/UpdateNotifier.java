@@ -4,6 +4,7 @@ import pl.kuba6000.ae2webintegration.core.api.IPlayerMessenger;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Channel;
 
 public class UpdateNotifier {
 
@@ -13,8 +14,7 @@ public class UpdateNotifier {
         if (update != null) {
             messenger.sendMessage(
                 player,
-                "AE2 Web Integration: new "
-                    + (update.channel == ReleaseManifest.Channel.STABLE ? "stable release " : "prerelease ")
+                "AE2 Web Integration: new " + (update.channel == Channel.STABLE ? "stable release " : "prerelease ")
                     + update.tag
                     + " available at "
                     + update.releaseUrl);

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static pl.kuba6000.ae2webintegration.core.icons.IconPack.CONTENT_SIZE;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -21,9 +23,9 @@ public final class IconMappings {
     /** Icon pack identifier used in atlas page URLs. */
     public final @NotNull String packId;
     /** Width of each resource icon in pixels. */
-    public final int width = IconPack.CONTENT_SIZE;
+    public final int width = CONTENT_SIZE;
     /** Height of each resource icon in pixels. */
-    public final int height = IconPack.CONTENT_SIZE;
+    public final int height = CONTENT_SIZE;
     /** Atlas pages, indexed by each resource's icon reference. */
     public final @NotNull List<Page> pages = new ArrayList<>();
     /** Animation sequences, indexed by each resource's optional animation reference. */

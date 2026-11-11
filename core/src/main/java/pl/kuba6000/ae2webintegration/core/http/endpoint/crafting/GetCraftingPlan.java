@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -268,6 +269,6 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 return;
             }
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobData, mappings));
+        respond(HTTP_OK, new Response(ApiStatus.OK, jobData, mappings));
     }
 }

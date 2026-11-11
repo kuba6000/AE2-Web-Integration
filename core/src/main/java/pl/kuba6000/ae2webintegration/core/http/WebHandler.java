@@ -1,13 +1,19 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
+import static java.net.HttpURLConnection.HTTP_BAD_METHOD;
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN;
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
@@ -15,11 +21,9 @@ import org.jetbrains.annotations.Nullable;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
@@ -46,7 +50,7 @@ public final class WebHandler implements HttpHandler {
                 .set("Content-Type", "image/x-icon");
             try (InputStream input = WebHandler.class.getResourceAsStream("/assets/favicon.ico")) {
                 if (input == null) return;
-                StaticAssetResponse.sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+                StaticAssetResponse.sendBytes(exchange, HTTP_OK, IOUtils.toByteArray(input));
             }
             return;
         }
@@ -57,12 +61,12 @@ public final class WebHandler implements HttpHandler {
             && !path.equals("/index.asp")
             && !path.equals("/index.aspx")
             && !path.equals("/index.jsp")) {
-            sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "<h1>Invalid url! (ERROR 404)</h1>");
+            sendText(exchange, HTTP_NOT_FOUND, "<h1>Invalid url! (ERROR 404)</h1>");
             return;
         }
 
-        RequestContext arrival = new RequestContext(exchange, WebPrincipal.anonymous());
-        RequestContext authenticated = AuthService.authenticate(exchange);
+        AE2Controller.RequestContext arrival = new AE2Controller.RequestContext(exchange, WebPrincipal.anonymous());
+        AE2Controller.RequestContext authenticated = AuthService.authenticate(exchange);
         if (authenticated == null && !exchange.getRequestHeaders()
             .containsKey("Authorization")) {
             String cookieToken = AuthService.extractToken(exchange);
@@ -82,7 +86,7 @@ public final class WebHandler implements HttpHandler {
         if (!method.equals("GET") && !method.equals("HEAD")) {
             exchange.getResponseHeaders()
                 .set("Allow", "GET, HEAD");
-            sendText(exchange, HttpURLConnection.HTTP_BAD_METHOD, "Method not allowed");
+            sendText(exchange, HTTP_BAD_METHOD, "Method not allowed");
             return;
         }
         String contentType;
@@ -100,12 +104,12 @@ public final class WebHandler implements HttpHandler {
             contentType = null;
         }
         if (contentType == null || !path.matches("/assets/web/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+")) {
-            sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+            sendText(exchange, HTTP_NOT_FOUND, "Not found");
             return;
         }
         try (InputStream input = WebHandler.class.getResourceAsStream(path)) {
             if (input == null) {
-                sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+                sendText(exchange, HTTP_NOT_FOUND, "Not found");
                 return;
             }
             byte[] bytes = IOUtils.toByteArray(input);
@@ -116,17 +120,18 @@ public final class WebHandler implements HttpHandler {
     /** Returns whether the form produced its own response instead of rendering the login page. */
     private static boolean handleForm(HttpExchange exchange, long generation) throws IOException {
         if (!isSameOriginBrowserPost(exchange)) {
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_FORBIDDEN, -1);
+            exchange.sendResponseHeaders(HTTP_FORBIDDEN, -1);
             return true;
         }
         // An oversized or incomplete form has no usable credentials and renders the login page.
         Map<String, String> input = HTTPUtils.parseQueryString(readBody(exchange));
         if (input.containsKey("register") && input.containsKey("password")) {
-            RegistrationResult result = AuthService.register(generation, input.get("register"), input.get("password"));
+            AuthService.RegistrationResult result = AuthService
+                .register(generation, input.get("register"), input.get("password"));
             switch (result.status()) {
                 case SERVER_BUSY, SERVER_STOPPING, TIMEOUT, INTERNAL_ERROR -> sendText(
                     exchange,
-                    HttpURLConnection.HTTP_UNAVAILABLE,
+                    HTTP_UNAVAILABLE,
                     result.status()
                         .name());
                 case OK -> redirect(exchange, "?confirmregistration&token=" + result.token());
@@ -138,12 +143,12 @@ public final class WebHandler implements HttpHandler {
             return true;
         }
         if (input.containsKey("username") && input.containsKey("password")) {
-            LoginResult result = AuthService
+            AuthService.LoginResult result = AuthService
                 .login(generation, input.get("username"), input.get("password"), input.containsKey("remember"));
             if (result.status() == ApiStatus.SERVER_STOPPING) {
                 sendText(
                     exchange,
-                    HttpURLConnection.HTTP_UNAVAILABLE,
+                    HTTP_UNAVAILABLE,
                     result.status()
                         .name());
             } else if (result.status() != ApiStatus.OK) {
@@ -157,8 +162,7 @@ public final class WebHandler implements HttpHandler {
                         "Set-Cookie",
                         sessionCookie(
                             result.token(),
-                            input.containsKey("remember")
-                                ? TimeUnit.MILLISECONDS.toSeconds(AuthSession.REMEMBERED_CAP_MILLIS)
+                            input.containsKey("remember") ? MILLISECONDS.toSeconds(AuthSession.REMEMBERED_CAP_MILLIS)
                                 : 0));
                 redirect(exchange, ".");
             }
@@ -167,7 +171,8 @@ public final class WebHandler implements HttpHandler {
         return false;
     }
 
-    private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
+    private static void renderPage(HttpExchange exchange, @Nullable AE2Controller.RequestContext context)
+        throws IOException {
         String site = context == null ? "/assets/login.html" : "/assets/web/index.html";
         // The selected document depends on authentication even though its bytes are static.
         exchange.getResponseHeaders()
@@ -176,18 +181,18 @@ public final class WebHandler implements HttpHandler {
             .set("Content-Type", "text/html; charset=UTF-8");
         try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
             if (input == null) return;
-            StaticAssetResponse.sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+            StaticAssetResponse.sendBytes(exchange, HTTP_OK, IOUtils.toByteArray(input));
         }
     }
 
     private static void redirect(HttpExchange exchange, String location) throws IOException {
         exchange.getResponseHeaders()
             .add("Location", location);
-        exchange.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
+        exchange.sendResponseHeaders(HTTP_MOVED_TEMP, -1);
     }
 
     private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
-        StaticAssetResponse.sendBytes(exchange, status, text.getBytes(StandardCharsets.UTF_8));
+        StaticAssetResponse.sendBytes(exchange, status, text.getBytes(UTF_8));
     }
 
     private static final int MAX_BODY_BYTES = 8 * 1024;
@@ -214,7 +219,7 @@ public final class WebHandler implements HttpHandler {
             if (read > MAX_BODY_BYTES) {
                 return null;
             }
-            return new String(buffer, 0, read, StandardCharsets.UTF_8);
+            return new String(buffer, 0, read, UTF_8);
         }
     }
 

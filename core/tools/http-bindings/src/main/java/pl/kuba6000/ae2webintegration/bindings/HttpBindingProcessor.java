@@ -1,5 +1,13 @@
 package pl.kuba6000.ae2webintegration.bindings;
 
+import static javax.lang.model.SourceVersion.RELEASE_17;
+import static javax.lang.model.element.Modifier.FINAL;
+import static javax.lang.model.element.Modifier.PRIVATE;
+import static javax.lang.model.element.Modifier.PUBLIC;
+import static javax.lang.model.element.Modifier.STATIC;
+import static javax.lang.model.element.Modifier.TRANSIENT;
+import static javax.tools.StandardLocation.CLASS_OUTPUT;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -15,20 +23,17 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedOptions;
 import javax.annotation.processing.SupportedSourceVersion;
-import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic;
-import javax.tools.StandardLocation;
 
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
@@ -42,7 +47,7 @@ import com.palantir.javapoet.WildcardTypeName;
 /** Generates ordinary Java companions using only the standard compiler model. */
 @SupportedAnnotationTypes({ "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint",
     "pl.kuba6000.ae2webintegration.core.json.JsonProjection" })
-@SupportedSourceVersion(SourceVersion.RELEASE_17)
+@SupportedSourceVersion(RELEASE_17)
 @SupportedOptions("bindings.catalog")
 public final class HttpBindingProcessor extends AbstractProcessor {
 
@@ -107,25 +112,25 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         if (!emitted.add(name.canonicalName()) || processingEnv.getElementUtils()
             .getTypeElement(name.canonicalName()) != null) return;
         TypeSpec.Builder companion = TypeSpec.classBuilder(name)
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addModifiers(PUBLIC, FINAL)
             .addOriginatingElement(owner)
             .addMethod(
                 MethodSpec.constructorBuilder()
-                    .addModifiers(Modifier.PRIVATE)
+                    .addModifiers(PRIVATE)
                     .build());
         Map<Shape, String> shapes = new LinkedHashMap<>();
         MethodSpec.Builder bind = MethodSpec.methodBuilder("bind")
-            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+            .addModifiers(PUBLIC, STATIC)
             .addParameter(ClassName.get(owner), "target")
             .addParameter(INPUT_VALUES, "values");
         int index = 0;
         for (VariableElement field : fields) {
             if (field.getModifiers()
-                .contains(Modifier.PRIVATE)
+                .contains(PRIVATE)
                 || field.getModifiers()
-                    .contains(Modifier.STATIC)
+                    .contains(STATIC)
                 || field.getModifiers()
-                    .contains(Modifier.FINAL)) {
+                    .contains(FINAL)) {
                 error(
                     field,
                     "HTTP input must be mutable and accessible to its same-package companion: "
@@ -177,7 +182,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             companion.addField(binding)
                 .addMethod(
                     MethodSpec.methodBuilder("get")
-                        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                        .addModifiers(PUBLIC, STATIC)
                         .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
                         .returns(HTTP_BINDING)
                         .addParameter(
@@ -231,8 +236,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         if (bodies == 0) initializer.addStatement("values.noBody()");
         initializer.unindent()
             .add("})");
-        FieldSpec binding = FieldSpec
-            .builder(HTTP_BINDING, "BINDING", Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+        FieldSpec binding = FieldSpec.builder(HTTP_BINDING, "BINDING", PRIVATE, STATIC, FINAL)
             .initializer(initializer.build())
             .build();
         return binding;
@@ -251,7 +255,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .stream()
             .filter(
                 field -> !field.getModifiers()
-                    .contains(Modifier.STATIC))
+                    .contains(STATIC))
             .toList();
         if (fields.size() != 1 || !wrapper.getTypeParameters()
             .isEmpty()
@@ -268,7 +272,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         }
         for (Element owner = wrapper; owner instanceof TypeElement; owner = owner.getEnclosingElement()) {
             if (owner.getModifiers()
-                .contains(Modifier.PRIVATE)) {
+                .contains(PRIVATE)) {
                 error(wrapper, "JsonProjection wrapper must be accessible to its same-package adapter");
                 return false;
             }
@@ -287,7 +291,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .addMethod(
                 MethodSpec.methodBuilder("write")
                     .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
+                    .addModifiers(PUBLIC)
                     .addParameter(ClassName.get("com.google.gson.stream", "JsonWriter"), "output")
                     .addParameter(ClassName.get(wrapper), "wrapper")
                     .addException(IOException.class)
@@ -299,7 +303,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .addMethod(
                 MethodSpec.methodBuilder("read")
                     .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
+                    .addModifiers(PUBLIC)
                     .returns(ClassName.get(wrapper))
                     .addParameter(ClassName.get("com.google.gson.stream", "JsonReader"), "input")
                     .addException(IOException.class)
@@ -307,15 +311,15 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     .build())
             .build();
         TypeSpec companion = TypeSpec.classBuilder(name)
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addModifiers(PUBLIC, FINAL)
             .addOriginatingElement(wrapper)
             .addMethod(
                 MethodSpec.constructorBuilder()
-                    .addModifiers(Modifier.PRIVATE)
+                    .addModifiers(PRIVATE)
                     .build())
             .addMethod(
                 MethodSpec.methodBuilder("get")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                    .addModifiers(PUBLIC, STATIC)
                     .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
                     .returns(ParameterizedTypeName.get(TYPE_ADAPTER, WildcardTypeName.subtypeOf(Object.class)))
                     .addParameter(
@@ -346,10 +350,10 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         ClassName name = ClassName.get(configuredName.substring(0, lastDot), configuredName.substring(lastDot + 1));
         ClassName catalogType = ClassName.get(BINDINGS, "BindingCatalog");
         TypeSpec.Builder catalog = TypeSpec.classBuilder(name)
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+            .addModifiers(PUBLIC, FINAL)
             .addSuperinterface(catalogType);
         MethodSpec.Builder lookup = MethodSpec.methodBuilder("get")
-            .addModifiers(Modifier.PUBLIC)
+            .addModifiers(PUBLIC)
             .addAnnotation(Override.class)
             .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
             .returns(HTTP_BINDING)
@@ -370,7 +374,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         MethodSpec.Builder adapters = MethodSpec.methodBuilder("adapter")
             .addAnnotation(Override.class)
             .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
-            .addModifiers(Modifier.PUBLIC)
+            .addModifiers(PUBLIC)
             .returns(ParameterizedTypeName.get(TYPE_ADAPTER, WildcardTypeName.subtypeOf(Object.class)))
             .addParameter(
                 ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
@@ -395,7 +399,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
         origins.addAll(projections);
         try (Writer writer = processingEnv.getFiler()
             .createResource(
-                StandardLocation.CLASS_OUTPUT,
+                CLASS_OUTPUT,
                 "",
                 "META-INF/services/" + catalogType.canonicalName(),
                 origins.toArray(new Element[0]))
@@ -430,9 +434,9 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .stream()
             .filter(
                 field -> !field.getModifiers()
-                    .contains(Modifier.STATIC)
+                    .contains(STATIC)
                     && !field.getModifiers()
-                        .contains(Modifier.TRANSIENT)
+                        .contains(TRANSIENT)
                     && !(shape.excludedAnnotation() != null && field.getAnnotationMirrors()
                         .stream()
                         .anyMatch(
@@ -441,7 +445,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                                 .equals(shape.excludedAnnotation()))))
             .toList();
         MethodSpec.Builder validate = MethodSpec.methodBuilder(shapes.get(shape))
-            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .addModifiers(PRIVATE, STATIC)
             .addParameter(JSON_OBJECT, "body")
             .beginControlFlow(
                 "for ($T member : body.entrySet())",

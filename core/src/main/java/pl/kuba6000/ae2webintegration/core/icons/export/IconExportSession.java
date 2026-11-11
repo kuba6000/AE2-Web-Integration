@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.MAX_CAPTURES_PER_BATCH;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -10,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -21,8 +23,6 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Failure;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** One client-thread producer owns discovery and capture; only detached batches cross to writer workers. */
@@ -34,14 +34,14 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     // Bound retained native candidates to the format-1 mapping ceiling, including candidates that later fail rendering.
     private static final int MAX_QUEUED_ICONS = 250_000;
     // Yield a frame regularly for window events and the exclusive progress dialog.
-    private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(800);
+    private static final long FRAME_BUDGET = MILLISECONDS.toNanos(800);
     private final IIconCapture<C> renderer;
     private final PackExportWriter writer;
     private final IconExportProgress progress = new IconExportProgress();
     private final @Nullable IconAnimationPasses animations;
     private final Map<StableKey, C> identities = new HashMap<>();
     private final Deque<QueuedIcon<C>> pendingIcons = new ArrayDeque<>();
-    private List<Failure> failures = new ArrayList<>();
+    private List<PackExportWriter.Failure> failures = new ArrayList<>();
     private @Nullable IIconSource<C> catalogue;
     private String sourceNote = "";
     private @Nullable C baseline;
@@ -170,9 +170,9 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     }
 
     private void captureBatch(@NotNull IIconSource<C> source) {
-        List<Capture> captures = new ArrayList<>();
+        List<PackExportWriter.Capture> captures = new ArrayList<>();
         long started = System.nanoTime();
-        for (int count = 0; count < PackExportWriter.MAX_CAPTURES_PER_BATCH && !pendingIcons.isEmpty(); count++) {
+        for (int count = 0; count < MAX_CAPTURES_PER_BATCH && !pendingIcons.isEmpty(); count++) {
             long before = System.nanoTime();
             capture(pendingIcons.removeFirst(), captures);
             progress.processed++;
@@ -205,7 +205,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             if (unchanged == null) return;
             animations.finishProbe(unchanged);
         }
-        List<Capture> captures = new ArrayList<>();
+        List<PackExportWriter.Capture> captures = new ArrayList<>();
         animations.capture(captures, (entry, cause) -> omitAnimation(entry.key, entry.context, cause));
         renderer.drain(captures);
         animations.recover(
@@ -274,7 +274,8 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             return;
         }
         if (key == null) {
-            failures.add(new Failure(candidate.context() + "/identity", "Unsupported resource identity"));
+            failures
+                .add(new PackExportWriter.Failure(candidate.context() + "/identity", "Unsupported resource identity"));
             progress.omitted++;
             return;
         }
@@ -294,7 +295,8 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             return;
         }
         if (pendingIcons.size() >= MAX_QUEUED_ICONS) {
-            failures.add(new Failure(candidate.context(), "Catalogue capacity reached; resource omitted"));
+            failures
+                .add(new PackExportWriter.Failure(candidate.context(), "Catalogue capacity reached; resource omitted"));
             progress.omitted++;
             return;
         }
@@ -303,7 +305,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         pendingIcons.addLast(new QueuedIcon<>(key, candidate));
     }
 
-    private void capture(@NotNull QueuedIcon<C> queued, @NotNull List<Capture> captures) {
+    private void capture(@NotNull QueuedIcon<C> queued, @NotNull List<PackExportWriter.Capture> captures) {
         try {
             renderer.capture(queued.candidate(), queued.key(), captures);
             progress.captured++;
@@ -375,21 +377,21 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
 
     private void omit(@NotNull String context, @NotNull Throwable failure) {
         String reason = failureReason(failure);
-        failures.add(new Failure(context, reason));
+        failures.add(new PackExportWriter.Failure(context, reason));
         progress.omitted++;
         LOG.warn("Icon candidate omitted ({}): {}", context, reason);
     }
 
     private void animationFallback(@NotNull StableKey key, @NotNull String context, @NotNull Throwable failure) {
         String reason = failureReason(failure);
-        failures.add(Failure.animationFallback(key, context + "/animation", reason));
+        failures.add(PackExportWriter.Failure.animationFallback(key, context + "/animation", reason));
         progress.animationFallbacks++;
         LOG.warn("Controlled icon animation failed; trying live samples ({}): {}", context, reason);
     }
 
     private void omitAnimation(@NotNull StableKey key, @NotNull String context, @NotNull Throwable failure) {
         String reason = failureReason(failure);
-        failures.add(Failure.animation(key, context + "/animation", reason));
+        failures.add(PackExportWriter.Failure.animation(key, context + "/animation", reason));
         LOG.warn("Icon animation omitted ({}): {}", context, reason);
     }
 

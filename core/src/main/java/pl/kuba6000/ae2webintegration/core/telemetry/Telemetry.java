@@ -1,11 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.telemetry;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -17,7 +21,6 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -35,8 +38,8 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 public final class Telemetry implements AutoCloseable {
 
     private static final int TIMEOUT_MILLIS = 5000;
-    private static final long INITIAL_DELAY_SECONDS = TimeUnit.MINUTES.toSeconds(10);
-    private static final long INTERVAL_SECONDS = TimeUnit.HOURS.toSeconds(1);
+    private static final long INITIAL_DELAY_SECONDS = MINUTES.toSeconds(10);
+    private static final long INTERVAL_SECONDS = HOURS.toSeconds(1);
     private final @NotNull URL endpoint;
     private @NotNull String sessionId = UUID.randomUUID()
         .toString();
@@ -76,7 +79,7 @@ public final class Telemetry implements AutoCloseable {
         }
         if (modFile != null) {
             try {
-                worker.scheduleWithFixedDelay(this::report, INITIAL_DELAY_SECONDS, INTERVAL_SECONDS, TimeUnit.SECONDS);
+                worker.scheduleWithFixedDelay(this::report, INITIAL_DELAY_SECONDS, INTERVAL_SECONDS, SECONDS);
             } catch (RuntimeException failure) {
                 worker.shutdownNow();
                 throw failure;
@@ -143,7 +146,7 @@ public final class Telemetry implements AutoCloseable {
             payload.addProperty("singleplayer", singleplayer);
             payload.add("jarProof", jarProof());
             byte[] bytes = payload.toString()
-                .getBytes(StandardCharsets.UTF_8);
+                .getBytes(UTF_8);
             connection = (HttpsURLConnection) endpoint.openConnection();
             connection.setConnectTimeout(TIMEOUT_MILLIS);
             connection.setReadTimeout(TIMEOUT_MILLIS);

@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.nio.ByteOrder.LITTLE_ENDIAN;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.awt.image.BufferedImage;
@@ -9,8 +12,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -46,8 +47,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Location;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class IconPackTest {
@@ -55,8 +54,14 @@ class IconPackTest {
     @TempDir
     Path directory;
 
-    private static Metadata metadata(String time) {
-        return new Metadata("1.7.10", "forge", "legacy-v1", "test", time, Collections.singletonMap("example", "1"));
+    private static IconPack.Metadata metadata(String time) {
+        return new IconPack.Metadata(
+            "1.7.10",
+            "forge",
+            "legacy-v1",
+            "test",
+            time,
+            Collections.singletonMap("example", "1"));
     }
 
     @Test
@@ -67,8 +72,7 @@ class IconPackTest {
             output = writer.finish();
         }
         try (ZipFile zip = new ZipFile(output.toFile())) {
-            JsonObject manifest = new JsonParser()
-                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+            JsonObject manifest = new JsonParser().parse(new String(entryBytes(zip, "manifest.json"), UTF_8))
                 .getAsJsonObject();
             assertEquals(
                 0,
@@ -93,8 +97,7 @@ class IconPackTest {
             output = writer.finish();
         }
         try (ZipFile zip = new ZipFile(output.toFile())) {
-            JsonObject manifest = new JsonParser()
-                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+            JsonObject manifest = new JsonParser().parse(new String(entryBytes(zip, "manifest.json"), UTF_8))
                 .getAsJsonObject();
             assertEquals(
                 2,
@@ -127,13 +130,13 @@ class IconPackTest {
                     byte[] bytes = entryBytes(source, entry.getName());
                     if (entry.getName()
                         .equals("manifest.json")) {
-                        JsonObject manifest = new JsonParser().parse(new String(bytes, StandardCharsets.UTF_8))
+                        JsonObject manifest = new JsonParser().parse(new String(bytes, UTF_8))
                             .getAsJsonObject();
                         manifest.getAsJsonObject("environment")
                             .getAsJsonArray("resourcePacks")
                             .add(new JsonPrimitive("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
                         String json = validDigest ? reseal(manifest.toString()) : manifest.toString();
-                        bytes = json.getBytes(StandardCharsets.UTF_8);
+                        bytes = json.getBytes(UTF_8);
                     }
                     writeEntry(target, entry.getName(), bytes, entry.getMethod() == ZipEntry.STORED);
                 }
@@ -153,8 +156,8 @@ class IconPackTest {
     @Test
     void compatibilityRequiresExactLoaderGameAndOpaqueVersion() throws Exception {
         for (String version : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
-            Metadata provenance = metadata("today");
-            Metadata metadata = new Metadata(
+            IconPack.Metadata provenance = metadata("today");
+            IconPack.Metadata metadata = new IconPack.Metadata(
                 "1.7.10",
                 "forge",
                 version,
@@ -189,8 +192,7 @@ class IconPackTest {
             Path changed = directory.resolve("old-contract-" + mutation + ".zip");
             try (ZipFile source = new ZipFile(output.toFile());
                 ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(changed))) {
-                JsonObject manifest = new JsonParser()
-                    .parse(new String(entryBytes(source, "manifest.json"), StandardCharsets.UTF_8))
+                JsonObject manifest = new JsonParser().parse(new String(entryBytes(source, "manifest.json"), UTF_8))
                     .getAsJsonObject();
                 if (mutation < 2) {
                     manifest.addProperty("formatVersion", mutation == 0 ? 1 : 2);
@@ -198,11 +200,7 @@ class IconPackTest {
                     manifest.addProperty("identityContract", "legacy-v1");
                     manifest.addProperty("basePolicy", "base-v1");
                 } else manifest.addProperty("compatibilityVersion", 1);
-                writeEntry(
-                    target,
-                    "manifest.json",
-                    reseal(manifest.toString()).getBytes(StandardCharsets.UTF_8),
-                    false);
+                writeEntry(target, "manifest.json", reseal(manifest.toString()).getBytes(UTF_8), false);
             }
             assertRejectedPack(changed, "1.7.10");
         }
@@ -229,7 +227,7 @@ class IconPackTest {
                 1,
                 pack.pages()
                     .size());
-            Location location = pack.find(key);
+            IconPack.Location location = pack.find(key);
             assertNotNull(location);
             try (InputStream stream = pack.openPage(
                 location.page()
@@ -285,8 +283,8 @@ class IconPackTest {
                 1,
                 pack.pages()
                     .size());
-            Location exactLocation = pack.find(exact);
-            Location baseLocation = pack.find(base);
+            IconPack.Location exactLocation = pack.find(exact);
+            IconPack.Location baseLocation = pack.find(base);
             assertNotNull(exactLocation);
             assertNotNull(baseLocation);
             assertEquals(
@@ -323,9 +321,9 @@ class IconPackTest {
             output = writer.finish();
         }
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
-            Location firstLocation = pack.find(first);
-            Location secondLocation = pack.find(second);
-            Location duplicateLocation = pack.find(duplicate);
+            IconPack.Location firstLocation = pack.find(first);
+            IconPack.Location secondLocation = pack.find(second);
+            IconPack.Location duplicateLocation = pack.find(duplicate);
             assertNotNull(firstLocation);
             assertNotNull(secondLocation);
             assertNotNull(duplicateLocation);
@@ -397,13 +395,13 @@ class IconPackTest {
         Path modified = directory.resolve("failure-count.zip");
         try (ZipFile source = new ZipFile(original.toFile());
             ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(modified))) {
-            String json = new String(entryBytes(source, "manifest.json"), StandardCharsets.UTF_8);
+            String json = new String(entryBytes(source, "manifest.json"), UTF_8);
             // Failure diagnostics are excluded from pack identity; preserve the supplied JSON token verbatim.
             writeEntry(
                 target,
                 "manifest.json",
                 json.replace("\"count\":0", "\"count\":" + count)
-                    .getBytes(StandardCharsets.UTF_8),
+                    .getBytes(UTF_8),
                 false);
         }
         return modified;
@@ -561,8 +559,7 @@ class IconPackTest {
             output = writer.finish();
         }
         try (ZipFile zip = new ZipFile(output.toFile())) {
-            JsonObject statistics = new JsonParser()
-                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+            JsonObject statistics = new JsonParser().parse(new String(entryBytes(zip, "manifest.json"), UTF_8))
                 .getAsJsonObject()
                 .getAsJsonObject("statistics");
             JsonObject publishedCounts = statistics.getAsJsonObject("counts");
@@ -612,7 +609,7 @@ class IconPackTest {
                     .size());
             for (int i = 0; i < 226; i++) {
                 final int identity = i;
-                Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
+                IconPack.Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
                 assertNotNull(location);
                 try (InputStream stream = pack.openPage(
                     location.page()
@@ -660,7 +657,7 @@ class IconPackTest {
                 }
                 for (int i = 0; i < count; i++) {
                     final int identity = i;
-                    Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
+                    IconPack.Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
                     assertNotNull(location);
                     if (!page.digest()
                         .equals(
@@ -725,11 +722,11 @@ class IconPackTest {
                     }
                     if (entry.getName()
                         .equals("manifest.json")) {
-                        String json = new String(data, StandardCharsets.UTF_8);
+                        String json = new String(data, UTF_8);
                         if (mutation == 0)
                             json = json.replace("\"formatVersion\":2", "\"formatVersion\":2,\"formatVersion\":2");
                         if (mutation == 1) json = reseal(json.replace("[0,1,1]", "[0,2147483647,1]"));
-                        data = json.getBytes(StandardCharsets.UTF_8);
+                        data = json.getBytes(UTF_8);
                         if (mutation == 4) data[json.indexOf("today")] = (byte) 0xff;
                     } else if (mutation == 2) data[data.length - 1] ^= 1;
                     writeEntry(
@@ -765,7 +762,7 @@ class IconPackTest {
                 new GsonBuilder().disableHtmlEscaping()
                     .create()
                     .toJson(sorted)
-                    .getBytes(StandardCharsets.UTF_8));
+                    .getBytes(UTF_8));
         manifest.addProperty("packId", String.format(Locale.ROOT, "%064x", new BigInteger(1, digest)));
         return manifest.toString();
     }
@@ -837,8 +834,7 @@ class IconPackTest {
         Path damaged = directory.resolve("wrong-dimensions.zip");
         try (ZipFile source = new ZipFile(original.toFile());
             ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(damaged))) {
-            JsonObject manifest = new JsonParser()
-                .parse(new String(entryBytes(source, "manifest.json"), StandardCharsets.UTF_8))
+            JsonObject manifest = new JsonParser().parse(new String(entryBytes(source, "manifest.json"), UTF_8))
                 .getAsJsonObject();
             JsonObject page = manifest.getAsJsonArray("pages")
                 .get(0)
@@ -862,7 +858,7 @@ class IconPackTest {
                         .digest(png)));
             page.addProperty("digest", digest);
             page.addProperty("path", "pages/" + digest + ".png");
-            writeEntry(target, "manifest.json", reseal(manifest.toString()).getBytes(StandardCharsets.UTF_8), false);
+            writeEntry(target, "manifest.json", reseal(manifest.toString()).getBytes(UTF_8), false);
             writeEntry(
                 target,
                 page.get("path")
@@ -884,7 +880,7 @@ class IconPackTest {
         }
         byte[] bytes = Files.readAllBytes(oversized);
         ByteBuffer fields = ByteBuffer.wrap(bytes)
-            .order(ByteOrder.LITTLE_ENDIAN);
+            .order(LITTLE_ENDIAN);
         int modified = 0;
         for (int i = 0; i + 28 <= bytes.length; i++) if (fields.getInt(i) == 0x02014b50) {
             fields.putInt(i + 24, 1);
@@ -916,7 +912,7 @@ class IconPackTest {
             writeEntry(zip, "manifest.jsox", manifest, false);
         }
         byte[] archiveBytes = Files.readAllBytes(archive);
-        byte[] alternate = "manifest.jsox".getBytes(StandardCharsets.US_ASCII);
+        byte[] alternate = "manifest.jsox".getBytes(US_ASCII);
         int renamed = 0;
         for (int i = 0; i <= archiveBytes.length - alternate.length; i++) {
             if (Arrays.equals(Arrays.copyOfRange(archiveBytes, i, i + alternate.length), alternate)) {
@@ -933,7 +929,13 @@ class IconPackTest {
     void changedPixelsAndKeysChangeIdentity() throws Exception {
         Set<String> ids = new HashSet<>();
         for (int variation = 0; variation < 3; variation++) {
-            Metadata metadata = new Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
+            IconPack.Metadata metadata = new IconPack.Metadata(
+                "1.7.10",
+                "forge",
+                "legacy-v1",
+                "test",
+                "today",
+                Collections.emptyMap());
             int[] pixels = new int[4096];
             pixels[0] = variation == 1 ? 0xffffffff : 0;
             StableKey key = StableKey.parse(variation == 2 ? "AQEBAQEBAQEBAQEBAQEBAQ" : "AAAAAAAAAAAAAAAAAAAAAA");

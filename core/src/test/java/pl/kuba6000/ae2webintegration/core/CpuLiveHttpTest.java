@@ -1,11 +1,15 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -15,13 +19,12 @@ import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -81,14 +84,14 @@ class CpuLiveHttpTest {
             AE2Controller.AE2Interface = new CpuFixtures.Ae(grid);
             return TestGridFixtures.resolvedKey(grid);
         });
-        game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+        game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, MILLISECONDS);
         base = "http://127.0.0.1:" + port + "/api/grids/" + gridKey + "/cpus/" + cpu.key;
     }
 
     @AfterEach
     void stopEngine() throws Exception {
         game.shutdownNow();
-        assertTrue(game.awaitTermination(3, TimeUnit.SECONDS));
+        assertTrue(game.awaitTermination(3, SECONDS));
         CoreEngine.onServerStopped();
         AE2Controller.AE2Interface = previousAe;
         AE2JobTracker.clearActiveJobs();
@@ -96,12 +99,12 @@ class CpuLiveHttpTest {
 
     private <T> T onGame(Callable<T> task) throws Exception {
         return game.submit(task)
-            .get(3, TimeUnit.SECONDS);
+            .get(3, SECONDS);
     }
 
     private void onGame(Runnable task) throws Exception {
         game.submit(task)
-            .get(3, TimeUnit.SECONDS);
+            .get(3, SECONDS);
     }
 
     @Test
@@ -189,8 +192,7 @@ class CpuLiveHttpTest {
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
         stream.setReadTimeout(3000);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -242,7 +244,7 @@ class CpuLiveHttpTest {
                     default -> throw new AssertionError(boundary);
                 }
             });
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            long deadline = System.nanoTime() + SECONDS.toNanos(5);
             while ((rowIdentity.get() != null || outputIdentity.get() != null) && System.nanoTime() < deadline) {
                 System.gc();
                 onGame(() -> AE2Controller.itemIdentities.cleanUp());
@@ -267,7 +269,7 @@ class CpuLiveHttpTest {
         System.gc();
         assertNotNull(onGame(() -> AE2Controller.itemIdentities.resolve(gear.key())));
         onGame(() -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (identity.get() != null && System.nanoTime() < deadline) {
             System.gc();
             onGame(() -> AE2Controller.itemIdentities.cleanUp());
@@ -323,8 +325,7 @@ class CpuLiveHttpTest {
         assertEquals(401, status(base + "/events?subscription=" + token, "GET", true, "Bearer invalid"));
         assertEquals(400, status(base + "/events?subscription=not-a-token", "GET", false, null));
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals("text/event-stream; charset=UTF-8", stream.getContentType());
             assertEquals(
                 "ready",
@@ -367,8 +368,7 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -405,8 +405,7 @@ class CpuLiveHttpTest {
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
         stream.setReadTimeout(1000);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -420,7 +419,7 @@ class CpuLiveHttpTest {
                 mutation.setDoOutput(true);
                 try {
                     try (OutputStream body = mutation.getOutputStream()) {
-                        body.write(("{\"paused\":" + paused + "}").getBytes(StandardCharsets.UTF_8));
+                        body.write(("{\"paused\":" + paused + "}").getBytes(UTF_8));
                     }
                     assertEquals(200, mutation.getResponseCode());
                 } finally {
@@ -451,8 +450,7 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -502,8 +500,7 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -553,8 +550,7 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -605,8 +601,7 @@ class CpuLiveHttpTest {
             String token = json(base + "?live=true").get("subscription")
                 .getAsString();
             HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-            try (BufferedReader input = new BufferedReader(
-                new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
                 assertEquals(
                     "ready",
                     CpuFixtures.readEvent(input)
@@ -641,7 +636,7 @@ class CpuLiveHttpTest {
     void deniedGridInTheSameLoginCannotRetireItsAllowedLiveView() throws Exception {
         Config.INSTANCE.general.publicMode = true;
         CoreData.setPassword(
-            TestGridFixtures.playerIdentity(TestGridFixtures.OWNER_ID),
+            TestGridFixtures.playerIdentity(OWNER_ID),
             PasswordHelper.generateStrongPasswordHash("handoff-test"));
         CpuFixtures.Grid forbidden = new CpuFixtures.Grid(9302, new CpuFixtures.Cpu(2));
         forbidden.withoutSources();
@@ -656,10 +651,10 @@ class CpuLiveHttpTest {
         login.setRequestProperty("X-AE2-Request", "true");
         login.setDoOutput(true);
         try (OutputStream body = login.getOutputStream()) {
-            body.write("{\"username\":\"Player7\",\"password\":\"handoff-test\"}".getBytes(StandardCharsets.UTF_8));
+            body.write("{\"username\":\"Player7\",\"password\":\"handoff-test\"}".getBytes(UTF_8));
         }
         String authorization;
-        try (InputStreamReader input = new InputStreamReader(login.getInputStream(), StandardCharsets.UTF_8)) {
+        try (InputStreamReader input = new InputStreamReader(login.getInputStream(), UTF_8)) {
             JsonObject data = new JsonParser().parse(input)
                 .getAsJsonObject()
                 .getAsJsonObject("data");
@@ -674,7 +669,7 @@ class CpuLiveHttpTest {
         HttpURLConnection snapshot = connection(base + "?live=true");
         snapshot.setRequestProperty("Authorization", authorization);
         String token;
-        try (InputStreamReader input = new InputStreamReader(snapshot.getInputStream(), StandardCharsets.UTF_8)) {
+        try (InputStreamReader input = new InputStreamReader(snapshot.getInputStream(), UTF_8)) {
             token = new JsonParser().parse(input)
                 .getAsJsonObject()
                 .get("subscription")
@@ -691,8 +686,7 @@ class CpuLiveHttpTest {
         assertEquals(403, status(denied, "GET", false, authorization));
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
         stream.setRequestProperty("Authorization", authorization);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -716,8 +710,7 @@ class CpuLiveHttpTest {
             + token;
         assertEquals(404, status(missing, "GET", false, null));
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
@@ -749,15 +742,14 @@ class CpuLiveHttpTest {
         String token = json(base + "?live=true").get("subscription")
             .getAsString();
         HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-        try (BufferedReader input = new BufferedReader(
-            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
             assertEquals(
                 "ready",
                 CpuFixtures.readEvent(input)
                     .name());
             assertNotNull(CoreEngine.getCpuLive());
             game.shutdownNow();
-            assertTrue(game.awaitTermination(3, TimeUnit.SECONDS));
+            assertTrue(game.awaitTermination(3, SECONDS));
             CoreEngine.onServerStopped();
             assertNull(CoreEngine.getCpuLive());
             assertNull(CoreEngine.getCpuRegistry());
@@ -794,7 +786,7 @@ class CpuLiveHttpTest {
 
     private static JsonObject json(String url) throws Exception {
         HttpURLConnection connection = connection(url);
-        try (InputStreamReader input = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+        try (InputStreamReader input = new InputStreamReader(connection.getInputStream(), UTF_8)) {
             return new JsonParser().parse(input)
                 .getAsJsonObject();
         } finally {
@@ -806,7 +798,7 @@ class CpuLiveHttpTest {
     private record Platform(File root) implements IServerPlatform {
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 

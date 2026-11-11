@@ -15,14 +15,12 @@ import org.jetbrains.annotations.Nullable;
 import appeng.api.storage.data.IAEStack;
 import appeng.crafting.v2.CraftingJobV2;
 import appeng.crafting.v2.CraftingRequest;
-import appeng.crafting.v2.CraftingRequest.UsedResolverEntry;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.CraftFromPatternTask;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.RequestAndPerCraftAmount;
+import appeng.crafting.v2.resolvers.CraftableItemResolver;
 import appeng.crafting.v2.resolvers.CraftingTask;
-import appeng.crafting.v2.resolvers.EmitableItemResolver.EmitItemTask;
-import appeng.crafting.v2.resolvers.ExtractItemResolver.ExtractItemTask;
-import appeng.crafting.v2.resolvers.IgnoreMissingItemResolver.IgnoreMissingItemTask;
-import appeng.crafting.v2.resolvers.SimulateMissingItemResolver.ConjureItemTask;
+import appeng.crafting.v2.resolvers.EmitableItemResolver;
+import appeng.crafting.v2.resolvers.ExtractItemResolver;
+import appeng.crafting.v2.resolvers.IgnoreMissingItemResolver;
+import appeng.crafting.v2.resolvers.SimulateMissingItemResolver;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftFromPatternTaskData;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
@@ -43,10 +41,11 @@ public final class V2TraceCapture {
     private final CraftingTraceCapture.Builder capture;
     private final Map<IAEStack<?>, Integer> resources = new HashMap<>();
     private final Map<CraftingRequest, Integer> requestIds = new IdentityHashMap<>();
-    private final Map<CraftFromPatternTask, Integer> taskIds = new IdentityHashMap<>();
-    private final Set<ExtractItemTask<?>> extractions = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<CraftableItemResolver.CraftFromPatternTask, Integer> taskIds = new IdentityHashMap<>();
+    private final Set<ExtractItemResolver.ExtractItemTask<?>> extractions = Collections
+        .newSetFromMap(new IdentityHashMap<>());
     private final Deque<CraftingRequest> pendingRequests = new ArrayDeque<>();
-    private final Deque<CraftFromPatternTask> pendingTasks = new ArrayDeque<>();
+    private final Deque<CraftableItemResolver.CraftFromPatternTask> pendingTasks = new ArrayDeque<>();
     private final long maxScanned;
     private long scanned;
     private boolean scanExhausted;
@@ -98,7 +97,7 @@ public final class V2TraceCapture {
 
     private boolean readRequest(@NotNull CraftingRequest request) {
         int requestId = requestIds.get(request);
-        for (UsedResolverEntry entry : request.usedResolvers) {
+        for (CraftingRequest.UsedResolverEntry entry : request.usedResolvers) {
             if (!visit()) return false;
             long amount = entry.resolvedStack.getStackSize();
             // A refunded contribution stays in the list with size zero.
@@ -110,11 +109,14 @@ public final class V2TraceCapture {
     private boolean contribution(int requestId, @NotNull CraftingTask task, long amount) {
         Class<?> type = task.getClass();
         // Exact classes only: a subclass may change what its counters mean.
-        if (type == CraftFromPatternTask.class) return crafting(requestId, amount, (CraftFromPatternTask) task);
-        if (type == ExtractItemTask.class) return extraction(requestId, (ExtractItemTask<?>) task);
+        if (type == CraftableItemResolver.CraftFromPatternTask.class)
+            return crafting(requestId, amount, (CraftableItemResolver.CraftFromPatternTask) task);
+        if (type == ExtractItemResolver.ExtractItemTask.class)
+            return extraction(requestId, (ExtractItemResolver.ExtractItemTask<?>) task);
         // These tasks fulfil their request once, so the entry's remaining amount is the task's amount.
-        if (type == EmitItemTask.class) return leaf(requestId, ContributionKind.EMITTED, amount);
-        if (type == IgnoreMissingItemTask.class || type == ConjureItemTask.class)
+        if (type == EmitableItemResolver.EmitItemTask.class) return leaf(requestId, ContributionKind.EMITTED, amount);
+        if (type == IgnoreMissingItemResolver.IgnoreMissingItemTask.class
+            || type == SimulateMissingItemResolver.ConjureItemTask.class)
             return leaf(requestId, ContributionKind.MISSING, amount);
         return leaf(requestId, ContributionKind.UNKNOWN, amount);
     }
@@ -123,7 +125,7 @@ public final class V2TraceCapture {
         return available() && capture.addContribution(requestId, kind, amount);
     }
 
-    private boolean crafting(int requestId, long amount, @NotNull CraftFromPatternTask task) {
+    private boolean crafting(int requestId, long amount, @NotNull CraftableItemResolver.CraftFromPatternTask task) {
         Integer existing = taskIds.get(task);
         int taskId;
         if (existing == null) {
@@ -143,7 +145,7 @@ public final class V2TraceCapture {
      * from byproducts. Refunds update those lists, so read the task once rather than assigning its lists to
      * individual resolver entries. The lists have no combined order; retain each list's order, byproducts first.
      */
-    private boolean extraction(int requestId, @NotNull ExtractItemTask<?> task) {
+    private boolean extraction(int requestId, @NotNull ExtractItemResolver.ExtractItemTask<?> task) {
         if (!extractions.add(task)) return true;
         return extracted(requestId, ContributionKind.REUSED, task.removedFromByproducts)
             && extracted(requestId, ContributionKind.STORAGE, task.removedFromSystem);
@@ -161,7 +163,7 @@ public final class V2TraceCapture {
         return true;
     }
 
-    private boolean readTask(@NotNull CraftFromPatternTask task) {
+    private boolean readTask(@NotNull CraftableItemResolver.CraftFromPatternTask task) {
         int taskId = taskIds.get(task);
         for (IAEStack<?> input : task.pattern.getCondensedAEInputs()) {
             int resourceId = declared(input);
@@ -175,7 +177,7 @@ public final class V2TraceCapture {
                 return false;
         }
         ICraftFromPatternTaskData children = (ICraftFromPatternTaskData) task;
-        for (RequestAndPerCraftAmount child : children.web$getChildRequests()) {
+        for (CraftableItemResolver.RequestAndPerCraftAmount child : children.web$getChildRequests()) {
             if (!childRequest(taskId, child.request)) return false;
         }
         for (CraftingRequest child : children.web$getChildRecursionRequests()

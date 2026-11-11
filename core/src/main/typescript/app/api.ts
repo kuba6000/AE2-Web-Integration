@@ -15,6 +15,8 @@ import type {
     ResourceHistory,
     ResourcePin,
     ResourcePinUpdate,
+    HomePinGroupUpdate,
+    HomePinGroup,
     PinPlacement
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
@@ -38,6 +40,8 @@ const responseStatuses = new Set([
     'INVALID_ID',
     'CPU_PAUSE_UNSUPPORTED',
     'CPU_NOT_BUSY',
+    'GROUP_NAME_TAKEN',
+    'GROUP_LIMIT_REACHED',
     'AMBIGUOUS_ITEM_KEY',
     'JOB_NOT_DONE',
     'FAIL',
@@ -84,12 +88,19 @@ export type Api = {
         icons?: boolean
     ): Promise<ResourceResponse<ResourcePin[]>>;
     deleteResourcePin(pinKey: string, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
+    addPinGroup(name: string, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
+    updatePinGroup(
+        groupKey: string,
+        update: HomePinGroupUpdate,
+        icons?: boolean
+    ): Promise<ResourceResponse<ResourcePin[]>>;
+    deletePinGroup(groupKey: string, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
     themes: (signal?: AbortSignal) => Promise<{ defaultTheme: string; themes: ThemeManifest[] }>;
     context: (signal?: AbortSignal) => Promise<ApplicationContext>;
     skipUpdate: (tag: string) => Promise<null>;
     iconPack: (
         signal?: AbortSignal
-    ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
+    ) => Promise<{ available: boolean; hasAnimations: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
     items: (
         gridKey: string,
@@ -226,7 +237,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 | { paused: boolean }
                 | { tag: string }
                 | { itemKey: string; placement: PinPlacement }
-                | ResourcePinUpdate;
+                | ResourcePinUpdate
+                | HomePinGroupUpdate;
         } = {}
     ): Promise<ResourceResponse<T>> {
         let response;
@@ -276,6 +288,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             nextBefore?: string | null;
             view?: TerminalView;
             subscription?: string;
+            groups?: HomePinGroup[];
             recent?: import('./api-types.js').RecentTracking;
         };
         if (!response.ok || envelope.status !== 'OK') {
@@ -287,7 +300,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             icons: envelope.icons ?? null,
             nextBefore: envelope.nextBefore ?? null,
             view: envelope.view,
-            subscription: envelope.subscription
+            subscription: envelope.subscription,
+            groups: envelope.groups
         };
     }
     function planTreeRead<T>(gridKey: string, planId: string | number, query: TreeQuery, signal?: AbortSignal) {
@@ -399,6 +413,15 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/resource-pins/${encodeURIComponent(pinKey)}?icons=${icons}`, { method: 'PATCH', body: update }),
         deleteResourcePin: (pinKey, icons = false) =>
             read(`api/resource-pins/${encodeURIComponent(pinKey)}?icons=${icons}`, { method: 'DELETE' }),
+        addPinGroup: (name, icons = false) =>
+            read(`api/resource-pin-groups?icons=${icons}`, { method: 'POST', body: { name } }),
+        updatePinGroup: (groupKey, update, icons = false) =>
+            read(`api/resource-pin-groups/${encodeURIComponent(groupKey)}?icons=${icons}`, {
+                method: 'PATCH',
+                body: update
+            }),
+        deletePinGroup: (groupKey, icons = false) =>
+            read(`api/resource-pin-groups/${encodeURIComponent(groupKey)}?icons=${icons}`, { method: 'DELETE' }),
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false, live = false) =>
             snapshot<StoredResource[]>(`api/grids/${encodeURIComponent(gridKey)}/items`, signal, icons, live),

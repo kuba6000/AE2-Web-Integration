@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -8,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.logging.log4j.Level;
@@ -25,6 +25,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage.Severity;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class NotificationManagerTest {
@@ -67,28 +68,24 @@ class NotificationManagerTest {
         worker.start();
         try {
             NotificationManager.reloadSettings();
-            NotificationManager
-                .postMessageNonBlocking(new StatusMessage("First", "First message", StatusMessage.Severity.NONE));
-            assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Malformed webhook must be diagnosed");
+            NotificationManager.postMessageNonBlocking(new StatusMessage("First", "First message", Severity.NONE));
+            assertNotNull(errors.poll(3, SECONDS), "Malformed webhook must be diagnosed");
 
             // No connection should be opened for a protocol Discord webhooks do not support.
             config.set("discord.webhook", "http://127.0.0.1:1/webhook");
             NotificationManager.reloadSettings();
-            NotificationManager
-                .postMessageNonBlocking(new StatusMessage("Second", "Second message", StatusMessage.Severity.NONE));
-            assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Unsupported protocol must be diagnosed");
+            NotificationManager.postMessageNonBlocking(new StatusMessage("Second", "Second message", Severity.NONE));
+            assertNotNull(errors.poll(3, SECONDS), "Unsupported protocol must be diagnosed");
 
             config.set("discord.webhook", "https://localhost:65536/webhook");
             NotificationManager.reloadSettings();
-            NotificationManager
-                .postMessageNonBlocking(new StatusMessage("Third", "Third message", StatusMessage.Severity.NONE));
-            assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Invalid port must be diagnosed");
+            NotificationManager.postMessageNonBlocking(new StatusMessage("Third", "Third message", Severity.NONE));
+            assertNotNull(errors.poll(3, SECONDS), "Invalid port must be diagnosed");
 
             config.set("discord.webhook", "another-malformed-webhook");
             NotificationManager.reloadSettings();
-            NotificationManager
-                .postMessageNonBlocking(new StatusMessage("Fourth", "Fourth message", StatusMessage.Severity.NONE));
-            assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Worker must continue processing the queue");
+            NotificationManager.postMessageNonBlocking(new StatusMessage("Fourth", "Fourth message", Severity.NONE));
+            assertNotNull(errors.poll(3, SECONDS), "Worker must continue processing the queue");
             assertNull(workerFailure.get());
         } finally {
             worker.interrupt();

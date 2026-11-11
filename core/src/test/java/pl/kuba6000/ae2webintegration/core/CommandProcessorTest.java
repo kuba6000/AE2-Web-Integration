@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 
 import java.util.Collections;
 import java.util.Map;
@@ -135,7 +136,7 @@ class CommandProcessorTest {
 
         @Override
         public Map<ServerCapability, Boolean> web$getCapabilities() {
-            return Collections.singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, false);
+            return Collections.singletonMap(CRAFTING_LIGHT_MODE, false);
         }
 
         @Override

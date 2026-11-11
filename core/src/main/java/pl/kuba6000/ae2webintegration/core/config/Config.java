@@ -1,12 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -197,7 +198,7 @@ public class Config {
 
     private static CommentedConfig read(File file) throws IOException {
         CommentedConfig document = newDocument();
-        try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+        try (Reader reader = Files.newBufferedReader(file.toPath(), UTF_8)) {
             new TomlParser().parse(reader, document, ParsingMode.REPLACE);
         }
         return document;

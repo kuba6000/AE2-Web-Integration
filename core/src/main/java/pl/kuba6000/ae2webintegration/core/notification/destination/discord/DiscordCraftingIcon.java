@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
+import static pl.kuba6000.ae2webintegration.core.icons.IconPack.CONTENT_SIZE;
+
 import java.awt.AWTError;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
@@ -18,7 +20,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Location;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Reads bounded icon crops for Discord thumbnails and full crafting cards. */
@@ -52,7 +53,7 @@ final class DiscordCraftingIcon {
     static @Nullable BufferedImage read(@Nullable IconPack pack, @NotNull ResourceDescriptor description)
         throws IOException {
         if (pack == null) return null;
-        Location location = description.itemKey() == null ? null : pack.find(description.itemKey());
+        IconPack.Location location = description.itemKey() == null ? null : pack.find(description.itemKey());
         if (location == null && description.baseKey() != null) location = pack.find(description.baseKey());
         if (location == null) return null;
         try (InputStream page = pack.openPage(
@@ -65,8 +66,7 @@ final class DiscordCraftingIcon {
             try {
                 reader.setInput(input, true, true);
                 ImageReadParam parameters = reader.getDefaultReadParam();
-                parameters.setSourceRegion(
-                    new Rectangle(location.x(), location.y(), IconPack.CONTENT_SIZE, IconPack.CONTENT_SIZE));
+                parameters.setSourceRegion(new Rectangle(location.x(), location.y(), CONTENT_SIZE, CONTENT_SIZE));
                 return reader.read(0, parameters);
             } finally {
                 reader.dispose();

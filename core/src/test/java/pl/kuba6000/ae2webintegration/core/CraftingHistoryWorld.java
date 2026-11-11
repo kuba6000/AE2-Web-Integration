@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
@@ -41,7 +42,7 @@ final class CraftingHistoryWorld implements AutoCloseable {
     private record Platform(File root) implements IServerPlatform {
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 

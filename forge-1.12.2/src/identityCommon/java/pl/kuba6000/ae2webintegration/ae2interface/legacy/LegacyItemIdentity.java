@@ -1,5 +1,19 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import static net.minecraftforge.common.util.Constants.NBT.TAG_BYTE;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_BYTE_ARRAY;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_COMPOUND;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_DOUBLE;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_END;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_FLOAT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_INT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_INT_ARRAY;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_LIST;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_LONG;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_LONG_ARRAY;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_SHORT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_STRING;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -17,7 +31,6 @@ import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
 import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.common.util.Constants.NBT;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
@@ -153,7 +166,7 @@ public final class LegacyItemIdentity {
             // Stream its fixed field order instead of constructing another envelope for hashing.
             nodes = 1;
             boolean hasCapabilities = capabilities != null && !capabilities.isEmpty();
-            output.writeByte(NBT.TAG_COMPOUND);
+            output.writeByte(TAG_COMPOUND);
             output.writeInt((tag == null ? 0 : 1) + (hasCapabilities ? 1 : 0));
             if (hasCapabilities) {
                 StableKey.writeText(sink, "ForgeCaps");
@@ -172,21 +185,21 @@ public final class LegacyItemIdentity {
             int type = tag.getId();
             if (includeType) output.writeByte(type);
             switch (type) {
-                case NBT.TAG_END:
+                case TAG_END:
                     throw new IllegalArgumentException("Unexpected NBT end tag");
-                case NBT.TAG_BYTE:
+                case TAG_BYTE:
                     output.writeByte(((NBTPrimitive) tag).getByte());
                     break;
-                case NBT.TAG_SHORT:
+                case TAG_SHORT:
                     output.writeShort(((NBTPrimitive) tag).getShort());
                     break;
-                case NBT.TAG_INT:
+                case TAG_INT:
                     output.writeInt(((NBTPrimitive) tag).getInt());
                     break;
-                case NBT.TAG_LONG:
+                case TAG_LONG:
                     output.writeLong(((NBTPrimitive) tag).getLong());
                     break;
-                case NBT.TAG_FLOAT:
+                case TAG_FLOAT:
                     float floatValue = ((NBTPrimitive) tag).getFloat();
                     if (Float.isNaN(floatValue)) return false;
                     if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
@@ -194,7 +207,7 @@ public final class LegacyItemIdentity {
                     }
                     output.writeFloat(floatValue == 0 ? 0 : floatValue);
                     break;
-                case NBT.TAG_DOUBLE:
+                case TAG_DOUBLE:
                     double doubleValue = ((NBTPrimitive) tag).getDouble();
                     if (Double.isNaN(doubleValue)) return false;
                     if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
@@ -202,23 +215,23 @@ public final class LegacyItemIdentity {
                     }
                     output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
                     break;
-                case NBT.TAG_BYTE_ARRAY:
+                case TAG_BYTE_ARRAY:
                     byte[] byteArray = ((NBTTagByteArray) tag).getByteArray();
                     output.writeInt(byteArray.length);
                     output.write(byteArray);
                     break;
-                case NBT.TAG_STRING:
+                case TAG_STRING:
                     StableKey.writeText(sink, ((NBTTagString) tag).getString());
                     break;
-                case NBT.TAG_LIST:
+                case TAG_LIST:
                     NBTTagList list = (NBTTagList) tag;
                     int length = list.tagCount();
                     checkChildren(length);
                     int elementType = list.getTagType();
-                    if (elementType == NBT.TAG_END && length != 0) {
+                    if (elementType == TAG_END && length != 0) {
                         throw new IllegalArgumentException("Invalid NBT list type");
                     }
-                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_LONG_ARRAY) return false;
+                    if (elementType < TAG_END || elementType > TAG_LONG_ARRAY) return false;
                     output.writeByte(elementType);
                     output.writeInt(length);
                     for (int index = 0; index < length; index++) {
@@ -229,7 +242,7 @@ public final class LegacyItemIdentity {
                         if (!write(child, depth + 1, false)) return false;
                     }
                     break;
-                case NBT.TAG_COMPOUND:
+                case TAG_COMPOUND:
                     NBTTagCompound compound = (NBTTagCompound) tag;
                     Set<String> keys = compound.getKeySet();
                     checkChildren(keys.size());
@@ -241,12 +254,12 @@ public final class LegacyItemIdentity {
                         if (!write(compound.getTag(name), depth + 1, true)) return false;
                     }
                     break;
-                case NBT.TAG_INT_ARRAY:
+                case TAG_INT_ARRAY:
                     int[] intArray = ((NBTTagIntArray) tag).getIntArray();
                     output.writeInt(intArray.length);
                     for (int value : intArray) output.writeInt(value);
                     break;
-                case NBT.TAG_LONG_ARRAY:
+                case TAG_LONG_ARRAY:
                     // 1.12 exposes no long-array getter. Native serialization of this one leaf is
                     // deterministic and streams directly into the hash without an accessor or buffer.
                     NBTTagCompound leaf = new NBTTagCompound();

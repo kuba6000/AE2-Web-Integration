@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -11,7 +11,6 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -96,7 +95,7 @@ public final class Login extends IAsyncRequest {
 
     @Override
     public void handle() {
-        LoginResult result = AuthService.login(
+        AuthService.LoginResult result = AuthService.login(
             context.getLifecycleGeneration(),
             input.username(),
             input.password(),
@@ -111,6 +110,6 @@ public final class Login extends IAsyncRequest {
             principal.getUsername(),
             principal.isAdmin(),
             Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null);
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, session));
+        respond(HTTP_OK, new Response(ApiStatus.OK, session));
     }
 }

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,7 +13,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -47,7 +48,7 @@ final class SqliteHistoryReader {
                 gridId = rows.getLong("id");
                 long deletedUntil = rows.getLong("deleted_until");
                 long firstObserved = rows.getLong("first_observed");
-                expiry = nowMillis - TimeUnit.DAYS.toMillis(rows.getInt("retention_days"));
+                expiry = nowMillis - DAYS.toMillis(rows.getInt("retention_days"));
                 retired = deletedUntil != Long.MIN_VALUE && fromMillis <= deletedUntil
                     || fromMillis < expiry && firstObserved < expiry;
             }

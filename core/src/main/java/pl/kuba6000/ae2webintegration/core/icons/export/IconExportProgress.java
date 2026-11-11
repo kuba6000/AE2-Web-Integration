@@ -1,8 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -12,7 +15,7 @@ final class IconExportProgress {
 
     private static final int ETA_MIN_SAMPLES = 20;
     private static final int PERCENT_SCALE = 100;
-    private static final long ETA_MIN_ELAPSED = TimeUnit.SECONDS.toNanos(2);
+    private static final long ETA_MIN_ELAPSED = SECONDS.toNanos(2);
     int captured;
     int processed;
     private int total;
@@ -126,11 +129,11 @@ final class IconExportProgress {
     private @NotNull String remainingTime(int remaining) {
         long elapsed = System.nanoTime() - renderStarted;
         if (processed < ETA_MIN_SAMPLES || elapsed < ETA_MIN_ELAPSED) return "estimating";
-        long seconds = (long) Math.ceil((double) elapsed / processed * remaining / TimeUnit.SECONDS.toNanos(1));
-        long hours = TimeUnit.SECONDS.toHours(seconds);
-        long minutes = TimeUnit.SECONDS.toMinutes(seconds);
-        if (hours > 0) return "~" + hours + "h " + minutes % TimeUnit.HOURS.toMinutes(1) + "m";
-        if (minutes > 0) return "~" + minutes + "m " + seconds % TimeUnit.MINUTES.toSeconds(1) + "s";
+        long seconds = (long) Math.ceil((double) elapsed / processed * remaining / SECONDS.toNanos(1));
+        long hours = SECONDS.toHours(seconds);
+        long minutes = SECONDS.toMinutes(seconds);
+        if (hours > 0) return "~" + hours + "h " + minutes % HOURS.toMinutes(1) + "m";
+        if (minutes > 0) return "~" + minutes + "m " + seconds % MINUTES.toSeconds(1) + "s";
         return "~" + seconds + "s";
     }
 

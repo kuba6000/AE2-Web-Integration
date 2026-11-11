@@ -1,3 +1,5 @@
+import org.gradle.jvm.tasks.Jar
+
 tasks.register('slimJar', Jar) {
     dependsOn("classes")
     archiveClassifier = "dev-slim"
@@ -30,7 +32,7 @@ afterEvaluate {
     } else {
         reobfJar.archiveClassifier = ''
     }
-    tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
+    tasks.withType(Jar).configureEach {
         destinationDirectory = file('build/libs/')
         manifest.attributes([
                 'MixinConfigs': 'mixins.ae2webintegration.json',

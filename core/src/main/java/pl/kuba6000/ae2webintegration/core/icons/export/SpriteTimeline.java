@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static pl.kuba6000.ae2webintegration.core.icons.IconPackWriter.MAX_ANIMATION_IMAGES;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -9,13 +11,11 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
-
 /** Bounded common capture times for native sprites whose frame schedules are already normalized. */
 public final class SpriteTimeline {
 
     private static final int MAX_TICKS = 12000;
-    private static final int MAX_FRAMES = IconPackWriter.MAX_ANIMATION_IMAGES;
+    private static final int MAX_FRAMES = MAX_ANIMATION_IMAGES;
     private final @NotNull List<Frame> frames;
     private final boolean reduced;
 

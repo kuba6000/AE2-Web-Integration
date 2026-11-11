@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import static net.minecraftforge.fluids.Fluid.BUCKET_VOLUME;
+
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
@@ -28,6 +29,6 @@ public final class LegacyResourceBaseline {
     }
 
     public static @Nullable AEFluidStack fluid(@NotNull AEFluidStack stack) {
-        return AEFluidStack.fromFluidStack(new FluidStack(stack.getFluid(), Fluid.BUCKET_VOLUME));
+        return AEFluidStack.fromFluidStack(new FluidStack(stack.getFluid(), BUCKET_VOLUME));
     }
 }

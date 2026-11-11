@@ -1,10 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination;
 
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -47,7 +50,7 @@ public class WebhookHelper {
             if (!username.isEmpty() && !password.isEmpty()) {
                 String auth = username + ":" + password;
                 byte[] encodedAuth = Base64.getEncoder()
-                    .encode(auth.getBytes(StandardCharsets.UTF_8));
+                    .encode(auth.getBytes(UTF_8));
                 String authHeaderValue = "Basic " + new String(encodedAuth);
                 connection.setRequestProperty("Authorization", authHeaderValue);
             }
@@ -64,24 +67,23 @@ public class WebhookHelper {
                     stream.write(
                         ("--" + boundary
                             + "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n")
-                            .getBytes(StandardCharsets.UTF_8));
+                            .getBytes(UTF_8));
                 }
                 stream.write(
                     json.toString()
-                        .getBytes(StandardCharsets.UTF_8));
+                        .getBytes(UTF_8));
                 if (png != null) {
                     stream.write(
                         ("\r\n--" + boundary
                             + "\r\nContent-Disposition: form-data; name=\"files[0]\"; filename=\"crafting.png\"\r\nContent-Type: image/png\r\n\r\n")
-                            .getBytes(StandardCharsets.UTF_8));
+                            .getBytes(UTF_8));
                     stream.write(png);
-                    stream.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+                    stream.write(("\r\n--" + boundary + "--\r\n").getBytes(UTF_8));
                 }
             }
 
             int code;
-            if ((code = connection.getResponseCode()) != HttpURLConnection.HTTP_OK
-                && code != HttpURLConnection.HTTP_NO_CONTENT) {
+            if ((code = connection.getResponseCode()) != HTTP_OK && code != HTTP_NO_CONTENT) {
                 LOG.error("Error, response code: {}", code);
             }
         } catch (IOException | IllegalArgumentException e) {

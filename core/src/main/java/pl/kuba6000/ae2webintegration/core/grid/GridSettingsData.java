@@ -3,8 +3,6 @@ package pl.kuba6000.ae2webintegration.core.grid;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 
 /** Mutable configuration owned by one retained grid identity. */
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
@@ -27,8 +25,8 @@ public final class GridSettingsData {
     private int flowFlushIntervalSeconds;
     private int historyRetentionDays;
     private int craftingHistoryRetentionDays;
-    private transient @NotNull CraftingHistory craftingPolicy;
-    private transient @NotNull ResourceHistory policy;
+    private transient @NotNull ConfigSettings.CraftingHistory craftingPolicy;
+    private transient @NotNull ConfigSettings.ResourceHistory policy;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -42,11 +40,12 @@ public final class GridSettingsData {
         this(new ConfigSettings.ResourceHistory());
     }
 
-    public GridSettingsData(@NotNull ResourceHistory policy) {
-        this(policy, new CraftingHistory());
+    public GridSettingsData(@NotNull ConfigSettings.ResourceHistory policy) {
+        this(policy, new ConfigSettings.CraftingHistory());
     }
 
-    public GridSettingsData(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
+    public GridSettingsData(@NotNull ConfigSettings.ResourceHistory policy,
+        @NotNull ConfigSettings.CraftingHistory craftingPolicy) {
         this.policy = policy;
         this.craftingPolicy = craftingPolicy;
         craftingHistoryRetentionDays = craftingPolicy.historyRetentionDays.defaultValue;
@@ -73,7 +72,8 @@ public final class GridSettingsData {
     }
 
     /** Normalize retained values under the settings lock when administrator bounds change. */
-    public boolean applyPolicy(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
+    public boolean applyPolicy(@NotNull ConfigSettings.ResourceHistory policy,
+        @NotNull ConfigSettings.CraftingHistory craftingPolicy) {
         synchronized (lock) {
             this.craftingPolicy = craftingPolicy;
             int craftingRetention = craftingPolicy.historyRetentionDays.clamp(craftingHistoryRetentionDays);

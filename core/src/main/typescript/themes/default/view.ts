@@ -61,10 +61,17 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         tooltips
     );
     header.element.after(notices.element);
-    const webSettings = createWebSettings(webSettingsRoot, workspace, application, context, () => {
-        notices.acknowledgeIcons();
-        renderDisplay();
-    });
+    const webSettings = createWebSettings(
+        webSettingsRoot,
+        workspace,
+        application,
+        context,
+        () => {
+            notices.acknowledgeIcons();
+            renderDisplay();
+        },
+        tooltips
+    );
     const mobile = createMobilePanels(root, workspace, header.navigation, tooltips.hide);
     lifetime.onCleanup(() => mobile.dispose());
     const homeView = createHomeView(workspace, application, mobile.beforeDialog, context.settings, tooltips.bind);

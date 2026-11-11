@@ -1,13 +1,15 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
+import static org.objectweb.asm.Opcodes.PUTFIELD;
+
 import net.minecraft.nbt.CompoundTag;
 
 import org.jetbrains.annotations.Nullable;
-import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -29,8 +31,8 @@ public class GridNodeUpdateMixin {
         at = @At(
             value = "FIELD",
             target = "Lappeng/me/GridNode;owningPlayerId:I",
-            opcode = Opcodes.PUTFIELD,
-            shift = At.Shift.AFTER))
+            opcode = PUTFIELD,
+            shift = Shift.AFTER))
     private void web$ownerChanged(int ownerPlayerId, CallbackInfo ci) {
         web$updatePermissions();
     }

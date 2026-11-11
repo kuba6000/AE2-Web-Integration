@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.Limit;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
@@ -30,8 +31,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
     @NotNull List<ResourceDescriptor> resources, @NotNull List<Request> requests,
     @NotNull List<Contribution> contributions, @NotNull List<Task> tasks, @NotNull List<Input> inputs,
-    @NotNull List<Output> outputs, @NotNull List<TaskRequest> taskRequests,
-    @NotNull Set<CraftingRecipeCapture.Limit> limits) {
+    @NotNull List<Output> outputs, @NotNull List<TaskRequest> taskRequests, @NotNull Set<Limit> limits) {
 
     /** Copies detached tables. Callers constructing directly must supply consistent local references. */
     public CraftingTraceCapture {
@@ -42,7 +42,7 @@ public record CraftingTraceCapture(@Nullable Integer root, boolean simulated,
         inputs = copy(inputs);
         outputs = copy(outputs);
         taskRequests = copy(taskRequests);
-        EnumSet<CraftingRecipeCapture.Limit> limitCopy = EnumSet.noneOf(CraftingRecipeCapture.Limit.class);
+        EnumSet<Limit> limitCopy = EnumSet.noneOf(Limit.class);
         limitCopy.addAll(limits);
         limits = Collections.unmodifiableSet(limitCopy);
     }

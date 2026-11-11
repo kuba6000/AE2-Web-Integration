@@ -1,11 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,7 +16,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
@@ -148,10 +149,10 @@ class IconAnimationFallbackTest {
     }
 
     private static void finish(IconExportSession<?> session, AtomicLong clock) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        long deadline = System.nanoTime() + SECONDS.toNanos(15);
         while (!session.tick()) {
             assertTrue(System.nanoTime() < deadline, session.status());
-            clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(100));
+            clock.addAndGet(MILLISECONDS.toNanos(100));
             Thread.sleep(1);
         }
     }
@@ -159,7 +160,7 @@ class IconAnimationFallbackTest {
     private long fallbackCount() throws Exception {
         try (ZipFile zip = new ZipFile(archive().toFile());
             InputStream input = zip.getInputStream(zip.getEntry("manifest.json"));
-            InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+            InputStreamReader reader = new InputStreamReader(input, UTF_8)) {
             return new JsonParser().parse(reader)
                 .getAsJsonObject()
                 .getAsJsonObject("statistics")
@@ -315,7 +316,7 @@ class IconAnimationFallbackTest {
 
                 public boolean capture(@NotNull List<PackExportWriter.Capture> captures,
                     @NotNull LongSupplier drawClock) throws RenderFailure {
-                    clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(20));
+                    clock.addAndGet(MILLISECONDS.toNanos(20));
                     draws++;
                     if (candidate == Candidate.HEALTHY) {
                         deferred
@@ -356,7 +357,7 @@ class IconAnimationFallbackTest {
                 public boolean capture(@NotNull List<PackExportWriter.Capture> captures,
                     @NotNull LongSupplier drawClock) throws RenderFailure {
                     long submitted = drawClock.getAsLong();
-                    clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(20));
+                    clock.addAndGet(MILLISECONDS.toNanos(20));
                     deferred
                         .add(PackExportWriter.Capture.sample(key, pixels(0xff000000 | (++draws * 0x1100)), submitted));
                     // A repeated fallback would succeed, making recursive retry visible in the published archive.

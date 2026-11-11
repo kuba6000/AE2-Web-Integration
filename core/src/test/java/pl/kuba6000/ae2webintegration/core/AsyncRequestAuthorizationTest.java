@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.util.List;
 import java.util.Map;
@@ -11,7 +13,6 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
@@ -54,7 +55,7 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
     @Test
     void currentSourceAuthorizesWithoutARequestCacheAndRevocationIsImmediate() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         assertStatus("OK", run(ME, "grid=" + key));
         grid.withoutSources();
         assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
@@ -63,14 +64,14 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
     @Test
     void unrelatedPlayerIsDenied() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
-        assertStatus("NO_PERMISSIONS", run(ME, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid)));
+        assertStatus("NO_PERMISSIONS", run(ME, "grid=" + GRID_IDENTITIES.getKey(grid)));
     }
 
     @Test
     void administrativeAccessStillRequiresALiveRecognizedGrid() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1)
             .withoutSources();
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         for (WebPrincipal user : new WebPrincipal[] { WebPrincipal.admin(), WebPrincipal.localhost() }) {
             assertStatus("OK", run(user, "grid=" + key));
             assertStatus("GRID_NOT_FOUND", run(user, "grid=" + TestGridFixtures.key(99)));
@@ -80,16 +81,16 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
     @Test
     void retiringTheIdentityDeniesAccessEvenWhileGridIsReferenced() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        StableKey key = GRID_IDENTITIES.getKey(grid);
+        GRID_IDENTITIES.controllerRemoved(grid.position());
         assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
     }
 
     @Test
     void stoppingTheSaveDeniesAccess() {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        CoreEngine.GRID_IDENTITIES.clear();
+        StableKey key = GRID_IDENTITIES.getKey(grid);
+        GRID_IDENTITIES.clear();
         assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
     }
 
@@ -117,7 +118,7 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
             boolean http;
 
             ThreadBoundGrid() {
-                super(1, false, AEControllerState.CONTROLLER_ONLINE, 42);
+                super(1, false, CONTROLLER_ONLINE, 42);
             }
 
             @Override
@@ -139,8 +140,8 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
             }
         }
         ThreadBoundGrid grid = new ThreadBoundGrid();
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GRID_IDENTITIES.controllerValidated(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         grid.http = true;
         assertStatus("OK", run(ME, "grid=" + key));
     }

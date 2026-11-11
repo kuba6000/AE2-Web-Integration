@@ -16,7 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.JDBC;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldSchemaBootstrapTest {
@@ -33,13 +33,13 @@ class WorldSchemaBootstrapTest {
             sql.execute("INSERT INTO world_schema VALUES (1, 7)");
             sql.execute("CREATE TABLE grids (value INTEGER)");
         }
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             database.open();
             database.read(db -> {
                 try (Statement sql = db.createStatement();
                     ResultSet rows = sql.executeQuery("SELECT version FROM world_schema")) {
                     assertTrue(rows.next());
-                    assertEquals(9, rows.getLong(1));
+                    assertEquals(10, rows.getLong(1));
                     assertFalse(rows.next());
                 }
                 return null;
@@ -50,7 +50,7 @@ class WorldSchemaBootstrapTest {
     @Test
     void aFailedWorldTransactionRollsBackBothSchemaChangesAndRowsAcrossReopen() throws Exception {
         Path file = directory.resolve("rollback.sqlite");
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, () -> database.write(db -> {
                 try (Statement sql = db.createStatement()) {
                     sql.execute("CREATE TABLE transaction_probe (value INTEGER)");
@@ -60,7 +60,7 @@ class WorldSchemaBootstrapTest {
                 throw new IOException("Interrupted transaction");
             }));
         }
-        try (WorldDatabase reopened = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase reopened = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             reopened.read(db -> {
                 try (Statement sql = db.createStatement()) {
                     try (ResultSet rows = sql.executeQuery("SELECT identities_imported FROM world_schema")) {
@@ -95,12 +95,46 @@ class WorldSchemaBootstrapTest {
             }
         }
         byte[] original = Files.readAllBytes(file);
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, database::open);
             assertThrows(IOException.class, database::open);
         }
         assertArrayEquals(original, Files.readAllBytes(file));
         assertFalse(Files.exists(file.resolveSibling(file.getFileName() + "-wal")));
+    }
+
+    @Test
+    void currentSchemaReopensWithoutRejectingAdditionalColumnsOrObjects() throws Exception {
+        Path file = directory.resolve("extended-current.sqlite");
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
+            database.write(db -> {
+                try (Statement sql = db.createStatement()) {
+                    sql.execute("ALTER TABLE resource_pins ADD COLUMN extension TEXT");
+                    sql.execute("CREATE TABLE extension_data (value INTEGER)");
+                    sql.execute("INSERT INTO extension_data VALUES (42)");
+                    sql.execute("CREATE VIEW extension_view AS SELECT value FROM extension_data");
+                    sql.execute(
+                        "CREATE TRIGGER extension_write AFTER UPDATE ON world_schema BEGIN INSERT INTO extension_data VALUES (99); END");
+                }
+                return null;
+            });
+        }
+        try (WorldDatabase reopened = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
+            reopened.open();
+            reopened.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT value FROM extension_view")) {
+                    assertTrue(rows.next());
+                    assertEquals(42, rows.getInt(1));
+                    assertFalse(rows.next(), "opening the current version does not update its schema marker");
+                }
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT extension FROM resource_pins")) {
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+        }
     }
 
     private static Connection connect(Path file) throws Exception {

@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.condition.OS.WINDOWS;
 
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
@@ -10,12 +13,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -23,7 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import pl.kuba6000.ae2webintegration.core.WindowsFileLocks;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-@EnabledOnOs(OS.WINDOWS)
+@EnabledOnOs(WINDOWS)
 class IconPackWriterCleanupTest {
 
     @TempDir
@@ -59,10 +60,10 @@ class IconPackWriterCleanupTest {
                     writer.close();
                     return null;
                 });
-                assertTrue(started.await(5, TimeUnit.SECONDS));
-                assertThrows(TimeoutException.class, () -> completion.get(300, TimeUnit.MILLISECONDS));
+                assertTrue(started.await(5, SECONDS));
+                assertThrows(TimeoutException.class, () -> completion.get(300, MILLISECONDS));
             }
-            Path output = completion.get(15, TimeUnit.SECONDS);
+            Path output = completion.get(15, SECONDS);
             assertFalse(Files.exists(scratch));
             if (publish) {
                 try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
@@ -74,7 +75,7 @@ class IconPackWriterCleanupTest {
             }
         } finally {
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(15, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(15, SECONDS));
         }
     }
 }

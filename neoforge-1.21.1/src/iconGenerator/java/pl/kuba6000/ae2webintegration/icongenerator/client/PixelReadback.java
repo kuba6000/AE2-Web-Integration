@@ -1,5 +1,24 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.opengl.GL11.GL_INVALID_ENUM;
+import static org.lwjgl.opengl.GL11.GL_INVALID_OPERATION;
+import static org.lwjgl.opengl.GL11.GL_INVALID_VALUE;
+import static org.lwjgl.opengl.GL11.GL_NO_ERROR;
+import static org.lwjgl.opengl.GL11.GL_PACK_ALIGNMENT;
+import static org.lwjgl.opengl.GL11.GL_PACK_ROW_LENGTH;
+import static org.lwjgl.opengl.GL11.GL_PACK_SKIP_PIXELS;
+import static org.lwjgl.opengl.GL11.GL_PACK_SKIP_ROWS;
+import static org.lwjgl.opengl.GL11.GL_RGBA;
+import static org.lwjgl.opengl.GL11.GL_STACK_OVERFLOW;
+import static org.lwjgl.opengl.GL11.GL_STACK_UNDERFLOW;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL15.GL_READ_ONLY;
+import static org.lwjgl.opengl.GL15.GL_STREAM_READ;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER_BINDING;
+import static org.lwjgl.opengl.GL30.GL_INVALID_FRAMEBUFFER_OPERATION;
+import static pl.kuba6000.ae2webintegration.icongenerator.client.ModernIconRenderer.ICON_SIZE;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -14,10 +33,8 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL21;
-import org.lwjgl.opengl.GL30;
 
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -26,7 +43,7 @@ final class PixelReadback implements AutoCloseable {
 
     private static final int PAGE_COUNT = 3;
     private static final int ICONS_PER_PAGE = 16;
-    private static final int SIZE = ModernIconRenderer.ICON_SIZE;
+    private static final int SIZE = ICON_SIZE;
     private static final int ICON_BYTES = SIZE * SIZE * Integer.BYTES;
     private static final int PAGE_BYTES = ICONS_PER_PAGE * ICON_BYTES;
     private static final int MAX_PRIOR_ERRORS = 16;
@@ -55,25 +72,26 @@ final class PixelReadback implements AutoCloseable {
     }
 
     /** Called inside the renderer's per-icon state guard, after successful drawing. */
-    void submit(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull CaptureKind kind, long timing) {
+    void submit(@NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures, @NotNull CaptureKind kind,
+        long timing) {
         discardRenderingErrors();
         initialize();
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
+        GL11.glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        GL11.glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        GL11.glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+        GL11.glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
         if (!pbo) {
-            if (supportsPackBinding()) GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
+            if (supportsPackBinding()) GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             rgba.clear();
             long started = System.nanoTime();
             try {
-                GL11.glReadPixels(0, 0, SIZE, SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
+                GL11.glReadPixels(0, 0, SIZE, SIZE, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
                 checkError();
             } finally {
                 readbackNanos += System.nanoTime() - started;
                 readbackCount++;
             }
-            captures.add(new Capture(key, convert(rgba), kind, timing));
+            captures.add(new PackExportWriter.Capture(key, convert(rgba), kind, timing));
             return;
         }
         if (current == null) {
@@ -85,10 +103,10 @@ final class PixelReadback implements AutoCloseable {
             current = free.removeFirst();
         }
         Page page = current;
-        GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, page.buffer);
+        GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, page.buffer);
         long started = System.nanoTime();
         try {
-            GL11.glReadPixels(0, 0, SIZE, SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (long) page.count * ICON_BYTES);
+            GL11.glReadPixels(0, 0, SIZE, SIZE, GL_RGBA, GL_UNSIGNED_BYTE, (long) page.count * ICON_BYTES);
             checkError();
         } finally {
             readbackNanos += System.nanoTime() - started;
@@ -110,8 +128,8 @@ final class PixelReadback implements AutoCloseable {
             for (int index = 0; index < PAGE_COUNT; index++) {
                 Page page = new Page(GL15.glGenBuffers());
                 owned.add(page);
-                GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, page.buffer);
-                GL15.glBufferData(GL21.GL_PIXEL_PACK_BUFFER, PAGE_BYTES, GL15.GL_STREAM_READ);
+                GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, page.buffer);
+                GL15.glBufferData(GL_PIXEL_PACK_BUFFER, PAGE_BYTES, GL_STREAM_READ);
                 checkError();
                 free.addLast(page);
             }
@@ -120,7 +138,7 @@ final class PixelReadback implements AutoCloseable {
     }
 
     /** Drain the partial page too, before transferring a writer batch or publishing the pack. */
-    void drain(@NotNull List<Capture> captures) {
+    void drain(@NotNull List<PackExportWriter.Capture> captures) {
         if (current != null) {
             pending.addLast(current);
             current = null;
@@ -133,15 +151,15 @@ final class PixelReadback implements AutoCloseable {
         }
     }
 
-    private void retrieve(@NotNull Page page, @NotNull List<Capture> captures) {
-        int previous = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+    private void retrieve(@NotNull Page page, @NotNull List<PackExportWriter.Capture> captures) {
+        int previous = GL11.glGetInteger(GL_PIXEL_PACK_BUFFER_BINDING);
         try {
-            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, page.buffer);
-            List<Capture> completed = new ArrayList<>(page.count);
+            GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, page.buffer);
+            List<PackExportWriter.Capture> completed = new ArrayList<>(page.count);
             ByteBuffer mapped;
             long started = System.nanoTime();
             try {
-                mapped = GL15.glMapBuffer(GL21.GL_PIXEL_PACK_BUFFER, GL15.GL_READ_ONLY, PAGE_BYTES, page.mapping);
+                mapped = GL15.glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY, PAGE_BYTES, page.mapping);
             } finally {
                 retrievalNanos += System.nanoTime() - started;
                 retrievalCount++;
@@ -157,8 +175,12 @@ final class PixelReadback implements AutoCloseable {
                 checkError();
                 mapped.clear();
                 for (int index = 0; index < page.count; index++) {
-                    completed
-                        .add(new Capture(page.keys[index], convert(mapped), page.kinds[index], page.timings[index]));
+                    completed.add(
+                        new PackExportWriter.Capture(
+                            page.keys[index],
+                            convert(mapped),
+                            page.kinds[index],
+                            page.timings[index]));
                 }
             } catch (RuntimeException | Error failure) {
                 conversionFailure = failure;
@@ -166,7 +188,7 @@ final class PixelReadback implements AutoCloseable {
             } finally {
                 started = System.nanoTime();
                 try {
-                    boolean valid = GL15.glUnmapBuffer(GL21.GL_PIXEL_PACK_BUFFER);
+                    boolean valid = GL15.glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
                     checkError();
                     if (!valid) throw new IllegalStateException("Icon readback page contents became invalid");
                 } catch (RuntimeException | Error failure) {
@@ -181,7 +203,7 @@ final class PixelReadback implements AutoCloseable {
             Arrays.fill(page.kinds, null);
             page.count = 0;
         } finally {
-            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, previous);
+            GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, previous);
         }
     }
 
@@ -214,7 +236,7 @@ final class PixelReadback implements AutoCloseable {
 
     private static void checkError() {
         int error = GL11.glGetError();
-        if (error != GL11.GL_NO_ERROR) throw new IllegalStateException("OpenGL icon readback error: " + error);
+        if (error != GL_NO_ERROR) throw new IllegalStateException("OpenGL icon readback error: " + error);
     }
 
     static void discardRenderingErrors() {
@@ -223,12 +245,12 @@ final class PixelReadback implements AutoCloseable {
         // Never swallow out-of-memory/context-loss errors or loop indefinitely on an unhealthy context.
         for (int count = 0; count < MAX_PRIOR_ERRORS; count++) {
             int error = GL11.glGetError();
-            if (error == GL11.GL_NO_ERROR) return;
-            if (error != GL11.GL_INVALID_ENUM && error != GL11.GL_INVALID_VALUE
-                && error != GL11.GL_INVALID_OPERATION
-                && error != GL11.GL_STACK_OVERFLOW
-                && error != GL11.GL_STACK_UNDERFLOW
-                && error != GL30.GL_INVALID_FRAMEBUFFER_OPERATION) {
+            if (error == GL_NO_ERROR) return;
+            if (error != GL_INVALID_ENUM && error != GL_INVALID_VALUE
+                && error != GL_INVALID_OPERATION
+                && error != GL_STACK_OVERFLOW
+                && error != GL_STACK_UNDERFLOW
+                && error != GL_INVALID_FRAMEBUFFER_OPERATION) {
                 throw new IllegalStateException("Unrecoverable OpenGL error before icon readback: " + error);
             }
         }

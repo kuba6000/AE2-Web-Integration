@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.Limit;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
@@ -18,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 final class CaptureBudget {
 
     final List<ResourceDescriptor> resources = new ArrayList<>();
-    final EnumSet<CraftingRecipeCapture.Limit> limits = EnumSet.noneOf(CraftingRecipeCapture.Limit.class);
+    final EnumSet<Limit> limits = EnumSet.noneOf(Limit.class);
     private final int maxEntries;
     private int entries;
     private final int maxDescriptionCharacters;
@@ -37,13 +38,13 @@ final class CaptureBudget {
 
     void stopAtEntryLimit() {
         if (entries < maxEntries) throw new IllegalStateException("Entry budget not exhausted");
-        limits.add(CraftingRecipeCapture.Limit.ENTRIES);
+        limits.add(Limit.ENTRIES);
     }
 
     boolean admit() {
         if (!limits.isEmpty()) return false;
         if (entries >= maxEntries) {
-            limits.add(CraftingRecipeCapture.Limit.ENTRIES);
+            limits.add(Limit.ENTRIES);
             return false;
         }
         entries++;
@@ -58,7 +59,7 @@ final class CaptureBudget {
             .length() + length(value.registryNamespace()) + length(value.registryPath());
         if (characters > maxDescriptionCharacters - descriptionCharacters) {
             entries--;
-            limits.add(CraftingRecipeCapture.Limit.DESCRIPTION_CHARACTERS);
+            limits.add(Limit.DESCRIPTION_CHARACTERS);
             return -1;
         }
         descriptionCharacters += characters;

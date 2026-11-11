@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -105,7 +106,7 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
 
     @Inject(
         method = "updatePatterns",
-        at = @At(value = "INVOKE", target = "Ljava/util/Map;clear()V", ordinal = 0, shift = At.Shift.AFTER))
+        at = @At(value = "INVOKE", target = "Ljava/util/Map;clear()V", ordinal = 0, shift = Shift.AFTER))
     void ae2webintegration$updatePatternsStart(CallbackInfo ci) {
         web$mediumToViewable.clear();
         web$currentCraftingProvider = null;

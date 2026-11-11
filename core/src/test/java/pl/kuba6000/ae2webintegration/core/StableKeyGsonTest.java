@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -19,12 +20,11 @@ import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class StableKeyGsonTest {
 
     private static final String TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";
-    private final Gson gson = GSONUtils.GSON_BUILDER.create();
+    private final Gson gson = GSON_BUILDER.create();
 
     @Test
     void scalarUsesCanonicalStringAndRoundTrips() {

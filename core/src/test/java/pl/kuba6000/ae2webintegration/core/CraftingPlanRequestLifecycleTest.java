@@ -1,9 +1,14 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.net.HttpURLConnection.HTTP_CONFLICT;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
+import static java.net.HttpURLConnection.HTTP_OK;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.reflect.Proxy;
-import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -20,7 +25,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -28,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan.PlanData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -38,7 +43,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
@@ -192,23 +196,20 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         DeleteCraftingPlan request = new DeleteCraftingPlan();
-        assertTrue(
-            request
-                .init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         assertStatus("OK", request.getJSON());
         assertEquals(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             request.getResponse()
                 .httpStatus());
         assertTrue(pending.isCancelled());
         GetCraftingPlan poll = new GetCraftingPlan();
-        assertTrue(
-            poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        assertTrue(poll.init(TestGridFixtures.context(-1, "grid=" + GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
         poll.runOnServerThread(TestGridFixtures.ae(grid));
         assertStatus("INVALID_ID", poll.getJSON());
         assertEquals(
-            HttpURLConnection.HTTP_NOT_FOUND,
+            HTTP_NOT_FOUND,
             poll.getResponse()
                 .httpStatus());
     }
@@ -219,11 +220,10 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         GetCraftingPlan poll = new GetCraftingPlan();
-        assertTrue(
-            poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        assertTrue(poll.init(TestGridFixtures.context(-1, "grid=" + GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
         poll.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             poll.getResponse()
                 .httpStatus());
         assertFalse(
@@ -234,20 +234,19 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
                 .getAsBoolean());
         SubmitCraftingPlan submit = new SubmitCraftingPlan();
         assertTrue(
-            submit.init(
-                TestGridFixtures
-                    .context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit")));
+            submit
+                .init(TestGridFixtures.context(-1, "grid=" + GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit")));
         submit.runOnServerThread(TestGridFixtures.ae(grid));
         assertStatus("JOB_NOT_DONE", submit.getJSON());
         assertEquals(
-            HttpURLConnection.HTTP_CONFLICT,
+            HTTP_CONFLICT,
             submit.getResponse()
                 .httpStatus());
     }
 
     @Test
     void calculatedResourceSerializesCamelCaseIdentityAndMeasurements() {
-        GetCraftingPlan.PlanData.JobItem row = new GetCraftingPlan.PlanData.JobItem(
+        PlanData.JobItem row = new PlanData.JobItem(
             "example",
             "resource",
             "Resource",
@@ -262,7 +261,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             null,
             null);
         JsonObject json = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(row))
             .getAsJsonObject();
         assertEquals(
@@ -318,8 +317,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
     private static String submit(TestGrid grid, int id, WebPrincipal principal) {
         SubmitCraftingPlan request = new SubmitCraftingPlan();
         request.init(
-            TestGridFixtures
-                .context(principal, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
+            TestGridFixtures.context(principal, "grid=" + GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         return request.getJSON();
     }
@@ -335,7 +333,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         private final IAECraftingGrid crafting;
 
         private TestGrid(StableKey securityKey, IAECraftingGrid crafting) {
-            super(securityKey, false, AEControllerState.CONTROLLER_ONLINE);
+            super(securityKey, false, CONTROLLER_ONLINE);
             this.crafting = crafting;
         }
 

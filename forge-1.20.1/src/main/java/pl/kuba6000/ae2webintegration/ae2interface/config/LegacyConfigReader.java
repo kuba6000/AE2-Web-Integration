@@ -1,12 +1,13 @@
 package pl.kuba6000.ae2webintegration.ae2interface.config;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -60,7 +61,7 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
             source.getFileName()
                 .toString() + ".old");
         try {
-            Files.move(source, renamed, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(source, renamed, REPLACE_EXISTING);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not rename legacy configuration " + source, e);
         }

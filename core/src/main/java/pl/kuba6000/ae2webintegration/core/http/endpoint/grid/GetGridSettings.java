@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -67,7 +67,7 @@ public final class GetGridSettings extends IAsyncRequest {
             GridSettingsData settings = data.getSettings();
             // Completion serializes under the same monitor used by settings mutations and file writes.
             respond(
-                HttpURLConnection.HTTP_OK,
+                HTTP_OK,
                 new Response(
                     ApiStatus.OK,
                     GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy())));

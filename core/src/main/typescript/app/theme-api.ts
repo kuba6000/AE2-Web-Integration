@@ -22,7 +22,8 @@ import type {
     GridSettings,
     AvailableUpdate,
     PinPlacement,
-    ResourcePinUpdate
+    ResourcePinUpdate,
+    HomePinGroupUpdate
 } from './api-types.js';
 import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
@@ -48,7 +49,7 @@ export type ThemeState = ReadonlyData<{
     /** Advances only when a full item snapshot is accepted, independently of live deltas. */
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
-    iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
+    iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
     itemError: string | null;
     refreshing: boolean;
@@ -98,6 +99,9 @@ export type ThemeApplication = {
         update(pinKey: string, update: ResourcePinUpdate): Promise<void>;
         remove(pinKey: string): Promise<void>;
         refresh(): Promise<void>;
+        addGroup(name: string): Promise<void>;
+        updateGroup(groupKey: string, update: HomePinGroupUpdate): Promise<void>;
+        removeGroup(groupKey: string): Promise<void>;
     };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;

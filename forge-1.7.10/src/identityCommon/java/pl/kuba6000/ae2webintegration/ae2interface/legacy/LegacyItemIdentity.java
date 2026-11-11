@@ -1,5 +1,18 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import static net.minecraftforge.common.util.Constants.NBT.TAG_BYTE;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_BYTE_ARRAY;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_COMPOUND;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_DOUBLE;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_END;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_FLOAT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_INT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_INT_ARRAY;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_LIST;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_LONG;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_SHORT;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_STRING;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -10,7 +23,6 @@ import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
-import net.minecraft.nbt.NBTBase.NBTPrimitive;
 import net.minecraft.nbt.NBTTagByteArray;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagDouble;
@@ -18,7 +30,6 @@ import net.minecraft.nbt.NBTTagFloat;
 import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
-import net.minecraftforge.common.util.Constants.NBT;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
@@ -152,61 +163,61 @@ public final class LegacyItemIdentity {
             int type = tag.getId();
             if (includeType) output.writeByte(type);
             switch (type) {
-                case NBT.TAG_END:
+                case TAG_END:
                     throw new IllegalArgumentException("Unexpected NBT end tag");
-                case NBT.TAG_BYTE:
-                    output.writeByte(((NBTPrimitive) tag).func_150290_f());
+                case TAG_BYTE:
+                    output.writeByte(((NBTBase.NBTPrimitive) tag).func_150290_f());
                     break;
-                case NBT.TAG_SHORT:
-                    output.writeShort(((NBTPrimitive) tag).func_150289_e());
+                case TAG_SHORT:
+                    output.writeShort(((NBTBase.NBTPrimitive) tag).func_150289_e());
                     break;
-                case NBT.TAG_INT:
-                    output.writeInt(((NBTPrimitive) tag).func_150287_d());
+                case TAG_INT:
+                    output.writeInt(((NBTBase.NBTPrimitive) tag).func_150287_d());
                     break;
-                case NBT.TAG_LONG:
-                    output.writeLong(((NBTPrimitive) tag).func_150291_c());
+                case TAG_LONG:
+                    output.writeLong(((NBTBase.NBTPrimitive) tag).func_150291_c());
                     break;
-                case NBT.TAG_FLOAT:
-                    float floatValue = ((NBTPrimitive) tag).func_150288_h();
+                case TAG_FLOAT:
+                    float floatValue = ((NBTBase.NBTPrimitive) tag).func_150288_h();
                     if (Float.isNaN(floatValue)) return false;
                     if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
                         return false;
                     }
                     output.writeFloat(floatValue == 0 ? 0 : floatValue);
                     break;
-                case NBT.TAG_DOUBLE:
-                    double doubleValue = ((NBTPrimitive) tag).func_150286_g();
+                case TAG_DOUBLE:
+                    double doubleValue = ((NBTBase.NBTPrimitive) tag).func_150286_g();
                     if (Double.isNaN(doubleValue)) return false;
                     if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
                         return false;
                     }
                     output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
                     break;
-                case NBT.TAG_BYTE_ARRAY:
+                case TAG_BYTE_ARRAY:
                     byte[] byteArray = ((NBTTagByteArray) tag).func_150292_c();
                     output.writeInt(byteArray.length);
                     output.write(byteArray);
                     break;
-                case NBT.TAG_STRING:
+                case TAG_STRING:
                     StableKey.writeText(sink, ((NBTTagString) tag).func_150285_a_());
                     break;
-                case NBT.TAG_LIST:
+                case TAG_LIST:
                     NBTTagList list = (NBTTagList) tag;
                     int length = list.tagCount();
                     checkChildren(length);
                     // GTNH's AE2 intern equality ignores the retained type of an empty item list.
-                    int elementType = length == 0 && !normalizeZero ? NBT.TAG_END : list.func_150303_d();
-                    if (elementType == NBT.TAG_END && length != 0) {
+                    int elementType = length == 0 && !normalizeZero ? TAG_END : list.func_150303_d();
+                    if (elementType == TAG_END && length != 0) {
                         throw new IllegalArgumentException("Invalid NBT list type");
                     }
-                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_INT_ARRAY) return false;
+                    if (elementType < TAG_END || elementType > TAG_INT_ARRAY) return false;
                     output.writeByte(elementType);
                     output.writeInt(length);
                     if (length == 0) break;
-                    if (elementType == NBT.TAG_FLOAT || elementType == NBT.TAG_DOUBLE
-                        || elementType == NBT.TAG_STRING
-                        || elementType == NBT.TAG_COMPOUND
-                        || elementType == NBT.TAG_INT_ARRAY) {
+                    if (elementType == TAG_FLOAT || elementType == TAG_DOUBLE
+                        || elementType == TAG_STRING
+                        || elementType == TAG_COMPOUND
+                        || elementType == TAG_INT_ARRAY) {
                         for (int index = 0; index < length; index++) {
                             if (!write(publicListElement(list, index, elementType), depth + 1, false, owned))
                                 return false;
@@ -225,7 +236,7 @@ public final class LegacyItemIdentity {
                         }
                     }
                     break;
-                case NBT.TAG_COMPOUND:
+                case TAG_COMPOUND:
                     NBTTagCompound compound = (NBTTagCompound) tag;
                     Set<String> keys = compound.func_150296_c();
                     checkChildren(keys.size());
@@ -237,7 +248,7 @@ public final class LegacyItemIdentity {
                         if (!write(compound.getTag(name), depth + 1, true, owned)) return false;
                     }
                     break;
-                case NBT.TAG_INT_ARRAY:
+                case TAG_INT_ARRAY:
                     int[] intArray = ((NBTTagIntArray) tag).func_150302_c();
                     output.writeInt(intArray.length);
                     for (int value : intArray) output.writeInt(value);
@@ -251,11 +262,11 @@ public final class LegacyItemIdentity {
 
         private static NBTBase publicListElement(NBTTagList list, int index, int type) {
             return switch (type) {
-                case NBT.TAG_FLOAT -> new NBTTagFloat(list.func_150308_e(index));
-                case NBT.TAG_DOUBLE -> new NBTTagDouble(list.func_150309_d(index));
-                case NBT.TAG_STRING -> new NBTTagString(list.getStringTagAt(index));
-                case NBT.TAG_COMPOUND -> list.getCompoundTagAt(index);
-                case NBT.TAG_INT_ARRAY -> new NBTTagIntArray(list.func_150306_c(index));
+                case TAG_FLOAT -> new NBTTagFloat(list.func_150308_e(index));
+                case TAG_DOUBLE -> new NBTTagDouble(list.func_150309_d(index));
+                case TAG_STRING -> new NBTTagString(list.getStringTagAt(index));
+                case TAG_COMPOUND -> list.getCompoundTagAt(index);
+                case TAG_INT_ARRAY -> new NBTTagIntArray(list.func_150306_c(index));
                 default -> throw new IllegalArgumentException("NBT list type has no public getter");
             };
         }

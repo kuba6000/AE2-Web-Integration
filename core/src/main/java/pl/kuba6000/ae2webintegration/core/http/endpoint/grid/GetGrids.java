@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,6 @@ public final class GetGrids extends ISyncedRequest {
             return tracked != 0 ? tracked : Integer.compare(second.cpuCount(), first.cpuCount());
         });
         // Serialize live permission collections before the server thread completes this request.
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
+        respond(HTTP_OK, new Response(ApiStatus.OK, result));
     }
 }

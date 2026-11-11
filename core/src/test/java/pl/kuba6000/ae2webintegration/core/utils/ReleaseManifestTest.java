@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Channel;
+
 class ReleaseManifestTest {
 
     @Test
@@ -60,7 +62,7 @@ class ReleaseManifestTest {
         assertEquals("1.2.0-beta.2", requireUpdate(manifest, "1.2.0-beta.1-forge-1.7.10", loader).version);
         assertNull(manifest.findUpdate("1.2.0-beta.10-forge-1.7.10", loader));
         manifest = ReleaseManifest.parse(feed("1.1.0", "1.1.0"), "1.7.10");
-        assertEquals(ReleaseManifest.Channel.STABLE, requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", loader).channel);
+        assertEquals(Channel.STABLE, requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", loader).channel);
         assertNull(manifest.findUpdate("1.2.0-forge-pre-1.7.10", loader));
         manifest = ReleaseManifest.parse(feed("1.0.2", "1.1.0"), "1.7.10");
         assertNull(manifest.findUpdate("1.1.0-other-feature-forge-pre-1.7.10", loader));
@@ -75,7 +77,7 @@ class ReleaseManifestTest {
         ReleaseManifest.Release update = manifest.findUpdate("1.0.1-forge-1.7.10", "forge");
         assertNotNull(update);
         assertEquals("1.0.2", update.version);
-        assertEquals(ReleaseManifest.Channel.STABLE, update.channel);
+        assertEquals(Channel.STABLE, update.channel);
         assertEquals(1786902605L, update.timestamp);
         assertTrue(update.releaseUrl.endsWith("/1.0.2-forge-1.7.10"));
         assertTrue(update.downloadUrl.endsWith("/mod.jar"));

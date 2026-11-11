@@ -196,12 +196,12 @@ export function createCpuResources(
     }
 
     function paintTiming(row: ReturnType<typeof createResourceRow>) {
-        const share = tracked ? `${locale.number(Math.round(row.item.shareInCraftingTime * 1000) / 10)}%` : '';
+        const share = tracked ? `${locale.number(Math.round(row.item.shareInCraftingTimeCombined * 1000) / 10)}%` : '';
         if (row.shareText !== share) {
             row.shareText = share;
             text(row.shareValue, share);
         }
-        const label = row.staticLabel + (tracked ? ` · ${locale.common('cpuProcessingShare')}: ${share}` : '');
+        const label = row.staticLabel + (tracked ? ` · ${locale.common('cpuElapsedShare')}: ${share}` : '');
         if (row.button.getAttribute('aria-label') !== label) row.button.setAttribute('aria-label', label);
     }
 

@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage.Severity;
 
 public class DiscordDestination implements INotificationDestination {
 
@@ -92,7 +93,7 @@ public class DiscordDestination implements INotificationDestination {
             }
 
         } else if (message instanceof StatusMessage statusMessage) {
-            StatusMessage.Severity severity = statusMessage.severity();
+            Severity severity = statusMessage.severity();
             int color = switch (severity) {
                 case ERROR -> COLOR_RED;
                 case WARNING -> COLOR_YELLOW;

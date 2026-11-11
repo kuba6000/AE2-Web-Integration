@@ -7,9 +7,11 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
+import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyPayload.Priority;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage.Severity;
 
 public class NtfyDestination implements INotificationDestination {
 
@@ -56,20 +58,20 @@ public class NtfyDestination implements INotificationDestination {
                     + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
                     + craftingMessage.durationString(),
-                NtfyPayload.Priority.NORMAL,
+                Priority.NORMAL,
                 tags,
                 settings);
         } else if (message instanceof StatusMessage statusMessage) {
-            StatusMessage.Severity severity = statusMessage.severity();
+            Severity severity = statusMessage.severity();
             List<String> tags = new ArrayList<>();
-            NtfyPayload.Priority priority = NtfyPayload.Priority.NORMAL;
+            Priority priority = Priority.NORMAL;
             switch (severity) {
                 case ERROR:
-                    priority = NtfyPayload.Priority.MAX;
+                    priority = Priority.MAX;
                     tags.add("rotating_light");
                     break;
                 case WARNING:
-                    priority = NtfyPayload.Priority.HIGH;
+                    priority = Priority.HIGH;
                     tags.add("warning");
                     break;
             }

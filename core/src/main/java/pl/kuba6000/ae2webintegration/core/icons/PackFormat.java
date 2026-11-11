@@ -1,12 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -88,7 +89,7 @@ final class PackFormat {
 
     static byte @NotNull [] json(@NotNull Object object) {
         return GSON.toJson(object)
-            .getBytes(StandardCharsets.UTF_8);
+            .getBytes(UTF_8);
     }
 
     static byte @NotNull [] read(@NotNull InputStream input, int maximum) throws IOException {
@@ -105,7 +106,7 @@ final class PackFormat {
     }
 
     static @NotNull JsonObject parse(byte @NotNull [] bytes) throws IOException {
-        String json = StandardCharsets.UTF_8.newDecoder()
+        String json = UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))

@@ -9,16 +9,15 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import appeng.api.storage.data.IAEStack;
 import appeng.crafting.v2.CraftingRequest;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.CraftFromPatternTask;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.RequestAndPerCraftAmount;
+import appeng.crafting.v2.resolvers.CraftableItemResolver;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftFromPatternTaskData;
 
-@Mixin(value = CraftFromPatternTask.class, remap = false)
+@Mixin(value = CraftableItemResolver.CraftFromPatternTask.class, remap = false)
 public abstract class CraftFromPatternTaskMixin implements ICraftFromPatternTaskData {
 
     @Override
     @Accessor("childRequests")
-    public abstract @NotNull ArrayList<RequestAndPerCraftAmount> web$getChildRequests();
+    public abstract @NotNull ArrayList<CraftableItemResolver.RequestAndPerCraftAmount> web$getChildRequests();
 
     @Override
     @Accessor("childRecursionRequests")

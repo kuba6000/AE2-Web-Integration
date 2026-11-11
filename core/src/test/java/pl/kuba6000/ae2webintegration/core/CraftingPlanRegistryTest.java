@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -60,7 +62,7 @@ class CraftingPlanRegistryTest {
         CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
         int id = registry.add(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
-        clock.set(TimeUnit.DAYS.toNanos(1));
+        clock.set(DAYS.toNanos(1));
         registry.evictExpiredCompleted();
 
         CraftingPlanRegistry.Entry entry = registry.find(id);
@@ -76,13 +78,13 @@ class CraftingPlanRegistryTest {
         CompletedRecordingFuture plan = new CompletedRecordingFuture();
         int id = registry.add(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
-        clock.set(TimeUnit.DAYS.toNanos(1));
+        clock.set(DAYS.toNanos(1));
         registry.evictExpiredCompleted();
         CraftingPlanRegistry.Entry entry = registry.find(id);
         assertNotNull(entry);
         assertSame(plan, entry.plan, "a long calculation must not consume the retention window");
 
-        clock.addAndGet(TimeUnit.MINUTES.toNanos(15));
+        clock.addAndGet(MINUTES.toNanos(15));
         registry.evictExpiredCompleted();
         assertNull(registry.find(id));
         assertFalse(plan.cancelCalled, "age eviction only releases the completed result");
@@ -96,18 +98,18 @@ class CraftingPlanRegistryTest {
         int id = registry.add(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         registry.evictExpiredCompleted();
 
-        clock.set(TimeUnit.MINUTES.toNanos(14));
+        clock.set(MINUTES.toNanos(14));
         CraftingPlanRegistry.Entry entry = registry.find(id);
         assertNotNull(entry);
         assertSame(plan, entry.plan);
 
-        clock.set(TimeUnit.MINUTES.toNanos(15));
+        clock.set(MINUTES.toNanos(15));
         registry.evictExpiredCompleted();
         CraftingPlanRegistry.Entry retained = registry.find(id);
         assertNotNull(retained);
         assertSame(plan, retained.plan, "recently accessed plans must remain retryable");
 
-        clock.set(TimeUnit.MINUTES.toNanos(30));
+        clock.set(MINUTES.toNanos(30));
         registry.evictExpiredCompleted();
         assertNull(registry.find(id));
     }

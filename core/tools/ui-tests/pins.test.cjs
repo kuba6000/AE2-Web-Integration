@@ -181,7 +181,7 @@ test('pin mutations are single flight and apply independent placement and settin
     assert.equal(terminal.state.pins.pending, false);
 });
 
-test('Home pin display and order mutations reuse matching history and hidden cards request no history', async (t) => {
+test('Home pin display and order mutations reuse history while compact rows retain their recorded range', async (t) => {
     let data = [pin('iron')],
         reads = 0;
     const terminal = await app(t, {
@@ -209,8 +209,10 @@ test('Home pin display and order mutations reuse matching history and hidden car
     await terminal.pins.update('iron', {
         homeConfig: { ...config, showStock: false, showFlow: false, showChart: false }
     });
-    await terminal.refresh();
     assert.equal(reads, 2);
+    await terminal.refresh();
+    assert.equal(reads, 3, 'manual refresh updates the one range still displayed by the compact row');
+    assert.deepEqual(Object.keys(terminal.state.pins.histories.iron), [String(config.flowRangeMillis)]);
 });
 
 test('a revoked grid discards peer history failures without resurrecting metadata', async (t) => {
@@ -490,4 +492,44 @@ test('explicit navigation from a Home pin discovers an uncached network with aut
     assert.equal(inventories, 1);
     assert.equal(terminal.state.itemStatus, 'ready');
     assert.equal(terminal.state.selectedGridKey, 'new');
+});
+
+test('author preview appends Home pins within Ungrouped after regrouping and deletions', async (t) => {
+    const { startServer } = await import('../../tools/theme-preview/server.mjs');
+    const server = startServer({ port: 0 });
+    if (!server.listening) await new Promise((resolve) => server.once('listening', resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const base = `http://127.0.0.1:${server.address().port}/`;
+    const read = async (path, method, body) =>
+        (
+            await fetch(base + path, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'X-AE2-Request': 'true' },
+                body: body ? JSON.stringify(body) : undefined
+            })
+        ).json();
+    const add = (item) =>
+        read('api/grids/AAAAAAAAAAAAAAAAAAAAAA/resource-pins', 'POST', { itemKey: item, placement: 'home' });
+    const first = (await add('example-0')).data[0].pinKey;
+    const second = (await add('example-1')).data.find((pin) => pin.itemKey === 'example-1').pinKey;
+    await add('example-2');
+    const group = (await read('api/resource-pin-groups', 'POST', { name: 'Machines' })).groups[0].groupKey;
+    let reply = await read('api/resource-pins/' + first, 'PATCH', { homeGroup: { groupKey: group } });
+    assert.deepEqual(
+        reply.data.filter((pin) => !pin.homeGroupKey).map((pin) => pin.homeOrder),
+        [0, 1]
+    );
+    await read('api/resource-pins/' + second, 'DELETE');
+    await read('api/resource-pins/' + first, 'PATCH', { home: false });
+    reply = await add('example-0');
+    assert.deepEqual(
+        reply.data
+            .filter((pin) => pin.homeOrder !== null)
+            .sort((a, b) => a.homeOrder - b.homeOrder)
+            .map((pin) => [pin.itemKey, pin.homeOrder]),
+        [
+            ['example-2', 0],
+            ['example-0', 1]
+        ]
+    );
 });

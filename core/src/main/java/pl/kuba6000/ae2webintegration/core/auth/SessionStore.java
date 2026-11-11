@@ -1,15 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.auth;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
+import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.attribute.PosixFilePermission;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -58,7 +60,7 @@ public final class SessionStore {
                 .lowerCase()
                 .encode(
                     MessageDigest.getInstance("SHA-256")
-                        .digest(token.getBytes(StandardCharsets.UTF_8)));
+                        .digest(token.getBytes(UTF_8)));
         } catch (NoSuchAlgorithmException failure) {
             throw new IllegalStateException(failure);
         }
@@ -68,7 +70,7 @@ public final class SessionStore {
     public synchronized void load(long now, @NotNull Function<WebPrincipal, String> credentials) throws IOException {
         if (!file.exists()) return;
         List<Map.Entry<String, AuthSession>> restored = new ArrayList<>();
-        try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+        try (Reader reader = Files.newBufferedReader(file.toPath(), UTF_8)) {
             Document document = GSONUtils.GSON_BUILDER.create()
                 .fromJson(reader, Document.class);
             if (document == null || document.version() != 1 || document.sessions() == null)
@@ -95,7 +97,7 @@ public final class SessionStore {
                 if (credential == null || !PasswordHelper.validatePassword(credential, entry.credentialProof()))
                     continue;
                 restored.add(
-                    new SimpleImmutableEntry<>(
+                    new AbstractMap.SimpleImmutableEntry<>(
                         entry.hash(),
                         new AuthSession(
                             principal,
@@ -159,9 +161,7 @@ public final class SessionStore {
         GSONUtils.writeAtomically(file, new Document(1, entries));
         if (Files.getFileStore(file.toPath())
             .supportsFileAttributeView("posix")) {
-            Files.setPosixFilePermissions(
-                file.toPath(),
-                EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            Files.setPosixFilePermissions(file.toPath(), EnumSet.of(OWNER_READ, OWNER_WRITE));
         }
         for (Entry entry : entries) {
             AuthSession session = sessions.get(entry.hash());

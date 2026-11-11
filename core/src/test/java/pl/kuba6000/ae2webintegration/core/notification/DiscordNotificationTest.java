@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.awt.AWTError;
@@ -10,14 +13,12 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 
@@ -43,6 +44,7 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDest
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage.Severity;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
@@ -90,12 +92,12 @@ class DiscordNotificationTest {
         Upload upload = upload();
         assertTrue(upload.contentType.startsWith("multipart/form-data; boundary="), upload.contentType);
         String boundary = upload.contentType.substring(upload.contentType.indexOf("boundary=") + 9);
-        String body = new String(upload.body, StandardCharsets.ISO_8859_1);
+        String body = new String(upload.body, ISO_8859_1);
         assertTrue(body.contains("name=\"payload_json\""));
         assertTrue(body.contains("name=\"files[0]\"; filename=\"crafting.png\""));
         int jsonStart = body.indexOf("\r\n\r\n") + 4;
         String jsonText = body.substring(jsonStart, body.indexOf("\r\n--" + boundary, jsonStart));
-        JsonObject payload = parse(jsonText.getBytes(StandardCharsets.ISO_8859_1));
+        JsonObject payload = parse(jsonText.getBytes(ISO_8859_1));
         JsonObject embed = payload.getAsJsonArray("embeds")
             .get(0)
             .getAsJsonObject();
@@ -157,7 +159,7 @@ class DiscordNotificationTest {
     @Test
     void statusNotificationsRemainJsonWithoutImageAttachments() throws Exception {
         new DiscordDestination()
-            .sendNotification(new StatusMessage("Server status", "Connection warning", StatusMessage.Severity.WARNING));
+            .sendNotification(new StatusMessage("Server status", "Connection warning", Severity.WARNING));
         Upload upload = upload();
         assertEquals("application/json", upload.contentType);
         assertFalse(
@@ -210,7 +212,7 @@ class DiscordNotificationTest {
                     .getAsString()
                     .contains("Powered Rail"));
             destination.getMethod("sendNotification", IMessage.class)
-                .invoke(sender, new StatusMessage("Still running", "Second notification", StatusMessage.Severity.NONE));
+                .invoke(sender, new StatusMessage("Still running", "Second notification", Severity.NONE));
             assertEquals(
                 "Still running",
                 parse(upload().body).getAsJsonArray("embeds")
@@ -308,7 +310,7 @@ class DiscordNotificationTest {
     }
 
     private Upload upload() throws InterruptedException {
-        Upload upload = uploads.poll(5, TimeUnit.SECONDS);
+        Upload upload = uploads.poll(5, SECONDS);
         assertNotNull(upload, "A notification must reach the loopback HTTP destination");
         return upload;
     }
@@ -322,11 +324,11 @@ class DiscordNotificationTest {
                 4096),
             "16m 42s",
             cancelled,
-            java.util.Collections.emptyList());
+            Collections.emptyList());
     }
 
     private static JsonObject parse(byte[] bytes) {
-        return new JsonParser().parse(new String(bytes, StandardCharsets.UTF_8))
+        return new JsonParser().parse(new String(bytes, UTF_8))
             .getAsJsonObject();
     }
 

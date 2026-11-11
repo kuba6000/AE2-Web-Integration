@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
@@ -16,7 +17,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -43,7 +43,7 @@ class SqliteStorageHistoryConcurrencyTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(3);
         try (SqliteStorageHistoryStore store = WorldHistoryFixtures
-            .create(directory.resolve("history"), new Range(1, 365, 7), 100)) {
+            .create(directory.resolve("history"), new ConfigSettings.Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             store.append(
                 grid,
@@ -56,18 +56,18 @@ class SqliteStorageHistoryConcurrencyTest {
                 return null;
             });
             try {
-                assertTrue(writing.await(5, TimeUnit.SECONDS));
+                assertTrue(writing.await(5, SECONDS));
                 Future<StorageHistory> first = tasks.submit(() -> store.read(grid, item, now, 10));
                 Future<StorageHistory> second = tasks.submit(() -> store.read(grid, item, now, 10));
                 assertEquals(
                     1,
-                    first.get(5, TimeUnit.SECONDS)
+                    first.get(5, SECONDS)
                         .points()
                         .get(0)
                         .quantity());
                 assertEquals(
                     1,
-                    second.get(5, TimeUnit.SECONDS)
+                    second.get(5, SECONDS)
                         .points()
                         .get(0)
                         .quantity());
@@ -75,7 +75,7 @@ class SqliteStorageHistoryConcurrencyTest {
             } finally {
                 release.countDown();
             }
-            writer.get(5, TimeUnit.SECONDS);
+            writer.get(5, SECONDS);
             assertEquals(
                 2,
                 store.read(grid, item, now + 1, 10)
@@ -98,16 +98,16 @@ class SqliteStorageHistoryConcurrencyTest {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(4);
         try (SqliteStorageHistoryStore store = WorldHistoryFixtures
-            .create(directory.resolve("history"), new Range(1, 365, 7), items.size())) {
+            .create(directory.resolve("history"), new ConfigSettings.Range(1, 365, 7), items.size())) {
             appendRevision(store, grid, items, now, 0);
             Future<?> writer = tasks.submit(() -> {
-                assertTrue(start.await(5, TimeUnit.SECONDS));
+                assertTrue(start.await(5, SECONDS));
                 for (int revision = 1; revision <= 100; revision++) appendRevision(store, grid, items, now, revision);
                 return null;
             });
             List<Future<?>> queries = new ArrayList<>();
             for (int reader = 0; reader < 3; reader++) queries.add(tasks.submit(() -> {
-                assertTrue(start.await(5, TimeUnit.SECONDS));
+                assertTrue(start.await(5, SECONDS));
                 for (int attempt = 0; attempt < 100; attempt++) {
                     StorageHistory history = store.read(grid, null, now, 100);
                     assertEquals(
@@ -129,8 +129,8 @@ class SqliteStorageHistoryConcurrencyTest {
                 return null;
             }));
             start.countDown();
-            writer.get(20, TimeUnit.SECONDS);
-            for (Future<?> query : queries) query.get(20, TimeUnit.SECONDS);
+            writer.get(20, SECONDS);
+            for (Future<?> query : queries) query.get(20, SECONDS);
             assertEquals(
                 100,
                 store.read(grid, items.get(0), now, 100)
@@ -153,8 +153,11 @@ class SqliteStorageHistoryConcurrencyTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(2);
         Path path = directory.resolve("history");
-        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100);
-            SqliteStorageHistoryStore next = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (
+            SqliteStorageHistoryStore store = WorldHistoryFixtures
+                .create(path, new ConfigSettings.Range(1, 365, 7), 100);
+            SqliteStorageHistoryStore next = WorldHistoryFixtures
+                .create(path, new ConfigSettings.Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             Future<?> writer = tasks.submit(() -> {
                 store.append(
@@ -163,7 +166,7 @@ class SqliteStorageHistoryConcurrencyTest {
                     Collections.singletonList(stock(item, now, 2)));
                 return null;
             });
-            assertTrue(writing.await(5, TimeUnit.SECONDS));
+            assertTrue(writing.await(5, SECONDS));
             Future<?> close = tasks.submit(() -> {
                 store.close();
                 return null;
@@ -174,8 +177,8 @@ class SqliteStorageHistoryConcurrencyTest {
             } finally {
                 release.countDown();
             }
-            writer.get(5, TimeUnit.SECONDS);
-            close.get(5, TimeUnit.SECONDS);
+            writer.get(5, SECONDS);
+            close.get(5, SECONDS);
             assertThrows(IOException.class, () -> store.read(grid, item, now, 10));
             assertThrows(IOException.class, () -> store.append(grid, Collections.emptyMap(), Collections.emptyList()));
             assertEquals(
@@ -199,11 +202,12 @@ class SqliteStorageHistoryConcurrencyTest {
         Path path = directory.resolve("history");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(6);
-        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
+            .create(path, new ConfigSettings.Range(1, 365, 7), 100)) {
             List<Future<?>> operations = new ArrayList<>();
             WorldHistoryFixtures.register(store, grid);
             operations.add(tasks.submit(() -> {
-                assertTrue(start.await(5, TimeUnit.SECONDS));
+                assertTrue(start.await(5, SECONDS));
                 store.append(
                     grid,
                     Collections.singletonMap(item, description(item, "First")),
@@ -211,7 +215,7 @@ class SqliteStorageHistoryConcurrencyTest {
                 return null;
             }));
             for (int index = 0; index < 5; index++) operations.add(tasks.submit(() -> {
-                assertTrue(start.await(5, TimeUnit.SECONDS));
+                assertTrue(start.await(5, SECONDS));
                 StorageHistory history = store.read(grid, item, now, 10);
                 assertTrue(
                     history.points()
@@ -221,12 +225,13 @@ class SqliteStorageHistoryConcurrencyTest {
                 return null;
             }));
             start.countDown();
-            for (Future<?> operation : operations) operation.get(10, TimeUnit.SECONDS);
+            for (Future<?> operation : operations) operation.get(10, SECONDS);
         } finally {
             start.countDown();
             tasks.shutdownNow();
         }
-        try (SqliteStorageHistoryStore reopened = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore reopened = WorldHistoryFixtures
+            .create(path, new ConfigSettings.Range(1, 365, 7), 100)) {
             assertEquals(
                 1,
                 reopened.read(grid, item, now, 10)
@@ -240,7 +245,8 @@ class SqliteStorageHistoryConcurrencyTest {
     void interruptedReadDoesNotInitializeOrConsumeReaderCapacity() throws Exception {
         Path path = directory.resolve("database/history");
         StableKey grid = StableKey.random();
-        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
+            .create(path, new ConfigSettings.Range(1, 365, 7), 100)) {
             for (int attempt = 0; attempt < 10; attempt++) {
                 Thread.currentThread()
                     .interrupt();
@@ -269,7 +275,7 @@ class SqliteStorageHistoryConcurrencyTest {
             public @NotNull Set<Entry<StableKey, ResourceDescriptor>> entrySet() {
                 writing.countDown();
                 try {
-                    if (!release.await(10, TimeUnit.SECONDS)) throw new AssertionError("Append was not released");
+                    if (!release.await(10, SECONDS)) throw new AssertionError("Append was not released");
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread()
                         .interrupt();

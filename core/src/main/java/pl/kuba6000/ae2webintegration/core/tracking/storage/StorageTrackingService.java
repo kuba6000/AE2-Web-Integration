@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,7 +12,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.LogManager;
@@ -36,7 +38,7 @@ public final class StorageTrackingService implements AutoCloseable {
         if (maxQueuedRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
         this.store = store;
         this.maxQueuedRows = maxQueuedRows;
-        worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1024), task -> {
+        worker = new ThreadPoolExecutor(1, 1, 0, MILLISECONDS, new ArrayBlockingQueue<>(1024), task -> {
             Thread thread = new Thread(task, "AE2Web-StorageHistory");
             thread.setDaemon(true);
             return thread;
@@ -145,7 +147,7 @@ public final class StorageTrackingService implements AutoCloseable {
         if (closed) return;
         worker.shutdown();
         try {
-            if (!worker.awaitTermination(5, TimeUnit.SECONDS)) stopWorker();
+            if (!worker.awaitTermination(5, SECONDS)) stopWorker();
         } catch (InterruptedException interrupted) {
             stopWorker();
             Thread.currentThread()

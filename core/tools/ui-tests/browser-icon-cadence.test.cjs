@@ -4,7 +4,8 @@ const { fixture, atlasFixture, pauseClock, gridA, iron } = require('./fixtures.c
 const { iconColor, waitIconColor } = require('./icon-pixels.cjs');
 
 test('animation update interval defaults to 200 ms and preserves an explicit Uncapped preference', async (t) => {
-    const { page, base } = await fixture(t);
+    const { page, options, base } = await fixture(t);
+    options.pack = { available: true, hasAnimations: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await page.goto(`${base}#/web-settings`);
     await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
     const interval = page.getByRole('slider', { name: 'Animation update interval', exact: true });
@@ -41,6 +42,7 @@ test('animation update interval defaults to 200 ms and preserves an explicit Unc
 test('animation update interval holds frames between batches while preserving elapsed animation time', async (t) => {
     const { page, options, base } = await fixture(t);
     await atlasFixture(page, options);
+    options.pack.hasAnimations = true;
     options.icons.pages.push({ digest: 'c'.repeat(64), width: 128, height: 64 });
     options.icons.animations = [
         {

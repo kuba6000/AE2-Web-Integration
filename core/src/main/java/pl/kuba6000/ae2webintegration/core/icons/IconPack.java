@@ -1,5 +1,19 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ANIMATED_VERSION;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ICON_SIZE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ANIMATION_FRAMES;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ANIMATION_MILLIS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ARCHIVE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_FAILURE_RECORDS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_IMAGES;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_KEYS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_MANIFEST;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_PAGE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_PAGE_DIMENSION;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_STATISTICS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_TOTAL_ANIMATION_FRAMES;
+
 import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.FilterInputStream;
@@ -34,7 +48,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Validated immutable archive index. Close after all page readers have finished. */
 public final class IconPack implements Closeable {
 
-    public static final int CONTENT_SIZE = PackFormat.ICON_SIZE;
+    public static final int CONTENT_SIZE = ICON_SIZE;
 
     private static final long PNG_SIGNATURE = 0x89504e470d0a1a0aL;
     private static final int PNG_IHDR_TYPE = 0x49484452;
@@ -68,7 +82,7 @@ public final class IconPack implements Closeable {
 
     public static @NotNull IconPack open(@NotNull Path path, @NotNull String minecraftVersion, @NotNull String loader,
         @NotNull String compatibilityVersion) throws IOException {
-        if (Files.size(path) > PackFormat.MAX_ARCHIVE) throw new IOException("Icon archive exceeds size limit");
+        if (Files.size(path) > MAX_ARCHIVE) throw new IOException("Icon archive exceeds size limit");
         ZipFile zip = new ZipFile(path.toFile());
         try {
             return load(zip, minecraftVersion, loader, compatibilityVersion);
@@ -87,11 +101,11 @@ public final class IconPack implements Closeable {
     private static @NotNull IconPack load(@NotNull ZipFile zip, @NotNull String minecraftVersion,
         @NotNull String loader, @NotNull String compatibilityVersion) throws IOException {
         int archiveEntries = validateArchiveEntries(zip);
-        JsonObject root = PackFormat.parse(bytes(zip, "manifest.json", PackFormat.MAX_MANIFEST));
+        JsonObject root = PackFormat.parse(bytes(zip, "manifest.json", MAX_MANIFEST));
         int version = PackFormat.integer(root.get("formatVersion"));
-        if ((version != PackFormat.VERSION && version != PackFormat.ANIMATED_VERSION)
-            || PackFormat.integer(root.get("contentWidth")) != PackFormat.ICON_SIZE
-            || PackFormat.integer(root.get("contentHeight")) != PackFormat.ICON_SIZE)
+        if ((version != PackFormat.VERSION && version != ANIMATED_VERSION)
+            || PackFormat.integer(root.get("contentWidth")) != ICON_SIZE
+            || PackFormat.integer(root.get("contentHeight")) != ICON_SIZE)
             throw new IOException("Unsupported icon format");
         Metadata metadata = metadata(root);
         if (!minecraftVersion.equals(metadata.minecraftVersion()) || !loader.equals(metadata.loader())
@@ -106,7 +120,7 @@ public final class IconPack implements Closeable {
             pages,
             archiveEntries,
             version);
-        Map<StableKey, Animation> animations = version == PackFormat.ANIMATED_VERSION
+        Map<StableKey, Animation> animations = version == ANIMATED_VERSION
             ? readAnimations(root.getAsJsonObject("animations"), pages, entries)
             : Collections.emptyMap();
         if (version == PackFormat.VERSION && root.has("animations"))
@@ -121,7 +135,7 @@ public final class IconPack implements Closeable {
         Enumeration<? extends ZipEntry> all = zip.entries();
         while (all.hasMoreElements()) {
             ZipEntry entry = all.nextElement();
-            if (!names.add(entry.getName()) || names.size() > PackFormat.MAX_IMAGES + 1
+            if (!names.add(entry.getName()) || names.size() > MAX_IMAGES + 1
                 || (!entry.getName()
                     .equals("manifest.json")
                     && !entry.getName()
@@ -142,12 +156,12 @@ public final class IconPack implements Closeable {
             int width = PackFormat.integer(page.get("width"));
             int height = PackFormat.integer(page.get("height"));
             if (digest.compareTo(previous) <= 0 || !entry.equals("pages/" + digest + ".png")
-                || width < PackFormat.ICON_SIZE
-                || height < PackFormat.ICON_SIZE
-                || width > PackFormat.MAX_PAGE_DIMENSION
-                || height > PackFormat.MAX_PAGE_DIMENSION) throw new IOException("Invalid atlas page");
+                || width < ICON_SIZE
+                || height < ICON_SIZE
+                || width > MAX_PAGE_DIMENSION
+                || height > MAX_PAGE_DIMENSION) throw new IOException("Invalid atlas page");
             previous = digest;
-            byte[] png = bytes(zip, entry, PackFormat.MAX_PAGE);
+            byte[] png = bytes(zip, entry, MAX_PAGE);
             if (!digest.equals(PackFormat.hash(png))) throw new IOException("Page digest mismatch");
             checkPng(png, width, height);
             pages.add(new Page(digest, entry, width, height, png.length));
@@ -158,9 +172,9 @@ public final class IconPack implements Closeable {
     private static @NotNull Map<StableKey, Location> readLocations(@NotNull JsonObject mapping,
         @NotNull List<Page> pages, int archiveEntries, int version) throws IOException {
         if (mapping.entrySet()
-            .size() > PackFormat.MAX_KEYS || pages.size()
+            .size() > MAX_KEYS || pages.size()
                 > (version == PackFormat.VERSION ? mapping.entrySet()
-                    .size() : PackFormat.MAX_IMAGES)
+                    .size() : MAX_IMAGES)
             || archiveEntries != pages.size() + 1) throw new IOException("Invalid archive entry count");
         Map<StableKey, Location> entries = new HashMap<>();
         for (Map.Entry<String, JsonElement> entry : mapping.entrySet()) {
@@ -180,8 +194,7 @@ public final class IconPack implements Closeable {
         int y = PackFormat.integer(coordinate.get(2));
         if (pageIndex >= pages.size()) throw new IOException("Unknown page index");
         Page page = pages.get(pageIndex);
-        if (x > page.width() - PackFormat.ICON_SIZE || y > page.height() - PackFormat.ICON_SIZE)
-            throw new IOException("Icon outside atlas");
+        if (x > page.width() - ICON_SIZE || y > page.height() - ICON_SIZE) throw new IOException("Icon outside atlas");
         return new Location(page, x, y);
     }
 
@@ -201,9 +214,8 @@ public final class IconPack implements Closeable {
             JsonArray sequence = entry.getValue()
                 .getAsJsonArray();
             totalFrames += sequence.size();
-            if (sequence.size() < 2 || sequence.size() > PackFormat.MAX_ANIMATION_FRAMES
-                || totalFrames > PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
-                throw new IOException("Animation frame limit exceeded");
+            if (sequence.size() < 2 || sequence.size() > MAX_ANIMATION_FRAMES
+                || totalFrames > MAX_TOTAL_ANIMATION_FRAMES) throw new IOException("Animation frame limit exceeded");
             List<Frame> frames = new ArrayList<>();
             Page page = readLocation(
                 sequence.get(0)
@@ -218,7 +230,7 @@ public final class IconPack implements Closeable {
                 if (!location.page()
                     .equals(page)) throw new IOException("Animation frames must share one atlas page");
                 int duration = PackFormat.integer(coordinate.get(LOCATION_FIELDS));
-                if (duration == 0 || duration > PackFormat.MAX_ANIMATION_MILLIS - totalMillis)
+                if (duration == 0 || duration > MAX_ANIMATION_MILLIS - totalMillis)
                     throw new IOException("Invalid animation duration");
                 if (location.equals(previous)) throw new IOException("Adjacent animation frames must be merged");
                 totalMillis += duration;
@@ -234,7 +246,7 @@ public final class IconPack implements Closeable {
     private static int validateFailures(@NotNull JsonObject failures) throws IOException {
         int failureCount = PackFormat.integer(failures.get("count"));
         JsonArray records = failures.getAsJsonArray("records");
-        if (records.size() > PackFormat.MAX_FAILURE_RECORDS || records.size() > failureCount)
+        if (records.size() > MAX_FAILURE_RECORDS || records.size() > failureCount)
             throw new IOException("Invalid failure records");
         for (JsonElement record : records) {
             PackFormat.text(record.getAsJsonObject(), "context");
@@ -247,8 +259,7 @@ public final class IconPack implements Closeable {
         JsonObject counts = statistics.getAsJsonObject("counts");
         JsonArray sources = statistics.getAsJsonArray("sources");
         if (counts.entrySet()
-            .size() > PackFormat.MAX_STATISTICS || sources.size() > PackFormat.MAX_STATISTICS)
-            throw new IOException("Too many statistics");
+            .size() > MAX_STATISTICS || sources.size() > MAX_STATISTICS) throw new IOException("Too many statistics");
         for (Map.Entry<String, JsonElement> entry : counts.entrySet()) {
             if (!entry.getKey()
                 .matches("[A-Za-z0-9._-]{1,64}")
@@ -335,6 +346,10 @@ public final class IconPack implements Closeable {
 
     public @Nullable Location find(@NotNull StableKey key) {
         return entries.get(key);
+    }
+
+    public boolean hasAnimations() {
+        return !animations.isEmpty();
     }
 
     /** One immutable page and ordered frame crops; null when the resource has only a static icon. */

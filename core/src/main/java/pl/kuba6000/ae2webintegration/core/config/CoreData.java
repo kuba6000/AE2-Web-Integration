@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Channel;
 
 @SuppressWarnings("UnstableApiUsage")
 public class CoreData {
@@ -58,7 +60,7 @@ public class CoreData {
 
     @Desugar
     private record SkippedUpdate(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String version,
-        @NotNull ReleaseManifest.Channel channel, @NotNull String tag) {}
+        @NotNull Channel channel, @NotNull String tag) {}
 
     /** Reads only committed suppression; a concurrent failed save must never hide a notice. */
     public static synchronized boolean isUpdateSkipped(@NotNull String minecraftVersion, @NotNull String loader,
@@ -198,7 +200,7 @@ public class CoreData {
         }
         try {
             CoreData loaded;
-            try (Reader reader = Files.newReader(file, StandardCharsets.UTF_8)) {
+            try (Reader reader = Files.newReader(file, UTF_8)) {
                 loaded = gson.fromJson(reader, CoreData.class);
             }
             if (loaded == null) {

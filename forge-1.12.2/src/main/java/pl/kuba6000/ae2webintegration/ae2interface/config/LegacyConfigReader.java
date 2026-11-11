@@ -1,12 +1,14 @@
 package pl.kuba6000.ae2webintegration.ae2interface.config;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static net.minecraftforge.common.config.Configuration.CATEGORY_GENERAL;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -72,7 +74,7 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
             source.getFileName()
                 .toString() + ".old");
         try {
-            Files.move(source, renamed, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(source, renamed, REPLACE_EXISTING);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not rename legacy configuration " + source, e);
         }
@@ -80,7 +82,7 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
 
     private static boolean globalConfig() {
         return ForgeModContainer.getConfig()
-            .getCategory(Configuration.CATEGORY_GENERAL)
+            .getCategory(CATEGORY_GENERAL)
             .get("enableGlobalConfig")
             .getBoolean();
     }

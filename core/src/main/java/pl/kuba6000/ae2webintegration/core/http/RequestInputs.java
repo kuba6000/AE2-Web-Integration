@@ -2,7 +2,7 @@ package pl.kuba6000.ae2webintegration.core.http;
 
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;
 import pl.kuba6000.ae2webintegration.core.binding.BindingCatalogs;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -22,7 +22,7 @@ public final class RequestInputs {
         return null;
     }
 
-    public static void bind(Object request, RequestContext context) {
+    public static void bind(Object request, AE2Controller.RequestContext context) {
         HttpBinding binding = find(request.getClass());
         if (binding != null) binding.inputs()
             .accept(request, new InputValues(context, binding.path()));

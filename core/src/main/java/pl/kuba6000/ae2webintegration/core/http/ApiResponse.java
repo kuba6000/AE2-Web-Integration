@@ -1,12 +1,14 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.net.HttpURLConnection;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.zip.GZIPOutputStream;
 
@@ -40,7 +42,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
     public static ApiResponse bounded(int status, @NotNull IResponseBody body, int maxBytes) {
         if (maxBytes < 0) throw new IllegalArgumentException("Negative response limit");
         LimitedBytes bytes = new LimitedBytes(maxBytes);
-        Writer writer = new OutputStreamWriter(bytes, StandardCharsets.UTF_8);
+        Writer writer = new OutputStreamWriter(bytes, UTF_8);
         GSONUtils.GSON_BUILDER.create()
             .toJson(body, writer);
         try {
@@ -48,7 +50,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
         } catch (IOException failure) {
             throw new IllegalStateException("Failed to serialize response", failure);
         }
-        return new ApiResponse(status, new String(bytes.toByteArray(), StandardCharsets.UTF_8), true);
+        return new ApiResponse(status, new String(bytes.toByteArray(), UTF_8), true);
     }
 
     /** Serialization exceeded the explicitly supplied UTF-8 byte limit. */
@@ -79,7 +81,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
     }
 
     public void send(HttpExchange exchange) throws IOException {
-        byte[] body = json.getBytes(StandardCharsets.UTF_8);
+        byte[] body = json.getBytes(UTF_8);
         if (compressible) {
             addVary(exchange);
             if (acceptsGzip(
@@ -96,10 +98,10 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
         }
         exchange.getResponseHeaders()
             .set("Content-Type", "application/json; charset=UTF-8");
-        if (httpStatus >= HttpURLConnection.HTTP_BAD_REQUEST || exchange.getResponseHeaders()
+        if (httpStatus >= HTTP_BAD_REQUEST || exchange.getResponseHeaders()
             .getFirst("Cache-Control") == null) exchange.getResponseHeaders()
                 .set("Cache-Control", "no-store");
-        if (httpStatus == HttpURLConnection.HTTP_UNAUTHORIZED) {
+        if (httpStatus == HTTP_UNAUTHORIZED) {
             exchange.getResponseHeaders()
                 .set("WWW-Authenticate", "Bearer");
         }

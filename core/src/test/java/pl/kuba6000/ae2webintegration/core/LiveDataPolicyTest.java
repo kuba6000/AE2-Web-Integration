@@ -1,6 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -10,13 +14,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -25,7 +27,6 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
 class LiveDataPolicyTest {
 
@@ -39,10 +40,7 @@ class LiveDataPolicyTest {
             SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
-            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(
-                89502,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(89502, false, CONTROLLER_ONLINE);
             registry.controllerValidated(live);
             StableKey grid = registry.getKey(live);
             assertNotNull(grid);
@@ -52,8 +50,8 @@ class LiveDataPolicyTest {
                 grid,
                 Collections.singletonMap(item, description(item)),
                 Arrays.asList(
-                    new StorageHistoryPoint(now, 1, Kind.STOCK, item, 1, 0, 0, 0, 0, null),
-                    new StorageHistoryPoint(now + 1, 1, Kind.STOCK, item, 2, 0, 0, 0, 0, null)));
+                    new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.STOCK, item, 1, 0, 0, 0, 0, null),
+                    new StorageHistoryPoint(now + 1, 1, StorageHistoryPoint.Kind.STOCK, item, 2, 0, 0, 0, 0, null)));
             registry.controllerRemoved(live.position());
             registry.saveIfDirty();
             database.write(db -> {
@@ -79,7 +77,7 @@ class LiveDataPolicyTest {
                     }
                     return null;
                 });
-                scheduler.advance(TimeUnit.MINUTES.toMillis(5));
+                scheduler.advance(MINUTES.toMillis(5));
                 assertEquals(1, stockRows(database));
                 assertEquals(
                     1,
@@ -112,18 +110,15 @@ class LiveDataPolicyTest {
             SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
-            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(
-                89500,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(89500, false, CONTROLLER_ONLINE);
             registry.controllerValidated(live);
             StableKey grid = registry.getKey(live);
             assertNotNull(grid);
             StableKey item = TestGridFixtures.key(80);
             long now = System.currentTimeMillis();
             List<StorageHistoryPoint> points = new ArrayList<>();
-            for (int index = 0; index < 5; index++)
-                points.add(new StorageHistoryPoint(now + index, 1, Kind.STOCK, item, index, 0, 0, 0, 0, null));
+            for (int index = 0; index < 5; index++) points.add(
+                new StorageHistoryPoint(now + index, 1, StorageHistoryPoint.Kind.STOCK, item, index, 0, 0, 0, 0, null));
             history.append(grid, Collections.singletonMap(item, description(item)), points);
             AtomicReference<Throwable> failure = new AtomicReference<>();
             Thread append = new Thread(() -> {
@@ -131,15 +126,25 @@ class LiveDataPolicyTest {
                     history.append(
                         grid,
                         Collections.emptyMap(),
-                        Collections
-                            .singletonList(new StorageHistoryPoint(now + 6, 1, Kind.STOCK, item, 6, 0, 0, 0, 0, null)));
+                        Collections.singletonList(
+                            new StorageHistoryPoint(
+                                now + 6,
+                                1,
+                                StorageHistoryPoint.Kind.STOCK,
+                                item,
+                                6,
+                                0,
+                                0,
+                                0,
+                                0,
+                                null)));
                 } catch (Throwable thrown) {
                     failure.set(thrown);
                 }
             });
             synchronized (registry) {
                 append.start();
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                long deadline = System.nanoTime() + SECONDS.toNanos(5);
                 while (append.getState() != Thread.State.BLOCKED && append.isAlive() && System.nanoTime() < deadline)
                     Thread.yield();
                 assertEquals(Thread.State.BLOCKED, append.getState());
@@ -168,19 +173,17 @@ class LiveDataPolicyTest {
             SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
-            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(
-                89501,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(89501, false, CONTROLLER_ONLINE);
             registry.controllerValidated(live);
             StableKey grid = registry.getKey(live);
             assertNotNull(grid);
             StableKey item = TestGridFixtures.key(81);
-            long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(3);
+            long old = System.currentTimeMillis() - DAYS.toMillis(3);
             history.append(
                 grid,
                 Collections.singletonMap(item, description(item)),
-                Collections.singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, old - 1000)));
+                Collections.singletonList(
+                    new StorageHistoryPoint(old, 1, StorageHistoryPoint.Kind.FLOW, item, 0, 5, 2, 0, 0, old - 1000)));
             registry.controllerRemoved(live.position());
             registry.saveIfDirty();
             ConfigSettings.ResourceHistory shorter = new ConfigSettings.ResourceHistory();

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
@@ -111,6 +112,6 @@ public final class PauseCPU extends ISyncedRequest {
         pausable.web$setPaused(input.paused());
         CpuLiveCoordinator live = CoreEngine.getCpuLive();
         if (live != null) live.metadataChanged(cluster);
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+        respond(HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

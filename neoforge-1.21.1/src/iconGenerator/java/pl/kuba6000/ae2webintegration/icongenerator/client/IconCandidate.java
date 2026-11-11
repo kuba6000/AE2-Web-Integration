@@ -11,7 +11,8 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.NativeItemIdentity;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Owns the discovered native stack through hashing, collision checks and rendering. */
@@ -82,8 +83,8 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
         return fluid.copy();
     }
 
-    void render(@NotNull ModernIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws ModernIconRenderer.RenderFailure {
+    void render(@NotNull ModernIconRenderer renderer, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
         // Mod renderers may mutate their input; retain the owned stack for collision comparisons.
         if (!item.isEmpty()) renderer.item(item.copy(), key, captures);
         else renderer.fluid(fluid.copy(), key, captures);

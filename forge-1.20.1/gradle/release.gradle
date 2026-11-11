@@ -1,3 +1,8 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
 def target = [
     minecraft: '1.20.1', loader: 'forge', java: 17, archiveTask: 'reobfShadowJar',
     generatorTask: 'reobfIconGeneratorJar',
@@ -21,7 +26,7 @@ def bundle = providers.provider {
     if (!suppliedManifest.isPresent()) {
         throw new GradleException('releaseBundleManifest is required with releaseArtifactFile')
     }
-    new groovy.json.JsonSlurper().parse(project.file(suppliedManifest.get()), 'UTF-8')
+    new JsonSlurper().parse(project.file(suppliedManifest.get()), 'UTF-8')
 }
 def additionalArtifacts = [
     [role: 'icon-generator', task: tasks.named(target.generatorTask)],
@@ -58,7 +63,7 @@ def releaseKind = providers.gradleProperty('releaseType').getOrElse(inferredType
 def manifestFile = layout.buildDirectory.file('release/manifest.json')
 def expectedSha512 = providers.gradleProperty('releaseArtifactSha512')
 def hashFile = { File archive, String algorithm ->
-    def digest = java.security.MessageDigest.getInstance(algorithm)
+    def digest = MessageDigest.getInstance(algorithm)
     archive.withInputStream { stream ->
         byte[] buffer = new byte[65536]
         int count
@@ -133,7 +138,7 @@ def prepareRelease = tasks.register('prepareRelease') {
         if (!archive.isFile()) {
             throw new GradleException('Production archive is missing: ' + archive)
         }
-        new java.util.zip.ZipFile(archive).withCloseable { jar ->
+        new ZipFile(archive).withCloseable { jar ->
             ['pl/kuba6000/ae2webintegration/ae2interface/AE2WebIntegration.class',
              'pl/kuba6000/ae2webintegration/core/api/IAEWebInterface.class',
              'mixins.ae2webintegration.json'].each { entry ->
@@ -171,7 +176,7 @@ def prepareRelease = tasks.register('prepareRelease') {
         ]
         File output = manifestFile.get().asFile
         output.parentFile.mkdirs()
-        output.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest)) + '\n', 'UTF-8')
+        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + '\n', 'UTF-8')
         logger.lifecycle('Release manifest: ' + output)
         logger.lifecycle('Production archive: ' + archive + ' (SHA-512 ' + sha512 + ')')
     }

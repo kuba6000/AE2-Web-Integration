@@ -1,11 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -18,7 +20,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
@@ -33,7 +34,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class IconPackWriterConcurrencyTest {
@@ -74,11 +74,11 @@ class IconPackWriterConcurrencyTest {
             });
             try {
                 await(firstFailed);
-                assertThrows(TimeoutException.class, () -> export.get(100, TimeUnit.MILLISECONDS));
+                assertThrows(TimeoutException.class, () -> export.get(100, MILLISECONDS));
             } finally {
                 release.countDown();
             }
-            ExecutionException failed = assertThrows(ExecutionException.class, () -> export.get(5, TimeUnit.SECONDS));
+            ExecutionException failed = assertThrows(ExecutionException.class, () -> export.get(5, SECONDS));
             assertSame(fatal, failed.getCause());
             assertTrue(
                 Arrays.asList(fatal.getSuppressed())
@@ -90,7 +90,7 @@ class IconPackWriterConcurrencyTest {
         } finally {
             release.countDown();
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(5, SECONDS));
         }
     }
 
@@ -126,11 +126,11 @@ class IconPackWriterConcurrencyTest {
             Future<Path> export = owner.submit(() -> writeTwoPages(directory));
             try {
                 await(firstFailed);
-                assertThrows(TimeoutException.class, () -> export.get(100, TimeUnit.MILLISECONDS));
+                assertThrows(TimeoutException.class, () -> export.get(100, MILLISECONDS));
             } finally {
                 release.countDown();
             }
-            ExecutionException failed = assertThrows(ExecutionException.class, () -> export.get(5, TimeUnit.SECONDS));
+            ExecutionException failed = assertThrows(ExecutionException.class, () -> export.get(5, SECONDS));
             assertInstanceOf(IOException.class, failed.getCause());
             assertSame(
                 codecFailure,
@@ -143,7 +143,7 @@ class IconPackWriterConcurrencyTest {
         } finally {
             release.countDown();
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(5, SECONDS));
         }
     }
 
@@ -173,11 +173,11 @@ class IconPackWriterConcurrencyTest {
                 }
             });
             try {
-                assertThrows(TimeoutException.class, () -> closed.get(100, TimeUnit.MILLISECONDS));
+                assertThrows(TimeoutException.class, () -> closed.get(100, MILLISECONDS));
             } finally {
                 release.countDown();
             }
-            assertTrue(closed.get(5, TimeUnit.SECONDS));
+            assertTrue(closed.get(5, SECONDS));
             assertEquals(1, encoder.completed.get());
             try (Stream<Path> files = Files.list(directory)) {
                 assertEquals(0, files.count());
@@ -186,7 +186,7 @@ class IconPackWriterConcurrencyTest {
         } finally {
             release.countDown();
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(5, SECONDS));
         }
     }
 
@@ -212,12 +212,12 @@ class IconPackWriterConcurrencyTest {
             });
             try {
                 await(full);
-                assertThrows(TimeoutException.class, () -> export.get(100, TimeUnit.MILLISECONDS));
+                assertThrows(TimeoutException.class, () -> export.get(100, MILLISECONDS));
                 assertEquals(0, encoder.completed.get());
             } finally {
                 release.countDown();
             }
-            Path output = export.get(15, TimeUnit.SECONDS);
+            Path output = export.get(15, SECONDS);
             try (IconPack pack = open(output)) {
                 assertEquals(
                     allowance + 1,
@@ -248,7 +248,7 @@ class IconPackWriterConcurrencyTest {
         } finally {
             release.countDown();
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(5, SECONDS));
         }
     }
 
@@ -278,7 +278,7 @@ class IconPackWriterConcurrencyTest {
         try (ZipFile archive = new ZipFile(output.toFile());
             InputStreamReader manifest = new InputStreamReader(
                 archive.getInputStream(archive.getEntry("manifest.json")),
-                StandardCharsets.UTF_8)) {
+                UTF_8)) {
             return new JsonParser().parse(manifest)
                 .getAsJsonObject()
                 .getAsJsonObject("statistics")
@@ -300,13 +300,11 @@ class IconPackWriterConcurrencyTest {
             await(started);
             Future<Path> finish = owner.submit(() -> writer.finish(() -> true));
             try {
-                assertThrows(TimeoutException.class, () -> finish.get(100, TimeUnit.MILLISECONDS));
+                assertThrows(TimeoutException.class, () -> finish.get(100, MILLISECONDS));
             } finally {
                 release.countDown();
             }
-            ExecutionException cancellation = assertThrows(
-                ExecutionException.class,
-                () -> finish.get(5, TimeUnit.SECONDS));
+            ExecutionException cancellation = assertThrows(ExecutionException.class, () -> finish.get(5, SECONDS));
             assertInstanceOf(CancellationException.class, cancellation.getCause());
             assertEquals(1, encoder.completed.get());
             try (Stream<Path> files = Files.list(directory)) {
@@ -315,7 +313,7 @@ class IconPackWriterConcurrencyTest {
         } finally {
             release.countDown();
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(5, SECONDS));
         }
     }
 
@@ -375,8 +373,8 @@ class IconPackWriterConcurrencyTest {
         return StableKey.create(sink -> sink.putInt(index));
     }
 
-    private static Metadata metadata() {
-        return new Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
+    private static IconPack.Metadata metadata() {
+        return new IconPack.Metadata("1.7.10", "forge", "legacy-v1", "test", "today", Collections.emptyMap());
     }
 
     private static IconPack open(Path output) throws IOException {
@@ -385,7 +383,7 @@ class IconPackWriterConcurrencyTest {
 
     private static void await(CountDownLatch latch) throws IOException {
         try {
-            if (!latch.await(5, TimeUnit.SECONDS)) throw new IOException("Timed out awaiting controlled PNG encode");
+            if (!latch.await(5, SECONDS)) throw new IOException("Timed out awaiting controlled PNG encode");
         } catch (InterruptedException interrupted) {
             Thread.currentThread()
                 .interrupt();

@@ -1,19 +1,19 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -38,7 +38,7 @@ final class RegistrationTestFixture implements AutoCloseable {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -92,14 +92,18 @@ final class RegistrationTestFixture implements AutoCloseable {
             body.addProperty("username", player.name);
             body.addProperty("password", password);
             Register request = new Register();
-            RequestContext context = new RequestContext(null, WebPrincipal.anonymous(), Collections.emptyMap(), body);
+            AE2Controller.RequestContext context = new AE2Controller.RequestContext(
+                null,
+                WebPrincipal.anonymous(),
+                Collections.emptyMap(),
+                body);
             CompletableFuture<Void> completion = CompletableFuture.runAsync(() -> request.handle(context));
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            long deadline = System.nanoTime() + SECONDS.toNanos(5);
             while (!completion.isDone() && System.nanoTime() < deadline) {
                 CoreEngine.onServerTick();
                 Thread.sleep(1);
             }
-            completion.get(1, TimeUnit.SECONDS);
+            completion.get(1, SECONDS);
             JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);
             assertEquals(
                 "OK",

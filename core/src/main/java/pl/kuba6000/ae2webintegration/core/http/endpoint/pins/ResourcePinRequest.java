@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.pins;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,11 +39,12 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
     /**
      * @param status {@code OK} when the request succeeds
      * @param data   current account's pins
+     * @param groups current account's Home pin groups, including empty groups
      * @param icons  mappings for resource icon references, or null when not requested or unavailable
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<View> data, @Nullable IconMappings icons)
-        implements IResponseBody {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<View> data,
+        @NotNull List<ResourcePinStore.HomeGroup> groups, @Nullable IconMappings icons) implements IResponseBody {}
 
     /**
      * @param pinKey        pin identifier
@@ -52,15 +54,16 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
      * @param gridName      network name, or null when unavailable
      * @param resource      resource description, or null when unavailable
      * @param terminalOrder order within this network's terminal pins, or null when not pinned there
-     * @param homeOrder     order among all Home pins, or null when not pinned there
+     * @param homeOrder     order within the Home group, or null when not pinned there
+     * @param homeGroupKey  Home group identifier, or null for Ungrouped or terminal-only pins
      * @param homeConfig    Home card display settings
      * @param recent        recent flow for this resource, or null when unavailable, disabled or not shown on Home
      */
     @Desugar
     public record View(@NotNull StableKey pinKey, boolean available, @Nullable StableKey gridKey,
         @Nullable StableKey itemKey, @Nullable String gridName, @Nullable ResourceDescription resource,
-        @Nullable Integer terminalOrder, @Nullable Integer homeOrder, @NotNull ResourcePinStore.HomeConfig homeConfig,
-        @Nullable RecentResourceActivity.Summary recent) {}
+        @Nullable Integer terminalOrder, @Nullable Integer homeOrder, @Nullable StableKey homeGroupKey,
+        @NotNull ResourcePinStore.HomeConfig homeConfig, @Nullable RecentResourceActivity.Summary recent) {}
 
     private static final class PinResource extends ResourceDescription {
 
@@ -124,7 +127,8 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
         Map<StableKey, Boolean> access = new HashMap<>();
         List<View> result = new ArrayList<>();
-        for (ResourcePinStore.Pin pin : store.list(context.getPrincipal())) {
+        ResourcePinStore.Snapshot snapshot = store.snapshot(context.getPrincipal());
+        for (ResourcePinStore.Pin pin : snapshot.pins()) {
             boolean allowed = access.computeIfAbsent(pin.gridKey(), this::available);
             result
                 .add(
@@ -145,9 +149,10 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
                             : null,
                         pin.terminalOrder(),
                         pin.homeOrder(),
+                        pin.homeGroupKey(),
                         pin.homeConfig(),
                         allowed ? recent(pin) : null));
         }
-        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result, mappings));
+        respondDetached(HTTP_OK, new Response(ApiStatus.OK, result, snapshot.groups(), mappings));
     }
 }

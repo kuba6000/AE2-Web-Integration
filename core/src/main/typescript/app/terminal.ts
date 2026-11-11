@@ -40,7 +40,7 @@ export type TerminalData = {
     items: StoredResource[];
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
-    iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
+    iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
     itemError: string | null;
     refreshing: boolean;
@@ -163,7 +163,7 @@ export function createTerminal(
         items: [],
         itemSnapshotRevision: 0,
         itemIcons: null,
-        iconPack: { available: null, status: 'loading' },
+        iconPack: { available: null, hasAnimations: false, status: 'loading' },
         itemStatus: 'idle',
         itemError: null,
         refreshing: false,
@@ -342,7 +342,7 @@ export function createTerminal(
             const changed =
                 (state.iconPack.available === true) !== pack.available ||
                 (pack.available && iconPackId !== pack.packId);
-            state.iconPack = { available: pack.available, status: 'ready' };
+            state.iconPack = { available: pack.available, hasAnimations: pack.hasAnimations, status: 'ready' };
             iconPackId = pack.packId;
             icons.enabled(iconsEnabled && pack.available);
             if (changed) {

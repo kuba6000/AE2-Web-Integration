@@ -10,6 +10,9 @@ Export a `ThemeDefinition` containing `id`, `name`, `supportedModVersion`, `view
 to this presentation; the theme must clean up anything it attaches outside it, including stylesheets,
 dialogs, document listeners, timers and observers.
 
+`supportedModVersion` declares a major/minor line such as `1.2.x`. A mismatch produces a warning;
+it does not prevent the user from selecting the theme.
+
 `context.lifetime.signal` aborts when the presentation ends.
 `context.lifetime.onCleanup(callback)` registers cleanup, including for partially failed mounts.
 Register cleanup immediately after acquiring the resource.
@@ -96,6 +99,9 @@ an explicit reload before another save. Render these states visibly; do not retr
 | `settings.edit(field, value)`, `settings.save()`                           | Edit and save network settings                            |
 | `pins.add(gridKey, itemKey, placement)`                                    | Pin a resource in the terminal or on Home                  |
 | `pins.update(pinKey, update)`, `pins.remove(pinKey)`                       | Change placement, order or Home display; remove a pin      |
+| `pins.addGroup(name)`, `pins.updateGroup(groupKey, update)`                | Create, rename or reorder a Home group                     |
+| `pins.removeGroup(groupKey)`                                             | Move its pins to Ungrouped and remove the group            |
+| `pins.refresh()`                                                         | Refresh the account's pins and Home groups                 |
 
 Actions retain the shared validation, capability checks, pending state and API error handling.
 Render the appropriate state error fields and pending indicators. Automatic polling must not disable
@@ -108,12 +114,42 @@ authorization or eliminate all background data requests.
 
 ### Account pins
 
-`state.pins.items` contains the current account's saved resource pins. `terminalOrder` is scoped to
-the pin's network; `homeOrder` spans all networks independently of the selected network. A null order
-means that placement is disabled. Adding one placement preserves the other. Use
-`pins.update(pinKey, { move: { placement: 'terminal', direction: 'earlier' } })` to change one order.
-Home display options are replaced together through `homeConfig`; copy the current configuration
-before changing selected fields.
+`state.pins.items` contains the current account's saved resource pins. A pin can appear in its
+network's terminal, on Home, or in both places. `terminalOrder: null` disables terminal placement;
+`homeOrder: null` disables Home placement. Adding or changing one placement preserves the other.
+Use `pins.update(pinKey, { terminal: false })` or `{ home: false }` to disable a placement; disabling
+both removes the pin.
+
+`terminalOrder` is scoped to the pin's network and is independent of Home groups and ordering.
+Use `pins.update(pinKey, { move: { placement: 'terminal', direction: 'earlier' } })` to move a terminal
+pin within that network. Home display options are replaced together through `homeConfig`; copy the
+current configuration before changing selected fields.
+
+`state.pins.groups` contains the account's named Home groups, each with a stable `groupKey`, a `name`
+and an `ordinal` for group order. Home groups can contain pins from several networks, independently
+of the selected network. A Home pin's `homeGroupKey` identifies its group; null means Ungrouped.
+Ungrouped has no entry in `state.pins.groups`. For the default Home layout, order named groups by
+`ordinal`, followed by Ungrouped, and order each section's pins by `homeOrder`. `homeOrder` is local
+to that group, including Ungrouped; it is not a global order across Home.
+
+Use the group actions and pin updates as follows:
+
+- `pins.addGroup(name)` creates a named group; `pins.updateGroup(groupKey, { name })` renames it
+  without changing its identifier.
+- `pins.updateGroup(groupKey, { move: 'earlier' })` moves a named group relative to other named groups;
+  use `'later'` for the reverse direction.
+- `pins.update(pinKey, { homeGroup: { groupKey } })` moves a Home pin into a group. Pass
+  `{ homeGroup: {} }` to move it to Ungrouped. Omit `homeGroup` to preserve membership. The pin must
+  have Home placement enabled; include `home: true` when enabling it in the same update. Changing
+  groups appends the pin to the destination's Home order.
+- `pins.update(pinKey, { move: { placement: 'home', direction: 'earlier' } })` moves a pin within its
+  current group or Ungrouped. Use `'later'` for the reverse direction.
+- `pins.removeGroup(groupKey)` appends its pins to Ungrouped in their existing relative order,
+  retaining pin identity, display configuration and terminal placement/order.
+
+Group actions update `state.pins.groups` and `state.pins.items` together. Render their pending and
+error feedback through the same `state.pins.pending`, `state.pins.status` and `state.pins.error`
+fields as other pin actions.
 
 `state.pins.icons` supplies the atlas metadata for pin descriptions. Unavailable pins retain their
 identifier and settings but have null resource/network metadata. Render an unavailable entry and

@@ -1,4 +1,5 @@
 import org.gradle.internal.os.OperatingSystem
+import org.slf4j.event.Level
 
 mixin {
     var refmap = add sourceSets.main, "mixins.ae2webintegration.refmap.json"
@@ -155,7 +156,7 @@ legacyForge {
             // Recommended logging level for the console
             // You can set various levels here.
             // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-            logLevel = org.slf4j.event.Level.INFO
+            logLevel = Level.INFO
         }
     }
 }

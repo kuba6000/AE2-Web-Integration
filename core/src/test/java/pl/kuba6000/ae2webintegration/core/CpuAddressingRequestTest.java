@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -28,7 +30,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
@@ -63,7 +64,7 @@ class CpuAddressingRequestTest extends GridTestScope {
         assertTrue(
             key.getAsJsonPrimitive()
                 .isString());
-        assertEquals(CoreEngine.GRID_IDENTITIES.getKey(grid), StableKey.parse(key.getAsString()));
+        assertEquals(GRID_IDENTITIES.getKey(grid), StableKey.parse(key.getAsString()));
     }
 
     @Test
@@ -361,7 +362,7 @@ class CpuAddressingRequestTest extends GridTestScope {
         private int submissions;
 
         TestGrid(StableKey key, TestCpu... cpus) {
-            super(key, false, AEControllerState.CONTROLLER_ONLINE);
+            super(key, false, CONTROLLER_ONLINE);
             this.cpus = new LinkedHashSet<>(Arrays.asList(cpus));
         }
 

@@ -228,6 +228,29 @@ header {
     min-width: 0;
     overflow-wrap: anywhere;
 }
+.cpu-overview > .terminal-heading {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+.cpu-overview-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: end;
+    gap: 8px;
+    min-width: 0;
+}
+.cpu-overview-search {
+    flex: 1;
+    min-width: min(160px, 100%);
+    max-width: 260px;
+}
+.cpu-overview-search input {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    font-size: 12px;
+}
 .cpu-list {
     list-style: none;
     padding: 0;
@@ -1503,6 +1526,20 @@ label {
 .web-preference-field .hint:empty {
     display: none;
 }
+.web-preferences .info-notice {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin: 8px 0 0;
+    border: 1px solid light-dark(#8ba7c7, #667d9a);
+    padding: 8px 10px;
+    background: var(--panel);
+    font-size: 13px;
+}
+.web-preferences .info-notice > .theme-icon {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
+}
 .about-view {
     overflow-wrap: anywhere;
 }
@@ -2422,8 +2459,13 @@ code {
     .terminal-heading h2 {
         font-size: 18px;
     }
-    .search input {
+    .search input,
+    .cpu-overview-search input {
         padding-block: 5px;
+    }
+    .cpu-overview-controls .tool-button,
+    .cpu-overview-search input {
+        height: 29px;
     }
     :is(.cpu-overview, .history-view, .settings-view, .page-view) > .terminal-heading {
         min-height: 33px;
@@ -3679,6 +3721,129 @@ button.toast:hover {
     min-height: 32px;
 }
 
+.home-pin-groups {
+    display: grid;
+    gap: 20px;
+}
+.home-pin-group-heading,
+.home-pin-group-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.home-pin-group-add,
+.home-pin-group-rename {
+    display: grid;
+    grid-template-columns: minmax(0, 240px) max-content;
+    align-items: end;
+    gap: 8px;
+}
+.home-pin-group-add {
+    margin-block: 0 16px;
+}
+.home-pin-group-error {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+.home-pin-group-add label,
+.home-pin-group-rename label {
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+}
+.home-pin-group-add input,
+.home-pin-group-rename input {
+    width: 100%;
+    max-width: 100%;
+}
+.home-pin-group-add :is(input, button),
+.home-pin-group-rename :is(input, button),
+.home-pin-group-actions button {
+    height: 36px;
+}
+.home-pin-group-add button,
+.home-pin-group-rename button,
+.home-pin-group-actions button {
+    white-space: nowrap;
+}
+.home-pin-group {
+    min-width: 0;
+    border: 1px solid var(--muted);
+    padding: 12px;
+}
+.home-pin-group-flat {
+    border: 0;
+    padding: 0;
+}
+.home-pin-group-heading {
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--muted);
+}
+.home-pin-group-heading h3 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.home-pin-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-height: 36px;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+.home-pin-group-toggle > :first-child {
+    flex: 0 0 12px;
+}
+.home-pin-group-actions {
+    max-width: 100%;
+}
+.home-pin-group-rename {
+    grid-template-columns: minmax(0, 240px) max-content max-content;
+    margin-block: 0 10px;
+}
+.home-pin-group-preview {
+    display: grid;
+    gap: 4px;
+}
+.home-pin-compact-row {
+    --resource-icon-size: 16px;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content auto max-content;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding-block: 4px;
+    font-size: 12px;
+}
+.home-pin-compact-identity {
+    min-width: 0;
+    gap: 8px;
+}
+.home-pin-compact-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.home-pin-compact-stock,
+.home-pin-compact-net {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.home-pin-compact-separator {
+    color: var(--muted);
+}
 .home-pins {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
@@ -3766,6 +3931,11 @@ button.toast:hover {
 }
 .home-pin-settings select {
     min-width: 80px;
+}
+.home-pin-group-choice select {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1;
 }
 .home-pin-series {
     display: grid;

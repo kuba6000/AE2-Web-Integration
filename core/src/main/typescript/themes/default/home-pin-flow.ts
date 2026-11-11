@@ -2,12 +2,17 @@ import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { element } from './dom.js';
 import type { Tooltips } from './tooltips.js';
 import { flowOperationLines } from './flow-operations.js';
+import type { historicalFlow } from './home-pin-metrics.js';
 
 type Pin = ThemeState['pins']['items'][number];
 type History = ThemeState['resourceHistory'];
 
 /** Exact counts and coverage for the two independently configured Home flow summaries. */
-export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind']) {
+export function createHomePinFlow(
+    host: HTMLElement,
+    bindTooltip: Tooltips['bind'],
+    formatting: () => { number: Intl.NumberFormat; short: Intl.NumberFormat }
+) {
     function section(className: string) {
         const root = element('section', '', className);
         const line = element('div', '', 'home-pin-flow-line');
@@ -32,11 +37,7 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
     ) {
         target.values.replaceChildren();
         target.tooltipContent.length = 0;
-        const number = new Intl.NumberFormat(document.documentElement.lang);
-        const compact = new Intl.NumberFormat(document.documentElement.lang, {
-            notation: 'compact',
-            maximumFractionDigits: 1
-        });
+        const { number, short: compact } = formatting();
         const net = input === null || output === null ? null : input - output;
         for (const [kind, label, value, sign] of [
             ['input', locale.common('resourceHistoryInput'), input, input],
@@ -64,7 +65,7 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
         }
     }
     return {
-        render(pin: Pin, history: History | undefined, locale: Translator) {
+        render(pin: Pin, history: History | undefined, locale: Translator, totals: ReturnType<typeof historicalFlow>) {
             recent.root.hidden = !pin.available || !pin.homeConfig.showRecentFlow;
             historical.root.hidden = !pin.available || !pin.homeConfig.showFlow;
             for (const section of [recent, historical])
@@ -117,23 +118,9 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
             }
             if (!historical.root.hidden) {
                 historical.heading.textContent = `${locale.common('pinHistoricalFlow')} ${locale.duration(pin.homeConfig.flowRangeMillis)}:`;
-                let input = 0n,
-                    output = 0n,
-                    inputOperations = 0n,
-                    outputOperations = 0n,
-                    observed = false;
+                const { input, output, inputOperations, outputOperations, observed } = totals;
                 const notes = [];
                 if (history?.status === 'ready') {
-                    for (const point of history.points) {
-                        if (point.observedAt <= history.from || point.observedAt > history.until) continue;
-                        if (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION') observed = true;
-                        if (point.kind === 'FLOW') {
-                            input += BigInt(point.input);
-                            output += BigInt(point.output);
-                            inputOperations += BigInt(point.inputOperations);
-                            outputOperations += BigInt(point.outputOperations);
-                        }
-                    }
                     if (!history.enabled) notes.push(locale.common('resourceHistoryDisabled'));
                     if (history.truncated) notes.push(locale.common('resourceHistoryTruncated'));
                 } else if (history?.error) notes.push(locale.common(history.error));

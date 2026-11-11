@@ -9,7 +9,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
@@ -17,11 +17,11 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 /** Request-local parsed transport inputs consumed by generated bindings. */
 public final class InputValues {
 
-    private final RequestContext context;
+    private final AE2Controller.RequestContext context;
     private final String route;
     private @Nullable Map<String, String> query;
 
-    public InputValues(RequestContext context, String route) {
+    public InputValues(AE2Controller.RequestContext context, String route) {
         this.context = context;
         this.route = route;
     }

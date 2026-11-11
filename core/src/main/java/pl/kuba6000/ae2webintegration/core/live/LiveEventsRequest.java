@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.live;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,8 +47,7 @@ public abstract class LiveEventsRequest extends IAsyncRequest {
 
     /** Transfers exchange ownership after the normal request's permission check and completion. */
     public final boolean startStream() throws IOException {
-        if (getResponse().httpStatus() != HttpURLConnection.HTTP_OK || streams == null || subscription == null)
-            return false;
+        if (getResponse().httpStatus() != HTTP_OK || streams == null || subscription == null) return false;
         if (!context.isLifecycleUnchanged()) {
             ApiResponse.error(ApiStatus.SERVER_STOPPING)
                 .send(context.getExchange());
@@ -60,7 +60,7 @@ public abstract class LiveEventsRequest extends IAsyncRequest {
                 .getResponseHeaders()
                 .set("Content-Type", "text/event-stream; charset=UTF-8");
             context.getExchange()
-                .sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
+                .sendResponseHeaders(HTTP_OK, -1);
             context.getExchange()
                 .close();
         } else streams.open(context, topicKey(), subscription, icons);

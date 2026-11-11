@@ -29,6 +29,7 @@ export function createTrackingChart(
     let preserveZoom = true;
     let building = false;
     let rebuildPending = false;
+    let buildDeferred = false;
     let disposed = false;
     function scheduleBuild() {
         if (building || rebuildPending || disposed) return;
@@ -133,7 +134,12 @@ export function createTrackingChart(
         chart.ctx.restore();
     }
     function build() {
-        if (!history || !host.clientWidth || host.closest('[hidden]')) return;
+        if (!history) return;
+        if (!host.clientWidth || host.closest('[hidden]')) {
+            buildDeferred = true;
+            return;
+        }
+        buildDeferred = false;
         building = true;
         const previousScale = plot?.scales.x;
         const zoom =
@@ -512,8 +518,7 @@ export function createTrackingChart(
         building = false;
     }
     const resize = new ResizeObserver(() => {
-        if (host.clientWidth && plot && plot.width !== host.clientWidth) scheduleBuild();
-        else if (!plot) build();
+        if (host.clientWidth && (buildDeferred || !plot || plot.width !== host.clientWidth)) scheduleBuild();
     });
     resize.observe(host);
     return {

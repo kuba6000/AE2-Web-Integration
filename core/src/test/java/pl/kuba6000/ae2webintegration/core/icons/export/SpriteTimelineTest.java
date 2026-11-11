@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.icons.export;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -100,7 +101,7 @@ class SpriteTimelineTest {
             try (InputStream input = pack.openPage(
                 animation.page()
                     .digest())) {
-                java.awt.image.BufferedImage image = ImageIO.read(input);
+                BufferedImage image = ImageIO.read(input);
                 IconPack.Frame last = animation.frames()
                     .get(
                         animation.frames()

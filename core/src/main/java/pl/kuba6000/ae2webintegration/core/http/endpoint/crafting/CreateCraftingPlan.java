@@ -1,8 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
+import static java.net.HttpURLConnection.HTTP_ACCEPTED;
 import static pl.kuba6000.ae2webintegration.core.AE2Controller.itemIdentities;
 
-import java.net.HttpURLConnection;
 import java.util.concurrent.Future;
 
 import org.jetbrains.annotations.NotNull;
@@ -10,7 +10,6 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
@@ -110,7 +109,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
     Input input;
 
     @Override
-    public boolean init(RequestContext context) {
+    public boolean init(AE2Controller.RequestContext context) {
         if (!super.init(context)) return false;
         if (input.quantity() <= 0) {
             deny(ApiStatus.INVALID_QUANTITY);
@@ -157,7 +156,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
         ResourceSnapshot finalOutput = ResourceSnapshot.capture(itemKey, input.quantity(), input.itemKey());
         Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, input.quantity(), options);
         int jobId = gridData.addJob(job, finalOutput, options, input.autoStart());
-        respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
+        respond(HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
     }
 
 }

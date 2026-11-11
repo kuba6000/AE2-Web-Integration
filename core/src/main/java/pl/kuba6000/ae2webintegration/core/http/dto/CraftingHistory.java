@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -132,7 +133,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
             long craftedTotal = resource.quantity();
             double share = total == 0 ? 1d : (double) spent / total;
             double combinedShare = elapsed > 0 ? Math.min((double) spent / elapsed, 1d) : 0d;
-            double rate = spent > 0 ? craftedTotal / (spent / (double) TimeUnit.SECONDS.toMillis(1)) : 0d;
+            double rate = spent > 0 ? craftedTotal / (spent / (double) SECONDS.toMillis(1)) : 0d;
             ArrayList<Timing> timings = new ArrayList<>();
             for (CompletedCrafting.Interval interval : measured.intervals())
                 timings.add(new Timing(interval.started(), interval.ended()));

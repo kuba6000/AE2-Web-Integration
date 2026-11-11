@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.async;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
@@ -16,7 +16,7 @@ public abstract class IAsyncRequest extends IRequest {
     protected StableKey gridKey;
 
     @Override
-    public boolean init(RequestContext context) {
+    public boolean init(AE2Controller.RequestContext context) {
         if (!super.init(context)) return false;
         if (gridKey != null) {
             IAEGrid liveGrid = CoreEngine.GRID_IDENTITIES.getGrid(gridKey);
@@ -34,7 +34,7 @@ public abstract class IAsyncRequest extends IRequest {
 
     public abstract void handle();
 
-    public final void handle(RequestContext context) {
+    public final void handle(AE2Controller.RequestContext context) {
         if (init(context)) handle();
     }
 }

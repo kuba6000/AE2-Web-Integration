@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.tracking.crafting;
 
+import static java.util.concurrent.TimeUnit.DAYS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -18,7 +19,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -830,7 +830,7 @@ class CraftingHistoryStoreTest {
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            firstRemoved = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 1));
+            firstRemoved = store.append(grid, simpleJob(now - DAYS.toMillis(20), 1));
             assertTrue(
                 store.list(grid, null, 10)
                     .entries()
@@ -842,7 +842,7 @@ class CraftingHistoryStoreTest {
             long current = store.append(grid, simpleJob(now, 2));
             assertTrue(current > firstRemoved);
             assertNull(store.read(grid, firstRemoved));
-            highestRemoved = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 3));
+            highestRemoved = store.append(grid, simpleJob(now - DAYS.toMillis(20), 3));
             assertTrue(highestRemoved > current);
             assertNull(store.read(grid, highestRemoved));
         }
@@ -867,7 +867,7 @@ class CraftingHistoryStoreTest {
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            long old = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 1));
+            long old = store.append(grid, simpleJob(now - DAYS.toMillis(20), 1));
             assertNull(store.read(grid, old));
             CompletedCrafting good = simpleJob(now, 2);
             CompletedCrafting invalid = new CompletedCrafting(
@@ -945,7 +945,7 @@ class CraftingHistoryStoreTest {
             GridIdentityRegistry identities = new GridIdentityRegistry();
             identities.initialize(database, directory.resolve("absent.json"));
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            long expired = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(2), 1));
+            long expired = store.append(grid, simpleJob(now - DAYS.toMillis(2), 1));
             long capped = store.append(grid, simpleJob(now - 20000, 2));
             long retained = store.append(grid, simpleJob(now - 10000, 3));
             identities.controllerRemoved(new DimensionalCoords("overworld", 0, 0, 0));

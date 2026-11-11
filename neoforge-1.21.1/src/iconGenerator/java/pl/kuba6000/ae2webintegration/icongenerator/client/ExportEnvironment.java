@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION;
+import static pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants.MINECRAFT_VERSION;
+
 import java.time.Instant;
 import java.util.Map;
 import java.util.TreeMap;
@@ -27,9 +30,9 @@ final class ExportEnvironment {
                     mod.getVersion()
                         .toString()));
         return new IconPack.Metadata(
-            PlatformConstants.MINECRAFT_VERSION,
+            MINECRAFT_VERSION,
             PlatformConstants.LOADER,
-            PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION,
+            ICON_PACK_COMPATIBILITY_VERSION,
             mods.get(IconGeneratorMod.MOD_ID),
             Instant.now()
                 .toString(),
