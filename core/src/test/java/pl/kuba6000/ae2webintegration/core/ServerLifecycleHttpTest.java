@@ -1071,14 +1071,25 @@ class ServerLifecycleHttpTest {
     @ValueSource(
         strings = { "other.example", "localhost.other.example:2324", "127.0.0.1.other.example", "192.0.2.10:2324",
             "[2001:db8::1]:2324", "user@localhost:2324", "localhost:2324/path", "localhost:2324?query",
-            "localhost:2324#fragment", "localhost:70000", "localhost:invalid", "localhost:",
-            "localhost:2324, other.example", "localhost:2324\r\nHost: other.example", "evillocalhost:2324",
+            "localhost:2324#fragment", "localhost:70000", "localhost:invalid", "localhost:", "evillocalhost:2324",
             "www.localhost.example:2324", ".localhost:2324", "www..localhost:2324", "www.localhost..:2324",
             "-www.localhost:2324", "www-.localhost:2324", "www_local.localhost:2324", "%77ww.localhost:2324" })
     void localAdminRejectsNonLocalOrMalformedAuthorities(String host) throws Exception {
         config.set("general.allow_no_password_on_localhost", true);
         startApi();
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus("Host: " + host));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "localhost:2324, other.example", "localhost:2324\r\nHost: other.example" })
+    void localAdminRejectsAmbiguousHostHeaders(String host) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        int status = rawGetStatus("Host: " + host);
+        // JDK HTTP parsers may reject ambiguous Host headers before authentication runs.
+        assertTrue(
+            status == HTTP_BAD_REQUEST || status == HTTP_UNAUTHORIZED,
+            () -> "Ambiguous Host headers must be rejected; received HTTP " + status);
     }
 
     @ParameterizedTest
