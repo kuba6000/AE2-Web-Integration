@@ -1,9 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sqlite.JDBC;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldDatabaseSqliteTest {
@@ -26,7 +26,7 @@ class WorldDatabaseSqliteTest {
     @Test
     void anUnsupported64BitSchemaVersionCannotNarrowToTheSupportedVersion() throws Exception {
         Path file = directory.resolve("large-version.sqlite");
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             database.write(db -> {
                 try (Statement sql = db.createStatement()) {
                     sql.execute("UPDATE world_schema SET version = 4294967304");
@@ -35,7 +35,7 @@ class WorldDatabaseSqliteTest {
             });
         }
         byte[] original = Files.readAllBytes(file);
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, database::open);
         }
         assertArrayEquals(original, Files.readAllBytes(file));
@@ -50,7 +50,7 @@ class WorldDatabaseSqliteTest {
             sql.execute("INSERT INTO sqliteXdata VALUES (42)");
         }
         byte[] original = Files.readAllBytes(file);
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, database::open);
         }
         assertArrayEquals(original, Files.readAllBytes(file));
@@ -59,13 +59,13 @@ class WorldDatabaseSqliteTest {
 
     @Test
     void worldTransactionsUseDurableSqliteWithoutTouchingOldDatabaseFiles() throws Exception {
-        byte[] oldContents = "Unconverted HSQL database sentinel".getBytes(StandardCharsets.UTF_8);
+        byte[] oldContents = "Unconverted HSQL database sentinel".getBytes(UTF_8);
         Path oldData = directory.resolve("grids.data");
         Path oldProperties = directory.resolve("grids.properties");
         Files.write(oldData, oldContents);
         Files.write(oldProperties, oldContents);
         Path file = directory.resolve("grids.sqlite");
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             database.write(db -> {
                 assertEquals(
                     "SQLite",

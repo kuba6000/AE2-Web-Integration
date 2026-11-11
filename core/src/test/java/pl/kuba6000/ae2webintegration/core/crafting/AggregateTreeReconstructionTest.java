@@ -7,7 +7,6 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
-import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.Contribution;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -273,7 +272,7 @@ class AggregateTreeReconstructionTest {
     }
 
     private static int task(CraftingTraceGraph graph, int request, int index, long amount) {
-        Contribution contribution = graph.capture()
+        CraftingTraceCapture.Contribution contribution = graph.capture()
             .contributions()
             .get(
                 graph.contributions(request)
@@ -286,7 +285,7 @@ class AggregateTreeReconstructionTest {
 
     private static void leaf(CraftingTraceGraph graph, int request, int index, ContributionKind kind, long amount,
         int resource) {
-        Contribution contribution = graph.capture()
+        CraftingTraceCapture.Contribution contribution = graph.capture()
             .contributions()
             .get(
                 graph.contributions(request)

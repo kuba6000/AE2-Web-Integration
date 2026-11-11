@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
@@ -8,7 +9,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.electronwill.nightconfig.core.io.ParsingException;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
@@ -222,7 +223,7 @@ class ServerSettingsHttpTest {
         config.write("general.trusted_proxies", "192.0.2.0/24");
         assertEquals(active, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
         config.writeRaw("[invalid");
-        assertThrows(com.electronwill.nightconfig.core.io.ParsingException.class, Config::reload);
+        assertThrows(ParsingException.class, Config::reload);
         assertEquals(active, request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data"));
         Files.delete(
             Config.getConfigFile("config.toml")
@@ -394,8 +395,8 @@ class ServerSettingsHttpTest {
         config.write("ntfy.password", "pending-ntfy-secret");
         Path file = Config.getConfigFile("config.toml")
             .toPath();
-        String original = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-        Files.write(file, ("# administrator comment\n" + original).getBytes(StandardCharsets.UTF_8));
+        String original = new String(Files.readAllBytes(file), UTF_8);
+        Files.write(file, ("# administrator comment\n" + original).getBytes(UTF_8));
         JsonObject body = request("GET", "/api/server/settings", token, null, 200).getAsJsonObject("data");
         JsonObject readOnly = body.getAsJsonObject("readOnly");
         assertEquals(
@@ -436,7 +437,7 @@ class ServerSettingsHttpTest {
         assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         assertEquals("", Config.INSTANCE.general.trustedProxies);
         assertEquals(20, Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute);
-        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        String contents = new String(Files.readAllBytes(file), UTF_8);
         assertTrue(contents.contains("administrator comment"));
         assertTrue(contents.contains("keep-me"));
         assertTrue(contents.contains("file-edited-password"));
@@ -806,12 +807,12 @@ class ServerSettingsHttpTest {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
             try (OutputStream output = connection.getOutputStream()) {
-                output.write(body.getBytes(StandardCharsets.UTF_8));
+                output.write(body.getBytes(UTF_8));
             }
         }
         assertEquals(expected, connection.getResponseCode());
         try (InputStream input = expected >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-            return new Gson().fromJson(new InputStreamReader(input, StandardCharsets.UTF_8), JsonObject.class);
+            return new Gson().fromJson(new InputStreamReader(input, UTF_8), JsonObject.class);
         } finally {
             connection.disconnect();
         }

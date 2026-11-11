@@ -1,9 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -23,10 +26,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -53,10 +54,7 @@ class WorldDatabaseTest {
                 }
                 return null;
             });
-            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-                89102,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(89102, false, CONTROLLER_ONLINE);
             registry.controllerValidated(grid);
             StableKey key = registry.getKey(grid);
             assertNotNull(key);
@@ -74,7 +72,7 @@ class WorldDatabaseTest {
             ManualScheduler clock = new ManualScheduler();
             try {
                 database.startGridFlush(clock, () -> {});
-                clock.advance(TimeUnit.MINUTES.toMillis(5));
+                clock.advance(MINUTES.toMillis(5));
                 assertTrue(
                     new WorldGridStore(database).load(source)
                         .isEmpty());
@@ -83,7 +81,7 @@ class WorldDatabaseTest {
                     Statement statement = repair.createStatement()) {
                     statement.execute("DROP TRIGGER temporary_write_failure");
                 }
-                clock.advance(TimeUnit.MINUTES.toMillis(5));
+                clock.advance(MINUTES.toMillis(5));
                 assertEquals(
                     "Retry",
                     new WorldGridStore(database).load(source)
@@ -112,14 +110,11 @@ class WorldDatabaseTest {
             try {
                 registry.initialize(first, source);
                 first.startGridFlush(clock, () -> {});
-                TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-                    89101,
-                    false,
-                    AEControllerState.CONTROLLER_ONLINE);
+                TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(89101, false, CONTROLLER_ONLINE);
                 registry.controllerValidated(grid);
                 StableKey key = registry.getKey(grid);
                 WorldGridStore saved = new WorldGridStore(first);
-                clock.advance(TimeUnit.MINUTES.toMillis(5) - 1);
+                clock.advance(MINUTES.toMillis(5) - 1);
                 assertTrue(
                     saved.load(source)
                         .isEmpty());
@@ -134,7 +129,7 @@ class WorldDatabaseTest {
                 registry.initialize(second, source);
                 registry.controllerValidated(grid);
                 alreadyDispatched.run();
-                clock.advance(TimeUnit.MINUTES.toMillis(10));
+                clock.advance(MINUTES.toMillis(10));
                 assertTrue(
                     first.write(db -> true)
                         .booleanValue());
@@ -178,7 +173,7 @@ class WorldDatabaseTest {
             action = command;
             next = unit.toMillis(initialDelay);
             interval = unit.toMillis(delay);
-            future = super.scheduleWithFixedDelay(() -> {}, 1, 1, TimeUnit.DAYS);
+            future = super.scheduleWithFixedDelay(() -> {}, 1, 1, DAYS);
             return future;
         }
 
@@ -209,10 +204,7 @@ class WorldDatabaseTest {
                 }
                 return null;
             });
-            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-                89103,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(89103, false, CONTROLLER_ONLINE);
             registry.controllerValidated(grid);
             StableKey key = registry.getKey(grid);
             assertNotNull(key);
@@ -247,15 +239,15 @@ class WorldDatabaseTest {
         String invalid = duplicateController
             ? valid.substring(0, valid.length() - 1) + "," + importJson(other).substring(1)
             : "{broken";
-        Files.write(source, invalid.getBytes(StandardCharsets.UTF_8));
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+        Files.write(source, invalid.getBytes(UTF_8));
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             assertThrows(IOException.class, () -> registry.initialize(database, source));
             assertFalse(registry.isInitialized());
             assertFalse(Files.exists(source.resolveSibling("legacy.json.old")));
-            assertArrayEquals(invalid.getBytes(StandardCharsets.UTF_8), Files.readAllBytes(source));
-            Files.write(source, importJson(other).getBytes(StandardCharsets.UTF_8));
+            assertArrayEquals(invalid.getBytes(UTF_8), Files.readAllBytes(source));
+            Files.write(source, importJson(other).getBytes(UTF_8));
             registry.initialize(database, source);
             assertNull(registry.getPersistentData(key));
             assertNotNull(registry.getPersistentData(other));
@@ -266,7 +258,7 @@ class WorldDatabaseTest {
     void failedSettingsTransactionKeepsDirtyValuesForRetryWithoutPartialPublication() throws Exception {
         Path source = directory.resolve("legacy.json");
         StableKey key = TestGridFixtures.key(38);
-        Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
+        Files.write(source, importJson(key).getBytes(UTF_8));
         try (WorldDatabase database = new WorldDatabase(
             directory.resolve("world"),
             new ConfigSettings.ResourceHistory())) {
@@ -321,12 +313,12 @@ class WorldDatabaseTest {
     void absentImportSourceIsCompletedAndLaterJsonCannotOverrideTheDatabase() throws Exception {
         Path source = directory.resolve("missing.json");
         StableKey key = TestGridFixtures.key(36);
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
         }
-        Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
+        Files.write(source, importJson(key).getBytes(UTF_8));
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -340,8 +332,8 @@ class WorldDatabaseTest {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
         StableKey key = TestGridFixtures.key(37);
-        Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+        Files.write(source, importJson(key).getBytes(UTF_8));
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(path, policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -382,12 +374,12 @@ class WorldDatabaseTest {
     void releasedImportUsesConfiguredCraftingRetentionDefault() throws Exception {
         StableKey key = TestGridFixtures.key(74);
         Path source = directory.resolve("released-crafting.json");
-        Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
+        Files.write(source, importJson(key).getBytes(UTF_8));
         ConfigSettings.CraftingHistory crafting = new ConfigSettings.CraftingHistory();
         crafting.historyRetentionDays = new ConfigSettings.Range(1, 3, 2);
         try (WorldDatabase database = new WorldDatabase(
             directory.resolve("import-crafting"),
-            new ResourceHistory(),
+            new ConfigSettings.ResourceHistory(),
             crafting)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -404,7 +396,7 @@ class WorldDatabaseTest {
         }
         try (WorldDatabase database = new WorldDatabase(
             directory.resolve("import-crafting"),
-            new ResourceHistory(),
+            new ConfigSettings.ResourceHistory(),
             crafting)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -426,8 +418,8 @@ class WorldDatabaseTest {
             ("{\"" + key
                 + "\":{\"controllers\":[{\"dimid\":\"0\",\"x\":1,\"y\":2,\"z\":3}],"
                 + "\"settings\":{\"name\":\"Imported\",\"isTracked\":true,\"historyRetentionDays\":14}}}")
-                .getBytes(StandardCharsets.UTF_8));
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+                .getBytes(UTF_8));
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, json);
@@ -465,7 +457,7 @@ class WorldDatabaseTest {
         }
         assertFalse(Files.exists(json));
         assertTrue(
-            new String(Files.readAllBytes(json.resolveSibling("grid-identities.json.old")), StandardCharsets.UTF_8)
+            new String(Files.readAllBytes(json.resolveSibling("grid-identities.json.old")), UTF_8)
                 .contains("Imported"));
     }
 
@@ -474,11 +466,11 @@ class WorldDatabaseTest {
         Path source = directory.resolve("grid-identities.json");
         Path archived = directory.resolve("grid-identities.json.old");
         StableKey key = TestGridFixtures.key(39);
-        byte[] original = importJson(key).getBytes(StandardCharsets.UTF_8);
-        byte[] previous = "previous backup".getBytes(StandardCharsets.UTF_8);
+        byte[] original = importJson(key).getBytes(UTF_8);
+        byte[] previous = "previous backup".getBytes(UTF_8);
         Files.write(source, original);
         Files.write(archived, previous);
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("grids"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -486,7 +478,7 @@ class WorldDatabaseTest {
         }
         assertArrayEquals(original, Files.readAllBytes(source));
         assertArrayEquals(previous, Files.readAllBytes(archived));
-        Files.write(source, "{broken".getBytes(StandardCharsets.UTF_8));
+        Files.write(source, "{broken".getBytes(UTF_8));
         try (WorldDatabase database = new WorldDatabase(directory.resolve("grids"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -496,7 +488,7 @@ class WorldDatabaseTest {
 
     @Test
     void oneOwnerPerWorldCanReopenOnlyAfterClose() throws Exception {
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         Path path = directory.resolve("world");
         try (WorldDatabase first = new WorldDatabase(path, policy);
             WorldDatabase second = new WorldDatabase(path, policy)) {

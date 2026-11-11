@@ -1,8 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -10,14 +14,13 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -58,8 +61,8 @@ class LiveTerminalHttpTest {
                 AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
                 return TestGridFixtures.resolvedKey(grid);
             })
-                .get(3, TimeUnit.SECONDS);
-            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+                .get(3, SECONDS);
+            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, MILLISECONDS);
             String path = "/api/grids/" + key + "/items";
             String base = "http://127.0.0.1:" + port + path;
             String previousSubscription = null;
@@ -79,9 +82,8 @@ class LiveTerminalHttpTest {
                         ("GET " + path
                             + "/events?subscription="
                             + subscription
-                            + " HTTP/1.1\r\nHost: localhost\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-                BufferedReader input = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                            + " HTTP/1.1\r\nHost: localhost\r\n\r\n").getBytes(UTF_8));
+                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), UTF_8));
                 String line;
                 do {
                     line = input.readLine();
@@ -99,7 +101,7 @@ class LiveTerminalHttpTest {
                         .toString(),
                     true));
             assertEquals(200, renew(base, previousSubscription, true));
-            game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, MILLISECONDS);
             HttpURLConnection full = connection(base + "?live=true");
             try {
                 assertEquals(503, full.getResponseCode());
@@ -119,7 +121,7 @@ class LiveTerminalHttpTest {
         } finally {
             for (Socket socket : streams) socket.close();
             game.shutdownNow();
-            game.awaitTermination(3, TimeUnit.SECONDS);
+            game.awaitTermination(3, SECONDS);
             CoreEngine.onServerStopped();
             AE2Controller.AE2Interface = previous;
         }
@@ -151,14 +153,14 @@ class LiveTerminalHttpTest {
             StableKey key = game.submit(() -> {
                 AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
                 StableKey gridKey = TestGridFixtures.resolvedKey(grid);
-                GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+                GridPersistentData data = GRID_IDENTITIES.getPersistentData(gridKey);
                 assertNotNull(data);
                 data.getSettings()
                     .setFlowTracked(true);
                 return gridKey;
             })
-                .get(3, TimeUnit.SECONDS);
-            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+                .get(3, SECONDS);
+            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, MILLISECONDS);
             String base = "http://127.0.0.1:" + port + "/api/grids/" + key + "/items";
             for (int i = 0; i < 6; i++) {
                 HttpURLConnection head = connection(base + "?live=true");
@@ -198,17 +200,16 @@ class LiveTerminalHttpTest {
             assertEquals(400, invalid.getResponseCode());
             invalid.disconnect();
             HttpURLConnection stream = connection(base + "/events?subscription=" + token);
-            try (BufferedReader input = new BufferedReader(
-                new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader input = new BufferedReader(new InputStreamReader(stream.getInputStream(), UTF_8))) {
                 assertEquals("text/event-stream; charset=UTF-8", stream.getContentType());
-                game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+                game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, MILLISECONDS);
                 game.submit(() -> {
                     grid.rows.set(0, new ItemIdentityRequestTest.Resource("iron", 25, false));
                     assertNotNull(grid.web$getStorageCapture());
                     grid.web$getStorageCapture()
                         .markChanged(iron);
                 })
-                    .get(3, TimeUnit.SECONDS);
+                    .get(3, SECONDS);
                 boolean updated = false;
                 boolean receivedRecent = recent != null;
                 for (int remaining = 30; remaining > 0 && (!updated || !receivedRecent);) {
@@ -248,7 +249,7 @@ class LiveTerminalHttpTest {
                     .isJsonNull());
         } finally {
             game.shutdownNow();
-            game.awaitTermination(3, TimeUnit.SECONDS);
+            game.awaitTermination(3, SECONDS);
             CoreEngine.onServerStopped();
             AE2Controller.AE2Interface = previous;
         }
@@ -274,7 +275,7 @@ class LiveTerminalHttpTest {
 
     private static JsonObject json(String url) throws Exception {
         HttpURLConnection connection = connection(url);
-        try (InputStreamReader input = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+        try (InputStreamReader input = new InputStreamReader(connection.getInputStream(), UTF_8)) {
             return new JsonParser().parse(input)
                 .getAsJsonObject();
         } finally {
@@ -286,7 +287,7 @@ class LiveTerminalHttpTest {
     private record Platform(File root) implements IServerPlatform {
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 

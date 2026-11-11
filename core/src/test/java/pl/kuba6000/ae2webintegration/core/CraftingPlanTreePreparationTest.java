@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.Arrays;
@@ -9,7 +11,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -57,7 +58,7 @@ class CraftingPlanTreePreparationTest {
         int id = registry.add(CompletableFuture.completedFuture(job(() -> {
             entered.countDown();
             try {
-                assertTrue(release.await(5, TimeUnit.SECONDS));
+                assertTrue(release.await(5, SECONDS));
             } catch (InterruptedException interrupted) {
                 throw new AssertionError(interrupted);
             }
@@ -68,11 +69,11 @@ class CraftingPlanTreePreparationTest {
         ExecutorService server = Executors.newSingleThreadExecutor();
         try {
             Future<CraftingPlanRegistry.TreePreparation> captured = server.submit(() -> entry.captureTree(20, 1000));
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            assertTrue(entered.await(5, SECONDS));
             registry.cancel(id);
             assertFalse(entry.isRetained());
             release.countDown();
-            captured.get(5, TimeUnit.SECONDS);
+            captured.get(5, SECONDS);
             assertNull(entry.tree());
             assertNull(registry.find(id));
         } finally {
@@ -95,7 +96,7 @@ class CraftingPlanTreePreparationTest {
             assertNotNull(entry);
             entry.captureTree(20, 1000);
             if (action == 0) {
-                clock.addAndGet(TimeUnit.MINUTES.toNanos(16));
+                clock.addAndGet(MINUTES.toNanos(16));
                 registry.evictExpiredCompleted();
             } else if (action == 1) {
                 for (int i = 0; i < 3; i++) registry.add(

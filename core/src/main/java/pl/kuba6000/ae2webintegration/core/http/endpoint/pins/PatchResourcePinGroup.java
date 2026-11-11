@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -16,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Direction;
 
 /**
  * Update Home pin group.
@@ -24,10 +26,10 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
  *
  * @pathParam groupKey Group identifier.
  * @response 200 {@link Response} Updated account pins and groups.
- * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: invalid name or move.
- * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} NOT_FOUND: the owned group does not
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid name or move.
+ * @response 404 {@link ErrorResponse} NOT_FOUND: the owned group does not
  *           exist.
- * @response 409 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} GROUP_NAME_TAKEN: name is already used.
+ * @response 409 {@link ErrorResponse} GROUP_NAME_TAKEN: name is already used.
  */
 @Endpoint(method = HttpMethod.PATCH, path = "/api/resource-pin-groups/{groupKey}")
 public final class PatchResourcePinGroup extends ResourcePinRequest {
@@ -51,8 +53,7 @@ public final class PatchResourcePinGroup extends ResourcePinRequest {
         ResourcePinStore store = store();
         if (store == null) return;
         try {
-            ResourcePinStore.Direction direction = input.move() == null ? null
-                : ResourcePinStore.Direction.parse(input.move());
+            Direction direction = input.move() == null ? null : Direction.parse(input.move());
             if (!store.updateGroup(context.getPrincipal(), groupKey, input.name(), direction)) {
                 deny(ApiStatus.NOT_FOUND);
                 return;

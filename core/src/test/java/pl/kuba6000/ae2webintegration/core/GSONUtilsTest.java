@@ -1,16 +1,17 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -115,8 +116,8 @@ class GSONUtilsTest {
         GSONUtils.writeAtomically(target.toFile(), Collections.singletonMap("name", "first"));
         GSONUtils.writeAtomically(target.toFile(), Collections.singletonMap("name", "żółw"));
 
-        JsonObject saved = GSONUtils.GSON_BUILDER.create()
-            .fromJson(new String(Files.readAllBytes(target), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject saved = GSON_BUILDER.create()
+            .fromJson(new String(Files.readAllBytes(target), UTF_8), JsonObject.class);
         assertEquals(
             "żółw",
             saved.get("name")
@@ -126,7 +127,7 @@ class GSONUtilsTest {
     @Test
     void serializationFailurePreservesTheExistingFile() throws Exception {
         Path target = directory.resolve("data.json");
-        byte[] previous = "{\"name\":\"original\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] previous = "{\"name\":\"original\"}".getBytes(UTF_8);
         Files.write(target, previous);
 
         assertThrows(

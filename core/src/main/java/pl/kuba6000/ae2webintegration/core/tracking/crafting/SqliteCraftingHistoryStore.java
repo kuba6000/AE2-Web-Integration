@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.crafting;
 
+import static java.sql.Statement.RETURN_GENERATED_KEYS;
+import static java.util.concurrent.TimeUnit.DAYS;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,7 +27,7 @@ import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -52,7 +54,7 @@ public final class SqliteCraftingHistoryStore {
     public long append(@NotNull StableKey grid, @NotNull CompletedCrafting job) throws IOException {
         validate(job);
         return database.write(db -> {
-            CraftingHistory policy = database.craftingPolicy();
+            ConfigSettings.CraftingHistory policy = database.craftingPolicy();
             WorldGridStore.normalizeCraftingPolicy(db, policy);
             long gridId = gridId(db, grid);
             if (gridId < 0) throw new IOException("Crafting history requires a durable grid identity");
@@ -63,7 +65,7 @@ public final class SqliteCraftingHistoryStore {
             long id;
             try (PreparedStatement insert = db.prepareStatement("""
                 INSERT INTO crafting_jobs(grid_id, time_started, time_done, cancelled) VALUES (?, ?, ?, ?)
-                """, Statement.RETURN_GENERATED_KEYS)) {
+                """, RETURN_GENERATED_KEYS)) {
                 insert.setLong(1, gridId);
                 insert.setLong(2, job.timeStarted());
                 insert.setLong(3, job.timeDone());
@@ -197,7 +199,7 @@ public final class SqliteCraftingHistoryStore {
         try (PreparedStatement insert = db.prepareStatement("""
             INSERT INTO crafting_resources(job_id, resource_id, ordinal, quantity, time_spent)
             VALUES (?, (SELECT id FROM history_resources WHERE item_key = ?), ?, ?, ?)
-            """, Statement.RETURN_GENERATED_KEYS)) {
+            """, RETURN_GENERATED_KEYS)) {
             insert.setLong(1, job);
             insert.setString(
                 2,
@@ -236,7 +238,7 @@ public final class SqliteCraftingHistoryStore {
         long id;
         try (PreparedStatement insert = db.prepareStatement(
             "INSERT INTO crafting_providers(job_id, ordinal, name) VALUES (?, ?, ?)",
-            Statement.RETURN_GENERATED_KEYS)) {
+            RETURN_GENERATED_KEYS)) {
             insert.setLong(1, job);
             insert.setInt(2, ordinal);
             insert.setString(3, provider.name());
@@ -524,7 +526,7 @@ public final class SqliteCraftingHistoryStore {
 
     public void maintain() throws IOException {
         database.write(db -> {
-            CraftingHistory policy = database.craftingPolicy();
+            ConfigSettings.CraftingHistory policy = database.craftingPolicy();
             WorldGridStore.normalizeCraftingPolicy(db, policy);
             List<Long> grids = new ArrayList<>();
             try (Statement query = db.createStatement();
@@ -543,7 +545,7 @@ public final class SqliteCraftingHistoryStore {
             query.setLong(1, grid);
             try (ResultSet rows = query.executeQuery()) {
                 rows.next();
-                expiry = now - TimeUnit.DAYS.toMillis(rows.getInt(1));
+                expiry = now - DAYS.toMillis(rows.getInt(1));
             }
         }
         List<Long> removed = new ArrayList<>();

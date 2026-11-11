@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
+
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -90,7 +91,7 @@ final class PaddedPng extends ImageWriterSpi implements AutoCloseable {
                 ImageOutputStream output = (ImageOutputStream) getOutput();
                 output.write(png, 0, png.length - 12);
                 // A valid, unknown ancillary chunk expands real encoded bytes without changing pixels.
-                byte[] kind = "npAD".getBytes(StandardCharsets.US_ASCII);
+                byte[] kind = "npAD".getBytes(US_ASCII);
                 byte[] block = new byte[65536];
                 int padding = paddingBytes.applyAsInt((BufferedImage) image.getRenderedImage());
                 output.writeInt(padding);

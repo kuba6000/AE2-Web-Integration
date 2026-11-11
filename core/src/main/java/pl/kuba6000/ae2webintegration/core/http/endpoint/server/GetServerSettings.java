@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.server;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -56,6 +56,6 @@ public final class GetServerSettings extends IAsyncRequest {
             }
             snapshot = Config.readServerSettings();
         }
-        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, snapshot));
+        respondDetached(HTTP_OK, new Response(ApiStatus.OK, snapshot));
     }
 }

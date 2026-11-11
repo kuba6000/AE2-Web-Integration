@@ -1,18 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry.Listing;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -31,7 +30,7 @@ class ItemIdentityRegistryTest {
         registry.remember(second, new Resource("shared", false));
         StableKey pending = registry.remember(first, new Resource("pending", false));
         WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(pending));
-        Listing listing = registry.beginListing(second);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(second);
         listing.remember(new Resource("pending", false));
 
         registry.release(first);
@@ -116,7 +115,7 @@ class ItemIdentityRegistryTest {
                 default -> throw new AssertionError("Unexpected identity operation " + method.getName());
             });
         assertNull(registry.remember(owner, variant));
-        Listing listing = registry.beginListing(owner);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(owner);
         assertNull(listing.remember(variant));
         listing.commit();
         assertEquals(2, attempts.get(), "Expected absence is not negatively cached");
@@ -145,7 +144,7 @@ class ItemIdentityRegistryTest {
         assertSame(
             failure,
             assertThrows(UnsupportedOperationException.class, () -> registry.remember(owner, resource)));
-        Listing listing = registry.beginListing(owner);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(owner);
         assertSame(failure, assertThrows(UnsupportedOperationException.class, () -> listing.remember(resource)));
         listing.commit();
     }
@@ -167,7 +166,7 @@ class ItemIdentityRegistryTest {
             }
         };
         assertNull(registry.remember(owner, unsupported));
-        Listing listing = registry.beginListing(owner);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(owner);
         assertNull(listing.remember(unsupported));
         listing.commit();
         StableKey supported = registry.remember(owner, new Resource("known", false));
@@ -201,7 +200,7 @@ class ItemIdentityRegistryTest {
         StableKey key = registry.remember(grid, resource);
         assertNotNull(key);
         assertEquals(0, normalizations.get());
-        Listing cpuListing = registry.beginListing(cpu);
+        ItemIdentityRegistry.Listing cpuListing = registry.beginListing(cpu);
         assertEquals(key, cpuListing.remember(resource));
         cpuListing.commit();
         ResourceDescriptor description = registry.describe(key);
@@ -335,7 +334,7 @@ class ItemIdentityRegistryTest {
         assertNotNull(gold);
         WeakReference<IAEKey> removed = new WeakReference<>(registry.resolve(gold));
         Resource nextPoll = new Resource("iron", false);
-        Listing listing = registry.beginListing(grid);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
         assertEquals(iron, listing.remember(nextPoll));
         StableKey listedIron = listing.remember(nextPoll);
         assertNotNull(listedIron);
@@ -364,7 +363,7 @@ class ItemIdentityRegistryTest {
     @Test
     void unreachableGridDoesNotKeepItsIdentitiesAlive() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        StableKey key = StableKey.create(sink -> sink.putBytes("iron".getBytes(StandardCharsets.UTF_8)));
+        StableKey key = StableKey.create(sink -> sink.putBytes("iron".getBytes(UTF_8)));
         WeakReference<IAEGrid> owner = rememberTemporaryGrid(registry);
         WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
         awaitCollected(owner, registry::cleanUp);
@@ -408,7 +407,7 @@ class ItemIdentityRegistryTest {
     void completedListingCannotBeReusedToRestoreAnObsoleteSnapshot() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
-        Listing listing = registry.beginListing(grid);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
         listing.remember(new Resource("iron", true));
         listing.commit();
         assertThrows(IllegalStateException.class, listing::commit);
@@ -423,7 +422,7 @@ class ItemIdentityRegistryTest {
 
     @SuppressWarnings("BusyWait") // GC has no completion callback; polling is bounded by the deadline.
     private static void awaitCollected(WeakReference<?> reference, Runnable maintenance) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (reference.get() != null && System.nanoTime() < deadline) {
             System.gc();
             maintenance.run();
@@ -464,7 +463,7 @@ class ItemIdentityRegistryTest {
         @Override
         public @NotNull StableKey web$getKey() {
             encodings++;
-            return StableKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes(encodedName.getBytes(UTF_8)));
         }
 
         @Override

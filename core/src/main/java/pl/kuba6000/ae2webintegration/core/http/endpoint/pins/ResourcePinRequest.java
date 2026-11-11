@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.pins;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -152,6 +153,6 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
                         pin.homeConfig(),
                         allowed ? recent(pin) : null));
         }
-        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result, snapshot.groups(), mappings));
+        respondDetached(HTTP_OK, new Response(ApiStatus.OK, result, snapshot.groups(), mappings));
     }
 }

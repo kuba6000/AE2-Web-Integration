@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -7,7 +10,6 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -61,8 +63,8 @@ public class CoreEngine {
      * cost of a request varies by orders of magnitude - {@code /items} on a large network against
      * {@code /gettracking} - so no count can bound the time.
      */
-    static final long DRAIN_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(5);
-    static final long PLAN_SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+    static final long DRAIN_BUDGET_NANOS = MILLISECONDS.toNanos(5);
+    static final long PLAN_SWEEP_INTERVAL_NANOS = MINUTES.toNanos(1);
     static final int PLAN_SWEEP_GRIDS_PER_TICK = 8;
 
     private static long nextPlanSweepNanos;

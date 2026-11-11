@@ -1,7 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.auth;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.security.GeneralSecurityException;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -14,11 +17,11 @@ public final class AuthSession {
 
     static final int MAX_REMEMBERED_PER_ACCOUNT = 20;
 
-    public static final long SESSION_MILLIS = TimeUnit.HOURS.toMillis(1);
-    public static final long REMEMBERED_MILLIS = TimeUnit.DAYS.toMillis(7);
-    public static final long SESSION_CAP_MILLIS = TimeUnit.HOURS.toMillis(12);
-    public static final long REMEMBERED_CAP_MILLIS = TimeUnit.DAYS.toMillis(60);
-    private static final long TOUCH_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
+    public static final long SESSION_MILLIS = HOURS.toMillis(1);
+    public static final long REMEMBERED_MILLIS = DAYS.toMillis(7);
+    public static final long SESSION_CAP_MILLIS = HOURS.toMillis(12);
+    public static final long REMEMBERED_CAP_MILLIS = DAYS.toMillis(60);
+    private static final long TOUCH_INTERVAL_MILLIS = MINUTES.toMillis(1);
     private final WebPrincipal principal;
     private final long absoluteExpiresAtMillis;
     private final boolean persistent;
@@ -103,7 +106,7 @@ public final class AuthSession {
     }
 
     boolean needsSave() {
-        return persistent && expiresAtMillis - savedExpiry >= TimeUnit.DAYS.toMillis(1);
+        return persistent && expiresAtMillis - savedExpiry >= DAYS.toMillis(1);
     }
 
     void saved(long expiry) {

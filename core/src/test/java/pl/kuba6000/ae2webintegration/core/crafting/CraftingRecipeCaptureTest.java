@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.crafting;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.Limit.DESCRIPTION_CHARACTERS;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -9,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -26,8 +28,8 @@ class CraftingRecipeCaptureTest {
         capture.addCandidate(input, water, 1000);
         capture.addCandidate(input, bucket, 1);
         capture.addOutput(recipe, product, 1, true);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.INITIAL, bucket, 1);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, water, 3000);
+        capture.addSummary(SummaryKind.INITIAL, bucket, 1);
+        capture.addSummary(SummaryKind.MISSING, water, 3000);
         CraftingRecipeCapture result = capture.build();
         assertEquals(
             4,
@@ -54,7 +56,7 @@ class CraftingRecipeCaptureTest {
                 .get(1)
                 .amount());
         assertEquals(
-            CraftingRecipeCapture.SummaryKind.INITIAL,
+            SummaryKind.INITIAL,
             result.summaries()
                 .get(0)
                 .kind());
@@ -106,7 +108,7 @@ class CraftingRecipeCaptureTest {
         assertTrue(
             capture.build()
                 .limits()
-                .contains(CraftingRecipeCapture.Limit.DESCRIPTION_CHARACTERS));
+                .contains(DESCRIPTION_CHARACTERS));
     }
 
     @Test
@@ -159,9 +161,7 @@ class CraftingRecipeCaptureTest {
         int second = capture.addResource(() -> resource("same"));
         assertNotEquals(first, second);
         assertThrows(IndexOutOfBoundsException.class, () -> capture.result(12, 1, false));
-        assertThrows(
-            IndexOutOfBoundsException.class,
-            () -> capture.addSummary(CraftingRecipeCapture.SummaryKind.EMITTED, 12, 1));
+        assertThrows(IndexOutOfBoundsException.class, () -> capture.addSummary(SummaryKind.EMITTED, 12, 1));
         int recipe = capture.addRecipe(1);
         assertThrows(IndexOutOfBoundsException.class, () -> capture.addOutput(recipe, 12, 1, true));
         int ingredient = capture.addIngredient(recipe, 1);

@@ -1,11 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.HOURS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.discord.Disco
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage.Severity;
 
 public class NotificationManager extends Thread {
 
@@ -36,15 +41,12 @@ public class NotificationManager extends Thread {
 
         if (!Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
-                new StatusMessage(
-                    "AE2 Web Integration",
-                    "Notification integration started!",
-                    StatusMessage.Severity.NONE));
+                new StatusMessage("AE2 Web Integration", "Notification integration started!", Severity.NONE));
         } else if (Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(new StatusMessage("AE2 Web Integration", """
                 Warning!
                 Notifications are enabled in the config, but the public mode is enabled!
-                Notifications will be disabled!""", StatusMessage.Severity.WARNING));
+                Notifications will be disabled!""", Severity.WARNING));
         }
 
         thread = new NotificationManager();
@@ -74,14 +76,14 @@ public class NotificationManager extends Thread {
 
     public static String formatDuration(long durationMillis) {
         if (durationMillis < FRACTIONAL_SECONDS_THRESHOLD_MILLIS) {
-            return durationMillis / (double) TimeUnit.SECONDS.toMillis(1) + "s";
+            return durationMillis / (double) SECONDS.toMillis(1) + "s";
         }
 
-        long totalSeconds = Math.round(durationMillis / (double) TimeUnit.SECONDS.toMillis(1));
-        long days = TimeUnit.SECONDS.toDays(totalSeconds);
-        long hours = TimeUnit.SECONDS.toHours(totalSeconds % TimeUnit.DAYS.toSeconds(1));
-        long minutes = TimeUnit.SECONDS.toMinutes(totalSeconds % TimeUnit.HOURS.toSeconds(1));
-        long seconds = totalSeconds % TimeUnit.MINUTES.toSeconds(1);
+        long totalSeconds = Math.round(durationMillis / (double) SECONDS.toMillis(1));
+        long days = SECONDS.toDays(totalSeconds);
+        long hours = SECONDS.toHours(totalSeconds % DAYS.toSeconds(1));
+        long minutes = SECONDS.toMinutes(totalSeconds % HOURS.toSeconds(1));
+        long seconds = totalSeconds % MINUTES.toSeconds(1);
 
         if (days > 0L) return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
         if (hours > 0L) return hours + "h " + minutes + "m " + seconds + "s";
@@ -90,8 +92,7 @@ public class NotificationManager extends Thread {
     }
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
-        long minimumDurationMillis = TimeUnit.SECONDS
-            .toMillis(Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
+        long minimumDurationMillis = SECONDS.toMillis(Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
         return durationMillis >= minimumDurationMillis
             && craftedAmount >= Config.INSTANCE.notifications.minimumCraftingAmount;
     }

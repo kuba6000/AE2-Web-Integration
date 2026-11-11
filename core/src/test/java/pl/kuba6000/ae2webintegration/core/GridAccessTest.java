@@ -1,12 +1,14 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -19,7 +21,7 @@ class GridAccessTest extends GridTestScope {
         GridAccess.View view = GridAccess.list(TestGridFixtures.ae(grid))
             .get(0);
         assertTrue(view.allows(TestGridFixtures.principal(42)));
-        assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
+        assertTrue(view.allows(TestGridFixtures.principal(OWNER_ID)));
         assertFalse(view.allows(TestGridFixtures.principal(99)));
         grid.withoutSources();
         assertFalse(view.allows(TestGridFixtures.principal(42)));
@@ -34,7 +36,7 @@ class GridAccessTest extends GridTestScope {
         TestGridFixtures.TestGrid booting = TestGridFixtures.grid(2)
             .booting();
         TestGridFixtures.TestGrid conflicted = TestGridFixtures.grid(3)
-            .controllerState(AEControllerState.CONTROLLER_CONFLICT);
+            .controllerState(CONTROLLER_CONFLICT);
         TestGridFixtures.TestGrid noController = TestGridFixtures.grid(4)
             .noController();
         TestGridFixtures.TestGrid noPathing = TestGridFixtures.grid(5)
@@ -51,25 +53,25 @@ class GridAccessTest extends GridTestScope {
     @Test
     void reverseBindingFollowsRebuiltGridAndRetiresWithLastController() {
         TestGridFixtures.TestGrid oldGrid = TestGridFixtures.grid(1);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(oldGrid);
+        StableKey key = GRID_IDENTITIES.getKey(oldGrid);
         assertNotNull(key);
         TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(1);
-        assertSame(replacement, CoreEngine.GRID_IDENTITIES.getGrid(key));
-        assertNull(CoreEngine.GRID_IDENTITIES.getKey(oldGrid));
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(replacement.position());
-        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
+        assertSame(replacement, GRID_IDENTITIES.getGrid(key));
+        assertNull(GRID_IDENTITIES.getKey(oldGrid));
+        GRID_IDENTITIES.controllerRemoved(replacement.position());
+        assertNull(GRID_IDENTITIES.getGrid(key));
     }
 
     @Test
     void retainedSettingsDoNotAuthorizeBeforeGridIsLoadedAgain() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
+        TestGridFixtures.setTracked(GRID_IDENTITIES, key, true);
         worlds.initialize(gridSave);
-        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
-        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(key));
+        assertTrue(TestGridFixtures.isTracked(GRID_IDENTITIES, key));
+        assertNull(GRID_IDENTITIES.getGrid(key));
+        GRID_IDENTITIES.controllerValidated(grid);
+        assertSame(grid, GRID_IDENTITIES.getGrid(key));
     }
 }

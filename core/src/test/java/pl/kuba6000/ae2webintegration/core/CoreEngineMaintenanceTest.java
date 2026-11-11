@@ -1,14 +1,16 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +35,7 @@ class CoreEngineMaintenanceTest {
         assertNotNull(entry);
         assertSame(plan, entry.plan);
 
-        long afterRetention = System.nanoTime() + TimeUnit.MINUTES.toNanos(16);
+        long afterRetention = System.nanoTime() + MINUTES.toNanos(16);
         for (int i = 0; i < 100; i++) {
             CoreEngine.runPlanMaintenance(afterRetention);
         }
@@ -48,7 +50,7 @@ class CoreEngineMaintenanceTest {
         CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
         int id = gridData.addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
-        long muchLater = System.nanoTime() + TimeUnit.DAYS.toNanos(1);
+        long muchLater = System.nanoTime() + DAYS.toNanos(1);
         for (int i = 0; i < 100; i++) {
             CoreEngine.runPlanMaintenance(muchLater);
         }
@@ -63,7 +65,7 @@ class CoreEngineMaintenanceTest {
         CoreEngine.onServerStopped();
         List<GridData> grids = new ArrayList<>();
         List<Integer> planIds = new ArrayList<>();
-        int planCount = CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK + 1;
+        int planCount = PLAN_SWEEP_GRIDS_PER_TICK + 1;
         for (int i = 0; i < planCount; i++) {
             GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_401L + i));
             int id = gridData.addJob(
@@ -76,7 +78,7 @@ class CoreEngineMaintenanceTest {
             planIds.add(id);
         }
 
-        long afterRetention = System.nanoTime() + TimeUnit.MINUTES.toNanos(16);
+        long afterRetention = System.nanoTime() + MINUTES.toNanos(16);
         CoreEngine.runPlanMaintenance(afterRetention);
 
         int remaining = 0;

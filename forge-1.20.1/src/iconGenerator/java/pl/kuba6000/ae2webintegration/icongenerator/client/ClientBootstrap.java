@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.minecraft.client.Minecraft;
@@ -18,6 +19,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -28,7 +30,7 @@ import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 @Mod.EventBusSubscriber(modid = IconGeneratorMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientBootstrap {
 
-    private static final long PROGRESS_MESSAGE_INTERVAL = TimeUnit.SECONDS.toNanos(5);
+    private static final long PROGRESS_MESSAGE_INTERVAL = SECONDS.toNanos(5);
     private static final AtomicLong RESOURCE_GENERATION = new AtomicLong();
 
     private record AnimationRequest(ClientLevel world, long resourceGeneration, boolean allowPbo) {}
@@ -240,7 +242,7 @@ public final class ClientBootstrap {
             .setScreen(null);
     }
 
-    @Mod.EventBusSubscriber(modid = IconGeneratorMod.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
+    @Mod.EventBusSubscriber(modid = IconGeneratorMod.MOD_ID, value = Dist.CLIENT, bus = Bus.MOD)
     public static final class ReloadEvents {
 
         private ReloadEvents() {}

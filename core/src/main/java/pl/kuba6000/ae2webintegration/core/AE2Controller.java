@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -12,7 +14,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -94,7 +95,7 @@ public class AE2Controller {
     public static PlayerIdentity AEControllerProfile;
 
     static {
-        AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes(StandardCharsets.UTF_8));
+        AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes(UTF_8));
         AEControllerProfile = new PlayerIdentity(AEControllerUUID, "AE2CONTROLLER");
     }
 
@@ -327,7 +328,7 @@ public class AE2Controller {
             HTTP_CORE_THREADS,
             HTTP_MAX_THREADS,
             HTTP_KEEP_ALIVE_SECONDS,
-            TimeUnit.SECONDS,
+            SECONDS,
             new ArrayBlockingQueue<>(HTTP_QUEUE_CAPACITY));
     }
 
@@ -337,11 +338,11 @@ public class AE2Controller {
         }
         executor.shutdown();
         try {
-            if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+            if (!executor.awaitTermination(1, SECONDS)) {
                 executor.shutdownNow();
                 // The final bounded wait is best-effort; shutdownNow has already requested interruption.
                 // noinspection ResultOfMethodCallIgnored
-                executor.awaitTermination(1, TimeUnit.SECONDS);
+                executor.awaitTermination(1, SECONDS);
             }
         } catch (InterruptedException e) {
             executor.shutdownNow();
@@ -387,7 +388,7 @@ public class AE2Controller {
             throw new ServerTaskUnavailableException(unavailableStatus);
         }
         try {
-            return task.result.get(AUTH_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return task.result.get(AUTH_LOOKUP_TIMEOUT_SECONDS, SECONDS);
         } catch (TimeoutException e) {
             requests.remove(task);
             task.failIfPending(ApiStatus.SERVER_BUSY);
@@ -413,7 +414,7 @@ public class AE2Controller {
             return;
         }
         try {
-            request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, SECONDS);
         } catch (TimeoutException e) {
             requests.remove(request);
             request.failIfPending(ApiStatus.TIMEOUT);

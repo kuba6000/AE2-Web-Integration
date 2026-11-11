@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
 import java.sql.Statement;
@@ -13,18 +14,11 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
-import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Direction;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeGroup;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeGroupSelection;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Move;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Pin;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -33,7 +27,7 @@ class ResourcePinGroupsTest extends GridTestScope {
     @Test
     void homeGroupsBelongToTheAccountAndSurviveReopening() throws Exception {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
-        HomeGroup group = store.createGroup(WebPrincipal.admin(), "  Production  ");
+        ResourcePinStore.HomeGroup group = store.createGroup(WebPrincipal.admin(), "  Production  ");
         assertEquals("Production", group.name());
         assertEquals(0, group.ordinal());
         assertEquals(
@@ -56,7 +50,7 @@ class ResourcePinGroupsTest extends GridTestScope {
     void homeGroupLimitIsPerOwnerAndDeletingAGroupFreesItsSlot() throws Exception {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();
-        HomeGroup first = store.createGroup(owner, "Group 0");
+        ResourcePinStore.HomeGroup first = store.createGroup(owner, "Group 0");
         for (int index = 1; index < 64; index++) store.createGroup(owner, "Group " + index);
         assertThrows(IllegalArgumentException.class, () -> store.createGroup(owner, "One too many"));
         assertEquals(
@@ -92,9 +86,9 @@ class ResourcePinGroupsTest extends GridTestScope {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();
         WebPrincipal other = TestGridFixtures.principal(4);
-        HomeGroup first = store.createGroup(owner, "Production");
-        HomeGroup second = store.createGroup(owner, "Storage");
-        HomeGroup third = store.createGroup(owner, "Other");
+        ResourcePinStore.HomeGroup first = store.createGroup(owner, "Production");
+        ResourcePinStore.HomeGroup second = store.createGroup(owner, "Storage");
+        ResourcePinStore.HomeGroup third = store.createGroup(owner, "Other");
         store.createGroup(other, "Production");
         assertThrows(IllegalArgumentException.class, () -> store.createGroup(owner, " Production "));
         assertThrows(IllegalArgumentException.class, () -> store.createGroup(owner, "   "));
@@ -125,7 +119,7 @@ class ResourcePinGroupsTest extends GridTestScope {
             store.snapshot(owner)
                 .groups()
                 .stream()
-                .map(HomeGroup::ordinal)
+                .map(ResourcePinStore.HomeGroup::ordinal)
                 .collect(Collectors.toList()));
     }
 
@@ -134,16 +128,16 @@ class ResourcePinGroupsTest extends GridTestScope {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();
         StableKey firstGrid = TestGridFixtures
-            .resolvedKey(new TestGrid(88701, false, AEControllerState.CONTROLLER_ONLINE));
+            .resolvedKey(new TestGridFixtures.TestGrid(88701, false, CONTROLLER_ONLINE));
         StableKey secondGrid = TestGridFixtures
-            .resolvedKey(new TestGrid(88702, false, AEControllerState.CONTROLLER_ONLINE));
-        Pin first = addPin(store, owner, firstGrid, 91);
-        Pin second = addPin(store, owner, secondGrid, 92);
-        Pin third = addPin(store, owner, firstGrid, 93);
-        Pin fourth = addPin(store, owner, secondGrid, 94);
-        HomeGroup production = store.createGroup(owner, "Production");
-        HomeGroup storage = store.createGroup(owner, "Storage");
-        HomeConfig configuration = new HomeConfig(
+            .resolvedKey(new TestGridFixtures.TestGrid(88702, false, CONTROLLER_ONLINE));
+        ResourcePinStore.Pin first = addPin(store, owner, firstGrid, 91);
+        ResourcePinStore.Pin second = addPin(store, owner, secondGrid, 92);
+        ResourcePinStore.Pin third = addPin(store, owner, firstGrid, 93);
+        ResourcePinStore.Pin fourth = addPin(store, owner, secondGrid, 94);
+        ResourcePinStore.HomeGroup production = store.createGroup(owner, "Production");
+        ResourcePinStore.HomeGroup storage = store.createGroup(owner, "Storage");
+        ResourcePinStore.HomeConfig configuration = new ResourcePinStore.HomeConfig(
             false,
             true,
             true,
@@ -162,18 +156,46 @@ class ResourcePinGroupsTest extends GridTestScope {
                 null,
                 null,
                 configuration,
-                new HomeGroupSelection(production.groupKey())));
+                new ResourcePinStore.HomeGroupSelection(production.groupKey())));
         assertTrue(
-            store.update(owner, third.pinKey(), null, null, null, null, new HomeGroupSelection(production.groupKey())));
+            store.update(
+                owner,
+                third.pinKey(),
+                null,
+                null,
+                null,
+                null,
+                new ResourcePinStore.HomeGroupSelection(production.groupKey())));
         assertTrue(
-            store.update(owner, second.pinKey(), null, null, null, null, new HomeGroupSelection(storage.groupKey())));
+            store.update(
+                owner,
+                second.pinKey(),
+                null,
+                null,
+                null,
+                null,
+                new ResourcePinStore.HomeGroupSelection(storage.groupKey())));
         assertEquals(Arrays.asList(first.pinKey(), third.pinKey()), pinKeys(store, owner, production.groupKey()));
         assertEquals(Collections.singletonList(fourth.pinKey()), pinKeys(store, owner, null));
         assertTrue(
-            store.update(owner, third.pinKey(), null, null, new Move(Placement.HOME, Direction.EARLIER), null, null));
+            store.update(
+                owner,
+                third.pinKey(),
+                null,
+                null,
+                new ResourcePinStore.Move(Placement.HOME, Direction.EARLIER),
+                null,
+                null));
         assertEquals(Arrays.asList(third.pinKey(), first.pinKey()), pinKeys(store, owner, production.groupKey()));
         assertTrue(
-            store.update(owner, third.pinKey(), null, null, null, null, new HomeGroupSelection(storage.groupKey())));
+            store.update(
+                owner,
+                third.pinKey(),
+                null,
+                null,
+                null,
+                null,
+                new ResourcePinStore.HomeGroupSelection(storage.groupKey())));
         assertEquals(Collections.singletonList(first.pinKey()), pinKeys(store, owner, production.groupKey()));
         assertEquals(Arrays.asList(second.pinKey(), third.pinKey()), pinKeys(store, owner, storage.groupKey()));
         assertEquals(1, pin(store, owner, third.pinKey()).terminalOrder());
@@ -190,16 +212,47 @@ class ResourcePinGroupsTest extends GridTestScope {
     void deletingAGroupAppendsItsPinsToUngroupedWithoutDeletingTheirConfiguration() throws Exception {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();
-        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88703, false, AEControllerState.CONTROLLER_ONLINE));
-        Pin first = addPin(store, owner, grid, 95);
-        Pin second = addPin(store, owner, grid, 96);
-        Pin ungrouped = addPin(store, owner, grid, 97);
-        HomeGroup group = store.createGroup(owner, "Production");
-        HomeGroup empty = store.createGroup(owner, "Empty");
-        HomeConfig configuration = new HomeConfig(true, false, false, false, true, false, true, 3600000, true, 900000);
-        store.update(owner, first.pinKey(), null, null, null, configuration, new HomeGroupSelection(group.groupKey()));
-        store.update(owner, second.pinKey(), null, null, null, null, new HomeGroupSelection(group.groupKey()));
-        store.update(owner, second.pinKey(), null, null, new Move(Placement.HOME, Direction.EARLIER), null, null);
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88703, false, CONTROLLER_ONLINE));
+        ResourcePinStore.Pin first = addPin(store, owner, grid, 95);
+        ResourcePinStore.Pin second = addPin(store, owner, grid, 96);
+        ResourcePinStore.Pin ungrouped = addPin(store, owner, grid, 97);
+        ResourcePinStore.HomeGroup group = store.createGroup(owner, "Production");
+        ResourcePinStore.HomeGroup empty = store.createGroup(owner, "Empty");
+        ResourcePinStore.HomeConfig configuration = new ResourcePinStore.HomeConfig(
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true,
+            3600000,
+            true,
+            900000);
+        store.update(
+            owner,
+            first.pinKey(),
+            null,
+            null,
+            null,
+            configuration,
+            new ResourcePinStore.HomeGroupSelection(group.groupKey()));
+        store.update(
+            owner,
+            second.pinKey(),
+            null,
+            null,
+            null,
+            null,
+            new ResourcePinStore.HomeGroupSelection(group.groupKey()));
+        store.update(
+            owner,
+            second.pinKey(),
+            null,
+            null,
+            new ResourcePinStore.Move(Placement.HOME, Direction.EARLIER),
+            null,
+            null);
         store.removeGroup(owner, group.groupKey());
         assertEquals(Arrays.asList(ungrouped.pinKey(), second.pinKey(), first.pinKey()), pinKeys(store, owner, null));
         assertEquals(configuration, pin(store, owner, first.pinKey()).homeConfig());
@@ -224,19 +277,49 @@ class ResourcePinGroupsTest extends GridTestScope {
         ResourcePinStore store = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         WebPrincipal owner = WebPrincipal.admin();
         WebPrincipal other = TestGridFixtures.principal(4);
-        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88704, false, AEControllerState.CONTROLLER_ONLINE));
-        Pin first = addPin(store, owner, grid, 98);
-        Pin second = addPin(store, owner, grid, 99);
-        HomeGroup group = store.createGroup(owner, "Production");
-        HomeGroup foreign = store.createGroup(other, "Private");
-        store.update(owner, first.pinKey(), null, null, null, null, new HomeGroupSelection(group.groupKey()));
-        store.update(owner, second.pinKey(), null, null, null, null, new HomeGroupSelection(group.groupKey()));
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88704, false, CONTROLLER_ONLINE));
+        ResourcePinStore.Pin first = addPin(store, owner, grid, 98);
+        ResourcePinStore.Pin second = addPin(store, owner, grid, 99);
+        ResourcePinStore.HomeGroup group = store.createGroup(owner, "Production");
+        ResourcePinStore.HomeGroup foreign = store.createGroup(other, "Private");
+        store.update(
+            owner,
+            first.pinKey(),
+            null,
+            null,
+            null,
+            null,
+            new ResourcePinStore.HomeGroupSelection(group.groupKey()));
+        store.update(
+            owner,
+            second.pinKey(),
+            null,
+            null,
+            null,
+            null,
+            new ResourcePinStore.HomeGroupSelection(group.groupKey()));
         ResourcePinStore.Snapshot before = store.snapshot(owner);
-        HomeConfig altered = new HomeConfig(false, false, false, false, false, false, false, 60000, false, 60000);
+        ResourcePinStore.HomeConfig altered = new ResourcePinStore.HomeConfig(
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            60000,
+            false,
+            60000);
         assertThrows(
             IllegalArgumentException.class,
-            () -> store
-                .update(owner, first.pinKey(), false, null, null, altered, new HomeGroupSelection(foreign.groupKey())));
+            () -> store.update(
+                owner,
+                first.pinKey(),
+                false,
+                null,
+                null,
+                altered,
+                new ResourcePinStore.HomeGroupSelection(foreign.groupKey())));
         assertThrows(
             IllegalArgumentException.class,
             () -> store.update(
@@ -246,12 +329,26 @@ class ResourcePinGroupsTest extends GridTestScope {
                 null,
                 null,
                 altered,
-                new HomeGroupSelection(TestGridFixtures.key(100))));
+                new ResourcePinStore.HomeGroupSelection(TestGridFixtures.key(100))));
         assertThrows(
             IllegalArgumentException.class,
-            () -> store.update(owner, first.pinKey(), null, false, null, altered, new HomeGroupSelection(null)));
+            () -> store.update(
+                owner,
+                first.pinKey(),
+                null,
+                false,
+                null,
+                altered,
+                new ResourcePinStore.HomeGroupSelection(null)));
         assertFalse(
-            store.update(other, first.pinKey(), null, null, null, null, new HomeGroupSelection(foreign.groupKey())));
+            store.update(
+                other,
+                first.pinKey(),
+                null,
+                null,
+                null,
+                null,
+                new ResourcePinStore.HomeGroupSelection(foreign.groupKey())));
         assertEquals(before, store.snapshot(owner));
         assertTrue(store.update(owner, first.pinKey(), null, false, null, null, null));
         assertNull(pin(store, owner, first.pinKey()).homeGroupKey());
@@ -271,10 +368,17 @@ class ResourcePinGroupsTest extends GridTestScope {
         WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
         ResourcePinStore store = new ResourcePinStore(database);
         WebPrincipal owner = WebPrincipal.admin();
-        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88705, false, AEControllerState.CONTROLLER_ONLINE));
-        Pin pin = addPin(store, owner, grid, 101);
-        HomeGroup group = store.createGroup(owner, "Production");
-        store.update(owner, pin.pinKey(), null, null, null, null, new HomeGroupSelection(group.groupKey()));
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88705, false, CONTROLLER_ONLINE));
+        ResourcePinStore.Pin pin = addPin(store, owner, grid, 101);
+        ResourcePinStore.HomeGroup group = store.createGroup(owner, "Production");
+        store.update(
+            owner,
+            pin.pinKey(),
+            null,
+            null,
+            null,
+            null,
+            new ResourcePinStore.HomeGroupSelection(group.groupKey()));
         ResourcePinStore.Snapshot before = store.snapshot(owner);
         database.write(db -> {
             try (Statement sql = db.createStatement()) {
@@ -299,11 +403,12 @@ class ResourcePinGroupsTest extends GridTestScope {
         return store.snapshot(owner)
             .groups()
             .stream()
-            .map(HomeGroup::groupKey)
+            .map(ResourcePinStore.HomeGroup::groupKey)
             .collect(Collectors.toList());
     }
 
-    private static Pin addPin(ResourcePinStore store, WebPrincipal owner, StableKey grid, int itemId) throws Exception {
+    private static ResourcePinStore.Pin addPin(ResourcePinStore store, WebPrincipal owner, StableKey grid, int itemId)
+        throws Exception {
         StableKey item = TestGridFixtures.key(itemId);
         ResourceDescriptor descriptor = new ResourceDescriptor(
             "test",
@@ -325,7 +430,8 @@ class ResourcePinGroupsTest extends GridTestScope {
             .get();
     }
 
-    private static Pin pin(ResourcePinStore store, WebPrincipal owner, StableKey key) throws Exception {
+    private static ResourcePinStore.Pin pin(ResourcePinStore store, WebPrincipal owner, StableKey key)
+        throws Exception {
         return store.list(owner)
             .stream()
             .filter(
@@ -340,8 +446,8 @@ class ResourcePinGroupsTest extends GridTestScope {
         return store.list(owner)
             .stream()
             .filter(pin -> pin.homeOrder() != null && Objects.equals(group, pin.homeGroupKey()))
-            .sorted(Comparator.comparingInt(Pin::homeOrder))
-            .map(Pin::pinKey)
+            .sorted(Comparator.comparingInt(ResourcePinStore.Pin::homeOrder))
+            .map(ResourcePinStore.Pin::pinKey)
             .collect(Collectors.toList());
     }
 }

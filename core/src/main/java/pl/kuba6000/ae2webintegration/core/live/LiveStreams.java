@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.live;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -11,7 +13,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
@@ -49,7 +50,7 @@ public final class LiveStreams implements AutoCloseable {
         4,
         4,
         0,
-        TimeUnit.MILLISECONDS,
+        MILLISECONDS,
         new ArrayBlockingQueue<>(64),
         task -> daemon(task, "AE2Web-LiveWriter"));
     private final ScheduledExecutorService timer = Executors
@@ -60,7 +61,7 @@ public final class LiveStreams implements AutoCloseable {
         this.hub = hub;
         this.icons = icons;
         this.identities = identities;
-        timer.scheduleWithFixedDelay(this::pump, MAINTENANCE_MILLIS, MAINTENANCE_MILLIS, TimeUnit.MILLISECONDS);
+        timer.scheduleWithFixedDelay(this::pump, MAINTENANCE_MILLIS, MAINTENANCE_MILLIS, MILLISECONDS);
     }
 
     private static Thread daemon(Runnable task, String name) {
@@ -70,7 +71,7 @@ public final class LiveStreams implements AutoCloseable {
     }
 
     /** Claims a single-use reservation created together with the initial snapshot. */
-    public void open(@NotNull RequestContext context, @NotNull LiveTopic.Key key, @NotNull String token,
+    public void open(@NotNull AE2Controller.RequestContext context, @NotNull LiveTopic.Key key, @NotNull String token,
         boolean withIcons) throws IOException {
         context.getExchange()
             .getRequestBody()
@@ -225,7 +226,7 @@ public final class LiveStreams implements AutoCloseable {
     }
 
     private static byte[] encode(String event, Object body) {
-        return ("event: " + event + "\ndata: " + JSON.toJson(body) + "\n\n").getBytes(StandardCharsets.UTF_8);
+        return ("event: " + event + "\ndata: " + JSON.toJson(body) + "\n\n").getBytes(UTF_8);
     }
 
     private static void sendControl(Session session, String event) throws IOException {
@@ -265,7 +266,7 @@ public final class LiveStreams implements AutoCloseable {
 
     private static final class Session {
 
-        private final RequestContext context;
+        private final AE2Controller.RequestContext context;
         private final LiveSubscription subscription;
         private final @Nullable IconPack pack;
         private volatile boolean ready;
@@ -317,7 +318,7 @@ public final class LiveStreams implements AutoCloseable {
             return true;
         }
 
-        private Session(RequestContext context, LiveSubscription subscription, @Nullable IconPack pack) {
+        private Session(AE2Controller.RequestContext context, LiveSubscription subscription, @Nullable IconPack pack) {
             this.context = context;
             this.subscription = subscription;
             this.pack = pack;

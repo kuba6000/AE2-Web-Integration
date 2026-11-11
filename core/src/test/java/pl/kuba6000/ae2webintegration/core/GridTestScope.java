@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -23,7 +25,7 @@ abstract class GridTestScope {
 
     @AfterEach
     void clearGridSave() {
-        CoreEngine.GRID_IDENTITIES.clear();
+        GRID_IDENTITIES.clear();
         try {
             worlds.close();
         } catch (IOException failure) {

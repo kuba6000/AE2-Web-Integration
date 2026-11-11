@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.server;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -99,7 +100,7 @@ public final class PostServerSettings extends IAsyncRequest {
                 return;
             }
             CoreEngine.applyServerConfig();
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, saved));
+            respond(HTTP_OK, new Response(ApiStatus.OK, saved));
         }
     }
 }

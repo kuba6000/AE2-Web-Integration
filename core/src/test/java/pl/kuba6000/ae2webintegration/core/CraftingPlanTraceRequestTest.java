@@ -16,6 +16,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
 import pl.kuba6000.ae2webintegration.core.crafting.TraceFixtures;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlanTree;
@@ -40,9 +41,9 @@ class CraftingPlanTraceRequestTest extends GridTestScope {
             int resource = trace.addResource(() -> TraceFixtures.descriptor("item"));
             int request = trace.addRequest(resource, 5);
             trace.root(request, false);
-            trace.addContribution(request, CraftingTraceCapture.ContributionKind.STORAGE, 1);
+            trace.addContribution(request, ContributionKind.STORAGE, 1);
             trace.addTask(1);
-            trace.addContribution(request, CraftingTraceCapture.ContributionKind.STORAGE, 1);
+            trace.addContribution(request, ContributionKind.STORAGE, 1);
             return trace.build();
         }, new AtomicInteger());
         JsonObject data = read(grid, plan, "");

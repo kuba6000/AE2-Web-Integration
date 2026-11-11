@@ -1,11 +1,11 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -19,7 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.JDBC;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldSchemaMigrationTest {
@@ -32,7 +32,7 @@ class WorldSchemaMigrationTest {
         Path file = directory.resolve("released.sqlite");
         createReleasedDatabase(file, false);
         for (int opening = 0; opening < 2; opening++) {
-            try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
                 database.open();
                 database.read(db -> {
                     assertScalar(db, "SELECT version FROM world_schema", "10");
@@ -60,7 +60,7 @@ class WorldSchemaMigrationTest {
     void failedUpgradeRollsBackNewObjectsAndVersionBeforeRetry() throws Exception {
         Path file = directory.resolve("failed.sqlite");
         createReleasedDatabase(file, true);
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, database::open);
             assertThrows(IOException.class, database::open);
         }
@@ -83,7 +83,7 @@ class WorldSchemaMigrationTest {
             sql.execute("ALTER TABLE resource_pins ADD COLUMN extension TEXT");
             sql.execute("UPDATE resource_pins SET extension = 'Preserved extension'");
         }
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             database.open();
             database.read(db -> {
                 assertScalar(db, "SELECT version FROM world_schema", "10");
@@ -100,14 +100,14 @@ class WorldSchemaMigrationTest {
         Path file = directory.resolve("missing-table.sqlite");
         if (upgrade) createReleasedDatabase(file, false);
         else {
-            try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
                 database.open();
             }
         }
         try (Connection db = connect(file); Statement sql = db.createStatement()) {
             sql.execute("DROP TABLE crafting_provider_intervals");
         }
-        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+        try (WorldDatabase database = new WorldDatabase(file, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, database::open);
         }
         try (Connection db = connect(file)) {
@@ -132,7 +132,7 @@ class WorldSchemaMigrationTest {
             byte[] buffer = new byte[4096];
             int count;
             while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
-            fixture = new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+            fixture = new String(bytes.toByteArray(), UTF_8);
         }
         if (rejectNewVersion) fixture = fixture
             .replace("CHECK (typeof(version) = 'integer')", "CHECK (typeof(version) = 'integer' AND version = 9)");

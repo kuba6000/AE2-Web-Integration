@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle.IMAGE_CARD;
 
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -31,7 +32,7 @@ class ConfigFileTest {
         Config.init(root.toFile());
         assertTrue(Config.INSTANCE.telemetry.enabled);
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         document.set("general.public_mode", false);
         document.set("notifications.minimum_crafting_amount", 123);
         document.set("discord.webhook", "https://example.invalid/pending-secret");
@@ -40,7 +41,7 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         ConfigSettings before = Config.INSTANCE;
 
         Config.setTelemetryEnabled(false);
@@ -50,7 +51,7 @@ class ConfigFileTest {
         assertTrue(Config.INSTANCE.general.publicMode, "an explicit telemetry command must not reload unrelated edits");
         assertEquals(before.notifications.minimumCraftingAmount, Config.INSTANCE.notifications.minimumCraftingAmount);
         assertEquals(before.discord.webhook, Config.INSTANCE.discord.webhook);
-        CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals("preserved", saved.get("future.value"));
         assertEquals(" custom comment", saved.getComment("future.value"));
         assertEquals(123, (Integer) saved.get("notifications.minimum_crafting_amount"));
@@ -66,7 +67,7 @@ class ConfigFileTest {
     void failedTelemetryWriteKeepsThePublishedSettingAndExistingFile() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        byte[] malformed = "[telemetry\n".getBytes(StandardCharsets.UTF_8);
+        byte[] malformed = "[telemetry\n".getBytes(UTF_8);
         Files.write(file, malformed);
         ConfigSettings before = Config.INSTANCE;
         assertThrows(RuntimeException.class, () -> Config.setTelemetryEnabled(false));
@@ -79,20 +80,19 @@ class ConfigFileTest {
     void discordCraftingStylesRoundTripThroughToml() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals("IMAGE_CARD", document.get("discord.crafting_style"));
         for (String style : new String[] { "SIMPLE", "SMALL_ICON", "IMAGE_CARD" }) {
             document.set("discord.crafting_style", style);
             Files.write(
                 file,
                 new TomlWriter().writeToString(document)
-                    .getBytes(StandardCharsets.UTF_8));
+                    .getBytes(UTF_8));
             Config.reload();
             assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
             Config.init(root.toFile());
             assertEquals(style, Config.INSTANCE.discord.craftingStyle.name());
-            CommentedConfig restored = new TomlParser()
-                .parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
             assertEquals(style, restored.get("discord.crafting_style"));
         }
     }
@@ -102,7 +102,7 @@ class ConfigFileTest {
     void invalidCraftingStyleUsesDefaultWithoutResettingOtherSettings(boolean reload) throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         document.set("general.password", "keep-this-password");
         document.set("discord.role_id", "123456789");
         for (Object invalid : new Object[] { "INVALID", "", 1, true }) {
@@ -110,20 +110,19 @@ class ConfigFileTest {
             Files.write(
                 file,
                 new TomlWriter().writeToString(document)
-                    .getBytes(StandardCharsets.UTF_8));
+                    .getBytes(UTF_8));
             Config.reload();
             document.set("discord.crafting_style", invalid);
             Files.write(
                 file,
                 new TomlWriter().writeToString(document)
-                    .getBytes(StandardCharsets.UTF_8));
+                    .getBytes(UTF_8));
             if (reload) Config.reload();
             else Config.init(root.toFile());
-            assertEquals(ConfigSettings.Discord.CraftingStyle.IMAGE_CARD, Config.INSTANCE.discord.craftingStyle);
+            assertEquals(IMAGE_CARD, Config.INSTANCE.discord.craftingStyle);
             assertEquals("keep-this-password", Config.INSTANCE.general.password);
             assertEquals("123456789", Config.INSTANCE.discord.roleId);
-            CommentedConfig restored = new TomlParser()
-                .parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
             assertEquals("IMAGE_CARD", restored.get("discord.crafting_style"));
             assertEquals("keep-this-password", restored.get("general.password"));
             assertEquals("123456789", restored.get("discord.role_id"));
@@ -156,7 +155,7 @@ class ConfigFileTest {
     void craftingHistoryBoundsRoundTripAndRejectInvalidCaps() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(7, (Integer) document.get("crafting_history.history_retention_days.default"));
         assertEquals(1000, (Integer) document.get("crafting_history.history_max_jobs_per_grid"));
         document.set("crafting_history.history_retention_days.min", 2);
@@ -166,10 +165,10 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         Config.init(root.toFile());
-        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(4, (Integer) restored.get("crafting_history.history_retention_days.default"));
         assertEquals(20, (Integer) restored.get("crafting_history.history_max_jobs_per_grid"));
         ConfigSettings active = Config.INSTANCE;
@@ -177,7 +176,7 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
         assertSame(active, Config.INSTANCE);
     }
@@ -201,7 +200,7 @@ class ConfigFileTest {
     void dataPolicyRangesRoundTripAndRejectInvalidDefaultWithoutReplacingActiveConfig() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(300, (Integer) document.get("resource_history.stock_sample_interval_seconds.default"));
         assertEquals(60, (Integer) document.get("resource_history.flow_flush_interval_seconds.default"));
         assertEquals(7, (Integer) document.get("resource_history.history_retention_days.default"));
@@ -213,17 +212,17 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         Config.init(root.toFile());
-        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(120, (Integer) restored.get("resource_history.stock_sample_interval_seconds.default"));
         ConfigSettings active = Config.INSTANCE;
         document.set("resource_history.stock_sample_interval_seconds.default", 5);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
         assertSame(active, Config.INSTANCE);
     }
@@ -233,13 +232,13 @@ class ConfigFileTest {
         Config.init(root.toFile());
         assertEquals(60, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         document.set("resource_history.flow_flush_interval_seconds.default", 5);
         document.set("resource_history.flow_flush_interval_seconds.min", 1);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         Config.init(root.toFile());
         assertEquals(5, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
@@ -247,7 +246,7 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         assertEquals(60, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
     }
@@ -256,7 +255,7 @@ class ConfigFileTest {
     void flowHistoryIntervalIsConfigurableAndRejectsZero() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertTrue(document.contains("resource_history.flow_flush_interval_seconds.default"));
         document.set("resource_history.flow_flush_interval_seconds.default", 11);
         document.set("resource_history.flow_flush_interval_seconds.min", 1);
@@ -264,14 +263,14 @@ class ConfigFileTest {
         Files.write(
             file,
             writer.writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         assertEquals(11, Config.INSTANCE.resourceHistory.flowFlushIntervalSeconds.defaultValue);
         document.set("resource_history.flow_flush_interval_seconds.default", 0);
         Files.write(
             file,
             writer.writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
     }
 
@@ -279,7 +278,7 @@ class ConfigFileTest {
     void historyRetentionAndRowLimitsArePersistedAndValidated() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(7, (Integer) document.get("resource_history.history_retention_days.default"));
         assertTrue(document.contains("resource_history.history_max_rows_per_grid"));
         for (String key : new String[] { "history_retention_days.default", "history_max_rows_per_grid" }) {
@@ -288,7 +287,7 @@ class ConfigFileTest {
             Files.write(
                 file,
                 new TomlWriter().writeToString(document)
-                    .getBytes(StandardCharsets.UTF_8));
+                    .getBytes(UTF_8));
             assertThrows(IllegalArgumentException.class, Config::reload);
             document.set("resource_history." + key, original);
         }
@@ -297,10 +296,10 @@ class ConfigFileTest {
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
         Config.init(root.toFile());
-        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertEquals(3, (Integer) reloaded.get("resource_history.history_retention_days.default"));
         assertEquals(5000, (Integer) reloaded.get("resource_history.history_max_rows_per_grid"));
     }
@@ -309,14 +308,14 @@ class ConfigFileTest {
     void resourceTrackingLimitsArePersistedAndInvalidIntervalsAreRejected() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        String contents = new String(Files.readAllBytes(file), UTF_8);
         CommentedConfig document = new TomlParser().parse(contents);
         assertTrue(document.contains("resource_tracking.active_interval_millis"));
         assertTrue(document.contains("resource_history.history_max_rows_per_grid"));
         Files.write(
             file,
             contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
     }
 
@@ -324,16 +323,16 @@ class ConfigFileTest {
     void obsoleteTrackingTableIsRemovedWithoutChangingUnrelatedUnknownConfig() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
-        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         document.set("tracking.track_machine_crafting", true);
         document.set("custom_extension.enabled", true);
         document.setComment("custom_extension.enabled", "Keep this extension option");
         Files.write(
             file,
             new TomlWriter().writeToString(document)
-                .getBytes(StandardCharsets.UTF_8));
+                .getBytes(UTF_8));
         Config.reload();
-        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertFalse(reloaded.contains("tracking"));
         assertEquals(Boolean.TRUE, reloaded.get("custom_extension.enabled"));
         assertEquals("Keep this extension option", reloaded.getComment("custom_extension.enabled"));
@@ -346,7 +345,7 @@ class ConfigFileTest {
         assertTrue(Files.isRegularFile(file));
         String password = Config.INSTANCE.general.password;
         assertFalse(password.isEmpty());
-        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        String contents = new String(Files.readAllBytes(file), UTF_8);
         CommentedConfig document = new TomlParser().parse(contents);
         assertNotNull(document.getComment("general.port"));
         assertNotNull(document.getComment("discord.webhook"));
@@ -390,8 +389,8 @@ class ConfigFileTest {
         assertEquals("123456789", Config.INSTANCE.discord.roleId);
         assertEquals(64, Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
         assertEquals(128, Config.INSTANCE.notifications.minimumCraftingAmount);
-        CommentedConfig document = new TomlParser().parse(
-            new String(Files.readAllBytes(root.resolve("ae2webintegration/config.toml")), StandardCharsets.UTF_8));
+        CommentedConfig document = new TomlParser()
+            .parse(new String(Files.readAllBytes(root.resolve("ae2webintegration/config.toml")), UTF_8));
         assertFalse(document.contains("tracking"));
         assertFalse(new GridSettingsData().isTrackMachineCrafting());
     }
@@ -401,24 +400,24 @@ class ConfigFileTest {
         Config.init(root.toFile());
         Path file = Config.getConfigFile("config.toml")
             .toPath();
-        Files.write(file, "[general]\nport = 25433\npassword = 'edited-password'\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(file, "[general]\nport = 25433\npassword = 'edited-password'\n".getBytes(UTF_8));
         Config.reload();
         assertEquals(25433, Config.INSTANCE.general.port);
         assertEquals("edited-password", Config.INSTANCE.general.password);
 
         String invalid = "[general]\nport = 65536\npassword = 'must-not-be-published'\n";
-        Files.write(file, invalid.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, invalid.getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
         assertEquals(25433, Config.INSTANCE.general.port);
         assertEquals("edited-password", Config.INSTANCE.general.password);
-        assertEquals(invalid, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(invalid, new String(Files.readAllBytes(file), UTF_8));
     }
 
     @Test
     void partialTomlReceivesDefaultsAndPersistsItsGeneratedPassword() throws Exception {
         Path file = root.resolve("ae2webintegration/config.toml");
         Files.createDirectories(file.getParent());
-        Files.write(file, "[general]\nport = 25434\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(file, "[general]\nport = 25434\n".getBytes(UTF_8));
         Config.init(root.toFile());
         String password = Config.INSTANCE.general.password;
         assertFalse(password.isEmpty());
@@ -434,7 +433,7 @@ class ConfigFileTest {
         String password = Config.INSTANCE.general.password;
         Path file = Config.getConfigFile("config.toml")
             .toPath();
-        Files.write(file, "[general".getBytes(StandardCharsets.UTF_8));
+        Files.write(file, "[general".getBytes(UTF_8));
         assertThrows(RuntimeException.class, Config::reload);
         assertEquals(password, Config.INSTANCE.general.password);
         Files.delete(file);
@@ -474,12 +473,12 @@ class ConfigFileTest {
             .toPath();
         String contents = "[general]\n# My administrator password\npassword = 'C:\\Minecraft\\config'\n"
             + "# My custom port\nport = 25435\n";
-        Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, contents.getBytes(UTF_8));
         Config.reload();
         assertEquals("C:\\Minecraft\\config", Config.INSTANCE.general.password);
         Config.init(root.toFile());
         assertEquals("C:\\Minecraft\\config", Config.INSTANCE.general.password);
-        CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
         assertTrue(
             saved.getComment("general.password")
                 .contains("My administrator password"));
@@ -505,9 +504,9 @@ class ConfigFileTest {
         Path file = Config.getConfigFile("config.toml")
             .toPath();
         String contents = "[general]\npassword = \"a\\u0001b\"\n";
-        Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, contents.getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
-        assertEquals(contents, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(contents, new String(Files.readAllBytes(file), UTF_8));
         assertEquals(password, Config.INSTANCE.general.password);
     }
 

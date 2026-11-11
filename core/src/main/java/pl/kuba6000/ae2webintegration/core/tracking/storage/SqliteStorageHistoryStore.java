@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.sql.Statement.RETURN_GENERATED_KEYS;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,7 +23,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -60,7 +62,7 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
 
     private final WorldDatabase database;
     private final SqliteHistoryRetention retention;
-    private volatile @Nullable ResourceHistory appliedPolicy;
+    private volatile @Nullable ConfigSettings.ResourceHistory appliedPolicy;
 
     public SqliteStorageHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
@@ -75,8 +77,8 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
     }
 
     /** Captured inside the writer gate, including when append waited after an earlier initialization. */
-    private @NotNull ResourceHistory applyPolicy(@NotNull Connection db) throws SQLException {
-        ResourceHistory current = database.policy();
+    private @NotNull ConfigSettings.ResourceHistory applyPolicy(@NotNull Connection db) throws SQLException {
+        ConfigSettings.ResourceHistory current = database.policy();
         if (appliedPolicy != current) {
             WorldGridStore.normalizePolicy(db, current);
             retention.enforceExistingBudgets(db, current.historyMaxRowsPerGrid);
@@ -90,7 +92,7 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
         @NotNull List<StorageHistoryPoint> points) throws IOException {
         initialize();
         appliedPolicy = database.write(db -> {
-            ResourceHistory current = applyPolicy(db);
+            ConfigSettings.ResourceHistory current = applyPolicy(db);
             long gridId = gridId(db, gridKey);
             if (gridId == -1) throw new IOException("History requires a durable grid identity");
             updateDescriptions(db, descriptions, points);
@@ -106,7 +108,7 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
     public void maintain() {
         try {
             appliedPolicy = database.write(db -> {
-                ResourceHistory current = applyPolicy(db);
+                ConfigSettings.ResourceHistory current = applyPolicy(db);
                 retention.maintain(db, current.historyMaxRowsPerGrid);
                 return current;
             });
@@ -243,7 +245,7 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
         throws SQLException {
         try (PreparedStatement insert = db.prepareStatement("""
             INSERT INTO history_measurements (grid_id, observed_at, generation, flow_from) VALUES (?, ?, ?, ?)
-            """, Statement.RETURN_GENERATED_KEYS)) {
+            """, RETURN_GENERATED_KEYS)) {
             insert.setLong(1, gridId);
             insert.setLong(2, point.observedAt());
             insert.setLong(3, point.generation());

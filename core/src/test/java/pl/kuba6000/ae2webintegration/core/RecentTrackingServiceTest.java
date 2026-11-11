@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,6 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
@@ -38,7 +38,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                 true,
                 false,
                 Collections.emptyList(),
-                java.util.Arrays.asList(
+                Arrays.asList(
                     new StorageObservation.Flow(iron, 17, 0, 1, 0),
                     new StorageObservation.Flow(other, 5, 0, 1, 0)),
                 Collections.emptyMap(),
@@ -50,7 +50,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     .size());
             service.applyLimits(100, 1);
             assertTrue(service.submit(grid, 1, flow(11000, 3), false, true));
-            Summary kept = awaitSnapshot(service, 11000);
+            RecentResourceActivity.Summary kept = awaitSnapshot(service, 11000);
             assertEquals(
                 "20",
                 kept.resources()
@@ -155,7 +155,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     service.submit(grid, 1, flow(11000, 99), false, true),
                     "Both queued and currently processing observations consume admission capacity");
             }
-            Summary unknown = awaitRecent(terminals, 11000);
+            RecentResourceActivity.Summary unknown = awaitRecent(terminals, 11000);
             assertFalse(unknown.flowComplete());
             assertNull(
                 unknown.resources()
@@ -163,7 +163,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     .input(),
                 "Dropped flow cannot be silently reported as zero");
             assertTrue(service.submit(grid, 1, flow(141000, 3), false, true));
-            Summary recovered = awaitRecent(terminals, 141000);
+            RecentResourceActivity.Summary recovered = awaitRecent(terminals, 141000);
             assertTrue(recovered.flowComplete());
             assertEquals(
                 "3",
@@ -183,7 +183,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                 assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
                 service.invalidate(grid, 1, 7000);
             }
-            Summary summary = awaitRecent(terminals, 7000);
+            RecentResourceActivity.Summary summary = awaitRecent(terminals, 7000);
             assertNull(summary.stockSince());
             assertFalse(summary.flowComplete());
             assertNull(
@@ -215,7 +215,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                 service.open(grid, 2, false, true, 100, 7000);
                 assertTrue(service.refresh(grid, 2, 7000));
             }
-            Summary summary = awaitRecent(terminals, 7000);
+            RecentResourceActivity.Summary summary = awaitRecent(terminals, 7000);
             assertEquals(7000, summary.flowSince());
             assertEquals(
                 "0",
@@ -240,7 +240,7 @@ class RecentTrackingServiceTest extends GridTestScope {
             service.open(grid, 1, false, true, 100, 1000);
             assertNull(service.snapshot(grid));
             assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
-            Summary summary = awaitSnapshot(service, 6000);
+            RecentResourceActivity.Summary summary = awaitSnapshot(service, 6000);
             assertEquals(
                 "17",
                 summary.resources()
@@ -250,14 +250,14 @@ class RecentTrackingServiceTest extends GridTestScope {
             synchronized (hub) {
                 assertTrue(service.submit(grid, 1, flow(11000, 99), false, true));
                 service.invalidate(grid, 1, 12000);
-                Summary invalidated = service.snapshot(grid);
+                RecentResourceActivity.Summary invalidated = service.snapshot(grid);
                 assertTrue(invalidated == null || !invalidated.flowComplete());
                 service.retire(grid, 1);
                 assertNull(service.snapshot(grid));
                 service.open(grid, 2, true, false, 100, 13000);
                 assertTrue(service.refresh(grid, 2, 13000));
             }
-            Summary disabled = awaitSnapshot(service, 13000);
+            RecentResourceActivity.Summary disabled = awaitSnapshot(service, 13000);
             assertNull(disabled.flowSince());
             assertFalse(disabled.flowComplete());
             assertFalse(
@@ -268,10 +268,11 @@ class RecentTrackingServiceTest extends GridTestScope {
         }
     }
 
-    private Summary awaitSnapshot(RecentTrackingService service, long at) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+    private RecentResourceActivity.Summary awaitSnapshot(RecentTrackingService service, long at)
+        throws InterruptedException {
+        long deadline = System.nanoTime() + SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            Summary summary = service.snapshot(grid);
+            RecentResourceActivity.Summary summary = service.snapshot(grid);
             if (summary != null && summary.observedAt() >= at) return summary;
             Thread.sleep(1);
         }
@@ -311,10 +312,11 @@ class RecentTrackingServiceTest extends GridTestScope {
             Collections.emptyList());
     }
 
-    private @NotNull Summary awaitRecent(TerminalRegistry terminals, long at) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+    private @NotNull RecentResourceActivity.Summary awaitRecent(TerminalRegistry terminals, long at)
+        throws InterruptedException {
+        long deadline = System.nanoTime() + SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            Summary summary = terminals.recent(grid);
+            RecentResourceActivity.Summary summary = terminals.recent(grid);
             if (summary != null && summary.observedAt() >= at) return summary;
             Thread.sleep(1);
         }

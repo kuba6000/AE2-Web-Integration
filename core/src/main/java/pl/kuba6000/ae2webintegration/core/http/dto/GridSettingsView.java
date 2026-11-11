@@ -4,8 +4,7 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 
 /**
@@ -27,11 +26,11 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 @Desugar
 public record GridSettingsView(boolean isTracked, boolean trackMachineCrafting, boolean isStorageTracked,
     boolean isFlowTracked, @NotNull String name, int stockSampleIntervalSeconds, int flowFlushIntervalSeconds,
-    int historyRetentionDays, int craftingHistoryRetentionDays, @NotNull ResourceHistory limits,
-    @NotNull CraftingHistory craftingLimits) {
+    int historyRetentionDays, int craftingHistoryRetentionDays, @NotNull ConfigSettings.ResourceHistory limits,
+    @NotNull ConfigSettings.CraftingHistory craftingLimits) {
 
-    public static @NotNull GridSettingsView from(@NotNull GridSettingsData settings, @NotNull ResourceHistory limits,
-        @NotNull CraftingHistory craftingLimits) {
+    public static @NotNull GridSettingsView from(@NotNull GridSettingsData settings,
+        @NotNull ConfigSettings.ResourceHistory limits, @NotNull ConfigSettings.CraftingHistory craftingLimits) {
         return new GridSettingsView(
             settings.isTracked(),
             settings.isTrackMachineCrafting(),

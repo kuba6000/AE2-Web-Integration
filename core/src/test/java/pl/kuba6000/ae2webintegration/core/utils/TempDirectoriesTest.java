@@ -1,24 +1,24 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.jupiter.api.condition.OS.WINDOWS;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.WindowsFileLocks;
@@ -52,7 +52,7 @@ class TempDirectoriesTest {
         Path dangling = directory.resolve("dangling");
         createLink(dangling, directory.resolve("absent"));
         TempDirectories.deleteRecursively(dangling);
-        assertFalse(Files.exists(dangling, LinkOption.NOFOLLOW_LINKS));
+        assertFalse(Files.exists(dangling, NOFOLLOW_LINKS));
     }
 
     @Test
@@ -74,7 +74,7 @@ class TempDirectoriesTest {
     }
 
     @Test
-    @EnabledOnOs(OS.WINDOWS)
+    @EnabledOnOs(WINDOWS)
     void permanentLockReportsFailureWithinBoundAndCanBeCleanedAfterRelease() throws Exception {
         Path root = Files.createDirectory(directory.resolve("scratch"));
         Path file = Files.createFile(root.resolve("locked"));
@@ -85,9 +85,7 @@ class TempDirectoriesTest {
                     TempDirectories.deleteRecursively(root);
                     return null;
                 });
-                ExecutionException failure = assertThrows(
-                    ExecutionException.class,
-                    () -> cleanup.get(15, TimeUnit.SECONDS));
+                ExecutionException failure = assertThrows(ExecutionException.class, () -> cleanup.get(15, SECONDS));
                 assertInstanceOf(FileSystemException.class, failure.getCause());
                 assertTrue(Files.exists(file));
             }
@@ -95,12 +93,12 @@ class TempDirectoriesTest {
             assertFalse(Files.exists(root));
         } finally {
             owner.shutdownNow();
-            assertTrue(owner.awaitTermination(15, TimeUnit.SECONDS));
+            assertTrue(owner.awaitTermination(15, SECONDS));
         }
     }
 
     @Test
-    @EnabledOnOs(OS.WINDOWS)
+    @EnabledOnOs(WINDOWS)
     void interruptedRetryRetainsInterruptAndFilesystemFailure() throws Exception {
         Path root = Files.createDirectory(directory.resolve("scratch"));
         Path file = Files.createFile(root.resolve("locked"));

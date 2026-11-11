@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,7 +13,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -107,9 +107,9 @@ class RateLimiterTest {
             for (int i = 0; i < threads; i++) {
                 results.add(executor.submit(() -> {
                     for (int round = 0; round < rounds; round++) {
-                        start.await(5, TimeUnit.SECONDS);
+                        start.await(5, SECONDS);
                         if (limiter.isAllowed(A)) accepted.incrementAndGet();
-                        done.await(5, TimeUnit.SECONDS);
+                        done.await(5, SECONDS);
                     }
                     return null;
                 }));
@@ -117,16 +117,16 @@ class RateLimiterTest {
             for (int round = 0; round < rounds; round++) {
                 accepted.set(0);
                 now.addAndGet(WINDOW_MS + 1);
-                start.await(5, TimeUnit.SECONDS);
-                done.await(5, TimeUnit.SECONDS);
+                start.await(5, SECONDS);
+                done.await(5, SECONDS);
                 assertEquals(threads, accepted.get(), "requests in the fresh window must be admitted");
                 assertTrue(limiter.isAllowed(A), "one request remains in the new window");
                 assertFalse(limiter.isAllowed(A), "concurrent requests must all consume the same window's budget");
             }
-            for (Future<?> result : results) result.get(5, TimeUnit.SECONDS);
+            for (Future<?> result : results) result.get(5, SECONDS);
         } finally {
             executor.shutdownNow();
-            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(executor.awaitTermination(5, SECONDS));
         }
     }
 }

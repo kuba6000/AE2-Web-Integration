@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,7 +11,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
@@ -158,7 +159,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
             captures.incrementAndGet();
             started.countDown();
             try {
-                assertTrue(release.await(5, TimeUnit.SECONDS));
+                assertTrue(release.await(5, SECONDS));
             } catch (InterruptedException interrupted) {
                 throw new AssertionError(interrupted);
             }
@@ -174,7 +175,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
         ExecutorService server = Executors.newSingleThreadExecutor();
         try {
             Future<?> capture = server.submit(() -> first.runOnServerThread(TestGridFixtures.ae(grid)));
-            assertTrue(started.await(5, TimeUnit.SECONDS));
+            assertTrue(started.await(5, SECONDS));
             first.failIfPending(ApiStatus.TIMEOUT);
             assertEquals(
                 "TIMEOUT",
@@ -194,7 +195,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                 preparing.get("state")
                     .getAsString());
             release.countDown();
-            capture.get(5, TimeUnit.SECONDS);
+            capture.get(5, SECONDS);
             GetCraftingPlanTree next = request(grid, plan, "");
             next.runOnServerThread(TestGridFixtures.ae(grid));
             JsonObject ready = json(
@@ -278,7 +279,7 @@ class CraftingPlanTreeRequestTest extends GridTestScope {
                 .httpStatus());
         GetCraftingPlanTree worldClosed = request(grid, plan, "");
         worldClosed.runOnServerThread(TestGridFixtures.ae(grid));
-        CoreEngine.GRID_IDENTITIES.clear();
+        GRID_IDENTITIES.clear();
         assertEquals(
             "GRID_NOT_FOUND",
             json(

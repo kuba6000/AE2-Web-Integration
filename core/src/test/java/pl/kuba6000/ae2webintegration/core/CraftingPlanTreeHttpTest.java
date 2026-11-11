@@ -1,18 +1,19 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.GZIPInputStream;
@@ -65,9 +66,7 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
             if ("Bearer owner".equals(
                 exchange.getRequestHeaders()
                     .getFirst("Authorization"))) {
-                return new AE2Controller.RequestContext(
-                    exchange,
-                    TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+                return new AE2Controller.RequestContext(exchange, TestGridFixtures.principal(OWNER_ID));
             }
             return null;
         }, exchange -> false, request -> {
@@ -78,7 +77,7 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
                     if (tickEntered != null) {
                         tickEntered.countDown();
                         try {
-                            assertTrue(tickRelease.await(5, TimeUnit.SECONDS));
+                            assertTrue(tickRelease.await(5, SECONDS));
                         } catch (InterruptedException interrupted) {
                             Thread.currentThread()
                                 .interrupt();
@@ -95,8 +94,8 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
                             .get("data")
                             .isJsonNull());
                 })
-                    .get(5, TimeUnit.SECONDS);
-                request.awaitCompletion(5, TimeUnit.SECONDS);
+                    .get(5, SECONDS);
+                request.awaitCompletion(5, SECONDS);
             } catch (Exception failure) {
                 throw new IllegalStateException(failure);
             }
@@ -143,12 +142,12 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
         ExecutorService client = Executors.newSingleThreadExecutor();
         try {
             var response = client.submit(() -> get("", 200, "OK"));
-            assertTrue(tickEntered.await(5, TimeUnit.SECONDS));
+            assertTrue(tickEntered.await(5, SECONDS));
             assertFalse(response.isDone());
             tickRelease.countDown();
             assertEquals(
                 "READY",
-                data(response.get(5, TimeUnit.SECONDS)).get("state")
+                data(response.get(5, SECONDS)).get("state")
                     .getAsString());
             assertEquals(1, captures.get());
             assertEquals(2, serverStages.get());
@@ -173,7 +172,7 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
             assertEquals("Accept-Encoding", connection.getHeaderField("Vary"));
             length = connection.getContentLength();
             try (InputStream input = new GZIPInputStream(connection.getInputStream())) {
-                JsonObject response = new JsonParser().parse(IOUtils.toString(input, StandardCharsets.UTF_8))
+                JsonObject response = new JsonParser().parse(IOUtils.toString(input, UTF_8))
                     .getAsJsonObject();
                 assertEquals(
                     "READY",
@@ -312,7 +311,7 @@ class CraftingPlanTreeHttpTest extends GridTestScope {
         try {
             int status = connection.getResponseCode();
             try (InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-                JsonObject response = new JsonParser().parse(IOUtils.toString(input, StandardCharsets.UTF_8))
+                JsonObject response = new JsonParser().parse(IOUtils.toString(input, UTF_8))
                     .getAsJsonObject();
                 assertEquals(expectedCode, status, response.toString());
                 assertEquals(

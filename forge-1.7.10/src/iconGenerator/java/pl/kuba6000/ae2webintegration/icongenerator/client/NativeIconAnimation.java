@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.opengl.GL20.GL_CURRENT_PROGRAM;
+import static pl.kuba6000.ae2webintegration.icongenerator.client.AtlasFrameScope.MAX_SCRATCH_BYTES;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -20,21 +23,22 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.IIcon;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.IItemRenderer;
+import net.minecraftforge.client.IItemRenderer.ItemRenderType;
 import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GLContext;
 
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
-import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture.RenderFailure;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation.Kind;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.icons.export.SpriteTimeline;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -71,7 +75,7 @@ final class NativeIconAnimation implements IIconAnimation {
         @NotNull StableKey key, @NotNull ItemStack stack) {
         ResourceLocation atlas = stack.getItemSpriteNumber() == 0 ? TextureMap.locationBlocksTexture
             : TextureMap.locationItemsTexture;
-        IItemRenderer custom = MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY);
+        IItemRenderer custom = MinecraftForgeClient.getItemRenderer(stack, ItemRenderType.INVENTORY);
         if (custom != null) {
             renderer.animationCustomRenderers.merge(
                 custom.getClass()
@@ -162,7 +166,7 @@ final class NativeIconAnimation implements IIconAnimation {
                 return null;
             }
             scratchBytes += timeline.scratchBytes();
-            if (scratchBytes > AtlasFrameScope.MAX_SCRATCH_BYTES) {
+            if (scratchBytes > MAX_SCRATCH_BYTES) {
                 renderer.animationUnsupportedTimeline++;
                 return null;
             }
@@ -171,7 +175,7 @@ final class NativeIconAnimation implements IIconAnimation {
         }
         if (timelines.isEmpty()) return null;
         // Unknown shader atlas layouts cannot be safely controlled; keep the successful static icon.
-        if (MODIFIED_ATLAS || GLContext.getCapabilities().OpenGL20 && GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
+        if (MODIFIED_ATLAS || GLContext.getCapabilities().OpenGL20 && GL11.glGetInteger(GL_CURRENT_PROGRAM) != 0) {
             renderer.animationUnsupportedAtlas++;
             return null;
         }
@@ -239,7 +243,8 @@ final class NativeIconAnimation implements IIconAnimation {
     }
 
     @Override
-    public boolean capture(@NotNull List<Capture> captures, @NotNull LongSupplier drawClock) throws RenderFailure {
+    public boolean capture(@NotNull List<PackExportWriter.Capture> captures, @NotNull LongSupplier drawClock)
+        throws IIconCapture.RenderFailure {
         if (kind() == Kind.SAMPLED) {
             renderer.animationFrame(candidate, key, captures, CaptureKind.SAMPLE, 0, drawClock);
             return true;
@@ -249,7 +254,7 @@ final class NativeIconAnimation implements IIconAnimation {
             .getTextureManager()
             .getTexture(atlas)
             .getGlTextureId();
-        RenderFailure drawFailure = null;
+        IIconCapture.RenderFailure drawFailure = null;
         try (AtlasFrameScope scope = new AtlasFrameScope(
             texture,
             sprites,
@@ -267,7 +272,7 @@ final class NativeIconAnimation implements IIconAnimation {
                     frames.get(frame)
                         .durationMillis(),
                     drawClock);
-            } catch (RenderFailure failure) {
+            } catch (IIconCapture.RenderFailure failure) {
                 drawFailure = failure;
             }
         } catch (RuntimeException | Error failure) {

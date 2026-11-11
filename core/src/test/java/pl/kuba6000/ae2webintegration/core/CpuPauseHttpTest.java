@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,7 +12,6 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -25,7 +27,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -84,9 +85,7 @@ class CpuPauseHttpTest extends GridTestScope {
             if ("Bearer owner".equals(token) || "authenticationToken=owner".equals(
                 exchange.getRequestHeaders()
                     .getFirst("Cookie")))
-                return new AE2Controller.RequestContext(
-                    exchange,
-                    TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+                return new AE2Controller.RequestContext(exchange, TestGridFixtures.principal(OWNER_ID));
             if ("Bearer other".equals(token))
                 return new AE2Controller.RequestContext(exchange, TestGridFixtures.principal(999));
             return null;
@@ -298,14 +297,13 @@ class CpuPauseHttpTest extends GridTestScope {
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setDoOutput(true);
             try (OutputStream output = connection.getOutputStream()) {
-                output.write(body.getBytes(StandardCharsets.UTF_8));
+                output.write(body.getBytes(UTF_8));
             }
         }
         try {
             int status = connection.getResponseCode();
             try (InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-                JsonObject response = new Gson()
-                    .fromJson(IOUtils.toString(input, StandardCharsets.UTF_8), JsonObject.class);
+                JsonObject response = new Gson().fromJson(IOUtils.toString(input, UTF_8), JsonObject.class);
                 assertEquals(expectedCode, status, response.toString());
                 assertEquals(
                     expectedStatus,
@@ -323,7 +321,7 @@ class CpuPauseHttpTest extends GridTestScope {
         private final LinkedHashSet<ICraftingCPUCluster> cpus;
 
         TestGrid(ICraftingCPUCluster... cpus) {
-            super(222, false, AEControllerState.CONTROLLER_ONLINE);
+            super(222, false, CONTROLLER_ONLINE);
             this.cpus = new LinkedHashSet<>(Arrays.asList(cpus));
         }
 

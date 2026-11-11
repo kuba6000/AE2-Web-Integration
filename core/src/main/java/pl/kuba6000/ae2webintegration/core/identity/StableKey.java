@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.function.Consumer;
@@ -83,7 +84,7 @@ public final class StableKey {
     public static void writeText(@NotNull PrimitiveSink output, @NotNull String value) {
         int length = Utf8.encodedLength(value);
         output.putInt(Integer.reverseBytes(length));
-        output.putString(value, StandardCharsets.UTF_8);
+        output.putString(value, UTF_8);
     }
 
     @Override

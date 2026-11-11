@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -7,9 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +36,7 @@ class UpdateNotifierTest {
             + "\",\"github_release_download_url\":\"https://github.com/kuba6000/AE2-Web-Integration/releases/download/1.1.0-forge-1.7.10/mod.jar\"}}}";
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
-            byte[] bytes = feed.getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = feed.getBytes(UTF_8);
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody()
                 .write(bytes);
@@ -61,7 +61,7 @@ class UpdateNotifierTest {
             UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, true);
             assertEquals(0, messenger.sentMessages);
             checker.checkForUpdates()
-                .get(5, TimeUnit.SECONDS);
+                .get(5, SECONDS);
             UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, false);
             assertEquals(0, messenger.sentMessages);
             UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, true);

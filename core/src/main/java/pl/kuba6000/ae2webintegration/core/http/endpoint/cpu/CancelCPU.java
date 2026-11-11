@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
@@ -84,7 +85,7 @@ public final class CancelCPU extends ISyncedRequest {
         }
         if (cluster.web$isBusy()) {
             cluster.web$cancel();
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+            respond(HTTP_OK, new Response(ApiStatus.OK, null));
             return;
         }
         deny(ApiStatus.CPU_NOT_BUSY);

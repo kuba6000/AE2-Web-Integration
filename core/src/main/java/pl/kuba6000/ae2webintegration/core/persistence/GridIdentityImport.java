@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.persistence;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -19,8 +20,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -44,8 +44,9 @@ final class GridIdentityImport {
         }
     }
 
-    static @NotNull Map<StableKey, GridPersistentData> read(@NotNull Path source, @NotNull ResourceHistory policy,
-        @NotNull CraftingHistory craftingPolicy) throws IOException {
+    static @NotNull Map<StableKey, GridPersistentData> read(@NotNull Path source,
+        @NotNull ConfigSettings.ResourceHistory policy, @NotNull ConfigSettings.CraftingHistory craftingPolicy)
+        throws IOException {
         if (Files.notExists(source)) return Collections.emptyMap();
         Gson standard = GSONUtils.GSON_BUILDER.create();
         JsonDeserializer<DimensionalCoords> coordinates = (json, type, context) -> {
@@ -54,7 +55,7 @@ final class GridIdentityImport {
                 position.add("dimensionId", position.remove("dimid"));
             return standard.fromJson(position, DimensionalCoords.class);
         };
-        try (Reader reader = Files.newBufferedReader(source, StandardCharsets.UTF_8)) {
+        try (Reader reader = Files.newBufferedReader(source, UTF_8)) {
             Map<StableKey, GridPersistentData> records = GSONUtils.createBuilder()
                 .registerTypeAdapter(DimensionalCoords.class, coordinates)
                 .registerTypeAdapter(

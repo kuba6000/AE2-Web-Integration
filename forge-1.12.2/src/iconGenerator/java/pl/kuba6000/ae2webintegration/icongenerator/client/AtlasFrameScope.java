@@ -1,5 +1,26 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.opengl.GL11.GL_FALSE;
+import static org.lwjgl.opengl.GL11.GL_NO_ERROR;
+import static org.lwjgl.opengl.GL11.GL_PACK_ALIGNMENT;
+import static org.lwjgl.opengl.GL11.GL_PACK_ROW_LENGTH;
+import static org.lwjgl.opengl.GL11.GL_PACK_SKIP_PIXELS;
+import static org.lwjgl.opengl.GL11.GL_PACK_SKIP_ROWS;
+import static org.lwjgl.opengl.GL11.GL_RGBA;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL11.GL_UNPACK_ALIGNMENT;
+import static org.lwjgl.opengl.GL11.GL_UNPACK_ROW_LENGTH;
+import static org.lwjgl.opengl.GL11.GL_UNPACK_SKIP_PIXELS;
+import static org.lwjgl.opengl.GL11.GL_UNPACK_SKIP_ROWS;
+import static org.lwjgl.opengl.GL11.GL_UNPACK_SWAP_BYTES;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL12.GL_BGRA;
+import static org.lwjgl.opengl.GL12.GL_UNSIGNED_INT_8_8_8_8_REV;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_UNPACK_BUFFER;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_UNPACK_BUFFER_BINDING;
+import static org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -11,12 +32,9 @@ import net.minecraft.client.renderer.OpenGlHelper;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL21;
-import org.lwjgl.opengl.GL30;
 
-import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture.RenderFailure;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 
 /** Saves only touched sprite mip rectangles. Every write is restored before the client can yield. */
 final class AtlasFrameScope implements AutoCloseable {
@@ -50,17 +68,17 @@ final class AtlasFrameScope implements AutoCloseable {
             state.snapshot();
             snapshot = true;
             if (PixelReadback.supportsPackBinding()) {
-                unpackBuffer = GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING);
-                GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
-                GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
+                unpackBuffer = GL11.glGetInteger(GL_PIXEL_UNPACK_BUFFER_BINDING);
+                GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+                GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
             OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            GL11.glBindTexture(GL_TEXTURE_2D, texture);
             pixelStore();
             framebuffer = OpenGlHelper.glGenFramebuffers();
             OpenGlHelper.glBindFramebuffer(OpenGlHelper.GL_FRAMEBUFFER, framebuffer);
-            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
-            GL11.glDrawBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            GL11.glReadBuffer(GL_COLOR_ATTACHMENT0);
+            GL11.glDrawBuffer(GL_COLOR_ATTACHMENT0);
             long bytes = 0;
             for (int index = 0; index < sprites.size(); index++) {
                 NativeIconAnimation.NativeSprite timeline = sprites.get(index);
@@ -82,8 +100,8 @@ final class AtlasFrameScope implements AutoCloseable {
                         scratch);
                     OpenGlHelper.glFramebufferTexture2D(
                         OpenGlHelper.GL_FRAMEBUFFER,
-                        GL30.GL_COLOR_ATTACHMENT0,
-                        GL11.GL_TEXTURE_2D,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
                         texture,
                         level);
                     if (OpenGlHelper.glCheckFramebufferStatus(OpenGlHelper.GL_FRAMEBUFFER)
@@ -94,8 +112,8 @@ final class AtlasFrameScope implements AutoCloseable {
                         rectangle.y,
                         width,
                         height,
-                        GL11.GL_RGBA,
-                        GL11.GL_UNSIGNED_BYTE,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
                         rectangle.saved);
                     checkError();
                     rectangles.add(rectangle);
@@ -118,8 +136,8 @@ final class AtlasFrameScope implements AutoCloseable {
         }
     }
 
-    void select(int tick) throws RenderFailure {
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+    void select(int tick) throws IIconCapture.RenderFailure {
+        GL11.glBindTexture(GL_TEXTURE_2D, texture);
         modified = true;
         for (Rectangle rectangle : rectangles) {
             try {
@@ -132,39 +150,39 @@ final class AtlasFrameScope implements AutoCloseable {
                     .write(tick, rectangle.level, rectangle.upload);
                 rectangle.upload.flip();
             } catch (RuntimeException | LinkageError failure) {
-                RenderFailure safeFailure = LegacyIconRenderer.animationFailure(failure);
+                IIconCapture.RenderFailure safeFailure = LegacyIconRenderer.animationFailure(failure);
                 checkError();
                 throw safeFailure;
             }
             GL11.glTexSubImage2D(
-                GL11.GL_TEXTURE_2D,
+                GL_TEXTURE_2D,
                 rectangle.level,
                 rectangle.x,
                 rectangle.y,
                 rectangle.width,
                 rectangle.height,
-                GL12.GL_BGRA,
-                GL12.GL_UNSIGNED_INT_8_8_8_8_REV,
+                GL_BGRA,
+                GL_UNSIGNED_INT_8_8_8_8_REV,
                 rectangle.upload);
             checkError();
         }
     }
 
     private static void pixelStore() {
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
-        GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
-        GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
-        GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, 0);
-        GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, 0);
-        GL11.glPixelStorei(GL11.GL_UNPACK_SWAP_BYTES, GL11.GL_FALSE);
+        GL11.glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        GL11.glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        GL11.glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+        GL11.glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+        GL11.glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        GL11.glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        GL11.glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        GL11.glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        GL11.glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
     }
 
     private static void checkError() {
         int error = GL11.glGetError();
-        if (error != GL11.GL_NO_ERROR) throw new IllegalStateException("Sprite atlas transfer failed: " + error);
+        if (error != GL_NO_ERROR) throw new IllegalStateException("Sprite atlas transfer failed: " + error);
     }
 
     @Override
@@ -178,20 +196,20 @@ final class AtlasFrameScope implements AutoCloseable {
                     priorError = failure;
                 }
                 OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
-                if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                GL11.glBindTexture(GL_TEXTURE_2D, texture);
                 pixelStore();
                 for (Rectangle rectangle : rectangles) {
                     rectangle.saved.rewind();
                     GL11.glTexSubImage2D(
-                        GL11.GL_TEXTURE_2D,
+                        GL_TEXTURE_2D,
                         rectangle.level,
                         rectangle.x,
                         rectangle.y,
                         rectangle.width,
                         rectangle.height,
-                        GL11.GL_RGBA,
-                        GL11.GL_UNSIGNED_BYTE,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
                         rectangle.saved);
                 }
                 try {
@@ -211,7 +229,7 @@ final class AtlasFrameScope implements AutoCloseable {
                         state.close();
                     } finally {
                         if (PixelReadback.supportsPackBinding())
-                            GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, unpackBuffer);
+                            GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, unpackBuffer);
                         snapshot = false;
                     }
                 }

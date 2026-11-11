@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.persistence;
 
+import static java.sql.Connection.TRANSACTION_SERIALIZABLE;
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +17,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -26,8 +28,7 @@ import org.sqlite.JDBC;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /** One world owns its writer, bounded snapshot readers and file lifetime. */
@@ -42,8 +43,8 @@ public final class WorldDatabase implements AutoCloseable {
     private final ReentrantLock writerGate = new ReentrantLock(true);
     private final Semaphore readers = new Semaphore(4, true);
     private final Path databaseBase;
-    private volatile ResourceHistory policy;
-    private volatile CraftingHistory craftingPolicy;
+    private volatile ConfigSettings.ResourceHistory policy;
+    private volatile ConfigSettings.CraftingHistory craftingPolicy;
     private volatile @Nullable OpenedDatabase openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
@@ -56,31 +57,32 @@ public final class WorldDatabase implements AutoCloseable {
     @Desugar
     private record OpenedDatabase(@NotNull Connection writer, @NotNull String url) {}
 
-    public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy) {
-        this(databaseBase, policy, new CraftingHistory());
+    public WorldDatabase(@NotNull Path databaseBase, @NotNull ConfigSettings.ResourceHistory policy) {
+        this(databaseBase, policy, new ConfigSettings.CraftingHistory());
     }
 
-    public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy,
-        @NotNull CraftingHistory craftingPolicy) {
+    public WorldDatabase(@NotNull Path databaseBase, @NotNull ConfigSettings.ResourceHistory policy,
+        @NotNull ConfigSettings.CraftingHistory craftingPolicy) {
         this.databaseBase = databaseBase.toAbsolutePath();
         this.policy = policy;
         this.craftingPolicy = craftingPolicy;
     }
 
-    public @NotNull ResourceHistory policy() {
+    public @NotNull ConfigSettings.ResourceHistory policy() {
         return policy;
     }
 
-    public @NotNull CraftingHistory craftingPolicy() {
+    public @NotNull ConfigSettings.CraftingHistory craftingPolicy() {
         return craftingPolicy;
     }
 
     /** Publishes validated, read-only settings to this active world without database work. */
-    public boolean applyPolicy(@NotNull ResourceHistory policy) {
+    public boolean applyPolicy(@NotNull ConfigSettings.ResourceHistory policy) {
         return applyPolicy(policy, craftingPolicy);
     }
 
-    public boolean applyPolicy(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
+    public boolean applyPolicy(@NotNull ConfigSettings.ResourceHistory policy,
+        @NotNull ConfigSettings.CraftingHistory craftingPolicy) {
         GridIdentityRegistry current = identities;
         if (current == null || gridFlushStopped) return false;
         synchronized (current) {
@@ -122,11 +124,8 @@ public final class WorldDatabase implements AutoCloseable {
         if (gridFlush != null || gridFlushStopped) return;
         this.historyMaintenance = historyMaintenance;
         gridFlushScheduler = scheduler;
-        gridFlush = scheduler.scheduleWithFixedDelay(
-            this::maintain,
-            GRID_FLUSH_INTERVAL_MINUTES,
-            GRID_FLUSH_INTERVAL_MINUTES,
-            TimeUnit.MINUTES);
+        gridFlush = scheduler
+            .scheduleWithFixedDelay(this::maintain, GRID_FLUSH_INTERVAL_MINUTES, GRID_FLUSH_INTERVAL_MINUTES, MINUTES);
     }
 
     private void maintain() {
@@ -219,7 +218,7 @@ public final class WorldDatabase implements AutoCloseable {
                     sql.execute("PRAGMA cache_size = -2048");
                     sql.execute("PRAGMA query_only = ON");
                 }
-                db.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+                db.setTransactionIsolation(TRANSACTION_SERIALIZABLE);
                 db.setAutoCommit(false);
                 T result = transaction.run(db);
                 db.commit();

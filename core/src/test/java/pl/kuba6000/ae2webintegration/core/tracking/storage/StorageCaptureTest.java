@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.ref.WeakReference;
@@ -10,7 +11,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -174,7 +174,7 @@ class StorageCaptureTest {
         capture.setStockNeeded(false);
         WeakReference<IAEKey> identity = recordTemporaryFlow(capture);
         capture.flushFlow(1);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (identity.get() != null && System.nanoTime() < deadline) {
             System.gc();
             AE2Controller.itemIdentities.cleanUp();
@@ -398,12 +398,14 @@ class StorageCaptureTest {
             flow.inputOperations(),
             flow.outputOperations(),
             (now) - 1000L);
-        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
+            .create(database, new ConfigSettings.Range(1, 365, 30), 100)) {
             WorldHistoryFixtures.register(store, gridKey);
             store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
         }
         AE2Controller.itemIdentities.clear();
-        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
+            .create(database, new ConfigSettings.Range(1, 365, 30), 100)) {
             StorageHistory history = store.read(gridKey, itemKey, now, 10);
             assertEquals(Collections.singletonList(point), history.points());
             assertEquals(

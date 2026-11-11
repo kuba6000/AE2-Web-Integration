@@ -1,5 +1,24 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11.GL_NEAREST;
+import static org.lwjgl.opengl.GL11.GL_NO_ERROR;
+import static org.lwjgl.opengl.GL11.GL_RGBA;
+import static org.lwjgl.opengl.GL11.GL_RGBA8;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL12.GL_TEXTURE_MAX_LEVEL;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_UNPACK_BUFFER;
+import static org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0;
+import static org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER;
+import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_COMPLETE;
+import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_SRGB;
+import static org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,9 +28,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -22,7 +39,7 @@ final class AtlasPixels implements AutoCloseable {
     private final List<Region> regions = new ArrayList<>();
     private int readFramebuffer;
     private int drawFramebuffer;
-    private final boolean srgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
+    private final boolean srgb = GL11.glIsEnabled(GL_FRAMEBUFFER_SRGB);
     private boolean changed;
 
     AtlasPixels(@NotNull Minecraft minecraft, @NotNull List<TextureAtlasSprite> sprites) {
@@ -31,17 +48,17 @@ final class AtlasPixels implements AutoCloseable {
             readFramebuffer = GL30.glGenFramebuffers();
             drawFramebuffer = GL30.glGenFramebuffers();
             RenderSystem.disableScissor();
-            GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
-            GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
+            GL11.glDisable(GL_FRAMEBUFFER_SRGB);
+            GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             for (TextureAtlasSprite sprite : sprites) {
                 int atlas = minecraft.getTextureManager()
                     .getTexture(sprite.atlasLocation())
                     .getId();
                 RenderSystem.bindTexture(atlas);
-                int min = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER);
-                int mag = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER);
-                int wrapS = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S);
-                int wrapT = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T);
+                int min = GL11.glGetTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER);
+                int mag = GL11.glGetTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER);
+                int wrapS = GL11.glGetTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S);
+                int wrapT = GL11.glGetTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T);
                 int levels = Math.min(
                     sprite.contents().byMipLevel.length,
                     Integer.SIZE - Integer.numberOfLeadingZeros(
@@ -53,23 +70,23 @@ final class AtlasPixels implements AutoCloseable {
                 Region region = new Region(sprite, atlas, GL11.glGenTextures(), min, mag, wrapS, wrapT, levels);
                 regions.add(region);
                 RenderSystem.bindTexture(region.backup);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
-                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, levels - 1);
+                GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, levels - 1);
                 for (int level = 0; level < levels; level++) {
                     int width = sprite.contents()
                         .width() >> level,
                         height = sprite.contents()
                             .height() >> level;
                     GL11.glTexImage2D(
-                        GL11.GL_TEXTURE_2D,
+                        GL_TEXTURE_2D,
                         level,
-                        GL11.GL_RGBA8,
+                        GL_RGBA8,
                         width,
                         height,
                         0,
-                        GL11.GL_RGBA,
-                        GL11.GL_UNSIGNED_BYTE,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
                         (ByteBuffer) null);
                 }
                 // Allocate the full mip chain before attaching any level to a framebuffer.
@@ -105,24 +122,24 @@ final class AtlasPixels implements AutoCloseable {
             height = region.sprite.contents()
                 .height() >> level;
         int x = region.sprite.getX() >> level, y = region.sprite.getY() >> level;
-        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+        GL30.glBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
         GL30.glFramebufferTexture2D(
-            GL30.GL_READ_FRAMEBUFFER,
-            GL30.GL_COLOR_ATTACHMENT0,
-            GL11.GL_TEXTURE_2D,
+            GL_READ_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D,
             restore ? region.backup : region.atlas,
             level);
-        GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
-        requireComplete(GL30.GL_READ_FRAMEBUFFER);
-        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+        GL11.glReadBuffer(GL_COLOR_ATTACHMENT0);
+        requireComplete(GL_READ_FRAMEBUFFER);
+        GL30.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFramebuffer);
         GL30.glFramebufferTexture2D(
-            GL30.GL_DRAW_FRAMEBUFFER,
-            GL30.GL_COLOR_ATTACHMENT0,
-            GL11.GL_TEXTURE_2D,
+            GL_DRAW_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D,
             restore ? region.atlas : region.backup,
             level);
-        GL11.glDrawBuffer(GL30.GL_COLOR_ATTACHMENT0);
-        requireComplete(GL30.GL_DRAW_FRAMEBUFFER);
+        GL11.glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        requireComplete(GL_DRAW_FRAMEBUFFER);
         GL30.glBlitFramebuffer(
             restore ? 0 : x,
             restore ? 0 : y,
@@ -132,21 +149,20 @@ final class AtlasPixels implements AutoCloseable {
             restore ? y : 0,
             restore ? x + width : width,
             restore ? y + height : height,
-            GL11.GL_COLOR_BUFFER_BIT,
-            GL11.GL_NEAREST);
+            GL_COLOR_BUFFER_BIT,
+            GL_NEAREST);
         checkTransfer();
     }
 
     private static void requireComplete(int target) {
         int status = GL30.glCheckFramebufferStatus(target);
-        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) throw new IllegalStateException(
+        if (status != GL_FRAMEBUFFER_COMPLETE) throw new IllegalStateException(
             "Could not attach icon animation atlas rectangle: target=" + target + ", status=" + status);
     }
 
     static void checkTransfer() {
         int error = GL11.glGetError();
-        if (error != GL11.GL_NO_ERROR)
-            throw new IllegalStateException("Icon animation atlas transfer failed: " + error);
+        if (error != GL_NO_ERROR) throw new IllegalStateException("Icon animation atlas transfer failed: " + error);
     }
 
     @Override
@@ -160,7 +176,7 @@ final class AtlasPixels implements AutoCloseable {
             }
             try {
                 RenderSystem.disableScissor();
-                GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
+                GL11.glDisable(GL_FRAMEBUFFER_SRGB);
             } catch (RuntimeException | Error problem) {
                 failure = combine(failure, problem);
             }
@@ -179,10 +195,10 @@ final class AtlasPixels implements AutoCloseable {
                 }
                 try {
                     RenderSystem.bindTexture(region.atlas);
-                    GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, region.min);
-                    GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, region.mag);
-                    GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, region.wrapS);
-                    GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, region.wrapT);
+                    GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, region.min);
+                    GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, region.mag);
+                    GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, region.wrapS);
+                    GL11.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, region.wrapT);
                     checkTransfer();
                 } catch (RuntimeException | Error problem) {
                     failure = combine(failure, problem);
@@ -207,8 +223,8 @@ final class AtlasPixels implements AutoCloseable {
             failure = combine(failure, problem);
         }
         try {
-            if (srgb) GL11.glEnable(GL30.GL_FRAMEBUFFER_SRGB);
-            else GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
+            if (srgb) GL11.glEnable(GL_FRAMEBUFFER_SRGB);
+            else GL11.glDisable(GL_FRAMEBUFFER_SRGB);
         } catch (RuntimeException | Error problem) {
             failure = combine(failure, problem);
         }

@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.themes;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -54,7 +54,7 @@ public final class GetThemes extends IAsyncRequest {
             return;
         }
         respond(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 CoreEngine.getThemes()

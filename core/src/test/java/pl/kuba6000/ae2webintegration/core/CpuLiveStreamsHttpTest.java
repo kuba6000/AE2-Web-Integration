@@ -1,11 +1,14 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -13,7 +16,6 @@ import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -60,10 +62,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     private final LiveHub hub = new LiveHub();
     private final CpuRegistry registry = new CpuRegistry(hub);
     private final ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-    private final CpuLiveCoordinator coordinator = new CpuLiveCoordinator(
-        registry,
-        CoreEngine.GRID_IDENTITIES,
-        settings);
+    private final CpuLiveCoordinator coordinator = new CpuLiveCoordinator(registry, GRID_IDENTITIES, settings);
     private final ExecutorService ordinary = Executors.newSingleThreadExecutor();
     private LiveStreams streams;
     private HttpServer server;
@@ -84,7 +83,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         other.busy = true;
         cpu.output = gear;
         clock = System.currentTimeMillis();
-        streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null);
+        streams = new LiveStreams(hub, GRID_IDENTITIES, null);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.setExecutor(ordinary);
         server.createContext("/events/", exchange -> {
@@ -882,7 +881,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     void goneGridEndsTheViewAndReleasesTheCpu() throws Exception {
         cpu.set(iron, 4, 0, 0);
         try (Connection stream = open(view(cpu), cpu)) {
-            CoreEngine.GRID_IDENTITIES.clear();
+            GRID_IDENTITIES.clear();
             assertEquals(
                 "invalidate",
                 CpuFixtures.readEvent(stream.input)
@@ -897,7 +896,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
     @Test
     void revokedPermissionEndsEveryViewer() throws Exception {
-        AuthSession owner = new AuthSession(TestGridFixtures.principal(TestGridFixtures.OWNER_ID), Long.MAX_VALUE);
+        AuthSession owner = new AuthSession(TestGridFixtures.principal(OWNER_ID), Long.MAX_VALUE);
         cpu.set(iron, 4, 0, 0);
         session = owner;
         try (Connection first = open(view(cpu, owner), cpu); Connection second = open(view(cpu, owner), cpu)) {
@@ -993,7 +992,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
         private Connection(HttpURLConnection connection) throws Exception {
             this.connection = connection;
-            input = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+            input = new BufferedReader(new InputStreamReader(connection.getInputStream(), UTF_8));
         }
 
         @Override

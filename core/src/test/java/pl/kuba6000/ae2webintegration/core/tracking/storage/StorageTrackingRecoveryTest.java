@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -12,7 +14,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -29,7 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -120,9 +121,7 @@ class StorageTrackingRecoveryTest {
             assertTrue(
                 history.points()
                     .stream()
-                    .anyMatch(
-                        point -> point.observedAt() == start + 3000
-                            && point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION),
+                    .anyMatch(point -> point.observedAt() == start + 3000 && point.kind() == FLOW_OBSERVATION),
                 "Database recovery must retain the current capture's complete flow interval");
             StorageHistory future = service.history(grid, item, start + 3001, 100);
             assertTrue(future.complete());
@@ -303,7 +302,7 @@ class StorageTrackingRecoveryTest {
                         .anyMatch(
                             point -> point.observedAt() == start + 2000
                                 && (point.kind() == StorageHistoryPoint.Kind.OBSERVATION
-                                    || point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION)));
+                                    || point.kind() == FLOW_OBSERVATION)));
                 assertTrue(
                     service.history(grid, item, start + 2001, 100)
                         .complete());
@@ -368,7 +367,7 @@ class StorageTrackingRecoveryTest {
                 if (key.equals(grid) && pauseNextRead.getAndSet(false)) {
                     entered.countDown();
                     try {
-                        if (!release.await(5, TimeUnit.SECONDS)) throw new IOException("Test reader did not resume");
+                        if (!release.await(5, SECONDS)) throw new IOException("Test reader did not resume");
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread()
                             .interrupt();
@@ -389,7 +388,7 @@ class StorageTrackingRecoveryTest {
                     .complete());
             pauseNextRead.set(true);
             Future<StorageHistory> oldRead = reader.submit(() -> service.history(grid, item, 21, 100));
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            assertTrue(entered.await(5, SECONDS));
             assertTrue(service.submit(grid, 1, stock(30, row(item, 7)), true, false, 0));
             awaitHealthySample(service, healthy, item, 40);
             assertTrue(
@@ -397,7 +396,7 @@ class StorageTrackingRecoveryTest {
                     .complete());
             release.countDown();
             assertFalse(
-                oldRead.get(5, TimeUnit.SECONDS)
+                oldRead.get(5, SECONDS)
                     .complete(),
                 "Recovery cannot certify data captured by a read during the outage");
         } finally {
@@ -407,7 +406,8 @@ class StorageTrackingRecoveryTest {
     }
 
     private SqliteStorageHistoryStore store() {
-        return WorldHistoryFixtures.create(directory.resolve("database/history"), new Range(1, 365, 7), 1000);
+        return WorldHistoryFixtures
+            .create(directory.resolve("database/history"), new ConfigSettings.Range(1, 365, 7), 1000);
     }
 
     private static IStorageHistoryStore failAfterCommit(IStorageHistoryStore stored, long at) {
@@ -445,7 +445,7 @@ class StorageTrackingRecoveryTest {
     private static void awaitHealthySample(StorageTrackingService service, StableKey grid, StableKey item, long at)
         throws Exception {
         assertTrue(service.submit(grid, 1, stock(at, row(item, at)), true, false, 0));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         while (service.history(grid, item, at, 100)
             .points()
             .isEmpty() && System.nanoTime() < deadline) Thread.sleep(1);

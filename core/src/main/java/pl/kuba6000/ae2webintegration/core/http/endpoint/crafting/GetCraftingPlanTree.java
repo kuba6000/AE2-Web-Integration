@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -13,13 +14,13 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingDependencyGraph;
-import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
-import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.Limit;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceGraph;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
@@ -141,7 +142,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     @Desugar
     public record Node(int id, @NotNull Kind kind, @Nullable Integer resourceId, @Nullable Integer recipeId,
         @Nullable String crafts, @Nullable String multiplier, @Nullable Boolean complete, @Nullable Integer candidates,
-        @Nullable CraftingTraceCapture.ContributionKind contribution, @NotNull List<Child> children) {}
+        @Nullable ContributionKind contribution, @NotNull List<Child> children) {}
 
     /** A capture-local resource descriptor with response-local icon references. */
     public static final class Resource extends ResourceDescription {
@@ -165,15 +166,15 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     @Desugar
     public record Data(@NotNull State state, @Nullable Mode mode, @Nullable String captureId, @Nullable Root root,
         @NotNull List<Integer> roots, @NotNull List<Resource> resources, @NotNull List<Recipe> recipes,
-        @NotNull List<Node> nodes, boolean partial, @NotNull Set<CraftingRecipeCapture.Limit> limits,
-        boolean missingComplete, int missingResourceCount) {}
+        @NotNull List<Node> nodes, boolean partial, @NotNull Set<Limit> limits, boolean missingComplete,
+        int missingResourceCount) {}
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull Data data, @Nullable IconMappings icons)
         implements IResponseBody {}
 
     @Override
-    public boolean init(RequestContext context) {
+    public boolean init(AE2Controller.RequestContext context) {
         if (!super.init(context)) return false;
         if (expectedCaptureId != null && expectedCaptureId.length() > 64) {
             deny(ApiStatus.BAD_PARAM);
@@ -219,7 +220,7 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
     @Override
     public ApiResponse finishResponse() {
         ApiResponse completed = getResponse();
-        if (completed.httpStatus() != HttpURLConnection.HTTP_OK || entry == null) return completed;
+        if (completed.httpStatus() != HTTP_OK || entry == null) return completed;
         ApiStatus failure = accessFailure();
         if (failure != null) return ApiResponse.error(failure);
         try {
@@ -245,9 +246,9 @@ public final class GetCraftingPlanTree extends ISyncedRequest {
             }
             ApiResponse response;
             try {
-                response = ApiResponse.bounded(HttpURLConnection.HTTP_OK, body, MAX_RESPONSE_BYTES);
+                response = ApiResponse.bounded(HTTP_OK, body, MAX_RESPONSE_BYTES);
             } catch (ApiResponse.SizeLimitExceeded tooLarge) {
-                response = ApiResponse.bounded(HttpURLConnection.HTTP_OK, state(State.TOO_LARGE), MAX_RESPONSE_BYTES);
+                response = ApiResponse.bounded(HTTP_OK, state(State.TOO_LARGE), MAX_RESPONSE_BYTES);
             }
             failure = accessFailure();
             return failure == null ? response : ApiResponse.error(failure);

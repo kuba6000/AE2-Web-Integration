@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.cpu;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.HashMap;
@@ -8,7 +10,6 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,7 +37,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 public final class CpuLiveCoordinator {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-    private static final long VALIDATION_MILLIS = TimeUnit.SECONDS.toMillis(1);
+    private static final long VALIDATION_MILLIS = SECONDS.toMillis(1);
     private final CpuRegistry cpus;
     private final GridIdentityRegistry identities;
     private ConfigSettings.ResourceTracking settings;

@@ -1,11 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
+import static java.awt.Font.TRUETYPE_FONT;
+import static java.awt.RenderingHints.KEY_INTERPOLATION;
+import static java.awt.RenderingHints.KEY_TEXT_ANTIALIASING;
+import static java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR;
+import static java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_OFF;
+import static java.awt.image.BufferedImage.TYPE_INT_RGB;
+
 import java.awt.AWTError;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontFormatException;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,14 +40,11 @@ final class DiscordCraftingCard {
     byte @NotNull [] render(@NotNull CraftingMessage message, @Nullable IconPack pack) throws IOException {
         try {
             Font cardFont = font();
-            BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+            BufferedImage image = new BufferedImage(WIDTH, HEIGHT, TYPE_INT_RGB);
             Graphics2D graphics = image.createGraphics();
             try {
-                graphics
-                    .setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-                graphics.setRenderingHint(
-                    RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                graphics.setRenderingHint(KEY_TEXT_ANTIALIASING, VALUE_TEXT_ANTIALIAS_OFF);
+                graphics.setRenderingHint(KEY_INTERPOLATION, VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
                 graphics.setColor(new Color(0x161616));
                 graphics.fillRect(0, 0, WIDTH, HEIGHT);
                 frame(graphics, 4, 4, WIDTH - 8, HEIGHT - 8, PANEL);
@@ -125,7 +128,7 @@ final class DiscordCraftingCard {
             .getResourceAsStream("/assets/web/themes/default/fonts/monocraft/Monocraft.ttf")) {
             if (input == null) throw new IOException("Notification font unavailable");
             try {
-                font = Font.createFont(Font.TRUETYPE_FONT, input);
+                font = Font.createFont(TRUETYPE_FONT, input);
             } catch (FontFormatException failure) {
                 throw new IOException("Invalid notification font", failure);
             }

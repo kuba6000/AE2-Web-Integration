@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_CONFLICT;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -140,17 +142,17 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
                     error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                 }
                 if (error != null) {
-                    respond(HttpURLConnection.HTTP_CONFLICT, new FailureResponse(ApiStatus.FAIL, error));
+                    respond(HTTP_CONFLICT, new FailureResponse(ApiStatus.FAIL, error));
                 } else {
                     gridData.removeJob(this.jobId);
-                    respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+                    respond(HTTP_OK, new Response(ApiStatus.OK, null));
                 }
             } catch (InterruptedException | ExecutionException e) {
                 LOG.error("Failed to submit crafting job", e);
                 deny(ApiStatus.INTERNAL_ERROR);
             }
         } else {
-            respond(HttpURLConnection.HTTP_CONFLICT, new FailureResponse(ApiStatus.JOB_NOT_DONE, null));
+            respond(HTTP_CONFLICT, new FailureResponse(ApiStatus.JOB_NOT_DONE, null));
         }
     }
 }

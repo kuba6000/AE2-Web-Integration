@@ -1,12 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.themes;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -186,7 +187,7 @@ public final class ThemeCatalog implements Closeable {
 
     private static Manifest manifest(byte[] bytes, Map<String, ZipEntry> files) throws IOException {
         try {
-            String json = StandardCharsets.UTF_8.newDecoder()
+            String json = UTF_8.newDecoder()
                 .decode(ByteBuffer.wrap(bytes))
                 .toString();
             JsonObject object = readManifest(json);
@@ -284,7 +285,7 @@ public final class ThemeCatalog implements Closeable {
 
         private static Pack open(Path path) throws IOException {
             if (Files.size(path) > MAX_ARCHIVE_BYTES) throw new IOException("Theme ZIP exceeds size limit");
-            ZipFile zip = new ZipFile(path.toFile(), StandardCharsets.UTF_8);
+            ZipFile zip = new ZipFile(path.toFile(), UTF_8);
             try {
                 Map<String, ZipEntry> files = new LinkedHashMap<>();
                 Set<String> names = new HashSet<>();

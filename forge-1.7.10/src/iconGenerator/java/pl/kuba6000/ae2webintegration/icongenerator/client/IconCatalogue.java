@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraftforge.fluids.FluidContainerRegistry.BUCKET_VOLUME;
+import static net.minecraftforge.oredict.OreDictionary.WILDCARD_VALUE;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,7 +19,6 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.Fluid;
-import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.oredict.OreDictionary;
@@ -134,7 +136,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             Map.Entry<String, Fluid> fluid = fluids.next();
             context = "fluid/" + fluid.getKey();
             fluidCandidates++;
-            return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), FluidContainerRegistry.BUCKET_VOLUME));
+            return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), BUCKET_VOLUME));
         }
         if (recipes != null && !recipes.done()) {
             try {
@@ -169,7 +171,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             oreDictionarySkippedInvalid++;
             return null;
         }
-        if (Items.blaze_rod.getDamage(stack) == OreDictionary.WILDCARD_VALUE) {
+        if (Items.blaze_rod.getDamage(stack) == WILDCARD_VALUE) {
             oreDictionarySkippedWildcard++;
             return null;
         }

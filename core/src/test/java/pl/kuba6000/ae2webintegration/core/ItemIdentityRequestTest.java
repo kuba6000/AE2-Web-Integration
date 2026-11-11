@@ -1,16 +1,18 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.net.HttpURLConnection.HTTP_ACCEPTED;
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.lang.reflect.Proxy;
-import java.net.HttpURLConnection;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
@@ -25,7 +27,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
@@ -107,7 +108,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         request.runOnServerThread(ae);
         AE2Controller.stopHTTPServer();
         assertEquals(
-            HttpURLConnection.HTTP_UNAVAILABLE,
+            HTTP_UNAVAILABLE,
             request.getResponse()
                 .httpStatus());
         assertEquals(
@@ -144,7 +145,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         ExecutorService http = Executors.newSingleThreadExecutor();
         try {
             String json = http.submit(request::getJSON)
-                .get(1, TimeUnit.SECONDS);
+                .get(1, SECONDS);
             JsonObject row = new JsonParser().parse(json)
                 .getAsJsonObject()
                 .getAsJsonArray("data")
@@ -342,7 +343,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "OK",
             run(new GetItems(), second, "").get("status")
                 .getAsString());
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + SECONDS.toNanos(5);
         String status;
         do {
             System.gc();
@@ -597,7 +598,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         CreateCraftingPlan request = new CreateCraftingPlan();
         JsonObject result = run(request, grid, "&itemKey=" + key + "&quantity=1");
         assertEquals(
-            HttpURLConnection.HTTP_ACCEPTED,
+            HTTP_ACCEPTED,
             request.getResponse()
                 .httpStatus());
         assertEquals(
@@ -651,7 +652,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         }
 
         public @NotNull StableKey web$getKey() {
-            return StableKey.create(sink -> sink.putBytes(id.getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes(id.getBytes(UTF_8)));
         }
 
         public @NotNull IAEKey web$copyIdentity() {
@@ -726,7 +727,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         IAEKey ordered;
 
         Grid(long id, Resource... rows) {
-            super(id, false, AEControllerState.CONTROLLER_ONLINE);
+            super(id, false, CONTROLLER_ONLINE);
             this.rows = new ArrayList<>(Arrays.asList(rows));
         }
 

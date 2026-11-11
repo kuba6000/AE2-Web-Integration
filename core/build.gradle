@@ -1,5 +1,12 @@
+import static org.gradle.api.attributes.Category.CATEGORY_ATTRIBUTE
+import static org.gradle.api.attributes.LibraryElements.CLASSES_AND_RESOURCES
+import static org.gradle.api.attributes.LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE
+import static org.gradle.api.attributes.Usage.JAVA_RUNTIME
+import static org.gradle.api.attributes.Usage.USAGE_ATTRIBUTE
 import javax.inject.Inject
+import org.gradle.api.attributes.Attribute
 import org.gradle.api.file.FileSystemOperations
+import org.gradle.external.javadoc.StandardJavadocDocletOptions
 
 plugins {
     id 'java-library'
@@ -325,9 +332,9 @@ configurations.create('iconPackElements') {
     canBeResolved = false
     canBeConsumed = true
     attributes {
-        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
-        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
-        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+        attribute(USAGE_ATTRIBUTE, objects.named(Usage, JAVA_RUNTIME))
+        attribute(CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+        attribute(LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
     }
     outgoing.capability("${project.group}:${project.name}-icon-pack:${project.version}")
     outgoing.artifact(iconPackJar)
@@ -338,9 +345,9 @@ configurations.create('modOutputElements') {
     canBeResolved = false
     canBeConsumed = true
     attributes {
-        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
-        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
-        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.CLASSES_AND_RESOURCES))
+        attribute(USAGE_ATTRIBUTE, objects.named(Usage, JAVA_RUNTIME))
+        attribute(CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+        attribute(LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, CLASSES_AND_RESOURCES))
     }
     outgoing.capability("${project.group}:${project.name}-mod-output:${project.version}")
     sourceSets.main.output.classesDirs.each { directory ->
@@ -357,7 +364,7 @@ configurations.create('modOutputElements') {
 configurations.configureEach {
     if (canBeConsumed) {
         outgoing.attributes.attribute(
-            org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
+            Attribute.of('rfgDeobfuscatorTransformed', Boolean),
             true
         )
     }
@@ -382,7 +389,7 @@ tasks.register('generateApiDocs', Exec) {
     outputs.file(apiDocumentation)
     doFirst {
         // Javadoc tasks inject HTML-only flags. Write an argument file for the custom doclet instead.
-        def options = new org.gradle.external.javadoc.StandardJavadocDocletOptions()
+        def options = new StandardJavadocDocletOptions()
         options.noTimestamp = false
         options.source = '17'
         options.encoding = 'UTF-8'

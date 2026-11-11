@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.ae2interface.platform;
 
+import static pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION;
+import static pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants.MINECRAFT_VERSION;
+
 import java.io.File;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -35,12 +38,12 @@ public record Platform(File configDir) implements IServerPlatform {
 
     @Override
     public @NotNull String getMinecraftVersion() {
-        return PlatformConstants.MINECRAFT_VERSION;
+        return MINECRAFT_VERSION;
     }
 
     @Override
     public @NotNull String getIconPackCompatibilityVersion() {
-        return PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION;
+        return ICON_PACK_COMPATIBILITY_VERSION;
     }
 
     @Override

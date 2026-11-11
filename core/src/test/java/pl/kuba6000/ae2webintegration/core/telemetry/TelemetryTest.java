@@ -1,11 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.telemetry;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
@@ -55,7 +59,7 @@ class TelemetryTest {
     @BeforeEach
     void createModArtifact() throws Exception {
         jar = directory.resolve("mod.jar");
-        Files.write(jar, "abc".getBytes(StandardCharsets.US_ASCII));
+        Files.write(jar, "abc".getBytes(US_ASCII));
     }
 
     @Test
@@ -79,10 +83,10 @@ class TelemetryTest {
             try (Telemetry telemetry = new Telemetry(endpoint.url(), "1.7.10", false, jar, scheduler, clock)) {
                 scheduler.runNext();
                 assertEquals(0, endpoint.requests.get());
-                Files.write(jar, "abc".getBytes(StandardCharsets.US_ASCII));
+                Files.write(jar, "abc".getBytes(US_ASCII));
                 Config.setTelemetryEnabled(true);
                 CompletableFuture.runAsync(scheduler::runNext)
-                    .get(5, TimeUnit.SECONDS);
+                    .get(5, SECONDS);
                 JsonObject first = endpoint.report.get()
                     .getAsJsonObject("jarProof");
                 assertArtifactProof(first);
@@ -111,7 +115,7 @@ class TelemetryTest {
                         .get("jarProof")
                         .isJsonNull());
                 if (directoryInstead) Files.delete(jar);
-                Files.write(jar, "abc".getBytes(StandardCharsets.US_ASCII));
+                Files.write(jar, "abc".getBytes(US_ASCII));
                 scheduler.runNext();
                 assertEquals(2, endpoint.requests.get());
                 assertTrue(
@@ -178,12 +182,12 @@ class TelemetryTest {
             try (Telemetry telemetry = new Telemetry(endpoint.url(), "1.7.10", false, jar, scheduler, clock)) {
                 CompletableFuture<Void> attempt = CompletableFuture.runAsync(scheduler::runNext);
                 try {
-                    assertTrue(endpoint.received.await(5, TimeUnit.SECONDS));
+                    assertTrue(endpoint.received.await(5, SECONDS));
                     assertTimeoutPreemptively(Duration.ofSeconds(1), telemetry::close);
                 } finally {
                     endpoint.release.countDown();
                 }
-                attempt.get(5, TimeUnit.SECONDS);
+                attempt.get(5, SECONDS);
                 scheduler.runNext();
                 assertEquals(1, endpoint.requests.get());
             }
@@ -345,7 +349,7 @@ class TelemetryTest {
             assertEquals(600, unit.toSeconds(initialDelay));
             assertTrue(unit.toMinutes(delay) >= 55 && unit.toMinutes(delay) <= 65);
             scheduled = command;
-            return super.schedule(() -> {}, 1, TimeUnit.DAYS);
+            return super.schedule(() -> {}, 1, DAYS);
         }
 
         void runNext() {
@@ -387,18 +391,18 @@ class TelemetryTest {
                     exchange.getRequestHeaders()
                         .getFirst("Content-Type"));
                 try (InputStream input = exchange.getRequestBody()) {
-                    java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
                     byte[] buffer = new byte[1024];
                     int count;
                     while ((count = input.read(buffer)) >= 0) bytes.write(buffer, 0, count);
                     report.set(
-                        new JsonParser().parse(new String(bytes.toByteArray(), StandardCharsets.UTF_8))
+                        new JsonParser().parse(new String(bytes.toByteArray(), UTF_8))
                             .getAsJsonObject());
                 }
                 received.countDown();
                 if (holdResponse) {
                     try {
-                        release.await(10, TimeUnit.SECONDS);
+                        release.await(10, SECONDS);
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread()
                             .interrupt();

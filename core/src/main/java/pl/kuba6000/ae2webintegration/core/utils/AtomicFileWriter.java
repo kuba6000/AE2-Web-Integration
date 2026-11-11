@@ -1,15 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.function.Consumer;
 
 /** Writes a complete temporary file before replacing the previous configuration or data file. */
@@ -25,7 +27,7 @@ public final class AtomicFileWriter {
         File temporary = new File(target.getPath() + ".tmp");
         try {
             try (FileOutputStream out = new FileOutputStream(temporary);
-                Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
+                Writer writer = new OutputStreamWriter(out, UTF_8)) {
                 serializer.accept(writer);
                 writer.flush();
                 out.getFD()
@@ -44,13 +46,9 @@ public final class AtomicFileWriter {
         for (int attempt = 0; attempt < 20; attempt++) {
             try {
                 try {
-                    Files.move(
-                        temporary.toPath(),
-                        target.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
+                    Files.move(temporary.toPath(), target.toPath(), REPLACE_EXISTING, ATOMIC_MOVE);
                 } catch (AtomicMoveNotSupportedException unsupported) {
-                    Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(temporary.toPath(), target.toPath(), REPLACE_EXISTING);
                 }
                 return;
             } catch (FileSystemException busy) {

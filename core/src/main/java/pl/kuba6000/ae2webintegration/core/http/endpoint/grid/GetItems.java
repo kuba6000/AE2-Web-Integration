@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -137,7 +138,7 @@ public final class GetItems extends LiveSnapshotRequest {
                 subscription = bootstrap.subscription();
                 IconMappings mappings = pack == null ? null : new IconMappings(pack);
                 respondDetached(
-                    HttpURLConnection.HTTP_OK,
+                    HTTP_OK,
                     new Response(
                         ApiStatus.OK,
                         StorageTopic
@@ -156,7 +157,7 @@ public final class GetItems extends LiveSnapshotRequest {
                 .resources(shared.rows(), shared.descriptions(), shared.unkeyed(), mappings);
             TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
             respondDetached(
-                HttpURLConnection.HTTP_OK,
+                HTTP_OK,
                 new Response(
                     ApiStatus.OK,
                     items,
@@ -188,7 +189,7 @@ public final class GetItems extends LiveSnapshotRequest {
         }
 
         listing.commit();
-        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+        respondDetached(HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
     private static void addItem(ArrayList<StoredResource> items, IAEGenericStack stack, IAEGrid grid,

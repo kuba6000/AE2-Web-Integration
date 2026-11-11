@@ -1,7 +1,13 @@
 package pl.kuba6000.ae2webintegration.doclet;
 
+import static java.lang.String.CASE_INSENSITIVE_ORDER;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static javax.lang.model.SourceVersion.RELEASE_17;
+import static javax.lang.model.element.Modifier.ABSTRACT;
+import static javax.lang.model.element.Modifier.STATIC;
+import static javax.lang.model.element.Modifier.TRANSIENT;
+
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,7 +28,6 @@ import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
@@ -98,7 +103,7 @@ public final class OpenApiDoclet implements Doclet {
 
     @Override
     public SourceVersion getSupportedSourceVersion() {
-        return SourceVersion.RELEASE_17;
+        return RELEASE_17;
     }
 
     @Override
@@ -244,7 +249,7 @@ public final class OpenApiDoclet implements Doclet {
             Path parent = output.toAbsolutePath()
                 .getParent();
             Files.createDirectories(parent);
-            Files.writeString(output, JSON.toJson(specification) + "\n", StandardCharsets.UTF_8);
+            Files.writeString(output, JSON.toJson(specification) + "\n", UTF_8);
             return true;
         } catch (IllegalArgumentException | IOException exception) {
             reporter.print(Diagnostic.Kind.ERROR, exception.getMessage());
@@ -491,7 +496,7 @@ public final class OpenApiDoclet implements Doclet {
             throw problem(endpoint, "Expected @responseHeader <status> <name> <description>");
         }
         Map<String, Object> headers = responseHeaders
-            .computeIfAbsent(header[0], ignored -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER));
+            .computeIfAbsent(header[0], ignored -> new TreeMap<>(CASE_INSENSITIVE_ORDER));
         if (headers.putIfAbsent(header[1], object("description", header[2], "schema", object("type", "string")))
             != null) {
             throw problem(endpoint, "Duplicate @responseHeader: " + header[1]);
@@ -574,7 +579,7 @@ public final class OpenApiDoclet implements Doclet {
             Element field = fields.get(name);
             if (field == null) throw problem(endpoint, "Missing @PathParam field: " + name);
             if (field.getModifiers()
-                .contains(Modifier.STATIC)) throw problem(field, "Static @PathParam field");
+                .contains(STATIC)) throw problem(field, "Static @PathParam field");
             Map<String, Object> value = schema(
                 environment.getTypeUtils()
                     .asMemberOf(endpointType, field),
@@ -615,7 +620,7 @@ public final class OpenApiDoclet implements Doclet {
         if (!parameters.isEmpty()) operation.put("parameters", parameters);
         if (body != null) {
             if (body.getModifiers()
-                .contains(Modifier.STATIC)) throw problem(body, "Static @Body field");
+                .contains(STATIC)) throw problem(body, "Static @Body field");
             TypeMirror type = environment.getTypeUtils()
                 .asMemberOf(endpointType, body);
             Map<String, Object> value = schema(type, true);
@@ -635,7 +640,7 @@ public final class OpenApiDoclet implements Doclet {
         TypeMirror type = environment.getTypeUtils()
             .asMemberOf(endpointType, field);
         if (field.getModifiers()
-            .contains(Modifier.STATIC)
+            .contains(STATIC)
             || !(Set.of(TypeKind.BOOLEAN, TypeKind.INT, TypeKind.LONG)
                 .contains(type.getKind())
                 || type instanceof DeclaredType declared
@@ -765,11 +770,11 @@ public final class OpenApiDoclet implements Doclet {
             || !element.getTypeParameters()
                 .isEmpty()
             || element.getModifiers()
-                .contains(Modifier.ABSTRACT)
+                .contains(ABSTRACT)
             || (element.getNestingKind()
                 .isNested()
                 && !element.getModifiers()
-                    .contains(Modifier.STATIC))) {
+                    .contains(STATIC))) {
             throw problem(element, "Unsupported schema type: " + type);
         }
         name = shortName(element) + (webSettings ? "Web" : "") + (input ? "Input" : "");
@@ -823,9 +828,9 @@ public final class OpenApiDoclet implements Doclet {
         }
         for (Element field : type.getEnclosedElements()) {
             if (field.getKind() != ElementKind.FIELD || field.getModifiers()
-                .contains(Modifier.STATIC)
+                .contains(STATIC)
                 || field.getModifiers()
-                    .contains(Modifier.TRANSIENT)
+                    .contains(TRANSIENT)
                 || webSettings && annotation(field, WEB_SETTING) != null) continue;
             if (annotation(field, "com.google.gson.annotations.JsonAdapter") != null) {
                 throw problem(field, "Unsupported custom Gson adapter");

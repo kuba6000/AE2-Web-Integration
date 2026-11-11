@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiYesNo;
@@ -30,7 +32,7 @@ import pl.kuba6000.ae2webintegration.icongenerator.GeneratorProxy;
 
 public final class ClientBootstrap extends GeneratorProxy implements IResourceManagerReloadListener {
 
-    private static final long PROGRESS_MESSAGE_INTERVAL = TimeUnit.SECONDS.toNanos(5);
+    private static final long PROGRESS_MESSAGE_INTERVAL = SECONDS.toNanos(5);
     private @Nullable ExportSession session;
     private @Nullable AnimationConfirmation confirmation;
     private @Nullable ExportProgressScreen progressScreen;
@@ -145,9 +147,9 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
             String response;
             if (arguments.length >= 1 && "export".equals(arguments[0]) && validExportOptions(arguments)) {
                 response = requestExport(
-                    !java.util.Arrays.asList(arguments)
+                    !Arrays.asList(arguments)
                         .contains("nopbo"),
-                    java.util.Arrays.asList(arguments)
+                    Arrays.asList(arguments)
                         .contains("animation"));
             } else if (arguments.length != 1) {
                 response = getCommandUsage(sender);

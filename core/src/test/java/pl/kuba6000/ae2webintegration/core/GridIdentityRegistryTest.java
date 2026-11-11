@@ -1,10 +1,13 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.ResultSet;
@@ -34,7 +37,6 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridIdentityRegistryTest {
@@ -346,7 +348,7 @@ class GridIdentityRegistryTest {
         TestGridFixtures.setTracked(registry, secondKey, true);
 
         first.controllers.add(controller(2));
-        first.state = AEControllerState.CONTROLLER_CONFLICT;
+        first.state = CONTROLLER_CONFLICT;
         first.mayReadControllers = false;
         registry.controllerValidated(first);
         GridIdentityRegistry saved = worlds.registry(file.toFile());
@@ -359,7 +361,7 @@ class GridIdentityRegistryTest {
         assertNull(registry.getKey(first));
 
         first.controllers.remove(controller(2));
-        first.state = AEControllerState.CONTROLLER_ONLINE;
+        first.state = CONTROLLER_ONLINE;
         // The ignored callback did not erase the previous runtime binding either.
         assertEquals(firstKey, registry.getKey(first));
         first.mayReadControllers = true;
@@ -472,7 +474,7 @@ class GridIdentityRegistryTest {
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         String json = "{\"" + key
             + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
-        Files.write(file, json.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, json.getBytes(UTF_8));
         GridIdentityRegistry registry = worlds.registry(file.toFile());
         assertEquals(key, registry.findIdentity(controller(1)));
         GridPersistentData data = registry.getPersistentData(key);
@@ -493,7 +495,7 @@ class GridIdentityRegistryTest {
             + "\":{\"controllers\":["
             + "{\"dimensionId\":\"-1\",\"x\":-32,\"y\":64,\"z\":120},"
             + "{\"dimensionId\":\"minecraft:overworld\",\"x\":-32,\"y\":64,\"z\":120}],\"settings\":{}}}";
-        Files.write(file, saved.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, saved.getBytes(UTF_8));
         DimensionalCoords legacy = new DimensionalCoords(-1, -32, 64, 120);
         DimensionalCoords modern = new DimensionalCoords("minecraft:overworld", -32, 64, 120);
         GridIdentityRegistry registry = worlds.registry(file.toFile());
@@ -505,7 +507,7 @@ class GridIdentityRegistryTest {
         assertEquals(key, restarted.findIdentity(modern));
         assertTrue(TestGridFixtures.isTracked(restarted, key));
         JsonObject http = new JsonParser().parse(
-            GSONUtils.GSON_BUILDER.create()
+            GSON_BUILDER.create()
                 .toJson(modern))
             .getAsJsonObject();
         assertEquals(
@@ -525,7 +527,7 @@ class GridIdentityRegistryTest {
             + "\":{\"controllers\":[{\"dimid\":\""
             + dimension
             + "\",\"x\":-643,\"y\":4,\"z\":-907}],\"settings\":{\"isTracked\":true}}}";
-        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
+        Files.write(file, document.getBytes(UTF_8));
 
         GridIdentityRegistry registry = worlds.registry(file.toFile());
         DimensionalCoords controller = new DimensionalCoords(dimension, -643, 4, -907);
@@ -533,15 +535,15 @@ class GridIdentityRegistryTest {
         assertTrue(TestGridFixtures.isTracked(registry, key));
         Path archived = file.resolveSibling("released-identities.json.old");
         assertFalse(Files.exists(file));
-        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
+        assertEquals(document, new String(Files.readAllBytes(archived), UTF_8));
 
         registry.saveIfDirty();
-        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
+        assertEquals(document, new String(Files.readAllBytes(archived), UTF_8));
         GridIdentityRegistry restarted = worlds.registry(file.toFile());
         assertEquals(key, restarted.findIdentity(controller));
         assertTrue(TestGridFixtures.isTracked(restarted, key));
 
-        DimensionalCoords apiCoordinates = GSONUtils.GSON_BUILDER.create()
+        DimensionalCoords apiCoordinates = GSON_BUILDER.create()
             .fromJson("{\"dimid\":\"" + dimension + "\",\"x\":-643,\"y\":4,\"z\":-907}", DimensionalCoords.class);
         assertNull(apiCoordinates.dimensionId(), "The storage alias must not affect API deserialization");
     }
@@ -559,11 +561,11 @@ class GridIdentityRegistryTest {
     private static final class ControllerGrid extends TestGridFixtures.TestGrid {
 
         final Set<DimensionalCoords> controllers;
-        AEControllerState state = AEControllerState.CONTROLLER_ONLINE;
+        AEControllerState state = CONTROLLER_ONLINE;
         boolean mayReadControllers = true;
 
         ControllerGrid(DimensionalCoords... positions) {
-            super(0, false, AEControllerState.CONTROLLER_ONLINE);
+            super(0, false, CONTROLLER_ONLINE);
             controllers = new LinkedHashSet<>(Arrays.asList(positions));
         }
 

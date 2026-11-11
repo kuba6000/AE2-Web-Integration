@@ -1,5 +1,30 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.awt.image.BufferedImage.TYPE_INT_ARGB;
+import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ANIMATED_VERSION;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.CELL_PITCH;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.DEFAULT_PAGE_DIMENSION;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.GUTTER;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ICON_BYTES;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ICON_PIXELS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.ICON_SIZE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ANIMATION_FRAMES;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ANIMATION_MILLIS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_ARCHIVE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_FAILURE_RECORDS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_FAILURE_TEXT;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_IMAGES;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_KEYS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_MANIFEST;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_PAGE;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_STATISTICS;
+import static pl.kuba6000.ae2webintegration.core.icons.PackFormat.MAX_TOTAL_ANIMATION_FRAMES;
+
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.ByteArrayOutputStream;
@@ -11,7 +36,6 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,6 +43,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +54,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 import java.util.zip.ZipOutputStream;
@@ -44,8 +68,6 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack.Page;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.TempDirectories;
 
@@ -59,14 +81,14 @@ public final class IconPackWriter implements Closeable {
 
     private final @NotNull Path outputDirectory;
     private final @NotNull Path scratch;
-    private final @NotNull Metadata metadata;
+    private final @NotNull IconPack.Metadata metadata;
     private final @NotNull Map<String, String> exportMods = new TreeMap<>();
-    private static final int PAGE_SIZE = PackFormat.DEFAULT_PAGE_DIMENSION;
-    private static final int COLUMNS = PAGE_SIZE / PackFormat.CELL_PITCH;
+    private static final int PAGE_SIZE = DEFAULT_PAGE_DIMENSION;
+    private static final int COLUMNS = PAGE_SIZE / CELL_PITCH;
     /** Maximum distinct images in one exported animation; every clip belongs to one atlas. */
     public static final int MAX_ANIMATION_IMAGES = COLUMNS * COLUMNS;
     private final @NotNull Map<String, int[]> entries = new TreeMap<>();
-    private final @NotNull List<Page> pages = new ArrayList<>();
+    private final @NotNull List<IconPack.Page> pages = new ArrayList<>();
     private final @NotNull List<Map<String, String>> failures = new ArrayList<>();
     private final @NotNull Map<String, List<PixelRecord>> pixelIndex = new HashMap<>();
     private final @NotNull Map<String, PixelRecord> keyPixels = new HashMap<>();
@@ -74,8 +96,8 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Map<String, TimedSample> samples = new HashMap<>();
     private int animationFrames;
     private final @NotNull RandomAccessFile pixelSpool;
-    private final byte @NotNull [] serializedPixels = new byte[PackFormat.ICON_BYTES];
-    private final byte @NotNull [] comparedPixels = new byte[PackFormat.ICON_BYTES];
+    private final byte @NotNull [] serializedPixels = new byte[ICON_BYTES];
+    private final byte @NotNull [] comparedPixels = new byte[ICON_BYTES];
     private final @NotNull IntBuffer pixelInts = ByteBuffer.wrap(serializedPixels)
         .asIntBuffer();
     private @NotNull List<String> statisticSources = new ArrayList<>();
@@ -98,11 +120,11 @@ public final class IconPackWriter implements Closeable {
     private boolean closed;
     private boolean staticSealed;
 
-    public IconPackWriter(@NotNull Path outputDirectory, @NotNull Metadata metadata) throws IOException {
+    public IconPackWriter(@NotNull Path outputDirectory, @NotNull IconPack.Metadata metadata) throws IOException {
         if (!metadata.minecraftVersion()
             .matches("[A-Za-z0-9._-]+")) throw new IllegalArgumentException("Unsafe target filename");
         this.outputDirectory = outputDirectory;
-        this.metadata = new Metadata(
+        this.metadata = new IconPack.Metadata(
             metadata.minecraftVersion(),
             metadata.loader(),
             metadata.compatibilityVersion(),
@@ -121,7 +143,7 @@ public final class IconPackWriter implements Closeable {
             }
             int bytes = PackFormat.json(Collections.singletonMap(mod.getKey(), mod.getValue())).length;
             // Reserve manifest space for actual icons instead of retaining unbounded optional provenance.
-            if (bytes > PackFormat.MAX_MANIFEST / 4 - metadataBytes) {
+            if (bytes > MAX_MANIFEST / 4 - metadataBytes) {
                 failure("metadata", "Optional mod metadata capacity reached");
                 continue;
             }
@@ -158,7 +180,7 @@ public final class IconPackWriter implements Closeable {
             if (!samePixels(existingKey)) throw new IOException("Conflicting icon key");
             return;
         }
-        if (entries.size() >= PackFormat.MAX_KEYS)
+        if (entries.size() >= MAX_KEYS)
             throw new CapacityException(CapacityException.Scope.EXPORT, "Too many icon mappings");
         PixelRecord record = internPixels();
         if (record.staticPosition == null) {
@@ -215,14 +237,14 @@ public final class IconPackWriter implements Closeable {
         serializePixels(pixels);
         int interval = 0;
         if (previous == null) {
-            if (animationFrames + samples.size() >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
+            if (animationFrames + samples.size() >= MAX_TOTAL_ANIMATION_FRAMES)
                 throw new CapacityException(CapacityException.Scope.EXPORT, "Animation frame limit exceeded");
         } else {
             long elapsed = submittedNanos - previous.submittedNanos();
             if (elapsed < 0) throw new IllegalArgumentException("Animation timestamps must be monotonic");
-            if (elapsed > TimeUnit.MILLISECONDS.toNanos(PackFormat.MAX_ANIMATION_MILLIS))
+            if (elapsed > MILLISECONDS.toNanos(MAX_ANIMATION_MILLIS))
                 throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation interval limit exceeded");
-            interval = (int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(elapsed));
+            interval = (int) Math.max(1, NANOSECONDS.toMillis(elapsed));
             checkFrame(identity, repeats(identity, previous.pixels()), interval, 1);
         }
         PixelRecord record = internPixels();
@@ -256,16 +278,16 @@ public final class IconPackWriter implements Closeable {
     private void checkFrame(@NotNull String identity, boolean repeated, int durationMillis, int pendingReservation)
         throws IOException {
         if (durationMillis <= 0) throw new IllegalArgumentException("Invalid animation duration");
-        if (durationMillis > PackFormat.MAX_ANIMATION_MILLIS)
+        if (durationMillis > MAX_ANIMATION_MILLIS)
             throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation duration limit exceeded");
         List<AnimationFrame> frames = animations.get(identity);
         int duration = 0;
         if (frames != null) for (AnimationFrame frame : frames) duration += frame.durationMillis();
-        if (duration > PackFormat.MAX_ANIMATION_MILLIS - durationMillis * (pendingReservation + 1))
+        if (duration > MAX_ANIMATION_MILLIS - durationMillis * (pendingReservation + 1))
             throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation duration limit exceeded");
-        if (!repeated && frames != null && frames.size() + pendingReservation >= PackFormat.MAX_ANIMATION_FRAMES)
+        if (!repeated && frames != null && frames.size() + pendingReservation >= MAX_ANIMATION_FRAMES)
             throw new CapacityException(CapacityException.Scope.RESOURCE, "Animation frame limit exceeded");
-        if (!repeated && animationFrames + samples.size() >= PackFormat.MAX_TOTAL_ANIMATION_FRAMES)
+        if (!repeated && animationFrames + samples.size() >= MAX_TOTAL_ANIMATION_FRAMES)
             throw new CapacityException(CapacityException.Scope.EXPORT, "Animation frame limit exceeded");
     }
 
@@ -289,7 +311,7 @@ public final class IconPackWriter implements Closeable {
     }
 
     private void serializePixels(int @NotNull [] pixels) {
-        if (pixels.length != PackFormat.ICON_PIXELS) throw new IllegalArgumentException("Expected 64x64 ARGB pixels");
+        if (pixels.length != ICON_PIXELS) throw new IllegalArgumentException("Expected 64x64 ARGB pixels");
         pixelInts.clear();
         pixelInts.put(pixels);
     }
@@ -308,7 +330,7 @@ public final class IconPackWriter implements Closeable {
         if (matches != null) for (PixelRecord match : matches) if (samePixels(match)) {
             return match;
         }
-        if (pixelSpool.length() / PackFormat.ICON_BYTES >= PackFormat.MAX_IMAGES)
+        if (pixelSpool.length() / ICON_BYTES >= MAX_IMAGES)
             throw new CapacityException(CapacityException.Scope.EXPORT, "Too many distinct icon images");
         long offset = pixelSpool.length();
         pixelSpool.seek(offset);
@@ -320,33 +342,32 @@ public final class IconPackWriter implements Closeable {
     }
 
     private int @NotNull [] placePixels(int @NotNull [] pixels) {
-        if (image == null) image = new BufferedImage(PAGE_SIZE, PAGE_SIZE, BufferedImage.TYPE_INT_ARGB);
-        int x = (occupied % COLUMNS) * PackFormat.CELL_PITCH + PackFormat.GUTTER;
-        int y = (occupied / COLUMNS) * PackFormat.CELL_PITCH + PackFormat.GUTTER;
+        if (image == null) image = new BufferedImage(PAGE_SIZE, PAGE_SIZE, TYPE_INT_ARGB);
+        int x = (occupied % COLUMNS) * CELL_PITCH + GUTTER;
+        int y = (occupied / COLUMNS) * CELL_PITCH + GUTTER;
         // This writer owns a fresh, contiguous, non-premultiplied ARGB raster.
         int[] atlas = ((DataBufferInt) image.getRaster()
             .getDataBuffer()).getData();
-        for (int row = 0; row < PackFormat.ICON_SIZE; row++) {
-            System
-                .arraycopy(pixels, row * PackFormat.ICON_SIZE, atlas, (y + row) * PAGE_SIZE + x, PackFormat.ICON_SIZE);
+        for (int row = 0; row < ICON_SIZE; row++) {
+            System.arraycopy(pixels, row * ICON_SIZE, atlas, (y + row) * PAGE_SIZE + x, ICON_SIZE);
         }
         extrudeGutter(atlas, pixels, x, y);
         return new int[] { pages.size() + pendingPages.size(), x, y };
     }
 
     private void extrudeGutter(int @NotNull [] atlas, int @NotNull [] pixels, int x, int y) {
-        int last = PackFormat.ICON_SIZE - 1;
-        int top = (y - PackFormat.GUTTER) * PAGE_SIZE + x;
-        int bottom = (y + PackFormat.ICON_SIZE) * PAGE_SIZE + x;
-        for (int dx = -PackFormat.GUTTER; dx <= PackFormat.ICON_SIZE; dx++) {
+        int last = ICON_SIZE - 1;
+        int top = (y - GUTTER) * PAGE_SIZE + x;
+        int bottom = (y + ICON_SIZE) * PAGE_SIZE + x;
+        for (int dx = -GUTTER; dx <= ICON_SIZE; dx++) {
             int sourceX = Math.max(0, Math.min(last, dx));
             atlas[top + dx] = pixels[sourceX];
-            atlas[bottom + dx] = pixels[last * PackFormat.ICON_SIZE + sourceX];
+            atlas[bottom + dx] = pixels[last * ICON_SIZE + sourceX];
         }
-        for (int dy = 0; dy < PackFormat.ICON_SIZE; dy++) {
+        for (int dy = 0; dy < ICON_SIZE; dy++) {
             int row = (y + dy) * PAGE_SIZE + x;
-            atlas[row - PackFormat.GUTTER] = pixels[dy * PackFormat.ICON_SIZE];
-            atlas[row + PackFormat.ICON_SIZE] = pixels[dy * PackFormat.ICON_SIZE + last];
+            atlas[row - GUTTER] = pixels[dy * ICON_SIZE];
+            atlas[row + ICON_SIZE] = pixels[dy * ICON_SIZE + last];
         }
     }
 
@@ -400,7 +421,7 @@ public final class IconPackWriter implements Closeable {
     }
 
     private void finishSamples() throws IOException {
-        java.util.Iterator<Map.Entry<String, TimedSample>> iterator = samples.entrySet()
+        Iterator<Map.Entry<String, TimedSample>> iterator = samples.entrySet()
             .iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, TimedSample> entry = iterator.next();
@@ -421,7 +442,7 @@ public final class IconPackWriter implements Closeable {
     public void failure(@NotNull String context, @NotNull String reason) throws IOException {
         checkOpen();
         if (failureCount < Integer.MAX_VALUE) failureCount++;
-        if (failures.size() < PackFormat.MAX_FAILURE_RECORDS) {
+        if (failures.size() < MAX_FAILURE_RECORDS) {
             LOG.warn("Icon export omission ({}): {}", bounded(context), bounded(reason));
             Map<String, String> record = new TreeMap<>();
             record.put("context", bounded(context));
@@ -442,7 +463,7 @@ public final class IconPackWriter implements Closeable {
     }
 
     private static @NotNull String bounded(@NotNull String value) {
-        return value.substring(0, Math.min(PackFormat.MAX_FAILURE_TEXT, value.length()));
+        return value.substring(0, Math.min(MAX_FAILURE_TEXT, value.length()));
     }
 
     public void statistics(@NotNull Map<String, Long> counts, @NotNull List<String> sources) throws IOException {
@@ -451,13 +472,12 @@ public final class IconPackWriter implements Closeable {
         statisticSources = new ArrayList<>();
         for (Map.Entry<String, Long> entry : new TreeMap<>(counts).entrySet()) {
             if (!entry.getKey()
-                .matches("[A-Za-z0-9._-]{1,64}") || entry.getValue() < 0
-                || statisticCounts.size() >= PackFormat.MAX_STATISTICS) {
+                .matches("[A-Za-z0-9._-]{1,64}") || entry.getValue() < 0 || statisticCounts.size() >= MAX_STATISTICS) {
                 failure("statistics", "Optional statistic omitted: " + entry.getKey());
             } else statisticCounts.put(entry.getKey(), entry.getValue());
         }
         for (String source : sources) {
-            if (!source.matches("[A-Za-z0-9._-]{1,64}") || statisticSources.size() >= PackFormat.MAX_STATISTICS) {
+            if (!source.matches("[A-Za-z0-9._-]{1,64}") || statisticSources.size() >= MAX_STATISTICS) {
                 failure("statistics", "Optional source omitted: " + source);
             } else statisticSources.add(source);
         }
@@ -491,9 +511,14 @@ public final class IconPackWriter implements Closeable {
         byte[] bytes = encoded.toByteArray();
         String digest = PackFormat.hash(bytes);
         // Keep its index for pending references; final admission omits an oversized page and its users.
-        if (bytes.length <= PackFormat.MAX_PAGE) Files.write(scratch.resolve(digest + ".png"), bytes);
+        if (bytes.length <= MAX_PAGE) Files.write(scratch.resolve(digest + ".png"), bytes);
         return new EncodedPage(
-            new Page(digest, "pages/" + digest + ".png", completed.getWidth(), completed.getHeight(), bytes.length),
+            new IconPack.Page(
+                digest,
+                "pages/" + digest + ".png",
+                completed.getWidth(),
+                completed.getHeight(),
+                bytes.length),
             System.nanoTime() - started,
             started - submitted);
     }
@@ -504,7 +529,7 @@ public final class IconPackWriter implements Closeable {
             while (true) {
                 checkCanceled(canceled);
                 try {
-                    EncodedPage result = pending.get(50, TimeUnit.MILLISECONDS);
+                    EncodedPage result = pending.get(50, MILLISECONDS);
                     pendingPages.removeFirst();
                     pages.add(result.page());
                     pngWorkNanosSum += result.workNanos();
@@ -526,7 +551,7 @@ public final class IconPackWriter implements Closeable {
     }
 
     @Desugar
-    private record EncodedPage(@NotNull Page page, long workNanos, long queueNanos) {}
+    private record EncodedPage(@NotNull IconPack.Page page, long workNanos, long queueNanos) {}
 
     public @NotNull Path finish() throws IOException {
         return finish(() -> false);
@@ -604,7 +629,7 @@ public final class IconPackWriter implements Closeable {
             close();
             checkCanceled(canceled);
             if (!beginCommit.getAsBoolean()) throw new CancellationException("Icon export publication canceled");
-            Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporary, output, ATOMIC_MOVE, REPLACE_EXISTING);
             if (failureCount != 0)
                 LOG.warn("Icon export completed with {} omissions or recoverable failures", failureCount);
             return output;
@@ -620,19 +645,19 @@ public final class IconPackWriter implements Closeable {
 
     private void omitOversizedPages(BooleanSupplier canceled) throws IOException {
         int omitted = 0;
-        java.util.Iterator<Map.Entry<String, int[]>> statics = entries.entrySet()
+        Iterator<Map.Entry<String, int[]>> statics = entries.entrySet()
             .iterator();
         while (statics.hasNext()) {
             checkCanceled(canceled);
             Map.Entry<String, int[]> entry = statics.next();
             if (pages.get(entry.getValue()[0])
-                .bytes() <= PackFormat.MAX_PAGE) continue;
+                .bytes() <= MAX_PAGE) continue;
             animations.remove(entry.getKey());
             keyPixels.remove(entry.getKey());
             statics.remove();
             omitted++;
         }
-        java.util.Iterator<Map.Entry<String, List<AnimationFrame>>> clips = animations.entrySet()
+        Iterator<Map.Entry<String, List<AnimationFrame>>> clips = animations.entrySet()
             .iterator();
         while (clips.hasNext()) {
             checkCanceled(canceled);
@@ -640,7 +665,7 @@ public final class IconPackWriter implements Closeable {
             boolean oversized = false;
             for (AnimationFrame frame : entry.getValue()) {
                 if (frame.position() != null && pages.get(frame.position()[0])
-                    .bytes() > PackFormat.MAX_PAGE) {
+                    .bytes() > MAX_PAGE) {
                     oversized = true;
                     break;
                 }
@@ -671,7 +696,7 @@ public final class IconPackWriter implements Closeable {
             }
         } else {
             Set<String> droppedPages = new HashSet<>();
-            List<Page> referenced = referencedPages();
+            List<IconPack.Page> referenced = referencedPages();
             Map<String, Integer> pageOrder = new HashMap<>();
             for (int index = 0; index < pages.size(); index++) pageOrder.put(
                 pages.get(index)
@@ -680,11 +705,11 @@ public final class IconPackWriter implements Closeable {
             referenced.sort(Comparator.comparingInt(page -> pageOrder.get(page.digest())));
             for (int index = referenced.size() - 1; index >= 0 && remaining > 0; index--) {
                 checkCanceled(canceled);
-                Page page = referenced.get(index);
+                IconPack.Page page = referenced.get(index);
                 droppedPages.add(page.digest());
                 remaining -= page.bytes();
             }
-            java.util.Iterator<Map.Entry<String, int[]>> iterator = entries.entrySet()
+            Iterator<Map.Entry<String, int[]>> iterator = entries.entrySet()
                 .iterator();
             while (iterator.hasNext()) {
                 checkCanceled(canceled);
@@ -704,18 +729,18 @@ public final class IconPackWriter implements Closeable {
     private @NotNull String writeArchive(@NotNull Path temporary, @NotNull BooleanSupplier canceled)
         throws IOException {
         checkCanceled(canceled);
-        List<Page> sorted = referencedPages();
-        sorted.sort(Comparator.comparing(Page::digest));
+        List<IconPack.Page> sorted = referencedPages();
+        sorted.sort(Comparator.comparing(IconPack.Page::digest));
         Map<String, Object> root = manifest(sorted);
         String packId = PackFormat.packId(
             PackFormat.GSON.toJsonTree(root)
                 .getAsJsonObject());
         root.put("packId", packId);
         byte[] manifest = PackFormat.json(root);
-        if (manifest.length > PackFormat.MAX_MANIFEST) {
+        if (manifest.length > MAX_MANIFEST) {
             CapacityException limit = new CapacityException(CapacityException.Scope.EXPORT, "Manifest too large");
             limit.manifestLimit = true;
-            limit.excessBytes = manifest.length - PackFormat.MAX_MANIFEST;
+            limit.excessBytes = manifest.length - MAX_MANIFEST;
             throw limit;
         }
         ArchiveOutput output = new ArchiveOutput(Files.newOutputStream(temporary));
@@ -724,9 +749,9 @@ public final class IconPackWriter implements Closeable {
             PackFormat.zipEntry(zip, "manifest.json", manifest, false);
             // Actual compressed manifest plus conservative ZIP directory/header overhead.
             projectedBytes = output.written + 128;
-            for (Page page : sorted) projectedBytes += page.bytes() + page.path()
+            for (IconPack.Page page : sorted) projectedBytes += page.bytes() + page.path()
                 .length() * 2L + 128;
-            for (Page page : sorted) {
+            for (IconPack.Page page : sorted) {
                 checkCanceled(canceled);
                 if (output.exceeded) break;
                 PackFormat
@@ -737,7 +762,7 @@ public final class IconPackWriter implements Closeable {
             CapacityException limit = new CapacityException(
                 CapacityException.Scope.EXPORT,
                 "Icon archive exceeds size limit");
-            limit.excessBytes = Math.max(1, projectedBytes - PackFormat.MAX_ARCHIVE);
+            limit.excessBytes = Math.max(1, projectedBytes - MAX_ARCHIVE);
             throw limit;
         }
         return packId;
@@ -746,7 +771,7 @@ public final class IconPackWriter implements Closeable {
     /** Each complete sequence stays within one page; optional pixels have not been PNG-encoded yet. */
     private void layoutAnimations(@NotNull BooleanSupplier canceled) throws IOException {
         Map<PixelRecord, int[]> positions = new HashMap<>();
-        int[] pixels = new int[PackFormat.ICON_PIXELS];
+        int[] pixels = new int[ICON_PIXELS];
         TreeMap<Integer, ArrayDeque<AnimationLayout>> remaining = new TreeMap<>();
         for (List<AnimationFrame> frames : animations.values()) {
             checkCanceled(canceled);
@@ -818,7 +843,7 @@ public final class IconPackWriter implements Closeable {
 
         @Override
         public void write(int value) throws IOException {
-            if (exceeded || written == PackFormat.MAX_ARCHIVE) {
+            if (exceeded || written == MAX_ARCHIVE) {
                 exceeded = true;
                 return;
             }
@@ -828,7 +853,7 @@ public final class IconPackWriter implements Closeable {
 
         @Override
         public void write(byte @NotNull [] bytes, int offset, int length) throws IOException {
-            if (exceeded || length > PackFormat.MAX_ARCHIVE - written) {
+            if (exceeded || length > MAX_ARCHIVE - written) {
                 exceeded = true;
                 return;
             }
@@ -842,7 +867,7 @@ public final class IconPackWriter implements Closeable {
         }
     }
 
-    private @NotNull List<Page> referencedPages() {
+    private @NotNull List<IconPack.Page> referencedPages() {
         boolean[] referenced = new boolean[pages.size()];
         for (int[] position : entries.values()) referenced[position[0]] = true;
         for (List<AnimationFrame> frames : animations.values()) if (frames.size() > 1) {
@@ -851,15 +876,15 @@ public final class IconPackWriter implements Closeable {
                 referenced[frame.position()[0]] = true;
             }
         }
-        Map<String, Page> result = new HashMap<>();
+        Map<String, IconPack.Page> result = new HashMap<>();
         for (int index = 0; index < pages.size(); index++) if (referenced[index]) {
-            Page page = pages.get(index);
+            IconPack.Page page = pages.get(index);
             result.put(page.digest(), page);
         }
         return new ArrayList<>(result.values());
     }
 
-    private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) throws IOException {
+    private @NotNull Map<String, Object> manifest(@NotNull List<IconPack.Page> sorted) throws IOException {
         recordStatistic("failures", failureCount);
         recordStatistic("pngWorkers", pngWorkers);
         recordStatistic("pngPeakPendingPages", peakPendingPages);
@@ -898,15 +923,15 @@ public final class IconPackWriter implements Closeable {
             }
             sequences.put(entry.getKey(), sequence);
         }
-        root.put("formatVersion", sequences.isEmpty() ? PackFormat.VERSION : PackFormat.ANIMATED_VERSION);
+        root.put("formatVersion", sequences.isEmpty() ? PackFormat.VERSION : ANIMATED_VERSION);
         if (!sequences.isEmpty()) root.put("animations", sequences);
         root.put("minecraftVersion", metadata.minecraftVersion());
         root.put("loader", metadata.loader());
         root.put("compatibilityVersion", metadata.compatibilityVersion());
         root.put("generatorVersion", metadata.generatorVersion());
         root.put("generatedAt", metadata.generatedAt());
-        root.put("contentWidth", PackFormat.ICON_SIZE);
-        root.put("contentHeight", PackFormat.ICON_SIZE);
+        root.put("contentWidth", ICON_SIZE);
+        root.put("contentHeight", ICON_SIZE);
         Map<String, Object> environment = new TreeMap<>();
         environment.put("mods", exportMods);
         // Released format-2 readers require this array, even though input fingerprints are no longer collected.
@@ -914,7 +939,7 @@ public final class IconPackWriter implements Closeable {
         root.put("environment", environment);
         root.put("entries", mapping);
         List<Map<String, Object>> pageRecords = new ArrayList<>();
-        for (Page page : sorted) {
+        for (IconPack.Page page : sorted) {
             Map<String, Object> record = new TreeMap<>();
             record.put("digest", page.digest());
             record.put("path", page.path());
@@ -936,7 +961,7 @@ public final class IconPackWriter implements Closeable {
 
     private void recordStatistic(@NotNull String name, long value) {
         // Preserve the existing 64-count caller allowance; optional diagnostics use available slots.
-        if (statisticCounts.size() < PackFormat.MAX_STATISTICS || statisticCounts.containsKey(name))
+        if (statisticCounts.size() < MAX_STATISTICS || statisticCounts.containsKey(name))
             statisticCounts.put(name, value);
     }
 
@@ -976,7 +1001,7 @@ public final class IconPackWriter implements Closeable {
         while (!pngExecutor.isTerminated()) try {
             // The loop condition checks termination; interruptions must not bypass cleanup.
             // noinspection ResultOfMethodCallIgnored
-            pngExecutor.awaitTermination(1, TimeUnit.SECONDS);
+            pngExecutor.awaitTermination(1, SECONDS);
         } catch (InterruptedException interruption) {
             interrupted = true;
         }

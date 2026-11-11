@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import static pl.kuba6000.ae2webintegration.ae2interface.implementations.RecipePlanCapture.SCAN_VISITS_PER_ENTRY;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -55,7 +57,7 @@ public final class TraceCapture {
 
     private TraceCapture(int maxEntries, int maxDescriptionCharacters) {
         capture = new CraftingTraceCapture.Builder(maxEntries, maxDescriptionCharacters);
-        maxVisits = (long) maxEntries * RecipePlanCapture.SCAN_VISITS_PER_ENTRY;
+        maxVisits = (long) maxEntries * SCAN_VISITS_PER_ENTRY;
     }
 
     /**

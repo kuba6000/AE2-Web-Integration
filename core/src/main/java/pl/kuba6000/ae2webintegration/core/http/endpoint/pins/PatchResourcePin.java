@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -16,6 +17,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Direction;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 
 /**
  * Update resource pin.
@@ -24,11 +27,11 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
  * 
  * @pathParam pinKey Pin identifier.
  * @response 200 {@link Response} Updated account pins.
- * @response 400 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} BAD_PARAM: invalid configuration, range
+ * @response 400 {@link ErrorResponse} BAD_PARAM: invalid configuration, range
  *           or move.
- * @response 403 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} NO_PERMISSIONS: enabling a placement
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: enabling a placement
  *           requires network access.
- * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} NOT_FOUND: the owned pin does not exist.
+ * @response 404 {@link ErrorResponse} NOT_FOUND: the owned pin does not exist.
  */
 @Endpoint(method = HttpMethod.PATCH, path = "/api/resource-pins/{pinKey}")
 public final class PatchResourcePin extends ResourcePinRequest {
@@ -72,10 +75,10 @@ public final class PatchResourcePin extends ResourcePinRequest {
         try {
             ResourcePinStore.Move move = input.move() == null ? null
                 : new ResourcePinStore.Move(
-                    ResourcePinStore.Placement.parse(
+                    Placement.parse(
                         input.move()
                             .placement()),
-                    ResourcePinStore.Direction.parse(
+                    Direction.parse(
                         input.move()
                             .direction()));
             if (input.homeConfig() != null) input.homeConfig()

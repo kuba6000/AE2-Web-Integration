@@ -1,14 +1,15 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraftforge.fluids.Fluid.BUCKET_VOLUME;
+import static net.minecraftforge.oredict.OreDictionary.WILDCARD_VALUE;
+
 import java.util.List;
 import java.util.Objects;
 
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.oredict.OreDictionary;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,7 +19,8 @@ import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Owned render candidates; native stacks never cross the worker boundary. */
@@ -35,7 +37,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
     }
 
     static @Nullable IconCandidate recipeItem(@NotNull String context, @NotNull ItemStack source) {
-        if (source == ItemStack.EMPTY || source.getItemDamage() == OreDictionary.WILDCARD_VALUE) return null;
+        if (source == ItemStack.EMPTY || source.getItemDamage() == WILDCARD_VALUE) return null;
         if (source.getCount() > 0) return item(context, source);
         Item raw = source.getItemRaw();
         if (raw == null) return null;
@@ -56,8 +58,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
 
     abstract @Nullable IIconAnimation animation(LegacyIconRenderer renderer, StableKey key);
 
-    abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws LegacyIconRenderer.RenderFailure;
+    abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure;
 
     private static final class ItemCandidate extends IconCandidate {
 
@@ -129,8 +131,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-            throws LegacyIconRenderer.RenderFailure {
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+            @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
             renderer.item(stack.copy(), key, captures);
         }
     }
@@ -158,7 +160,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
 
         @Override
         public @NotNull IconCandidate baseline() {
-            return new FluidCandidate(context() + "/base", new FluidStack(stack.getFluid(), Fluid.BUCKET_VOLUME));
+            return new FluidCandidate(context() + "/base", new FluidStack(stack.getFluid(), BUCKET_VOLUME));
         }
 
         @Override
@@ -168,8 +170,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-            throws LegacyIconRenderer.RenderFailure {
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+            @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
             renderer.fluid(stack.copy(), key, captures);
         }
     }

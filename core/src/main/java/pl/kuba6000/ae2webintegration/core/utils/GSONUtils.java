@@ -44,7 +44,7 @@ public class GSONUtils {
                 return null;
             }
         })
-            // Old Gson otherwise reflects into java.lang.Void, which modern JVM modules forbid.
+            // Old Gson otherwise reflects into Void, which modern JVM modules forbid.
             .registerTypeAdapter(Void.class, new TypeAdapter<Void>() {
 
                 @Override

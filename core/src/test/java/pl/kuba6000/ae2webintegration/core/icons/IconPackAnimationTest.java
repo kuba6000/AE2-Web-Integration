@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
@@ -7,7 +8,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -44,6 +44,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter.CapacityException;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class IconPackAnimationTest {
@@ -96,10 +97,10 @@ class IconPackAnimationTest {
         try (IconPackWriter writer = writer()) {
             writer.add(KEY, pixels(0xffabcdef));
             for (int index = 0; index < 225; index++) writer.addAnimationFrame(KEY, pixels(index), 50);
-            IconPackWriter.CapacityException failure = assertThrows(
-                IconPackWriter.CapacityException.class,
+            CapacityException failure = assertThrows(
+                CapacityException.class,
                 () -> writer.addAnimationFrame(KEY, pixels(225), 50));
-            assertEquals(IconPackWriter.CapacityException.Scope.RESOURCE, failure.scope());
+            assertEquals(CapacityException.Scope.RESOURCE, failure.scope());
             writer.discardAnimation(KEY);
             output = writer.finish();
         }
@@ -293,10 +294,10 @@ class IconPackAnimationTest {
             writer.addAnimationSample(single, pixels(0xff445566), Long.MIN_VALUE);
             for (int index = 0; index < 256; index++)
                 writer.addAnimationSample(KEY, pixels(index % 2 == 0 ? 0xff445566 : 0xff778899), index * 1_000_000L);
-            IconPackWriter.CapacityException limit = assertThrows(
-                IconPackWriter.CapacityException.class,
+            CapacityException limit = assertThrows(
+                CapacityException.class,
                 () -> writer.addAnimationSample(KEY, pixels(0xff445566), 256_000_000L));
-            assertEquals(IconPackWriter.CapacityException.Scope.RESOURCE, limit.scope());
+            assertEquals(CapacityException.Scope.RESOURCE, limit.scope());
             output = writer.finish();
         }
         try (IconPack pack = open(output)) {
@@ -324,7 +325,7 @@ class IconPackAnimationTest {
             assertThrows(IllegalStateException.class, () -> writer.addAnimationFrame(KEY, pixels(0xff778899), 100));
             assertThrows(IllegalArgumentException.class, () -> writer.addAnimationSample(KEY, pixels(0xff778899), -1));
             assertThrows(
-                IconPackWriter.CapacityException.class,
+                CapacityException.class,
                 () -> writer.addAnimationSample(KEY, pixels(0xff778899), 400_000_000_000L));
             writer.addAnimationSample(KEY, pixels(0xff778899), 200_000_000_000L);
             output = writer.finish();
@@ -472,7 +473,7 @@ class IconPackAnimationTest {
                 InputStream manifest = zip.getInputStream(zip.getEntry("manifest.json"))) {
                 assertEquals(
                     2,
-                    new JsonParser().parse(new InputStreamReader(manifest, StandardCharsets.UTF_8))
+                    new JsonParser().parse(new InputStreamReader(manifest, UTF_8))
                         .getAsJsonObject()
                         .get("formatVersion")
                         .getAsInt());
@@ -491,9 +492,7 @@ class IconPackAnimationTest {
                 assertThrows(IllegalArgumentException.class, () -> writer.addAnimationFrame(KEY, pixels(1), duration));
             }
             for (int duration : new int[] { 600001, Integer.MAX_VALUE }) {
-                assertThrows(
-                    IconPackWriter.CapacityException.class,
-                    () -> writer.addAnimationFrame(KEY, pixels(1), duration));
+                assertThrows(CapacityException.class, () -> writer.addAnimationFrame(KEY, pixels(1), duration));
             }
             writer.addAnimationFrame(KEY, pixels(0xff445566), 300000);
             writer.addAnimationFrame(KEY, pixels(0xff778899), 300000);
@@ -659,7 +658,7 @@ class IconPackAnimationTest {
                 }
                 if (entry.getName()
                     .equals("manifest.json")) {
-                    JsonObject root = new JsonParser().parse(new String(bytes, StandardCharsets.UTF_8))
+                    JsonObject root = new JsonParser().parse(new String(bytes, UTF_8))
                         .getAsJsonObject();
                     mutation.accept(root);
                     if (reseal) {
@@ -672,11 +671,11 @@ class IconPackAnimationTest {
                                 new GsonBuilder().disableHtmlEscaping()
                                     .create()
                                     .toJson(canonical(projection))
-                                    .getBytes(StandardCharsets.UTF_8));
+                                    .getBytes(UTF_8));
                         root.addProperty("packId", String.format(Locale.ROOT, "%064x", new BigInteger(1, digest)));
                     }
                     bytes = root.toString()
-                        .getBytes(StandardCharsets.UTF_8);
+                        .getBytes(UTF_8);
                 }
                 ZipEntry replacement = new ZipEntry(entry.getName());
                 if (entry.getMethod() == ZipEntry.STORED) {

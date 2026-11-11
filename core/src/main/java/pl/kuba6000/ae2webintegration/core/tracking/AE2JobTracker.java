@@ -29,7 +29,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
-import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting.Interval;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 public class AE2JobTracker {
@@ -66,10 +65,10 @@ public class AE2JobTracker {
         public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
-        public HashMap<IAEKey, ArrayList<Interval>> itemShare = new HashMap<>();
+        public HashMap<IAEKey, ArrayList<CompletedCrafting.Interval>> itemShare = new HashMap<>();
         /** Provider groups used for each output, retained after the active waiting intervals are removed. */
         public final HashMap<IAEKey, HashSet<String>> resourceProviders = new HashMap<>();
-        public HashMap<AEInterface, ArrayList<Interval>> interfaceShare = new HashMap<>();
+        public HashMap<AEInterface, ArrayList<CompletedCrafting.Interval>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
         public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
@@ -177,7 +176,7 @@ public class AE2JobTracker {
                 info.timeSpentOn.merge(keyDiff, elapsed, Long::sum);
                 info.craftedTotal.merge(keyDiff, info.waitingFor.remove(keyDiff), Long::sum);
                 info.itemShare.computeIfAbsent(keyDiff, k -> new ArrayList<>())
-                    .add(new Interval(started, endedReal));
+                    .add(new CompletedCrafting.Interval(started, endedReal));
                 if (info.interfaceWaitingForLookup.containsKey(keyDiff)) {
                     for (Map.Entry<AEInterface, HashSet<IAEKey>> entry : info.interfaceWaitingForLookup.get(keyDiff)
                         .entrySet()) {
@@ -188,7 +187,7 @@ public class AE2JobTracker {
                             info.interfaceWaitingFor.remove(aeInterface);
                             long interfaceStarted = info.interfaceStarted.remove(aeInterface);
                             info.interfaceShare.computeIfAbsent(aeInterface, k -> new ArrayList<>())
-                                .add(new Interval(interfaceStarted, endedReal));
+                                .add(new CompletedCrafting.Interval(interfaceStarted, endedReal));
                         }
                     }
                     info.interfaceWaitingForLookup.remove(keyDiff);
@@ -237,11 +236,11 @@ public class AE2JobTracker {
         for (Map.Entry<IAEKey, Long> entry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
             info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                .add(new Interval(entry.getValue(), now));
+                .add(new CompletedCrafting.Interval(entry.getValue(), now));
         }
         for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
             info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                .add(new Interval(entry.getValue(), now));
+                .add(new CompletedCrafting.Interval(entry.getValue(), now));
         }
         info.interfaceStarted.clear();
         info.interfaceWaitingFor.clear();

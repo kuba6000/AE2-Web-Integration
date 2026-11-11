@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -134,7 +135,7 @@ public final class RecentTrackingService implements AutoCloseable {
     private void run() {
         while (!closed) {
             try {
-                Command command = commands.poll(100, TimeUnit.MILLISECONDS);
+                Command command = commands.poll(100, MILLISECONDS);
                 if (command != null) {
                     try {
                         apply(command);

@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.DAYS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.File;
 import java.io.IOException;
@@ -9,31 +12,26 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
-import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig;
-import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Pin;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Direction;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
 class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void unchangedDescriptionsDoNotRewriteCatalogueAndMissingBaseKeepsKnownIcon() throws Exception {
-        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88401, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88401, false, CONTROLLER_ONLINE));
         StableKey item = TestGridFixtures.key(71);
         StableKey base = TestGridFixtures.key(72);
         WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
@@ -115,7 +113,7 @@ class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void catalogueRefreshesEachMetadataFieldIncludingNullableRegistryValues() throws Exception {
-        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88402, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88402, false, CONTROLLER_ONLINE));
         StableKey item = TestGridFixtures.key(73);
         StableKey base = TestGridFixtures.key(74);
         ResourcePinStore pins = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
@@ -149,9 +147,9 @@ class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void capturedHistoryPersistsAnIdentityRetiredBeforeItsFirstFlush() throws Exception {
-        TestGrid grid = new TestGrid(88400, false, AEControllerState.CONTROLLER_ONLINE);
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(88400, false, CONTROLLER_ONLINE);
         StableKey key = TestGridFixtures.resolvedKey(grid);
-        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(data);
         GridSettingsData retiredSettings = data.getSettings();
         retiredSettings.setName("Retired");
@@ -162,8 +160,8 @@ class ResourcePinStoreTest extends GridTestScope {
         retiredSettings.setStockSampleIntervalSeconds(600);
         retiredSettings.setFlowFlushIntervalSeconds(120);
         retiredSettings.setHistoryRetentionDays(14);
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
-        assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
+        GRID_IDENTITIES.controllerRemoved(grid.position());
+        assertNull(GRID_IDENTITIES.getPersistentData(key));
         // A stale settings handle must not change the final policy of a retired identity.
         retiredSettings.setHistoryRetentionDays(1);
         retiredSettings.setName("Stale");
@@ -174,14 +172,24 @@ class ResourcePinStoreTest extends GridTestScope {
         retiredSettings.setStockSampleIntervalSeconds(60);
         retiredSettings.setFlowFlushIntervalSeconds(60);
         StableKey item = TestGridFixtures.key(70);
-        long observed = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        long observed = System.currentTimeMillis() - DAYS.toMillis(2);
         WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
         try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(
                 key,
                 Collections.singletonMap(item, description(item, "Captured")),
                 Collections.singletonList(
-                    new StorageHistoryPoint(observed, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, observed - 1000)));
+                    new StorageHistoryPoint(
+                        observed,
+                        1,
+                        StorageHistoryPoint.Kind.FLOW,
+                        item,
+                        0,
+                        5,
+                        2,
+                        0,
+                        0,
+                        observed - 1000)));
             assertEquals(
                 1,
                 history.read(key, item, 0, 100)
@@ -219,9 +227,9 @@ class ResourcePinStoreTest extends GridTestScope {
     @Test
     void terminalAndHomeOrdersRemainIndependentAcrossGridsAndConfigurationIsAtomic() throws Exception {
         StableKey firstGrid = TestGridFixtures
-            .resolvedKey(new TestGrid(88392, false, AEControllerState.CONTROLLER_ONLINE));
+            .resolvedKey(new TestGridFixtures.TestGrid(88392, false, CONTROLLER_ONLINE));
         StableKey secondGrid = TestGridFixtures
-            .resolvedKey(new TestGrid(88393, false, AEControllerState.CONTROLLER_ONLINE));
+            .resolvedKey(new TestGridFixtures.TestGrid(88393, false, CONTROLLER_ONLINE));
         StableKey first = TestGridFixtures.key(62);
         StableKey second = TestGridFixtures.key(63);
         StableKey third = TestGridFixtures.key(64);
@@ -233,20 +241,20 @@ class ResourcePinStoreTest extends GridTestScope {
         assertTrue(pins.add(owner, firstGrid, second, null, Placement.HOME));
         assertTrue(pins.add(owner, firstGrid, first, null, Placement.HOME));
         assertTrue(pins.add(owner, secondGrid, third, null, Placement.HOME));
-        List<Pin> records = pins.list(owner);
-        Pin firstPin = records.stream()
+        List<ResourcePinStore.Pin> records = pins.list(owner);
+        ResourcePinStore.Pin firstPin = records.stream()
             .filter(
                 pin -> pin.itemKey()
                     .equals(first))
             .findFirst()
             .get();
-        Pin secondPin = records.stream()
+        ResourcePinStore.Pin secondPin = records.stream()
             .filter(
                 pin -> pin.itemKey()
                     .equals(second))
             .findFirst()
             .get();
-        Pin thirdPin = records.stream()
+        ResourcePinStore.Pin thirdPin = records.stream()
             .filter(
                 pin -> pin.itemKey()
                     .equals(third))
@@ -260,7 +268,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 secondPin.pinKey(),
                 null,
                 null,
-                new ResourcePinStore.Move(Placement.TERMINAL, ResourcePinStore.Direction.EARLIER),
+                new ResourcePinStore.Move(Placement.TERMINAL, Direction.EARLIER),
                 null,
                 null));
         assertTrue(
@@ -269,13 +277,23 @@ class ResourcePinStoreTest extends GridTestScope {
                 thirdPin.pinKey(),
                 null,
                 null,
-                new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
+                new ResourcePinStore.Move(Placement.HOME, Direction.EARLIER),
                 null,
                 null));
-        HomeConfig config = new HomeConfig(false, true, true, false, false, false, true, 604800000, false, 900000);
+        ResourcePinStore.HomeConfig config = new ResourcePinStore.HomeConfig(
+            false,
+            true,
+            true,
+            false,
+            false,
+            false,
+            true,
+            604800000,
+            false,
+            900000);
         assertTrue(pins.update(owner, firstPin.pinKey(), null, null, null, config, null));
-        List<Pin> changed = pins.list(owner);
-        for (Pin pin : changed) {
+        List<ResourcePinStore.Pin> changed = pins.list(owner);
+        for (ResourcePinStore.Pin pin : changed) {
             if (pin.itemKey()
                 .equals(first)) {
                 assertEquals(1, pin.terminalOrder());
@@ -301,7 +319,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 false,
                 null,
                 null,
-                new HomeConfig(true, true, true, true, true, true, true, 0, true, 86400000),
+                new ResourcePinStore.HomeConfig(true, true, true, true, true, true, true, 0, true, 86400000),
                 null));
         assertEquals(changed, pins.list(owner));
         assertThrows(
@@ -311,7 +329,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 firstPin.pinKey(),
                 null,
                 false,
-                new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
+                new ResourcePinStore.Move(Placement.HOME, Direction.EARLIER),
                 null,
                 null));
         assertEquals(changed, pins.list(owner));
@@ -323,14 +341,14 @@ class ResourcePinStoreTest extends GridTestScope {
                 false,
                 null,
                 null,
-                new HomeConfig(true, true, true, true, true, true, true, 86400000, true, 0),
+                new ResourcePinStore.HomeConfig(true, true, true, true, true, true, true, 86400000, true, 0),
                 null));
         assertEquals(changed, pins.list(owner));
         worlds.close(TestGridFixtures.Worlds.source(gridSave));
         ResourcePinStore reopened = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         assertEquals(changed, reopened.list(owner));
         reopened.remove(owner, secondPin.pinKey());
-        for (Pin pin : reopened.list(owner)) {
+        for (ResourcePinStore.Pin pin : reopened.list(owner)) {
             assertEquals(0, pin.terminalOrder());
             assertEquals(
                 pin.itemKey()
@@ -341,7 +359,7 @@ class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void pinAndDescriptorRollbackTogetherWhenStorageRejectsCreation() throws Exception {
-        StableKey key = TestGridFixtures.resolvedKey(new TestGrid(88394, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey key = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88394, false, CONTROLLER_ONLINE));
         StableKey item = TestGridFixtures.key(65);
         WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
         ResourcePinStore pins = new ResourcePinStore(database);
@@ -386,19 +404,19 @@ class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void pinnedDescriptorSurvivesLastHistoryPruneAndLastUnpinReclaimsIt() throws Exception {
-        StableKey key = TestGridFixtures.resolvedKey(new TestGrid(88395, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey key = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88395, false, CONTROLLER_ONLINE));
         StableKey item = TestGridFixtures.key(66);
         File source = TestGridFixtures.Worlds.source(gridSave);
         WorldDatabase database = worlds.database(source);
         ResourcePinStore pins = new ResourcePinStore(database);
         assertTrue(pins.add(WebPrincipal.admin(), key, item, description(item, "Pinned"), Placement.HOME));
-        long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(9);
+        long old = System.currentTimeMillis() - DAYS.toMillis(9);
         try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(
                 key,
                 Collections.emptyMap(),
-                Collections
-                    .singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, old - 60000)));
+                Collections.singletonList(
+                    new StorageHistoryPoint(old, 1, StorageHistoryPoint.Kind.FLOW, item, 0, 5, 2, 0, 0, old - 60000)));
         }
         worlds.close(source);
         WorldDatabase reopened = worlds.database(source);
@@ -430,7 +448,7 @@ class ResourcePinStoreTest extends GridTestScope {
                         new StorageHistoryPoint(
                             System.currentTimeMillis(),
                             2,
-                            Kind.STOCK,
+                            StorageHistoryPoint.Kind.STOCK,
                             item,
                             1,
                             0,
@@ -447,7 +465,7 @@ class ResourcePinStoreTest extends GridTestScope {
 
     @Test
     void placementsAreIndependentAndAdministratorOwnershipSurvivesRestart() throws Exception {
-        TestGrid grid = new TestGrid(88391, false, AEControllerState.CONTROLLER_ONLINE);
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(88391, false, CONTROLLER_ONLINE);
         StableKey key = TestGridFixtures.resolvedKey(grid);
         StableKey item = TestGridFixtures.key(61);
         ResourceDescriptor descriptor = new ResourceDescriptor(
@@ -463,7 +481,7 @@ class ResourcePinStoreTest extends GridTestScope {
         assertTrue(pins.add(WebPrincipal.admin(), key, item, descriptor, Placement.TERMINAL));
         assertTrue(pins.add(WebPrincipal.localhost(), key, item, null, Placement.HOME));
         assertTrue(pins.add(WebPrincipal.admin(), key, item, null, Placement.TERMINAL));
-        List<Pin> selected = pins.list(WebPrincipal.admin());
+        List<ResourcePinStore.Pin> selected = pins.list(WebPrincipal.admin());
         assertEquals(1, selected.size());
         assertTrue(
             selected.get(0)

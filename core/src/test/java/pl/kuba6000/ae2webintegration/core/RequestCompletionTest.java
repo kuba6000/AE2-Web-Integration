@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,7 +17,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -60,7 +60,7 @@ class RequestCompletionTest {
     @Test
     void timeoutCompletionCannotBeReplacedByALateResponse() throws Exception {
         TestRequest request = new TestRequest();
-        assertThrows(TimeoutException.class, () -> request.awaitCompletion(0, TimeUnit.SECONDS));
+        assertThrows(TimeoutException.class, () -> request.awaitCompletion(0, SECONDS));
         request.failIfPending(ApiStatus.TIMEOUT);
         request.respond("late page");
         assertEquals(
@@ -69,7 +69,7 @@ class RequestCompletionTest {
                 .httpStatus());
         TestRequest rejected = new TestRequest();
         rejected.failIfPending(ApiStatus.SERVER_BUSY);
-        rejected.awaitCompletion(1, TimeUnit.SECONDS);
+        rejected.awaitCompletion(1, SECONDS);
         assertEquals(
             ApiStatus.SERVER_BUSY.httpStatus(),
             rejected.finishResponse()
@@ -100,12 +100,12 @@ class RequestCompletionTest {
         TestRequest request = new TestRequest();
         ConsumerOwnedData body = new ConsumerOwnedData();
         request.respondDetachedBody(body);
-        request.awaitCompletion(1, TimeUnit.SECONDS);
+        request.awaitCompletion(1, SECONDS);
         assertEquals(0, body.reads.get());
         ExecutorService consumer = Executors.newSingleThreadExecutor();
         try {
             Future<String> result = consumer.submit(request::getJSON);
-            assertEquals("[\"Żelazo\"]", result.get(1, TimeUnit.SECONDS));
+            assertEquals("[\"Żelazo\"]", result.get(1, SECONDS));
             assertEquals("[\"Żelazo\"]", request.getJSON());
             assertEquals(1, body.reads.get());
         } finally {
@@ -158,12 +158,12 @@ class RequestCompletionTest {
         ExecutorService consumer = Executors.newSingleThreadExecutor();
         try {
             Future<ApiResponse> result = consumer.submit(request::getResponse);
-            assertTrue(body.entered.await(1, TimeUnit.SECONDS));
+            assertTrue(body.entered.await(1, SECONDS));
             AE2Controller.stopHTTPServer();
             body.release.countDown();
             assertEquals(
                 503,
-                result.get(1, TimeUnit.SECONDS)
+                result.get(1, SECONDS)
                     .httpStatus());
             assertEquals(
                 "SERVER_STOPPING",
@@ -205,14 +205,14 @@ class RequestCompletionTest {
         ExecutorService consumers = Executors.newFixedThreadPool(2);
         try {
             Future<ApiResponse> first = consumers.submit(request::getResponse);
-            assertTrue(body.entered.await(1, TimeUnit.SECONDS));
+            assertTrue(body.entered.await(1, SECONDS));
             Future<ApiResponse> second = consumers.submit(request::getResponse);
             body.release.countDown();
             assertEquals(
                 "[\"old world\"]",
-                first.get(1, TimeUnit.SECONDS)
+                first.get(1, SECONDS)
                     .json());
-            assertEquals(first.get(), second.get(1, TimeUnit.SECONDS));
+            assertEquals(first.get(), second.get(1, SECONDS));
             assertEquals(1, body.reads.get());
         } finally {
             body.release.countDown();
@@ -231,7 +231,7 @@ class RequestCompletionTest {
             reads.incrementAndGet();
             entered.countDown();
             try {
-                assertTrue(release.await(5, TimeUnit.SECONDS));
+                assertTrue(release.await(5, SECONDS));
             } catch (InterruptedException exception) {
                 Thread.currentThread()
                     .interrupt();
@@ -355,17 +355,17 @@ class RequestCompletionTest {
             Future<?> waiter = executor.submit(() -> {
                 entered.countDown();
                 try {
-                    request.awaitCompletion(5, TimeUnit.SECONDS);
+                    request.awaitCompletion(5, SECONDS);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             });
 
-            assertTrue(entered.await(1, TimeUnit.SECONDS));
+            assertTrue(entered.await(1, SECONDS));
             assertFalse(waiter.isDone());
             request.done();
 
-            waiter.get(1, TimeUnit.SECONDS);
+            waiter.get(1, SECONDS);
         } finally {
             executor.shutdownNow();
         }

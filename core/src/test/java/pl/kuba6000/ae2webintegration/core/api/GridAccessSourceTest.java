@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.util.UUID;
 
@@ -10,7 +11,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture coordinates.
 class GridAccessSourceTest {
@@ -20,7 +20,7 @@ class GridAccessSourceTest {
 
     @Test
     void accessExplanationKeepsItsJsonSchemaAndRoundTripsPermissions() {
-        Gson gson = GSONUtils.GSON_BUILDER.create();
+        Gson gson = GSON_BUILDER.create();
         GridAccessSource source = new GridAccessSource(
             new PlayerIdentity(anna, "Anna"),
             "security_terminal",

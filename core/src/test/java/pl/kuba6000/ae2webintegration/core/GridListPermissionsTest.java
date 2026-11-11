@@ -1,13 +1,16 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -16,7 +19,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -30,11 +32,7 @@ class GridListPermissionsTest extends GridTestScope {
     @Test
     void permissionExplanationIsDetachedBeforeHttpReadsTheResponse() throws Exception {
         Thread serverThread = Thread.currentThread();
-        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-            1,
-            false,
-            AEControllerState.CONTROLLER_ONLINE,
-            42) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(1, false, CONTROLLER_ONLINE, 42) {
 
             @Override
             public @NotNull Map<UUID, List<GridAccessSource>> web$getPermissions() {
@@ -54,10 +52,10 @@ class GridListPermissionsTest extends GridTestScope {
                     });
             }
         };
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GRID_IDENTITIES.controllerValidated(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        GridPersistentData persistent = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        GridPersistentData persistent = GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(persistent);
         persistent.getSettings()
             .setName("Factory");
@@ -71,7 +69,7 @@ class GridListPermissionsTest extends GridTestScope {
             .forEach(List::clear);
         grid.withoutSources();
         String json = CompletableFuture.supplyAsync(request::getJSON)
-            .get(2, TimeUnit.SECONDS);
+            .get(2, SECONDS);
         JsonObject response = JsonParser.parseString(json)
             .getAsJsonObject();
         assertEquals(
@@ -90,7 +88,7 @@ class GridListPermissionsTest extends GridTestScope {
             .getAsJsonObject()
             .getAsJsonObject("accessSources");
         assertEquals(2, sources.size());
-        for (int playerId : new int[] { TestGridFixtures.OWNER_ID, 42 }) {
+        for (int playerId : new int[] { OWNER_ID, 42 }) {
             PlayerIdentity player = TestGridFixtures.playerIdentity(playerId);
             JsonArray entries = sources.getAsJsonArray(player.uuid.toString());
             assertNotNull(entries);

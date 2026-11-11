@@ -1,5 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CPU_SELECTION_MODE;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_PLAN_STEPS;
+
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Iterator;
@@ -27,10 +32,10 @@ public class AE implements IAE {
 
     static {
         Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
-        capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, true);
-        capabilities.put(ServerCapability.CRAFTING_IGNORE_MISSING, true);
-        capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, true);
-        capabilities.put(ServerCapability.CPU_SELECTION_MODE, true);
+        capabilities.put(CRAFTING_LIGHT_MODE, true);
+        capabilities.put(CRAFTING_IGNORE_MISSING, true);
+        capabilities.put(CRAFTING_PLAN_STEPS, true);
+        capabilities.put(CPU_SELECTION_MODE, true);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
     }
 

@@ -1,16 +1,17 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -41,8 +42,7 @@ class CraftingNotificationTest extends GridTestScope {
         CountDownLatch releaseWorker = new CountDownLatch(1);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/discord", exchange -> {
-            JsonObject payload = new JsonParser()
-                .parse(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))
+            JsonObject payload = new JsonParser().parse(new InputStreamReader(exchange.getRequestBody(), UTF_8))
                 .getAsJsonObject();
             JsonObject embed = payload.getAsJsonArray("embeds")
                 .get(0)
@@ -52,7 +52,7 @@ class CraftingNotificationTest extends GridTestScope {
                 .contains("Display notification-output")) {
                 workerBlocked.countDown();
                 try {
-                    assertTrue(releaseWorker.await(5, TimeUnit.SECONDS));
+                    assertTrue(releaseWorker.await(5, SECONDS));
                 } catch (InterruptedException failure) {
                     Thread.currentThread()
                         .interrupt();
@@ -65,8 +65,7 @@ class CraftingNotificationTest extends GridTestScope {
             exchange.close();
         });
         server.createContext("/ntfy", exchange -> {
-            JsonObject payload = new JsonParser()
-                .parse(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))
+            JsonObject payload = new JsonParser().parse(new InputStreamReader(exchange.getRequestBody(), UTF_8))
                 .getAsJsonObject();
             if (payload.get("message")
                 .getAsString()
@@ -87,15 +86,15 @@ class CraftingNotificationTest extends GridTestScope {
             Config.INSTANCE.ntfy.topic = "crafting-test";
             NotificationManager.init();
             try {
-                assertTrue(workerBlocked.await(5, TimeUnit.SECONDS));
+                assertTrue(workerBlocked.await(5, SECONDS));
                 CpuFixtures.Cpu cpu = new CpuFixtures.Cpu(900_107L);
                 cpu.output = new CpuFixtures.Resource("notification-output");
                 cpu.outputAmount = 5;
                 CpuFixtures.Grid grid = new CpuFixtures.Grid(900_106L, cpu);
                 TestGridFixtures.track(grid);
-                StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+                StableKey key = GRID_IDENTITIES.getKey(grid);
                 assertNotNull(key);
-                GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+                GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
                 assertNotNull(data);
                 GridSettingsData settings = data.getSettings();
                 settings.setName("Name when the job started");
@@ -110,8 +109,8 @@ class CraftingNotificationTest extends GridTestScope {
                 settings.setName("Renamed after completion");
                 releaseWorker.countDown();
                 String label = named ? name : key.toString();
-                assertPayload(discord.poll(5, TimeUnit.SECONDS), "description", label, cancelled);
-                assertPayload(ntfy.poll(5, TimeUnit.SECONDS), "message", label, cancelled);
+                assertPayload(discord.poll(5, SECONDS), "description", label, cancelled);
+                assertPayload(ntfy.poll(5, SECONDS), "message", label, cancelled);
             } finally {
                 releaseWorker.countDown();
                 NotificationManager.shutdown();

@@ -1,27 +1,31 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.MAX_CAPTURES_PER_BATCH;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Cooperative client-frame traversal; native cursors and their lifetime stay on this owner. */
 final class IconAnimationPasses implements AutoCloseable {
 
-    private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(10);
-    private static final long SAMPLE_WINDOW = TimeUnit.SECONDS.toNanos(5);
-    private static final long GROUP_TARGET = TimeUnit.MILLISECONDS.toNanos(150);
-    private static final long PASS_GAP = TimeUnit.MILLISECONDS.toNanos(100);
+    private static final long FRAME_BUDGET = MILLISECONDS.toNanos(10);
+    private static final long SAMPLE_WINDOW = SECONDS.toNanos(5);
+    private static final long GROUP_TARGET = MILLISECONDS.toNanos(150);
+    private static final long PASS_GAP = MILLISECONDS.toNanos(100);
     private static final int MAX_SAMPLES = 256;
     private final @NotNull LongSupplier clock;
     private final Deque<Entry> sprites = new ArrayDeque<>();
@@ -102,7 +106,7 @@ final class IconAnimationPasses implements AutoCloseable {
 
     void capture(@NotNull List<PackExportWriter.Capture> captures, @NotNull BiConsumer<Entry, Throwable> omitted) {
         long started = clock.getAsLong();
-        for (int count = 0; count < PackExportWriter.MAX_CAPTURES_PER_BATCH && !done(); count++) {
+        for (int count = 0; count < MAX_CAPTURES_PER_BATCH && !done(); count++) {
             boolean sprite = !sprites.isEmpty();
             if (!sprite && !startPass()) break;
             Deque<Entry> queue = sprite ? sprites : probeFinished ? group : sampled;
@@ -156,7 +160,7 @@ final class IconAnimationPasses implements AutoCloseable {
         recoveryCause = null;
         captures.removeIf(
             capture -> capture.key()
-                .equals(entry.key) && capture.kind() == PackExportWriter.CaptureKind.FRAME);
+                .equals(entry.key) && capture.kind() == CaptureKind.FRAME);
         entry.cursor.close();
         fallback.accept(entry, cause);
         try {

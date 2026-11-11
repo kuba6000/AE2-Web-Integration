@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -177,7 +178,7 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.nativeRequesterName = CpuReader.nativeRequesterName(cluster, cpuInfo.isBusy, cpuInfo.requesters);
             cpuList.put(entry.getKey(), cpuInfo);
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));
+        respond(HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));
     }
 
 }

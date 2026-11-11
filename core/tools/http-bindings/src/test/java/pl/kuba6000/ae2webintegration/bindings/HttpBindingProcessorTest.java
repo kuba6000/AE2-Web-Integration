@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.bindings;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -11,7 +12,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -32,7 +32,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.TypeAdapter;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;
@@ -52,6 +52,7 @@ class HttpBindingProcessorTest {
     void separatelyCompiledCatalogCanConstructAPackageAccessibleNestedEndpoint() throws Exception {
         Compilation result = compileSource(
             "package fixture;\n" + "import pl.kuba6000.ae2webintegration.core.http.contract.*;\n"
+                + "import java.util.ServiceLoader;\n"
                 + "import pl.kuba6000.ae2webintegration.core.http.*;\n"
                 + "import pl.kuba6000.ae2webintegration.core.binding.BindingCatalog;\n"
                 + "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;\n"
@@ -61,7 +62,7 @@ class HttpBindingProcessorTest {
                 + "}\n"
                 + "public final class Example {\n"
                 + " public static Object create() {\n"
-                + "  for (BindingCatalog catalog : java.util.ServiceLoader.load(BindingCatalog.class, Example.class.getClassLoader())) {\n"
+                + "  for (BindingCatalog catalog : ServiceLoader.load(BindingCatalog.class, Example.class.getClassLoader())) {\n"
                 + "   HttpBinding binding = catalog.get(Owner.Nested.class);\n"
                 + "   if (binding != null) return binding.factory().get();\n"
                 + "  }\n"
@@ -96,9 +97,11 @@ class HttpBindingProcessorTest {
     void outputOnlyProjectionGeneratesAUsableCatalogWithoutAnyEndpoint() throws Exception {
         Compilation result = compileSource("""
             package fixture;
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
             import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
             public final class Example {
-              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+              @Retention(RetentionPolicy.RUNTIME)
               public @interface Hidden {}
               public static final class Value { public long amount = 7; @Hidden public String secret = "hidden"; }
               @JsonProjection(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
@@ -152,7 +155,7 @@ class HttpBindingProcessorTest {
         assertCompiles(
             "  @Body Input input;\n"
                 + "  public static final class Input { long quantity; @OptionalInput Details details; }\n"
-                + "  public static final class Details { boolean enabled; @org.jetbrains.annotations.NotNull String name; }\n"
+                + "  public static final class Details { boolean enabled; @NotNull String name; }\n"
                 + "  public long quantity() { return input.quantity; }");
         try (URLClassLoader loader = new URLClassLoader(
             new URL[] { directory.toUri()
@@ -193,8 +196,8 @@ class HttpBindingProcessorTest {
         assertCompiles("""
               @Body Input input;
               public static final class Input { Projected projected; Source ordinary; }
-              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
-              @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
+              @Retention(RetentionPolicy.RUNTIME)
+              @Target(ElementType.FIELD)
               public @interface Hidden {}
               @JsonProjection(value=Source.class, excludeFieldsAnnotatedWith=Hidden.class)
               public record Projected(Source value) {}
@@ -277,7 +280,7 @@ class HttpBindingProcessorTest {
     @Test
     void rejectsJsonProjectionExclusionsWithoutRuntimeRetention() throws Exception {
         Compilation result = compile("""
-              @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE)
+              @Retention(RetentionPolicy.SOURCE)
               public @interface Hidden {}
               @JsonProjection(value=Value.class, excludeFieldsAnnotatedWith=Hidden.class)
               public record Projection(Value value) {}
@@ -295,7 +298,7 @@ class HttpBindingProcessorTest {
 
     private InputValues inputs(String body) {
         return new InputValues(
-            new RequestContext(
+            new AE2Controller.RequestContext(
                 null,
                 WebPrincipal.admin(),
                 Collections.emptyMap(),
@@ -321,7 +324,7 @@ class HttpBindingProcessorTest {
 
     @Test
     void rejectsUnsupportedQueryTypesAtCompilation() throws Exception {
-        Compilation result = compile("  @QueryParam(\"values\") java.util.List<String> values;");
+        Compilation result = compile("  @QueryParam(\"values\") List<String> values;");
         assertFalse(result.success());
         assertTrue(
             result.diagnostics()
@@ -360,24 +363,30 @@ class HttpBindingProcessorTest {
                 "\n",
                 Arrays.asList(
                     "package fixture;",
+                    "import java.lang.annotation.ElementType;",
+                    "import java.lang.annotation.Retention;",
+                    "import java.lang.annotation.RetentionPolicy;",
+                    "import java.lang.annotation.Target;",
+                    "import java.util.List;",
+                    "import org.jetbrains.annotations.NotNull;",
                     "import pl.kuba6000.ae2webintegration.core.http.contract.*;",
+                    "import pl.kuba6000.ae2webintegration.core.http.InputValues;",
                     "import pl.kuba6000.ae2webintegration.core.json.JsonProjection;",
                     "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;",
                     "@Endpoint(method=HttpMethod.GET,path=\"/api/example\")",
                     "public final class Example extends IAsyncRequest {",
                     inputs,
-                    "  public void bind(pl.kuba6000.ae2webintegration.core.http.InputValues values) { Example_HttpBinding.bind(this, values); }",
+                    "  public void bind(InputValues values) { Example_HttpBinding.bind(this, values); }",
                     "  public void handle() {}",
                     "}")));
     }
 
     private Compilation compileSource(String sourceText) throws Exception {
         Path source = directory.resolve("Example.java");
-        Files.write(source, sourceText.getBytes(StandardCharsets.UTF_8));
+        Files.write(source, sourceText.getBytes(UTF_8));
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        try (StandardJavaFileManager files = compiler
-            .getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+        try (StandardJavaFileManager files = compiler.getStandardFileManager(diagnostics, null, UTF_8)) {
             boolean compiled = compiler
                 .getTask(
                     null,

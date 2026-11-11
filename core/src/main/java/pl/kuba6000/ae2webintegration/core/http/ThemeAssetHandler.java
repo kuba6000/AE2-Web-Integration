@@ -9,7 +9,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 
@@ -23,7 +22,7 @@ public final class ThemeAssetHandler implements HttpHandler {
                 .send(exchange);
             return;
         }
-        RequestContext context = AuthService.authenticate(exchange);
+        AE2Controller.RequestContext context = AuthService.authenticate(exchange);
         if (context == null) {
             ApiResponse.error(ApiStatus.UNAUTHORIZED)
                 .send(exchange);

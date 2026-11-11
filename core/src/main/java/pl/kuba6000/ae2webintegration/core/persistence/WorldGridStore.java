@@ -19,9 +19,7 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -62,18 +60,19 @@ public final class WorldGridStore {
     @Desugar
     private record LoadedGrids(@NotNull Map<StableKey, GridPersistentData> records, boolean imported) {}
 
-    public static void normalizePolicy(@NotNull Connection db, @NotNull ResourceHistory policy) throws SQLException {
+    public static void normalizePolicy(@NotNull Connection db, @NotNull ConfigSettings.ResourceHistory policy)
+        throws SQLException {
         normalize(db, "stock_seconds", policy.stockSampleIntervalSeconds);
         normalize(db, "flow_seconds", policy.flowFlushIntervalSeconds);
         normalize(db, "retention_days", policy.historyRetentionDays);
     }
 
-    public static void normalizeCraftingPolicy(@NotNull Connection db, @NotNull CraftingHistory policy)
+    public static void normalizeCraftingPolicy(@NotNull Connection db, @NotNull ConfigSettings.CraftingHistory policy)
         throws SQLException {
         normalize(db, "crafting_retention_days", policy.historyRetentionDays);
     }
 
-    private static void normalize(Connection db, String column, Range range) throws SQLException {
+    private static void normalize(Connection db, String column, ConfigSettings.Range range) throws SQLException {
         try (PreparedStatement update = db.prepareStatement("""
             UPDATE grids
             SET $column = CASE

@@ -1,21 +1,22 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -42,27 +43,25 @@ class VersionCheckerTest {
                 stalled.getOutputStream()
                     .write(
                         (headers ? "HTTP/1.1 200 OK\r\nX-Slow: " : "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
-                            .getBytes(StandardCharsets.US_ASCII));
+                            .getBytes(US_ASCII));
                 stalled.getOutputStream()
                     .flush();
-                ExecutionException failure = assertThrows(
-                    ExecutionException.class,
-                    () -> first.get(8, TimeUnit.SECONDS));
+                ExecutionException failure = assertThrows(ExecutionException.class, () -> first.get(8, SECONDS));
                 assertInstanceOf(IOException.class, failure.getCause());
             }
             CompletableFuture<ReleaseManifest.Release> second = checker.checkForUpdates();
             try (Socket healthy = server.accept()) {
                 byte[] body = ReleaseManifestTest.feed("1.1.0", null)
-                    .getBytes(StandardCharsets.UTF_8);
+                    .getBytes(UTF_8);
                 healthy.getOutputStream()
                     .write(
                         ("HTTP/1.1 200 OK\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n")
-                            .getBytes(StandardCharsets.US_ASCII));
+                            .getBytes(US_ASCII));
                 healthy.getOutputStream()
                     .write(body);
                 healthy.getOutputStream()
                     .flush();
-                assertEquals("1.1.0", second.get(5, TimeUnit.SECONDS).version);
+                assertEquals("1.1.0", second.get(5, SECONDS).version);
             }
         }
     }
@@ -72,12 +71,12 @@ class VersionCheckerTest {
         AtomicReference<String> body = new AtomicReference<>(ReleaseManifestTest.feed("1.1.0", null));
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, 0);
+            exchange.sendResponseHeaders(HTTP_OK, 0);
             try {
                 exchange.getResponseBody()
                     .write(
                         body.get()
-                            .getBytes(StandardCharsets.UTF_8));
+                            .getBytes(UTF_8));
             } finally {
                 exchange.close();
             }
@@ -93,13 +92,13 @@ class VersionCheckerTest {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS).version);
+                    .get(5, SECONDS).version);
             // Valid JSON plus whitespace would parse successfully without the streaming size limit.
             body.set(body.get() + new String(new char[70_000]).replace('\0', ' '));
             ExecutionException failure = assertThrows(
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS));
+                    .get(5, SECONDS));
             assertInstanceOf(IOException.class, failure.getCause());
             ReleaseManifest.Release retained = checker.getAvailableUpdate();
             assertNotNull(retained);
@@ -116,7 +115,7 @@ class VersionCheckerTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             byte[] bytes = body.get()
-                .getBytes(StandardCharsets.UTF_8);
+                .getBytes(UTF_8);
             exchange.sendResponseHeaders(status.get(), bytes.length);
             exchange.getResponseBody()
                 .write(bytes);
@@ -133,12 +132,12 @@ class VersionCheckerTest {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS).version);
+                    .get(5, SECONDS).version);
             status.set(503);
             assertThrows(
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS));
+                    .get(5, SECONDS));
             ReleaseManifest.Release retained = checker.getAvailableUpdate();
             assertNotNull(retained);
             assertEquals("1.1.0", retained.version);
@@ -147,21 +146,21 @@ class VersionCheckerTest {
             assertThrows(
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS));
+                    .get(5, SECONDS));
             body.set(new String(new char[70_000]).replace('\0', 'x'));
             assertThrows(
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS));
+                    .get(5, SECONDS));
             body.set(ReleaseManifestTest.feed("1.2.0", null));
             assertEquals(
                 "1.2.0",
                 checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS).version);
+                    .get(5, SECONDS).version);
             body.set(ReleaseManifestTest.feed(null, null));
             assertNull(
                 checker.checkForUpdates()
-                    .get(5, TimeUnit.SECONDS));
+                    .get(5, SECONDS));
             assertNull(checker.getAvailableUpdate());
         } finally {
             server.stop(0);
@@ -183,9 +182,9 @@ class VersionCheckerTest {
             try {
                 // A bounded fallback releases the fake server even if caller assertions fail before signaling.
                 // noinspection ResultOfMethodCallIgnored
-                respond.await(5, TimeUnit.SECONDS);
+                respond.await(5, SECONDS);
                 byte[] bytes = ReleaseManifestTest.feed("1.1.0", null)
-                    .getBytes(StandardCharsets.UTF_8);
+                    .getBytes(UTF_8);
                 exchange.getResponseBody()
                     .write(bytes);
             } catch (InterruptedException e) {
@@ -205,9 +204,9 @@ class VersionCheckerTest {
             "1.7.10");
         try {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            assertTrue(entered.await(5, SECONDS));
             CompletableFuture.runAsync(checker::close)
-                .get(1, TimeUnit.SECONDS);
+                .get(1, SECONDS);
             assertTrue(result.isCancelled());
             respond.countDown();
             // Wait for the old worker to finish before checking for a late publication.
@@ -215,7 +214,7 @@ class VersionCheckerTest {
             Field executorField = VersionChecker.class.getDeclaredField("executor");
             executorField.setAccessible(true);
             ExecutorService executor = (ExecutorService) executorField.get(checker);
-            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(executor.awaitTermination(5, SECONDS));
             assertNull(checker.getAvailableUpdate());
             assertTrue(
                 checker.checkForUpdates()
@@ -239,9 +238,9 @@ class VersionCheckerTest {
                     .getPath());
             entered.countDown();
             try {
-                if (!respond.await(5, TimeUnit.SECONDS)) throw new AssertionError("Test response not released");
+                if (!respond.await(5, SECONDS)) throw new AssertionError("Test response not released");
                 byte[] body = ReleaseManifestTest.feed("1.1.0", null)
-                    .getBytes(StandardCharsets.UTF_8);
+                    .getBytes(UTF_8);
                 exchange.sendResponseHeaders(200, body.length);
                 exchange.getResponseBody()
                     .write(body);
@@ -261,12 +260,12 @@ class VersionCheckerTest {
             "forge",
             "1.7.10")) {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            assertTrue(entered.await(5, SECONDS));
             assertFalse(result.isDone());
             assertNull(checker.getAvailableUpdate());
             assertSame(result, checker.checkForUpdates());
             respond.countDown();
-            assertEquals("1.1.0", result.get(5, TimeUnit.SECONDS).version);
+            assertEquals("1.1.0", result.get(5, SECONDS).version);
             assertSame(result.get(), checker.getAvailableUpdate());
             assertEquals("/1.7.10.json", requestedPath.get());
         } finally {

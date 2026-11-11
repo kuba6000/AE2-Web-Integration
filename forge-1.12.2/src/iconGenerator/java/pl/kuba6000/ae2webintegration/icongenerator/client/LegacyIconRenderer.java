@@ -1,5 +1,21 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraft.client.renderer.texture.TextureMap.LOCATION_BLOCKS_TEXTURE;
+import static net.minecraft.client.renderer.vertex.DefaultVertexFormats.POSITION_TEX;
+import static org.lwjgl.opengl.GL11.GL_COLOR_WRITEMASK;
+import static org.lwjgl.opengl.GL11.GL_GREATER;
+import static org.lwjgl.opengl.GL11.GL_LEQUAL;
+import static org.lwjgl.opengl.GL11.GL_MODELVIEW;
+import static org.lwjgl.opengl.GL11.GL_ONE;
+import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.GL_PROJECTION;
+import static org.lwjgl.opengl.GL11.GL_QUADS;
+import static org.lwjgl.opengl.GL11.GL_SCISSOR_TEST;
+import static org.lwjgl.opengl.GL11.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_UNPACK_BUFFER;
+
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -15,8 +31,6 @@ import net.minecraft.client.renderer.RenderItem;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.block.model.IBakedModel;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.renderer.texture.TextureMap;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.item.ItemStack;
@@ -33,11 +47,10 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL21;
 
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -85,7 +98,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         renderItem = new AlphaPreservingRenderItem(minecraft);
     }
 
-    void item(@NotNull ItemStack stack, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
+    void item(@NotNull ItemStack stack, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, () -> {
             RenderHelper.enableGUIStandardItemLighting();
             // GuiContainer enables this for RenderItem's scaled 3D block normals.
@@ -99,8 +113,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, () -> {
             ResourceLocation still = stack.getFluid()
                 .getStill(stack);
@@ -113,7 +127,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
             int color = stack.getFluid()
                 .getColor(stack);
             minecraft.getTextureManager()
-                .bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
+                .bindTexture(LOCATION_BLOCKS_TEXTURE);
             GlStateManager.disableLighting();
             GlStateManager.enableBlend();
             captureBlend();
@@ -124,7 +138,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
                 (color >>> 24) / 255.0F);
             Tessellator tessellator = Tessellator.getInstance();
             BufferBuilder vertices = tessellator.getBuffer();
-            vertices.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
+            vertices.begin(GL_QUADS, POSITION_TEX);
             vertices.pos(0, GUI_SIZE, 0)
                 .tex(icon.getMinU(), icon.getMaxV())
                 .endVertex();
@@ -141,8 +155,8 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Runnable draw)
-        throws RenderFailure {
+    private void capture(@NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures,
+        @NotNull Runnable draw) throws IIconCapture.RenderFailure {
         if (!OpenGlHelper.isFramebufferEnabled())
             throw new IllegalStateException("Framebuffer rendering is unavailable");
         Throwable renderFailure = null;
@@ -204,55 +218,50 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
             }
         }
         // Only a draw failure followed by successful state restoration is safe to skip.
-        throw new RenderFailure(renderFailure);
+        throw new IIconCapture.RenderFailure(renderFailure);
     }
 
     private static void captureBlend() {
         // Native blendFunc updates RGB cache fields only, although GL also changes its alpha factors.
         // Set the driver explicitly before reconciling the separate-alpha cache.
-        OpenGlHelper
-            .glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GlStateManager.tryBlendFuncSeparate(
-            GL11.GL_SRC_ALPHA,
-            GL11.GL_ONE_MINUS_SRC_ALPHA,
-            GL11.GL_ONE,
-            GL11.GL_ONE_MINUS_SRC_ALPHA);
+        OpenGlHelper.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        GlStateManager.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     }
 
     private void setup() {
         long started = System.nanoTime();
         try {
             if (PixelReadback.supportsPackBinding()) {
-                GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
-                GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
+                GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+                GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
             GL20.glUseProgram(0);
             Framebuffer framebuffer = framebuffer();
-            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            GL11.glDisable(GL_SCISSOR_TEST);
             GlStateManager.colorMask(true, true, true, true);
             GlStateManager.depthMask(true);
             framebuffer.setFramebufferColor(0, 0, 0, 0);
             framebuffer.framebufferClear();
             framebuffer.bindFramebuffer(true);
-            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glMatrixMode(GL_PROJECTION);
             GL11.glLoadIdentity();
             GL11.glOrtho(0, GUI_SIZE, GUI_SIZE, 0, -GUI_DEPTH, GUI_DEPTH);
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glMatrixMode(GL_MODELVIEW);
             GL11.glLoadIdentity();
             GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
             GlStateManager.disableTexture2D();
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, FULL_BRIGHTNESS, FULL_BRIGHTNESS);
             GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
-            GL11.glMatrixMode(GL11.GL_TEXTURE);
+            GL11.glMatrixMode(GL_TEXTURE);
             GL11.glLoadIdentity();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glMatrixMode(GL_MODELVIEW);
             GlStateManager.enableTexture2D();
             GlStateManager.disableBlend();
             GlStateManager.disableFog();
             GlStateManager.enableDepth();
-            GlStateManager.depthFunc(GL11.GL_LEQUAL);
+            GlStateManager.depthFunc(GL_LEQUAL);
             GlStateManager.enableAlpha();
-            GlStateManager.alphaFunc(GL11.GL_GREATER, 0);
+            GlStateManager.alphaFunc(GL_GREATER, 0);
             GlStateManager.disableCull();
             GlStateManager.color(1, 1, 1, 1);
         } finally {
@@ -262,17 +271,17 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
         capturedModel = null;
         candidate.render(this, key, captures);
     }
 
     @Override
     public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
-        throws RenderFailure {
+        throws IIconCapture.RenderFailure {
         IIconAnimation animation = null;
-        RenderFailure preparationFailure = null;
+        IIconCapture.RenderFailure preparationFailure = null;
         try (RenderState ignored = state.snapshot()) {
             try {
                 animation = candidate.animation(this, key);
@@ -297,17 +306,17 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
         return NativeIconAnimation.sampled(this, candidate, key);
     }
 
-    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+    static @NotNull IIconCapture.RenderFailure animationFailure(@NotNull Throwable failure) {
         Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
             ? failure.getCause()
             : failure;
         if (cause instanceof VirtualMachineError fatal) throw fatal;
         if (cause instanceof ThreadDeath fatal) throw fatal;
-        return new RenderFailure(cause == null ? failure : cause);
+        return new IIconCapture.RenderFailure(cause == null ? failure : cause);
     }
 
-    void animationFrame(IconCandidate candidate, StableKey key, List<Capture> captures, CaptureKind kind, long duration,
-        LongSupplier clock) throws RenderFailure {
+    void animationFrame(IconCandidate candidate, StableKey key, List<PackExportWriter.Capture> captures,
+        CaptureKind kind, long duration, LongSupplier clock) throws IIconCapture.RenderFailure {
         captureKind = kind;
         frameDuration = duration;
         drawClock = clock;
@@ -321,7 +330,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void drain(@NotNull List<Capture> captures) {
+    public void drain(@NotNull List<PackExportWriter.Capture> captures) {
         readback.drain(captures);
     }
 
@@ -418,7 +427,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
 
         private void renderGlint(@NotNull IBakedModel model) {
             mask.clear();
-            GL11.glGetBoolean(GL11.GL_COLOR_WRITEMASK, mask);
+            GL11.glGetBoolean(GL_COLOR_WRITEMASK, mask);
             GlStateManager.colorMask(mask.get(0) != 0, mask.get(1) != 0, mask.get(2) != 0, false);
             try {
                 // Execute both native glint passes, texture transforms and RGB blending without changing base alpha.
@@ -436,7 +445,7 @@ final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
                 // Native code restores atlas filtering only after a successful draw.
                 try {
                     minecraft.getTextureManager()
-                        .getTexture(TextureMap.LOCATION_BLOCKS_TEXTURE)
+                        .getTexture(LOCATION_BLOCKS_TEXTURE)
                         .restoreLastBlurMipmap();
                 } catch (RuntimeException | Error cleanup) {
                     if (!(failure instanceof VirtualMachineError) && !(failure instanceof ThreadDeath)

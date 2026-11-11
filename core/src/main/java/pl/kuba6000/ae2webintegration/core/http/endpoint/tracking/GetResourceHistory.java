@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -151,7 +152,7 @@ public final class GetResourceHistory extends IAsyncRequest {
             for (StorageHistoryPoint point : history.points()) points.add(toPoint(point, history, references));
             GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
             respondDetached(
-                HttpURLConnection.HTTP_OK,
+                HTTP_OK,
                 new Response(
                     ApiStatus.OK,
                     new History(

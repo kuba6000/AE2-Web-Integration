@@ -16,7 +16,8 @@ import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** One owned native candidate; it never crosses the writer thread boundary. */
@@ -34,8 +35,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
 
     public abstract @NotNull IconCandidate baseline();
 
-    abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws LegacyIconRenderer.RenderFailure;
+    abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure;
 
     abstract @Nullable IIconAnimation animation(LegacyIconRenderer renderer, StableKey key);
 
@@ -101,8 +102,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-            throws LegacyIconRenderer.RenderFailure {
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+            @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
             renderer.item(stack, key, captures);
         }
     }
@@ -141,8 +142,8 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
-            throws LegacyIconRenderer.RenderFailure {
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key,
+            @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
             renderer.fluid(stack, key, captures);
         }
     }

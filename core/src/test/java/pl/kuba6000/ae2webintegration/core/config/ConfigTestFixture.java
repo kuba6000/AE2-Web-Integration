@@ -1,10 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -45,7 +46,7 @@ public final class ConfigTestFixture implements AutoCloseable {
 
     public void write(String key, Object value) {
         CommentedConfig settings;
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+        try (Reader reader = Files.newBufferedReader(file, UTF_8)) {
             settings = new TomlParser().parse(reader);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -56,7 +57,7 @@ public final class ConfigTestFixture implements AutoCloseable {
 
     public void writeRaw(String toml) {
         try {
-            Files.write(file, toml.getBytes(StandardCharsets.UTF_8));
+            Files.write(file, toml.getBytes(UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.icons;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static pl.kuba6000.ae2webintegration.core.icons.IconPack.CONTENT_SIZE;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -63,14 +64,14 @@ public final class GetIconPack extends IAsyncRequest {
         }
         IconPack pack = CoreEngine.getIconPack();
         respond(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 new Availability(
                     pack != null,
                     pack != null && pack.hasAnimations(),
                     pack == null ? null : pack.packId(),
-                    pack == null ? 0 : IconPack.CONTENT_SIZE,
-                    pack == null ? 0 : IconPack.CONTENT_SIZE)));
+                    pack == null ? 0 : CONTENT_SIZE,
+                    pack == null ? 0 : CONTENT_SIZE)));
     }
 }

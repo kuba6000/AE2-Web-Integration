@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -17,7 +19,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -87,7 +88,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             key,
             new ArrayList<>(
                 Collections.singletonList(new CompletedCrafting.Interval(info.timeStarted, info.timeStarted + spent))));
-        StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey actualKey = GRID_IDENTITIES.getKey(grid);
         assertNotNull(actualKey);
         CraftingHistoryService history = CoreEngine.getCraftingHistory();
         assertNotNull(history);
@@ -224,10 +225,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                     .equals("web$getCPUs")) return Collections.singleton(cpu);
                 throw new AssertionError("Unexpected crafting service call: " + method.getName());
             });
-        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
-            GRID,
-            false,
-            AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(GRID, false, CONTROLLER_ONLINE) {
 
             @Override
             public IAECraftingGrid web$getCraftingGrid() {
@@ -254,9 +252,8 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             GetCPU request = new GetCPU();
             assertTrue(
                 request.init(
-                    TestGridFixtures.context(
-                        -1,
-                        "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
+                    TestGridFixtures
+                        .context(-1, "grid=" + GRID_IDENTITIES.getKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
             request.runOnServerThread(ae);
             JsonObject response = new JsonParser().parse(request.getJSON())
                 .getAsJsonObject();

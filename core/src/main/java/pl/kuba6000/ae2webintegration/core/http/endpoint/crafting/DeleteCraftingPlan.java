@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -76,6 +76,6 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
             return;
         }
         gridData.cancelJob(jobId);
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+        respond(HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

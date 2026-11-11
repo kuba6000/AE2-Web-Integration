@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import appeng.api.storage.data.IAEStack;
 import appeng.crafting.v2.CraftingRequest;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.RequestAndPerCraftAmount;
+import appeng.crafting.v2.resolvers.CraftableItemResolver;
 
 /**
  * Native child requests of a normal-mode pattern task, read only during completed-plan server-thread capture.
@@ -16,7 +16,7 @@ import appeng.crafting.v2.resolvers.CraftableItemResolver.RequestAndPerCraftAmou
 public interface ICraftFromPatternTaskData {
 
     @NotNull
-    ArrayList<RequestAndPerCraftAmount> web$getChildRequests();
+    ArrayList<CraftableItemResolver.RequestAndPerCraftAmount> web$getChildRequests();
 
     @NotNull
     Map<IAEStack<?>, CraftingRequest> web$getChildRecursionRequests();

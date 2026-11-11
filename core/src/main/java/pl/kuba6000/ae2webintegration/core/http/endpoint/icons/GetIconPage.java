@@ -1,16 +1,17 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.icons;
 
+import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 
 import com.sun.net.httpserver.HttpExchange;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -71,7 +72,7 @@ public final class GetIconPage {
     private GetIconPage() {}
 
     /** The router performs authentication and bounded request parsing before this HTTP-thread operation. */
-    public static void handle(RequestContext context) throws IOException {
+    public static void handle(AE2Controller.RequestContext context) throws IOException {
         GetIconPage page = new GetIconPage();
         try {
             RequestInputs.bind(page, context);
@@ -83,7 +84,7 @@ public final class GetIconPage {
         page.send(context);
     }
 
-    private void send(RequestContext context) throws IOException {
+    private void send(AE2Controller.RequestContext context) throws IOException {
         HttpExchange exchange = context.getExchange();
         String digest = pageDigest;
         if (!packId.matches("[0-9a-f]{64}") || !digest.matches("[0-9a-f]{64}")) {
@@ -132,7 +133,7 @@ public final class GetIconPage {
                 exchange.getRequestHeaders()
                     .getFirst("If-None-Match"),
                 etag)) {
-                exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_MODIFIED, -1);
+                exchange.sendResponseHeaders(HTTP_NOT_MODIFIED, -1);
                 exchange.close();
                 return;
             }
@@ -142,11 +143,11 @@ public final class GetIconPage {
                 .set("Content-Length", Long.toString(page.bytes()));
             if (exchange.getRequestMethod()
                 .equals("HEAD")) {
-                exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
+                exchange.sendResponseHeaders(HTTP_OK, -1);
                 exchange.close();
                 return;
             }
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, page.bytes());
+            exchange.sendResponseHeaders(HTTP_OK, page.bytes());
             try (OutputStream output = exchange.getResponseBody()) {
                 byte[] buffer = new byte[STREAM_BUFFER_BYTES];
                 long remaining = page.bytes();

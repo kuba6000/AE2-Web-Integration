@@ -16,7 +16,9 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
 import pl.kuba6000.ae2webintegration.core.crafting.TraceFixtures;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlanTree;
@@ -279,8 +281,8 @@ class CraftingPlanDocumentTest extends GridTestScope {
             () -> TestGridFixtures.planOutput()
                 .description());
         capture.result(resource, 1, true);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, resource, Long.MAX_VALUE);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, resource, 1);
+        capture.addSummary(SummaryKind.MISSING, resource, Long.MAX_VALUE);
+        capture.addSummary(SummaryKind.MISSING, resource, 1);
         int plan = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(
                 CompletableFuture.completedFuture(CraftingPlanTreePreparationTest.job(capture::build)),
@@ -458,8 +460,8 @@ class CraftingPlanDocumentTest extends GridTestScope {
             capture.addResource(() -> TraceFixtures.descriptor(name));
         int request = capture.addRequest(0, 10);
         capture.root(request, false);
-        capture.addContribution(request, CraftingTraceCapture.ContributionKind.STORAGE, 2, 1);
-        capture.addContribution(request, CraftingTraceCapture.ContributionKind.STORAGE, 1);
+        capture.addContribution(request, ContributionKind.STORAGE, 2, 1);
+        capture.addContribution(request, ContributionKind.STORAGE, 1);
         int task = capture.addTask(3);
         capture.addCraft(request, 7, task);
         capture.addInput(task, 2, 2);
@@ -469,7 +471,7 @@ class CraftingPlanDocumentTest extends GridTestScope {
         int cycle = capture.addRequest(0, 3);
         capture.addChildRequest(task, cycle);
         capture.finishTask(task);
-        capture.addContribution(missing, CraftingTraceCapture.ContributionKind.MISSING, 6);
+        capture.addContribution(missing, ContributionKind.MISSING, 6);
         capture.addCraft(cycle, 3, task);
         return capture.build();
     }
@@ -487,8 +489,8 @@ class CraftingPlanDocumentTest extends GridTestScope {
             capture.addOutput(recipe, 0, 1, true);
             capture.finishRecipe(recipe);
         }
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 1, 5);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 4, 6);
+        capture.addSummary(SummaryKind.MISSING, 1, 5);
+        capture.addSummary(SummaryKind.MISSING, 4, 6);
         return capture.build();
     }
 
@@ -509,8 +511,8 @@ class CraftingPlanDocumentTest extends GridTestScope {
         capture.addCandidate(input, 2, 2);
         capture.addOutput(intermediate, 1, 1, true);
         capture.finishRecipe(intermediate);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.INITIAL, 1, 8);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 2, 8);
+        capture.addSummary(SummaryKind.INITIAL, 1, 8);
+        capture.addSummary(SummaryKind.MISSING, 2, 8);
         return capture.build();
     }
 
@@ -525,7 +527,7 @@ class CraftingPlanDocumentTest extends GridTestScope {
         capture.addCandidate(group, 2, 1);
         capture.addOutput(recipe, 0, 1, true);
         capture.finishRecipe(recipe);
-        capture.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, 1, 1);
+        capture.addSummary(SummaryKind.MISSING, 1, 1);
         return capture.build();
     }
 

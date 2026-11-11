@@ -1,13 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.MAX_CAPTURES_PER_BATCH;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
@@ -36,7 +38,7 @@ class IconExportSessionTest {
         Renderer renderer = new Renderer(source);
         renderer.uniformPixels = true;
         IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
-        long deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(2);
+        long deadline = System.nanoTime() + MINUTES.toNanos(2);
         while (!session.tick()) {
             assertTrue(System.nanoTime() < deadline, session.status());
             Thread.sleep(1);
@@ -233,7 +235,7 @@ class IconExportSessionTest {
         source.available = false;
         Renderer renderer = new Renderer(source);
         IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        long deadline = System.nanoTime() + SECONDS.toNanos(10);
         while (!source.waitingReported) {
             assertFalse(session.tick());
             assertTrue(System.nanoTime() < deadline, "Native readiness was not polled");
@@ -248,7 +250,7 @@ class IconExportSessionTest {
 
     @Test
     void captureRemainsBoundedAcrossMultipleBatchesAndPublishedPacksSurviveLateCancellation() throws Exception {
-        Candidate[] candidates = new Candidate[PackExportWriter.MAX_CAPTURES_PER_BATCH + 7];
+        Candidate[] candidates = new Candidate[MAX_CAPTURES_PER_BATCH + 7];
         for (int index = 0; index < candidates.length; index++) candidates[index] = new Candidate(index);
         Source source = new Source(candidates);
         Renderer renderer = new Renderer(source);
@@ -272,7 +274,7 @@ class IconExportSessionTest {
         try (ControlledPng ignored = new ControlledPng((image, delegate) -> {
             encoding.countDown();
             try {
-                if (!release.await(10, TimeUnit.SECONDS)) throw new IOException("Controlled PNG timed out");
+                if (!release.await(10, SECONDS)) throw new IOException("Controlled PNG timed out");
             } catch (InterruptedException interrupted) {
                 Thread.currentThread()
                     .interrupt();
@@ -282,7 +284,7 @@ class IconExportSessionTest {
         })) {
             IconExportSession<Candidate> session = new IconExportSession<>(directory, metadata(), source, renderer);
             try {
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                long deadline = System.nanoTime() + SECONDS.toNanos(10);
                 while (encoding.getCount() != 0) {
                     assertFalse(session.tick());
                     assertTrue(System.nanoTime() < deadline, "No atlas reached the encoder");
@@ -329,7 +331,7 @@ class IconExportSessionTest {
     }
 
     private static void awaitFinished(IconExportSession<?> session) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        long deadline = System.nanoTime() + SECONDS.toNanos(10);
         while (!session.tick()) {
             assertTrue(System.nanoTime() < deadline, "Export did not settle: " + session.status());
             Thread.sleep(1);
@@ -463,7 +465,7 @@ class IconExportSessionTest {
             if (!source.done()) throw new IllegalStateException("Native identity changed before discovery finished");
             if (closed) throw new IllegalStateException("Renderer is closed");
             if (candidate.drawFailure != null) throw new RenderFailure(candidate.drawFailure);
-            if (pending.size() >= PackExportWriter.MAX_CAPTURES_PER_BATCH)
+            if (pending.size() >= MAX_CAPTURES_PER_BATCH)
                 throw new IllegalStateException("Capture memory budget exceeded");
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff000000 | (uniformPixels ? 0 : candidate.identity));

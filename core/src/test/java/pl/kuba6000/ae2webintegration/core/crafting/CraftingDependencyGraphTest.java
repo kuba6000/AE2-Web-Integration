@@ -14,6 +14,7 @@ import java.util.Collections;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -211,7 +212,7 @@ class CraftingDependencyGraphTest {
             recipe(builder, output, input);
             output = input;
         }
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, output, 1);
+        builder.addSummary(SummaryKind.MISSING, output, 1);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertEquals(Collections.singletonList(0), graph.declaredProducers(result, true));
         assertEquals(1, graph.missingResourceCount());
@@ -239,7 +240,7 @@ class CraftingDependencyGraphTest {
         int targetRecipe = recipe(builder, target, intermediate, available);
         int intermediateRecipe = recipe(builder, intermediate, absent);
         recipe(builder, available);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, absent, 9007199254740993L);
+        builder.addSummary(SummaryKind.MISSING, absent, 9007199254740993L);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
 
         assertEquals(Long.valueOf(9007199254740993L), graph.missingAmount(absent));
@@ -268,7 +269,7 @@ class CraftingDependencyGraphTest {
         int first = recipe(builder, target, intermediate);
         int second = recipe(builder, intermediate, target, missing);
         recipe(builder, missing);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, missing, 8);
+        builder.addSummary(SummaryKind.MISSING, missing, 8);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertEquals(Collections.singletonList(0), graph.declaredProducers(target, true));
         assertEquals(Collections.singletonList(1), graph.declaredProducers(intermediate, true));
@@ -285,9 +286,9 @@ class CraftingDependencyGraphTest {
         int root = resource(builder, "root");
         int detached = resource(builder, "detached");
         builder.result(root, 1, true);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, root, Long.MAX_VALUE);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, root, 1);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, detached, 3);
+        builder.addSummary(SummaryKind.MISSING, root, Long.MAX_VALUE);
+        builder.addSummary(SummaryKind.MISSING, root, 1);
+        builder.addSummary(SummaryKind.MISSING, detached, 3);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertNull(graph.missingAmount(root));
         assertTrue(graph.isMissing(root));
@@ -305,7 +306,7 @@ class CraftingDependencyGraphTest {
         int root = resource(builder, "root");
         int detached = resource(builder, "detached");
         builder.result(root, 1, true);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, detached, 7);
+        builder.addSummary(SummaryKind.MISSING, detached, 7);
         assertEquals(-1, builder.addRecipe(1));
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertFalse(graph.missingComplete());
@@ -328,7 +329,7 @@ class CraftingDependencyGraphTest {
         recipe(builder, target);
         int relevant = recipe(builder, detachedOutput, missing);
         recipe(builder, unrelated);
-        builder.addSummary(CraftingRecipeCapture.SummaryKind.MISSING, missing, 6);
+        builder.addSummary(SummaryKind.MISSING, missing, 6);
         CraftingDependencyGraph graph = CraftingDependencyGraph.from(builder.build());
         assertTrue(
             graph.declaredProducers(target, true)

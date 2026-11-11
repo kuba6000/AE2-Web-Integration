@@ -1,8 +1,20 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
+import static appeng.api.networking.crafting.CalculationStrategy.REPORT_MISSING_ITEMS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static net.minecraft.world.item.Items.HOPPER;
+import static net.minecraft.world.item.Items.IRON_INGOT;
+import static net.minecraft.world.item.Items.IRON_NUGGET;
+import static net.minecraft.world.item.Items.IRON_TRAPDOOR;
+import static net.minecraft.world.item.Items.OAK_LOG;
+import static net.minecraft.world.item.Items.OAK_PLANKS;
+import static net.minecraft.world.item.Items.PAPER;
+import static net.minecraft.world.item.Items.RAW_IRON;
+import static net.minecraft.world.item.Items.STICK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -15,19 +27,16 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
-import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.mockito.MockedStatic;
 
 import com.google.common.collect.ImmutableList;
@@ -36,7 +45,6 @@ import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
-import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingService;
 import appeng.api.networking.crafting.ICraftingSimulationRequester;
@@ -58,14 +66,14 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Real AE2 calculator and loader-transformed capture; only the network environment is controlled. */
-@Execution(ExecutionMode.SAME_THREAD)
+@Execution(SAME_THREAD)
 class CraftingDependencyIntegrationTest {
 
     @Test
     void chainKeepsNativeBatchRoundingAndDeclaredDependencies() throws Exception {
-        AEItemKey log = AEItemKey.of(Items.OAK_LOG);
-        AEItemKey plank = AEItemKey.of(Items.OAK_PLANKS);
-        AEItemKey stick = AEItemKey.of(Items.STICK);
+        AEItemKey log = AEItemKey.of(OAK_LOG);
+        AEItemKey plank = AEItemKey.of(OAK_PLANKS);
+        AEItemKey stick = AEItemKey.of(STICK);
         Environment environment = new Environment();
         IPatternDetails planks = environment.recipe(new GenericStack(plank, 4), new GenericStack(log, 1));
         IPatternDetails sticks = environment.recipe(new GenericStack(stick, 4), new GenericStack(plank, 2));
@@ -126,11 +134,11 @@ class CraftingDependencyIntegrationTest {
 
     @Test
     void sharedIntermediateRetainsStockSummaryWithoutAllocatingItToConsumers() throws Exception {
-        AEItemKey ore = AEItemKey.of(Items.RAW_IRON);
-        AEItemKey ingot = AEItemKey.of(Items.IRON_INGOT);
-        AEItemKey plate = AEItemKey.of(Items.IRON_TRAPDOOR);
-        AEItemKey rod = AEItemKey.of(Items.IRON_NUGGET);
-        AEItemKey machine = AEItemKey.of(Items.HOPPER);
+        AEItemKey ore = AEItemKey.of(RAW_IRON);
+        AEItemKey ingot = AEItemKey.of(IRON_INGOT);
+        AEItemKey plate = AEItemKey.of(IRON_TRAPDOOR);
+        AEItemKey rod = AEItemKey.of(IRON_NUGGET);
+        AEItemKey machine = AEItemKey.of(HOPPER);
         Environment environment = new Environment();
         IPatternDetails smelting = environment.recipe(new GenericStack(ingot, 2), new GenericStack(ore, 1));
         environment.recipe(new GenericStack(plate, 1), new GenericStack(ingot, 1));
@@ -269,7 +277,7 @@ class CraftingDependencyIntegrationTest {
 
                 @Override
                 public AEItemKey getDefinition() {
-                    return AEItemKey.of(Items.PAPER);
+                    return AEItemKey.of(PAPER);
                 }
 
                 @Override
@@ -361,11 +369,11 @@ class CraftingDependencyIntegrationTest {
                 grid,
                 requester,
                 requested,
-                CalculationStrategy.REPORT_MISSING_ITEMS);
+                REPORT_MISSING_ITEMS);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             try (AutoCloseable cleanup = () -> {
                 executor.shutdownNow();
-                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+                assertTrue(executor.awaitTermination(10, SECONDS));
                 ThreadGroup previousServerGroup = Platform.serverThreadGroup;
                 try {
                     Platform.serverThreadGroup = Thread.currentThread()
@@ -377,11 +385,11 @@ class CraftingDependencyIntegrationTest {
                 }
             }) {
                 Future<ICraftingPlan> result = executor.submit(calculation::run);
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                long deadline = System.nanoTime() + SECONDS.toNanos(10);
                 while (!result.isDone() && System.nanoTime() < deadline) {
                     calculation.simulateFor(1000);
                 }
-                return result.get(10, TimeUnit.SECONDS);
+                return result.get(10, SECONDS);
             }
         }
     }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -65,7 +66,7 @@ class DiscordCraftingCardTest {
             assertEquals(exactImage.getWidth(), missingImage.getWidth());
         }
         // On Windows a live ZipFile lease prevents deletion, so this also detects retained archive readers.
-        java.nio.file.Files.delete(archive);
+        Files.delete(archive);
     }
 
     @Test
@@ -152,7 +153,7 @@ class DiscordCraftingCardTest {
                 4096),
             "16m 42s",
             cancelled,
-            java.util.Collections.emptyList());
+            Collections.emptyList());
     }
 
     private static BufferedImage decode(byte[] png) throws Exception {

@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -96,9 +97,7 @@ public final class GetTracking extends IAsyncRequest {
             }
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
-            respondDetached(
-                HttpURLConnection.HTTP_OK,
-                new Response(ApiStatus.OK, CraftingHistory.capture(info, mappings), mappings));
+            respondDetached(HTTP_OK, new Response(ApiStatus.OK, CraftingHistory.capture(info, mappings), mappings));
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }

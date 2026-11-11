@@ -8,6 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -33,14 +37,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry.Entry;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -76,7 +79,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         historyWorld = new CraftingHistoryWorld(gridSave);
         AE2JobTracker.clearActiveJobs();
         TestGridFixtures.track(grid);
-        gridKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        gridKey = GRID_IDENTITIES.getKey(grid);
     }
 
     @AfterEach
@@ -137,7 +140,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
                 .get(1)
                 .player().name);
         GetTracking detail = new GetTracking();
-        detail.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=1"));
+        detail.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey + "&id=1"));
         JsonObject body = new JsonParser().parse(detail.getJSON())
             .getAsJsonObject()
             .getAsJsonObject("data");
@@ -150,7 +153,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
                 .get("name")
                 .getAsString());
         GetTrackingHistory list = new GetTrackingHistory();
-        list.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey));
+        list.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey));
         JsonObject summary = new JsonParser().parse(list.getJSON())
             .getAsJsonObject()
             .getAsJsonArray("data")
@@ -161,7 +164,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @Test
     void machineAdmissionIsPerGridAndTogglingDoesNotReplaceActiveMeasurements() {
-        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+        GridPersistentData data = GRID_IDENTITIES.getPersistentData(gridKey);
         assertNotNull(data);
         GridSettingsData settings = data.getSettings();
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_105L);
@@ -199,10 +202,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     void controllerAdditionDuringCraftingPublishesTheMergedOutputImmediately() {
         Set<DimensionalCoords> positions = new LinkedHashSet<>();
         positions.add(new DimensionalCoords("world", 0, 0, 0));
-        TestGridFixtures.TestGrid changing = new TestGridFixtures.TestGrid(
-            900_104L,
-            false,
-            AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid changing = new TestGridFixtures.TestGrid(900_104L, false, CONTROLLER_ONLINE) {
 
             @Override
             public @NotNull Set<DimensionalCoords> web$getControllers() {
@@ -210,13 +210,13 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
             }
         };
         TestGridFixtures.track(changing);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(changing);
+        StableKey key = GRID_IDENTITIES.getKey(changing);
         assertNotNull(key);
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, changing, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         positions.add(new DimensionalCoords("world", 1, 0, 0));
-        CoreEngine.GRID_IDENTITIES.controllerValidated(changing);
+        GRID_IDENTITIES.controllerValidated(changing);
         cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
         AE2JobTracker.addJob(cpu, changing, true, CraftingRequester.automation());
         AE2JobTracker.completeCrafting(changing, cpu);
@@ -225,7 +225,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         try {
             AE2Controller.AE2Interface = TestGridFixtures.ae(changing);
             CoreEngine.onServerTick();
-            assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(changing));
+            assertEquals(key, GRID_IDENTITIES.getKey(changing));
             assertEquals(info.finalOutput, completed(key).finalOutput());
             assertEquals(9, info.finalOutput.quantity());
         } finally {
@@ -239,24 +239,21 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
-        grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        grid.controllerState(CONTROLLER_CONFLICT);
+        GRID_IDENTITIES.controllerValidated(grid);
         if (cancelled) AE2JobTracker.cancelCrafting(grid, cpu);
         else AE2JobTracker.completeCrafting(grid, cpu);
         assertNull(AE2JobTracker.findActiveJob(cpu));
-        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        grid.controllerState(CONTROLLER_ONLINE);
+        GRID_IDENTITIES.controllerValidated(grid);
         CoreEngine.onServerTick();
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        assertEmptyHistory(OWNER_ID, gridKey);
     }
 
     @Test
     void cachedLifecycleAndHotUpdatesDoNotEnumerateControllers() {
         AtomicBoolean mayReadControllers = new AtomicBoolean(true);
-        TestGridFixtures.TestGrid stable = new TestGridFixtures.TestGrid(
-            900_103L,
-            false,
-            AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid stable = new TestGridFixtures.TestGrid(900_103L, false, CONTROLLER_ONLINE) {
 
             @Override
             public @NotNull Set<DimensionalCoords> web$getControllers() {
@@ -266,7 +263,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
             }
         };
         TestGridFixtures.track(stable);
-        StableKey stableKey = CoreEngine.GRID_IDENTITIES.getKey(stable);
+        StableKey stableKey = GRID_IDENTITIES.getKey(stable);
         assertNotNull(stableKey);
         mayReadControllers.set(false);
         EqualCpu cpu = new EqualCpu();
@@ -292,10 +289,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         assertNull(AE2JobTracker.findActiveJob(cpu));
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        GRID_IDENTITIES.controllerValidated(grid);
         CoreEngine.onServerTick();
         AE2JobTracker.completeCrafting(grid, cpu);
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        assertEmptyHistory(OWNER_ID, gridKey);
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
     }
@@ -308,15 +305,15 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         assertNotNull(info);
         TestGridFixtures.TestGrid destination = TestGridFixtures.grid(900_102L);
-        StableKey destinationKey = CoreEngine.GRID_IDENTITIES.getKey(destination);
+        StableKey destinationKey = GRID_IDENTITIES.getKey(destination);
         assertNotNull(destinationKey);
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, destinationKey, tracked);
+        TestGridFixtures.setTracked(GRID_IDENTITIES, destinationKey, tracked);
         // Native completion hooks pass the CPU's current grid, which can differ from its starting grid.
         AE2JobTracker.completeCrafting(destination, cpu);
         assertNull(AE2JobTracker.findActiveJob(cpu));
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        assertEmptyHistory(OWNER_ID, gridKey);
         if (tracked) assertEquals(info.finalOutput, completed(destinationKey).finalOutput());
-        else assertEmptyHistory(TestGridFixtures.OWNER_ID, destinationKey);
+        else assertEmptyHistory(OWNER_ID, destinationKey);
     }
 
     @Test
@@ -324,8 +321,8 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
-        grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        grid.controllerState(CONTROLLER_CONFLICT);
+        GRID_IDENTITIES.controllerValidated(grid);
         cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
 
         AE2JobTracker.addJob(cpu, grid, true, CraftingRequester.automation());
@@ -338,23 +335,20 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     void mergeRetiresLosingPlansAndHistoryWithoutDiscardingTheWinningPlan() throws Exception {
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
         GridAccess.list(TestGridFixtures.ae(grid, other));
-        StableKey losingKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        StableKey losingKey = GRID_IDENTITIES.getKey(other);
         assertNotNull(losingKey);
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, true);
+        TestGridFixtures.setTracked(GRID_IDENTITIES, losingKey, true);
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, other, false, CraftingRequester.automation());
         AE2JobTracker.completeCrafting(other, cpu);
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, false);
+        TestGridFixtures.setTracked(GRID_IDENTITIES, losingKey, false);
         CompletableFuture<IAECraftingJob> losingPlan = new CompletableFuture<>();
         int losingId = GridData.getOrCreate(losingKey)
             .addJob(losingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         CompletableFuture<IAECraftingJob> winningPlan = new CompletableFuture<>();
         int winningId = GridData.getOrCreate(gridKey)
             .addJob(winningPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        TestGridFixtures.TestGrid merged = new TestGridFixtures.TestGrid(
-            gridKey,
-            false,
-            AEControllerState.CONTROLLER_ONLINE) {
+        TestGridFixtures.TestGrid merged = new TestGridFixtures.TestGrid(gridKey, false, CONTROLLER_ONLINE) {
 
             @Override
             public @NotNull Set<DimensionalCoords> web$getControllers() {
@@ -364,26 +358,25 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
             }
         };
 
-        CoreEngine.GRID_IDENTITIES.controllerValidated(merged);
+        GRID_IDENTITIES.controllerValidated(merged);
         GridAccess.list(TestGridFixtures.ae(merged));
-        assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(merged));
+        assertEquals(gridKey, GRID_IDENTITIES.getKey(merged));
         assertTrue(losingPlan.isCancelled());
-        Entry retainedPlan = GridData.getOrCreate(gridKey)
+        CraftingPlanRegistry.Entry retainedPlan = GridData.getOrCreate(gridKey)
             .getJob(winningId);
         assertNotNull(retainedPlan);
         assertSame(winningPlan, retainedPlan.plan);
 
         TestGridFixtures.TestAE split = TestGridFixtures.ae(grid, other);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(other);
+        GRID_IDENTITIES.controllerValidated(grid);
+        GRID_IDENTITIES.controllerValidated(other);
         GridAccess.list(split);
-        StableKey splitKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        StableKey splitKey = GRID_IDENTITIES.getKey(other);
         assertNotNull(splitKey);
         assertNotEquals(losingKey, splitKey);
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, splitKey);
+        assertEmptyHistory(OWNER_ID, splitKey);
         GetCraftingPlan request = new GetCraftingPlan();
-        assertTrue(
-            request.init(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + splitKey + "&id=" + losingId)));
+        assertTrue(request.init(TestGridFixtures.context(OWNER_ID, "grid=" + splitKey + "&id=" + losingId)));
         request.runOnServerThread(split);
         assertEquals(
             "INVALID_ID",
@@ -402,11 +395,11 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         int planId = GridData.getOrCreate(gridKey)
             .addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        GRID_IDENTITIES.controllerRemoved(grid.position());
         TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(900_101L, 42);
         TestGridFixtures.TestAE ae = TestGridFixtures.ae(replacement);
 
-        StableKey replacementKey = CoreEngine.GRID_IDENTITIES.getKey(replacement);
+        StableKey replacementKey = GRID_IDENTITIES.getKey(replacement);
         assertNotNull(replacementKey);
         assertNotEquals(gridKey, replacementKey);
         assertEmptyHistory(42, replacementKey);
@@ -488,11 +481,11 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         historyWorld.close();
         historyWorld = new CraftingHistoryWorld(gridSave);
         TestGridFixtures.track(grid);
-        assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(grid));
+        assertEquals(gridKey, GRID_IDENTITIES.getKey(grid));
         assertNull(GridData.find(gridKey), "Durable history must not require an in-memory grid runtime");
 
         GetTracking request = new GetTracking();
-        request.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=" + id));
+        request.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey + "&id=" + id));
         JsonObject response = new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
         assertEquals(
@@ -515,9 +508,9 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
                 .isJsonNull());
 
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_106L);
-        StableKey otherKey = CoreEngine.GRID_IDENTITIES.getKey(other);
+        StableKey otherKey = GRID_IDENTITIES.getKey(other);
         GetTracking foreignJob = new GetTracking();
-        foreignJob.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + otherKey + "&id=" + id));
+        foreignJob.handle(TestGridFixtures.context(OWNER_ID, "grid=" + otherKey + "&id=" + id));
         assertEquals(
             "TRACKING_NOT_FOUND",
             new JsonParser().parse(foreignJob.getJSON())
@@ -534,8 +527,8 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
 
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(other.position());
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(new DimensionalCoords("unknown", 1, 2, 3));
+        GRID_IDENTITIES.controllerRemoved(other.position());
+        GRID_IDENTITIES.controllerRemoved(new DimensionalCoords("unknown", 1, 2, 3));
         AE2JobTracker.completeCrafting(grid, cpu);
 
         assertEquals(info.finalOutput, completed(gridKey).finalOutput());
@@ -579,7 +572,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         update(cpu, new Resource(1, 0), 10);
         AE2JobTracker.completeCrafting(grid, cpu);
         AE2JobTracker.cancelCrafting(grid, cpu);
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        assertEmptyHistory(OWNER_ID, gridKey);
     }
 
     @Test
@@ -598,7 +591,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertNull(AE2JobTracker.findActiveJob(cpu));
         update(cpu, new Resource(1, 0), 0);
         AE2JobTracker.completeCrafting(grid, cpu);
-        assertEmptyHistory(TestGridFixtures.OWNER_ID, gridKey);
+        assertEmptyHistory(OWNER_ID, gridKey);
     }
 
     @Test
@@ -738,7 +731,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
         flushHistory();
         GetTracking request = new GetTracking();
-        request.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=1"));
+        request.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey + "&id=1"));
         JsonObject response = new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
         assertEquals(

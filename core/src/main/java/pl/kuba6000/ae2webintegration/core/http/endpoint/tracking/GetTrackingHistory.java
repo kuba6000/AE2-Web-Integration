@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -139,7 +140,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
                         entry.requesters()));
             }
             respondDetached(
-                HttpURLConnection.HTTP_OK,
+                HTTP_OK,
                 new Response(
                     ApiStatus.OK,
                     jobs,

@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.icons.export;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.MAX_CAPTURES_PER_BATCH;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +14,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.icons.ControlledPng;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter.CapacityException;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class PackExportWriterTest {
@@ -64,8 +65,8 @@ class PackExportWriterTest {
 
     @Test
     void optionalEncoderFailureStillAbortsInsteadOfPublishingStaticFallback() throws Exception {
-        IOException failure = new IconPackWriter.CapacityException(
-            IconPackWriter.CapacityException.Scope.EXPORT,
+        IOException failure = new CapacityException(
+            CapacityException.Scope.EXPORT,
             "Failure from encoder is not a publication capacity decision");
         try (ControlledPng ignored = new ControlledPng((image, delegate) -> {
             if (image.getRGB(1, 1) == 0xff112233) throw failure;
@@ -272,8 +273,8 @@ class PackExportWriterTest {
 
     private static ArrayList<PackExportWriter.Capture> captures(int batch) {
         ArrayList<PackExportWriter.Capture> captures = new ArrayList<>();
-        for (int index = 0; index < PackExportWriter.MAX_CAPTURES_PER_BATCH; index++) {
-            int color = batch * PackExportWriter.MAX_CAPTURES_PER_BATCH + index;
+        for (int index = 0; index < MAX_CAPTURES_PER_BATCH; index++) {
+            int color = batch * MAX_CAPTURES_PER_BATCH + index;
             int[] pixels = new int[4096];
             Arrays.fill(pixels, 0xff000000 | color);
             captures.add(new PackExportWriter.Capture(StableKey.create(sink -> sink.putInt(color)), pixels));
@@ -340,7 +341,7 @@ class PackExportWriterTest {
                     new PackExportWriter.Capture(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[1]))),
             Collections.emptyList());
         ExecutionException early = assertThrows(ExecutionException.class, () -> {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            long deadline = System.nanoTime() + SECONDS.toNanos(10);
             while (System.nanoTime() < deadline) {
                 writer.ready();
                 Thread.sleep(1);
@@ -362,7 +363,7 @@ class PackExportWriterTest {
 
     private static void await(CountDownLatch latch) throws IOException {
         try {
-            if (!latch.await(10, TimeUnit.SECONDS)) throw new IOException("Controlled worker timed out");
+            if (!latch.await(10, SECONDS)) throw new IOException("Controlled worker timed out");
         } catch (InterruptedException interrupted) {
             Thread.currentThread()
                 .interrupt();
@@ -416,7 +417,7 @@ class PackExportWriterTest {
     }
 
     private static void awaitReady(PackExportWriter writer) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        long deadline = System.nanoTime() + SECONDS.toNanos(10);
         while (!writer.ready()) {
             assertTrue(System.nanoTime() < deadline, "Pipeline did not become ready");
             Thread.sleep(1);
@@ -424,7 +425,7 @@ class PackExportWriterTest {
     }
 
     private static void awaitFinished(PackExportWriter writer) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        long deadline = System.nanoTime() + SECONDS.toNanos(10);
         while (!writer.finished()) {
             assertTrue(System.nanoTime() < deadline, "Pipeline did not finish");
             Thread.sleep(1);

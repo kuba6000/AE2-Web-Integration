@@ -1,14 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.math.BigDecimal;
-import java.net.HttpURLConnection;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,7 +31,7 @@ import com.google.gson.stream.JsonToken;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
@@ -51,12 +52,12 @@ public final class ApiRouter implements HttpHandler {
         @Nullable Supplier<? extends IRequest> factory, String[] segments) {}
 
     private final List<Route> routes = new ArrayList<>();
-    private final Function<HttpExchange, RequestContext> authenticate;
+    private final Function<HttpExchange, AE2Controller.RequestContext> authenticate;
     private final Predicate<HttpExchange> rateLimited;
     private final Consumer<ISyncedRequest> dispatch;
 
-    public ApiRouter(Function<HttpExchange, RequestContext> authenticate, Predicate<HttpExchange> rateLimited,
-        Consumer<ISyncedRequest> dispatch) {
+    public ApiRouter(Function<HttpExchange, AE2Controller.RequestContext> authenticate,
+        Predicate<HttpExchange> rateLimited, Consumer<ISyncedRequest> dispatch) {
         this.authenticate = authenticate;
         this.rateLimited = rateLimited;
         this.dispatch = dispatch;
@@ -95,7 +96,7 @@ public final class ApiRouter implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        RequestContext arrival = new RequestContext(exchange, WebPrincipal.anonymous());
+        AE2Controller.RequestContext arrival = new AE2Controller.RequestContext(exchange, WebPrincipal.anonymous());
         exchange.getResponseHeaders()
             .set("Access-Control-Allow-Origin", "*");
         if (rateLimited.test(exchange)) {
@@ -132,7 +133,7 @@ public final class ApiRouter implements HttpHandler {
             // Never allow the same-origin cookie/local mutation marker in a cross-origin preflight.
             exchange.getResponseHeaders()
                 .set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_NO_CONTENT, -1);
+            exchange.sendResponseHeaders(HTTP_NO_CONTENT, -1);
             exchange.close();
             return;
         }
@@ -144,7 +145,8 @@ public final class ApiRouter implements HttpHandler {
             return;
         }
         Authentication authentication = selected.authentication();
-        RequestContext credentials = authentication == Authentication.NONE ? null : authenticate.apply(exchange);
+        AE2Controller.RequestContext credentials = authentication == Authentication.NONE ? null
+            : authenticate.apply(exchange);
         if (credentials == null && authentication == Authentication.REQUIRED) {
             ApiResponse.error(ApiStatus.UNAUTHORIZED)
                 .send(exchange);
@@ -177,7 +179,7 @@ public final class ApiRouter implements HttpHandler {
                 }
             }
             JsonObject body = readJsonBody(exchange, unsafe);
-            RequestContext context = arrival.withInputs(credentials, parameters, body);
+            AE2Controller.RequestContext context = arrival.withInputs(credentials, parameters, body);
             if (selected.factory() == null) {
                 GetIconPage.handle(context);
                 return;
@@ -230,7 +232,7 @@ public final class ApiRouter implements HttpHandler {
         }
         String json;
         try {
-            json = StandardCharsets.UTF_8.newDecoder()
+            json = UTF_8.newDecoder()
                 .decode(ByteBuffer.wrap(bytes, 0, size))
                 .toString();
         } catch (CharacterCodingException exception) {

@@ -1,11 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
+
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -44,7 +45,7 @@ public final class TempDirectories {
     }
 
     private static @Nullable IOException deleteOnce(@NotNull Path root) {
-        if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return null;
+        if (Files.notExists(root, NOFOLLOW_LINKS)) return null;
         List<Path> paths;
         // Close traversal handles before deleting directories, especially on Windows.
         try (Stream<Path> walk = Files.walk(root)) {

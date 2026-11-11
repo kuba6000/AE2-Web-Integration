@@ -1,13 +1,20 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.net.HttpURLConnection.HTTP_OK;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
+import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.NO_CONTROLLER;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CPU_SELECTION_MODE;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_PLAN_STEPS;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.file.Path;
@@ -87,7 +94,7 @@ final class TestGridFixtures {
 
         void initialize(File save) throws IOException {
             File source = source(save);
-            CoreEngine.GRID_IDENTITIES.initialize(database(source), source.toPath());
+            GRID_IDENTITIES.initialize(database(source), source.toPath());
         }
 
         void close(File source) throws IOException {
@@ -124,8 +131,8 @@ final class TestGridFixtures {
 
     /** An online grid with a controller source owned by {@link #OWNER_ID}. */
     static TestGrid grid(long securityKey, int... alsoPermitted) {
-        TestGrid grid = new TestGrid(securityKey, false, AEControllerState.CONTROLLER_ONLINE, alsoPermitted);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        TestGrid grid = new TestGrid(securityKey, false, CONTROLLER_ONLINE, alsoPermitted);
+        GRID_IDENTITIES.controllerValidated(grid);
         return grid;
     }
 
@@ -134,8 +141,8 @@ final class TestGridFixtures {
     }
 
     static TestGrid grid(StableKey key, int... alsoPermitted) {
-        TestGrid grid = new TestGrid(key, false, AEControllerState.CONTROLLER_ONLINE, alsoPermitted);
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        TestGrid grid = new TestGrid(key, false, CONTROLLER_ONLINE, alsoPermitted);
+        GRID_IDENTITIES.controllerValidated(grid);
         return grid;
     }
 
@@ -159,18 +166,18 @@ final class TestGridFixtures {
 
     static void track(IAEGrid grid) {
         try {
-            CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            GRID_IDENTITIES.controllerValidated(grid);
+            StableKey key = GRID_IDENTITIES.getKey(grid);
             assertNotNull(key);
-            TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
+            TestGridFixtures.setTracked(GRID_IDENTITIES, key, true);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     static StableKey resolvedKey(IAEGrid grid) {
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        return CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GRID_IDENTITIES.controllerValidated(grid);
+        return GRID_IDENTITIES.getKey(grid);
     }
 
     static TestAE ae(IAEGrid... grids) {
@@ -264,7 +271,7 @@ final class TestGridFixtures {
         }
 
         TestGrid noController() {
-            this.controllerState = AEControllerState.NO_CONTROLLER;
+            this.controllerState = NO_CONTROLLER;
             return this;
         }
 
@@ -289,8 +296,7 @@ final class TestGridFixtures {
 
         @Override
         public @NotNull Set<DimensionalCoords> web$getControllers() {
-            return controllerState == AEControllerState.NO_CONTROLLER ? Collections.emptySet()
-                : Collections.singleton(position());
+            return controllerState == NO_CONTROLLER ? Collections.emptySet() : Collections.singleton(position());
         }
 
         @Override
@@ -343,10 +349,10 @@ final class TestGridFixtures {
         @Override
         public Map<ServerCapability, Boolean> web$getCapabilities() {
             Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
-            capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, false);
-            capabilities.put(ServerCapability.CRAFTING_IGNORE_MISSING, false);
-            capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, false);
-            capabilities.put(ServerCapability.CPU_SELECTION_MODE, false);
+            capabilities.put(CRAFTING_LIGHT_MODE, false);
+            capabilities.put(CRAFTING_IGNORE_MISSING, false);
+            capabilities.put(CRAFTING_PLAN_STEPS, false);
+            capabilities.put(CPU_SELECTION_MODE, false);
             return capabilities;
         }
 
@@ -432,7 +438,7 @@ final class TestGridFixtures {
 
         @Override
         public int getResponseCode() {
-            return HttpURLConnection.HTTP_OK;
+            return HTTP_OK;
         }
 
         @Override

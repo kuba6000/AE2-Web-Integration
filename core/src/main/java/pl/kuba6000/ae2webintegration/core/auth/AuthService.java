@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.auth;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
@@ -11,7 +13,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,8 +23,6 @@ import com.github.bsideup.jabel.Desugar;
 import com.sun.net.httpserver.HttpExchange;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
-import pl.kuba6000.ae2webintegration.core.AE2Controller.ServerTaskUnavailableException;
 import pl.kuba6000.ae2webintegration.core.ClientAddressResolver;
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
@@ -36,7 +35,7 @@ import pl.kuba6000.ae2webintegration.core.utils.RateLimiter;
 /** Shared account authentication and server-global sessions for the API, website and game commands. */
 public final class AuthService {
 
-    private static final int RATE_LIMIT_WINDOW_MILLIS = (int) TimeUnit.MINUTES.toMillis(1);
+    private static final int RATE_LIMIT_WINDOW_MILLIS = (int) MINUTES.toMillis(1);
     private static final int SESSION_TOKEN_LENGTH = 200;
     private static final int CONFIRMATION_TOKEN_LENGTH = 50;
     private static final Object authenticationStateLock = new Object();
@@ -94,8 +93,7 @@ public final class AuthService {
             });
             SessionStore ownedStore = store;
             Map<String, AuthSession> ownedSessions = sessions;
-            persistence
-                .scheduleWithFixedDelay(() -> maintainSessions(ownedStore, ownedSessions), 1, 1, TimeUnit.MINUTES);
+            persistence.scheduleWithFixedDelay(() -> maintainSessions(ownedStore, ownedSessions), 1, 1, MINUTES);
         }
         if (adminCredential != null && !adminCredential.equals(Config.INSTANCE.general.password)) {
             for (AuthSession session : sessions.values()) if (session.principal()
@@ -179,9 +177,9 @@ public final class AuthService {
         return null;
     }
 
-    public static @Nullable RequestContext authenticate(@NotNull HttpExchange exchange) {
+    public static @Nullable AE2Controller.RequestContext authenticate(@NotNull HttpExchange exchange) {
         if (isLocalAccess(exchange, resolveClientAddress(exchange))) {
-            return new RequestContext(exchange, localSession);
+            return new AE2Controller.RequestContext(exchange, localSession);
         }
         String token = extractToken(exchange);
         if (token == null) return null;
@@ -196,7 +194,7 @@ public final class AuthService {
             }
             return null;
         }
-        return new RequestContext(exchange, session);
+        return new AE2Controller.RequestContext(exchange, session);
     }
 
     /** Verifies credentials and publishes a session only into the originating HTTP lifecycle. */
@@ -273,7 +271,7 @@ public final class AuthService {
         UUID uuid;
         try {
             uuid = AE2Controller.findOnlinePlayerOnServerThread(username);
-        } catch (ServerTaskUnavailableException exception) {
+        } catch (AE2Controller.ServerTaskUnavailableException exception) {
             return new RegistrationResult(exception.getStatus(), null);
         }
         if (uuid == null) return new RegistrationResult(ApiStatus.NOT_ONLINE, null);
@@ -308,7 +306,7 @@ public final class AuthService {
         return ConfirmationResult.SUCCESS;
     }
 
-    public static boolean logout(@NotNull RequestContext context) {
+    public static boolean logout(@NotNull AE2Controller.RequestContext context) {
         HttpExchange exchange = context.getExchange();
         String token = extractToken(exchange);
         AuthSession session;

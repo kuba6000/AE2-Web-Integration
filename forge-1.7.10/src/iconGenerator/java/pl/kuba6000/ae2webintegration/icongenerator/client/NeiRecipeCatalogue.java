@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraftforge.fluids.FluidContainerRegistry.BUCKET_VOLUME;
+import static net.minecraftforge.oredict.OreDictionary.WILDCARD_VALUE;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -10,9 +13,7 @@ import java.util.Set;
 
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.oredict.OreDictionary;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -89,15 +90,14 @@ final class NeiRecipeCatalogue {
             FluidStack fluid = StackInfo.getFluid(stack);
             if (fluid == null || fluid.getFluid() == null) return null;
             FluidStack copy = fluid.copy();
-            copy.amount = FluidContainerRegistry.BUCKET_VOLUME;
+            copy.amount = BUCKET_VOLUME;
             fluidCandidates++;
             return IconCandidate.fluid(context, copy);
         }
         if (alternativeIndex < alternatives.length) {
             context = slotContext + "/" + alternativeIndex;
             ItemStack stack = alternatives[alternativeIndex++];
-            if (stack == null || stack.getItem() == null
-                || Items.blaze_rod.getDamage(stack) == OreDictionary.WILDCARD_VALUE) {
+            if (stack == null || stack.getItem() == null || Items.blaze_rod.getDamage(stack) == WILDCARD_VALUE) {
                 skipped++;
                 return null;
             }

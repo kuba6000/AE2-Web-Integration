@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.List;
 import java.util.Map;
 
@@ -137,7 +138,7 @@ public final class GetCPU extends LiveSnapshotRequest {
             }
             subscription = bootstrap.subscription();
             respondDetached(
-                HttpURLConnection.HTTP_OK,
+                HTTP_OK,
                 new Response(
                     ApiStatus.OK,
                     clusterData(
@@ -156,7 +157,7 @@ public final class GetCPU extends LiveSnapshotRequest {
         CpuObservation observation = CpuReader.read(cpu, mappings != null);
         CpuObservation.Header header = observation.header();
         respond(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 clusterData(

@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.DAYS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -9,13 +11,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -26,7 +27,7 @@ class SqliteStorageHistoryStoreTest {
         StableKey shortGrid = StableKey.random();
         StableKey longGrid = StableKey.random();
         StableKey item = StableKey.random();
-        long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        long old = System.currentTimeMillis() - DAYS.toMillis(2);
         StorageHistoryPoint point = new StorageHistoryPoint(
             old,
             1,
@@ -44,7 +45,7 @@ class SqliteStorageHistoryStoreTest {
             WorldHistoryFixtures.retention(store, shortGrid, 1);
         }
         try (SqliteStorageHistoryStore reopened = WorldHistoryFixtures
-            .create(directory.resolve("database/history"), new Range(1, 365, 7), 100)) {
+            .create(directory.resolve("database/history"), new ConfigSettings.Range(1, 365, 7), 100)) {
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
                     .points()
@@ -67,7 +68,7 @@ class SqliteStorageHistoryStoreTest {
         StableKey shortGrid = StableKey.random();
         StableKey longGrid = StableKey.random();
         StableKey item = StableKey.random();
-        long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        long old = System.currentTimeMillis() - DAYS.toMillis(2);
         StorageHistoryPoint point = stock(item, old, 9);
         try (SqliteStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
@@ -162,17 +163,7 @@ class SqliteStorageHistoryStoreTest {
                 (now) - 1000L),
             new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0, 0, 0, null),
             stock(item, now, 9),
-            new StorageHistoryPoint(
-                now,
-                7,
-                StorageHistoryPoint.Kind.FLOW_OBSERVATION,
-                null,
-                0,
-                0,
-                0,
-                0,
-                0,
-                (now) - 1000L));
+            new StorageHistoryPoint(now, 7, FLOW_OBSERVATION, null, 0, 0, 0, 0, 0, (now) - 1000L));
         try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, points);
         }
@@ -199,7 +190,7 @@ class SqliteStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        long old = now - TimeUnit.DAYS.toMillis(8);
+        long old = now - DAYS.toMillis(8);
         StorageHistoryPoint gap = new StorageHistoryPoint(
             old + 100,
             7,
@@ -416,7 +407,8 @@ class SqliteStorageHistoryStoreTest {
     }
 
     private SqliteStorageHistoryStore store(int rows) {
-        return WorldHistoryFixtures.create(directory.resolve("database/history"), new Range(1, 365, 7), rows);
+        return WorldHistoryFixtures
+            .create(directory.resolve("database/history"), new ConfigSettings.Range(1, 365, 7), rows);
     }
 
     @Test
@@ -456,7 +448,7 @@ class SqliteStorageHistoryStoreTest {
         StableKey otherGrid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint expired = stock(item, now - TimeUnit.DAYS.toMillis(8), 1);
+        StorageHistoryPoint expired = stock(item, now - DAYS.toMillis(8), 1);
         StorageHistoryPoint recent = stock(item, now, 2);
         try (SqliteStorageHistoryStore store = store(100)) {
             append(store, firstGrid, Arrays.asList(expired, recent));
@@ -483,17 +475,7 @@ class SqliteStorageHistoryStoreTest {
     void anAbsentFlowObservationStartRemainsAbsentAcrossReopen() throws Exception {
         StableKey grid = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint observation = new StorageHistoryPoint(
-            now,
-            7,
-            StorageHistoryPoint.Kind.FLOW_OBSERVATION,
-            null,
-            0,
-            0,
-            0,
-            0,
-            0,
-            null);
+        StorageHistoryPoint observation = new StorageHistoryPoint(now, 7, FLOW_OBSERVATION, null, 0, 0, 0, 0, 0, null);
         try (SqliteStorageHistoryStore history = store(100)) {
             append(history, grid, Collections.singletonList(observation));
         }
@@ -550,7 +532,7 @@ class SqliteStorageHistoryStoreTest {
         StorageHistoryPoint observation = new StorageHistoryPoint(
             now + 3,
             1,
-            StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+            FLOW_OBSERVATION,
             null,
             0,
             0,
@@ -684,7 +666,7 @@ class SqliteStorageHistoryStoreTest {
             StorageHistoryPoint nextMarker = new StorageHistoryPoint(
                 now,
                 7,
-                StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+                FLOW_OBSERVATION,
                 null,
                 0,
                 0,
@@ -705,13 +687,13 @@ class SqliteStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint old = stock(item, now - TimeUnit.DAYS.toMillis(2), 1);
+        StorageHistoryPoint old = stock(item, now - DAYS.toMillis(2), 1);
         StorageHistoryPoint recent = stock(item, now, 2);
         try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(old, recent));
         }
         try (SqliteStorageHistoryStore store = WorldHistoryFixtures
-            .create(directory.resolve("database/history"), new Range(1, 1, 1), 100)) {
+            .create(directory.resolve("database/history"), new ConfigSettings.Range(1, 1, 1), 100)) {
             StorageHistory history = store.read(grid, item, 0, 10);
             assertEquals(Collections.singletonList(recent), history.points());
             assertTrue(history.truncated());
@@ -734,11 +716,11 @@ class SqliteStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint anchor = stock(item, now - TimeUnit.DAYS.toMillis(8), 42);
+        StorageHistoryPoint anchor = stock(item, now - DAYS.toMillis(8), 42);
         StorageHistoryPoint marker = new StorageHistoryPoint(
             now,
             7,
-            StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+            FLOW_OBSERVATION,
             null,
             0,
             0,
@@ -767,7 +749,7 @@ class SqliteStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint old = stock(item, now - TimeUnit.DAYS.toMillis(8), 42);
+        StorageHistoryPoint old = stock(item, now - DAYS.toMillis(8), 42);
         StorageHistoryPoint marker = new StorageHistoryPoint(
             now,
             7,
@@ -818,7 +800,7 @@ class SqliteStorageHistoryStoreTest {
         StorageHistoryPoint point = stock(item, now, 42);
         try (SqliteStorageHistoryStore first = store(100);
             SqliteStorageHistoryStore second = WorldHistoryFixtures
-                .create(directory.resolve("database/./history"), new Range(1, 365, 7), 100)) {
+                .create(directory.resolve("database/./history"), new ConfigSettings.Range(1, 365, 7), 100)) {
             append(first, grid, Collections.singletonList(point));
             for (int attempt = 0; attempt < 10; attempt++)
                 assertThrows(IOException.class, () -> second.read(grid, item, now, 10));

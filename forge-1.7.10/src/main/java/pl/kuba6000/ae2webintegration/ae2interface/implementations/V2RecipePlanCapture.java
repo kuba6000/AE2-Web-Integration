@@ -15,14 +15,12 @@ import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEStack;
 import appeng.crafting.v2.CraftingJobV2;
 import appeng.crafting.v2.CraftingRequest;
-import appeng.crafting.v2.CraftingRequest.UsedResolverEntry;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.CraftFromPatternTask;
-import appeng.crafting.v2.resolvers.CraftableItemResolver.RequestAndPerCraftAmount;
+import appeng.crafting.v2.resolvers.CraftableItemResolver;
 import appeng.crafting.v2.resolvers.CraftingTask;
-import appeng.crafting.v2.resolvers.EmitableItemResolver.EmitItemTask;
-import appeng.crafting.v2.resolvers.ExtractItemResolver.ExtractItemTask;
-import appeng.crafting.v2.resolvers.IgnoreMissingItemResolver.IgnoreMissingItemTask;
-import appeng.crafting.v2.resolvers.SimulateMissingItemResolver.ConjureItemTask;
+import appeng.crafting.v2.resolvers.EmitableItemResolver;
+import appeng.crafting.v2.resolvers.ExtractItemResolver;
+import appeng.crafting.v2.resolvers.IgnoreMissingItemResolver;
+import appeng.crafting.v2.resolvers.SimulateMissingItemResolver;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftFromPatternTaskData;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture;
 import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
@@ -70,7 +68,7 @@ public final class V2RecipePlanCapture {
     private boolean scan(@NotNull CraftingRequest root) {
         if (!enqueue(root)) return false;
         while (!pending.isEmpty()) {
-            for (UsedResolverEntry entry : pending.removeFirst().usedResolvers) {
+            for (CraftingRequest.UsedResolverEntry entry : pending.removeFirst().usedResolvers) {
                 if (!visit()) return false;
                 // A refunded contribution stays in the list with size zero.
                 if (entry.resolvedStack.getStackSize() > 0 && !resolve(entry)) return false;
@@ -79,26 +77,28 @@ public final class V2RecipePlanCapture {
         return true;
     }
 
-    private boolean resolve(@NotNull UsedResolverEntry entry) {
+    private boolean resolve(@NotNull CraftingRequest.UsedResolverEntry entry) {
         CraftingTask task = entry.task;
         Class<?> type = task.getClass();
         // Exact classes only: a subclass may change what its counters mean.
-        if (type == CraftFromPatternTask.class) return crafting((CraftFromPatternTask) task);
-        if (type == ExtractItemTask.class) return extraction((ExtractItemTask<?>) task);
+        if (type == CraftableItemResolver.CraftFromPatternTask.class)
+            return crafting((CraftableItemResolver.CraftFromPatternTask) task);
+        if (type == ExtractItemResolver.ExtractItemTask.class)
+            return extraction((ExtractItemResolver.ExtractItemTask<?>) task);
         // These tasks fulfil their request once, so the entry's remaining amount is the task's amount.
-        if (type == EmitItemTask.class) return add(emitted, entry.resolvedStack);
-        if (type == IgnoreMissingItemTask.class || type == ConjureItemTask.class)
-            return add(missing, entry.resolvedStack);
+        if (type == EmitableItemResolver.EmitItemTask.class) return add(emitted, entry.resolvedStack);
+        if (type == IgnoreMissingItemResolver.IgnoreMissingItemTask.class
+            || type == SimulateMissingItemResolver.ConjureItemTask.class) return add(missing, entry.resolvedStack);
         return false;
     }
 
-    private boolean crafting(@NotNull CraftFromPatternTask task) {
+    private boolean crafting(@NotNull CraftableItemResolver.CraftFromPatternTask task) {
         if (!tasks.add(task)) return true;
         long totalCrafts = task.getTotalCraftsDone();
         // Like populatePlan, a zero-craft task contributes no recipe; its children are still traversed.
         if (totalCrafts > 0) crafts.merge(task.pattern, totalCrafts, Math::addExact);
         ICraftFromPatternTaskData children = (ICraftFromPatternTaskData) task;
-        for (RequestAndPerCraftAmount child : children.web$getChildRequests()) {
+        for (CraftableItemResolver.RequestAndPerCraftAmount child : children.web$getChildRequests()) {
             if (!enqueue(child.request)) return false;
         }
         for (CraftingRequest child : children.web$getChildRecursionRequests()
@@ -108,7 +108,7 @@ public final class V2RecipePlanCapture {
         return true;
     }
 
-    private boolean extraction(@NotNull ExtractItemTask<?> task) {
+    private boolean extraction(@NotNull ExtractItemResolver.ExtractItemTask<?> task) {
         if (!tasks.add(task)) return true;
         // Byproduct reuse is not storage; it is deliberately left out of the initial amounts.
         for (IAEStack<?> removed : task.removedFromSystem) {

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
@@ -10,12 +12,10 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
-import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Release;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 class UpdateSkipHttpTest {
@@ -68,7 +68,7 @@ class UpdateSkipHttpTest {
             .getAsString();
         feedServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         feedServer.createContext("/", exchange -> {
-            byte[] bytes = feed.getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = feed.getBytes(UTF_8);
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody()
                 .write(bytes);
@@ -229,7 +229,7 @@ class UpdateSkipHttpTest {
             Files.write(
                 Config.getConfigFile("webdata.json")
                     .toPath(),
-                ("{\"skippedUpdate\":" + invalid + "}").getBytes(StandardCharsets.UTF_8));
+                ("{\"skippedUpdate\":" + invalid + "}").getBytes(UTF_8));
             CoreData.loadData();
             assertFalse(skipped());
             assertNotNull(CoreData.getAccount("Player"));
@@ -251,7 +251,7 @@ class UpdateSkipHttpTest {
             new Gson().fromJson(request.getJSON(), JsonObject.class)
                 .get("status")
                 .getAsString());
-        Release release = checker.getAvailableUpdate();
+        ReleaseManifest.Release release = checker.getAvailableUpdate();
         assertNotNull(release);
         assertFalse(CoreData.isUpdateSkipped("1.7.10", "forge", release));
     }
@@ -302,7 +302,7 @@ class UpdateSkipHttpTest {
         field.setAccessible(true);
         field.set(null, checker);
         checker.checkForUpdates()
-            .get(5, TimeUnit.SECONDS);
+            .get(5, SECONDS);
     }
 
     private JsonObject context(String credentials) throws Exception {
@@ -327,12 +327,12 @@ class UpdateSkipHttpTest {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
             try (OutputStream output = connection.getOutputStream()) {
-                output.write(body.getBytes(StandardCharsets.UTF_8));
+                output.write(body.getBytes(UTF_8));
             }
         }
         assertEquals(expected, connection.getResponseCode());
         try (InputStream input = expected >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-            return new Gson().fromJson(new InputStreamReader(input, StandardCharsets.UTF_8), JsonObject.class);
+            return new Gson().fromJson(new InputStreamReader(input, UTF_8), JsonObject.class);
         } finally {
             connection.disconnect();
         }

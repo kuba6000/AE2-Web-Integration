@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,7 +13,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,9 +41,9 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 public final class StorageTrackingCoordinator implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-    private static final long DISCOVERY_MILLIS = TimeUnit.SECONDS.toMillis(1);
-    private static final long VIEWER_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(10);
-    private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
+    private static final long DISCOVERY_MILLIS = SECONDS.toMillis(1);
+    private static final long VIEWER_LEASE_MILLIS = SECONDS.toMillis(10);
+    private static final long FAILURE_RETRY_MILLIS = SECONDS.toMillis(30);
     private final StorageTrackingService service;
     private final RecentTrackingService recent;
     private final TerminalRegistry terminals;
@@ -76,7 +78,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding.capture.setMaximumResources(updated.maxResourcesPerGrid);
             binding.nextViewerRead = Math.min(binding.nextViewerRead, nowMillis + updated.activeIntervalMillis);
             binding.nextFull = Math
-                .min(binding.nextFull, nowMillis + TimeUnit.SECONDS.toMillis(updated.reconciliationIntervalSeconds));
+                .min(binding.nextFull, nowMillis + SECONDS.toMillis(updated.reconciliationIntervalSeconds));
         }
         service.setMaximumQueuedRows(updated.maxQueuedRows);
         recent.applyLimits(updated.maxQueuedRows, updated.maxResourcesPerGrid);
@@ -249,10 +251,10 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private Binding binding(StableKey key, IAEGrid grid, @Nullable GridSettingsData configuration, long nowMillis) {
         boolean stock = configuration != null && configuration.isStorageTracked();
         boolean flow = configuration != null && configuration.isFlowTracked();
-        long stockInterval = TimeUnit.SECONDS.toMillis(
+        long stockInterval = SECONDS.toMillis(
             configuration == null ? identities.getDataPolicy().stockSampleIntervalSeconds.defaultValue
                 : configuration.getStockSampleIntervalSeconds());
-        long flowInterval = TimeUnit.SECONDS.toMillis(
+        long flowInterval = SECONDS.toMillis(
             configuration == null ? identities.getDataPolicy().flowFlushIntervalSeconds.defaultValue
                 : configuration.getFlowFlushIntervalSeconds());
         Binding binding = bindings.get(key);
@@ -335,7 +337,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, flowSample)
                 : binding.capture.flushFlow(nowMillis);
             if (observation.full())
-                binding.nextFull = nowMillis + TimeUnit.SECONDS.toMillis(settings.reconciliationIntervalSeconds);
+                binding.nextFull = nowMillis + SECONDS.toMillis(settings.reconciliationIntervalSeconds);
             // Native reads may themselves deliver a full-list invalidation.
             terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
@@ -406,7 +408,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     private static long retryAt(long nowMillis, long startedNanos, long interval) {
         // A slow failed read must not consume its own retry delay while it blocks the game thread.
-        long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+        long elapsed = NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
         return nowMillis + elapsed + Math.max(interval, FAILURE_RETRY_MILLIS);
     }
 

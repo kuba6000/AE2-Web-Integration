@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.auth;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -122,7 +123,7 @@ public final class GetContext extends IAsyncRequest {
             ? new AvailableUpdate(release.version, release.tag, release.releaseUrl, CoreEngine.isUpdateSkipped(release))
             : null;
         respond(
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 new Metadata(

@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
-import java.net.HttpURLConnection;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -70,6 +70,6 @@ public final class RenewItemEvents extends IAsyncRequest {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
+        respond(HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

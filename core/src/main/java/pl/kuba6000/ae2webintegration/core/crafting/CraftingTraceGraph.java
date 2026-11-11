@@ -6,6 +6,8 @@ import java.util.List;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingTraceCapture.ContributionKind;
+
 /**
  * Navigation through a captured trace: a request lists its contributions, a task lists the requests it
  * issued. Local capture IDs are the node references; a task serving several requests is one node reached
@@ -160,8 +162,7 @@ public final class CraftingTraceGraph {
                 .size(); row++) {
                 CraftingTraceCapture.Contribution contribution = capture.contributions()
                     .get(row);
-                if (contribution.kind() != CraftingTraceCapture.ContributionKind.MISSING || contribution.amount() == 0)
-                    continue;
+                if (contribution.kind() != ContributionKind.MISSING || contribution.amount() == 0) continue;
                 missingRequests[contribution.requestId()] = true;
                 int resource = capture.requests()
                     .get(contribution.requestId())
@@ -236,8 +237,7 @@ public final class CraftingTraceGraph {
                     CraftingTraceCapture.Contribution contribution = capture.contributions()
                         .get(row);
                     return craftedTask[row] == NO_TASK
-                        ? contribution.kind() == CraftingTraceCapture.ContributionKind.MISSING
-                            && contribution.amount() > 0
+                        ? contribution.kind() == ContributionKind.MISSING && contribution.amount() > 0
                         : relevantTasks[craftedTask[row]];
                 });
             taskRequests = new Adjacency(

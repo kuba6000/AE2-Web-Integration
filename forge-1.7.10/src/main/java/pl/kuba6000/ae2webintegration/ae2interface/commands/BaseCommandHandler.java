@@ -7,8 +7,6 @@ import net.minecraft.command.ICommandSender;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 
-import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder.CommandNode;
-
 /**
  * Forge 1.7.10 command handler. Traverses the command tree built by
  * {@link CommandBuilder} to find the matching handler for the
@@ -16,9 +14,9 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder.Comman
  */
 public class BaseCommandHandler extends CommandBase {
 
-    private final List<CommandNode> rootNodes;
+    private final List<CommandBuilder.CommandNode> rootNodes;
 
-    public BaseCommandHandler(List<CommandNode> rootNodes) {
+    public BaseCommandHandler(List<CommandBuilder.CommandNode> rootNodes) {
         this.rootNodes = rootNodes;
     }
 
@@ -48,9 +46,9 @@ public class BaseCommandHandler extends CommandBase {
         if (sender.getEntityWorld().isRemote) return;
 
         if (rootNodes.isEmpty()) return;
-        CommandNode root = rootNodes.get(0); // "ae2webintegration"
+        CommandBuilder.CommandNode root = rootNodes.get(0); // "ae2webintegration"
 
-        CommandNode matched = walkTree(root, args, 0);
+        CommandBuilder.CommandNode matched = walkTree(root, args, 0);
         if (matched != null && matched.handler != null) {
             // Check permission on the matched node
             if (matched.permission > 0 && !sender.canCommandSenderUseCommand(matched.permission, getCommandName())) {
@@ -70,7 +68,7 @@ public class BaseCommandHandler extends CommandBase {
      * names and argument placeholders. Returns the deepest matching node that
      * has a handler, or {@code null} if no path matches.
      */
-    private static CommandNode walkTree(CommandNode node, String[] args, int index) {
+    private static CommandBuilder.CommandNode walkTree(CommandBuilder.CommandNode node, String[] args, int index) {
         if (index >= args.length) {
             return node.handler != null ? node : null;
         }
@@ -78,17 +76,17 @@ public class BaseCommandHandler extends CommandBase {
         String current = args[index];
 
         // Try to match a literal child by name
-        for (CommandNode child : node.children) {
+        for (CommandBuilder.CommandNode child : node.children) {
             if (!child.isArgument && child.name.equals(current)) {
-                CommandNode result = walkTree(child, args, index + 1);
+                CommandBuilder.CommandNode result = walkTree(child, args, index + 1);
                 if (result != null) return result;
             }
         }
 
         // Try to match an argument child (matches any token)
-        for (CommandNode child : node.children) {
+        for (CommandBuilder.CommandNode child : node.children) {
             if (child.isArgument) {
-                CommandNode result = walkTree(child, args, index + 1);
+                CommandBuilder.CommandNode result = walkTree(child, args, index + 1);
                 if (result != null) return result;
             }
         }

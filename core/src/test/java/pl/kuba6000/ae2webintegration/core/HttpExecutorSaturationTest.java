@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,7 +11,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -39,12 +39,12 @@ class HttpExecutorSaturationTest {
             for (int i = 0; i < 64; i++) {
                 executor.execute(blockingRequest);
             }
-            assertTrue(workersEntered.await(2, TimeUnit.SECONDS));
+            assertTrue(workersEntered.await(2, SECONDS));
 
             Future<?> excessSubmission = submitter.submit(() -> executor.execute(() -> {}));
             ExecutionException rejection = assertThrows(
                 ExecutionException.class,
-                () -> excessSubmission.get(1, TimeUnit.SECONDS));
+                () -> excessSubmission.get(1, SECONDS));
             assertInstanceOf(RejectedExecutionException.class, rejection.getCause());
         } finally {
             releaseWorkers.countDown();

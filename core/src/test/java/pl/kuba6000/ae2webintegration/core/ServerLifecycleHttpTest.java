@@ -1,5 +1,21 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.net.HttpURLConnection.HTTP_ACCEPTED;
+import static java.net.HttpURLConnection.HTTP_BAD_METHOD;
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
+import static java.net.HttpURLConnection.HTTP_CONFLICT;
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN;
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR;
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
+import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -9,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -25,8 +42,8 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +56,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.io.IOUtils;
@@ -84,7 +100,7 @@ class ServerLifecycleHttpTest {
     private static final class BlockingPlayerLookup implements IServerPlatform {
 
         @Override
-        public java.nio.file.Path getModFile() {
+        public Path getModFile() {
             return null;
         }
 
@@ -168,7 +184,7 @@ class ServerLifecycleHttpTest {
         private PostExchange(String path, String requestBody) {
             super(null);
             uri = URI.create(path);
-            this.requestBody = requestBody.getBytes(StandardCharsets.UTF_8);
+            this.requestBody = requestBody.getBytes(UTF_8);
             getRequestHeaders().set(
                 "Content-Type",
                 path.startsWith("/api/") ? "application/json" : "application/x-www-form-urlencoded");
@@ -269,7 +285,7 @@ class ServerLifecycleHttpTest {
             try (Reader reader = Files.newBufferedReader(
                 Config.getConfigFile("sessions.json")
                     .toPath(),
-                StandardCharsets.UTF_8)) {
+                UTF_8)) {
                 assertEquals(
                     21,
                     new Gson().fromJson(reader, JsonObject.class)
@@ -296,7 +312,7 @@ class ServerLifecycleHttpTest {
             List<Future<String>> logins = new ArrayList<>();
             for (int i = 0; i < 24; i++)
                 logins.add(clients.submit(() -> rememberedLogin("admin", "lifecycle-password", ordinary)));
-            for (Future<String> login : logins) tokens.add(login.get(30, TimeUnit.SECONDS));
+            for (Future<String> login : logins) tokens.add(login.get(30, SECONDS));
         } finally {
             clients.shutdownNow();
         }
@@ -306,7 +322,7 @@ class ServerLifecycleHttpTest {
         try (Reader reader = Files.newBufferedReader(
             Config.getConfigFile("sessions.json")
                 .toPath(),
-            StandardCharsets.UTF_8)) {
+            UTF_8)) {
             assertEquals(
                 20,
                 new Gson().fromJson(reader, JsonObject.class)
@@ -429,7 +445,7 @@ class ServerLifecycleHttpTest {
             "/assets/web/themes/default/view.js" }) {
             HttpURLConnection module = connection(path, null);
             Response response = read(module);
-            assertEquals(HttpURLConnection.HTTP_OK, response.status(), path);
+            assertEquals(HTTP_OK, response.status(), path);
             assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
             assertFalse(
                 response.body()
@@ -444,13 +460,13 @@ class ServerLifecycleHttpTest {
         startApi();
         for (int i = 0; i < 3; i++) {
             HttpURLConnection module = connection("/assets/web/http-test.mjs", null);
-            assertEquals(HttpURLConnection.HTTP_OK, read(module).status());
+            assertEquals(HTTP_OK, read(module).status());
             assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
             HttpURLConnection style = connection("/assets/web/http-test.css", null);
-            assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+            assertEquals(HTTP_OK, read(style).status());
             assertEquals("text/css; charset=UTF-8", style.getHeaderField("Content-Type"));
         }
-        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+        assertEquals(HTTP_OK, get("/", null).status());
         assertEquals(429, get("/", null).status());
     }
 
@@ -461,7 +477,7 @@ class ServerLifecycleHttpTest {
         String path = "/assets/web/themes/default/window-frame.svg";
         HttpURLConnection image = connection(path, null);
         Response content = read(image);
-        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        assertEquals(HTTP_OK, content.status());
         assertEquals("image/svg+xml", image.getHeaderField("Content-Type"));
         assertEquals("nosniff", image.getHeaderField("X-Content-Type-Options"));
         assertTrue(
@@ -470,14 +486,14 @@ class ServerLifecycleHttpTest {
         HttpURLConnection head = connection(path, null);
         head.setRequestMethod("HEAD");
         Response metadata = read(head);
-        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals(HTTP_OK, metadata.status());
         assertEquals("image/svg+xml", head.getHeaderField("Content-Type"));
         assertEquals("", metadata.body());
         assertEquals(
             content.body()
-                .getBytes(StandardCharsets.UTF_8).length,
+                .getBytes(UTF_8).length,
             head.getContentLength());
-        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+        assertEquals(HTTP_OK, get("/", null).status());
     }
 
     @Test
@@ -487,22 +503,22 @@ class ServerLifecycleHttpTest {
         for (String weight : new String[] { "Regular", "Bold" }) {
             String path = "/assets/web/themes/default/fonts/monocraft/Monocraft-" + weight + ".woff2";
             HttpURLConnection font = connection(path, null);
-            assertEquals(HttpURLConnection.HTTP_OK, font.getResponseCode());
+            assertEquals(HTTP_OK, font.getResponseCode());
             assertEquals("font/woff2", font.getHeaderField("Content-Type"));
             assertEquals("nosniff", font.getHeaderField("X-Content-Type-Options"));
             byte[] content;
             try (InputStream input = font.getInputStream()) {
                 content = IOUtils.toByteArray(input);
             }
-            assertEquals("wOF2", new String(content, 0, 4, StandardCharsets.US_ASCII));
+            assertEquals("wOF2", new String(content, 0, 4, US_ASCII));
             HttpURLConnection head = connection(path, null);
             head.setRequestMethod("HEAD");
             Response metadata = read(head);
-            assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+            assertEquals(HTTP_OK, metadata.status());
             assertEquals("", metadata.body());
             assertEquals(content.length, head.getContentLength());
         }
-        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+        assertEquals(HTTP_OK, get("/", null).status());
     }
 
     @Test
@@ -512,7 +528,7 @@ class ServerLifecycleHttpTest {
             String path = "/assets/web/themes/default/fonts/" + family + "/LICENSE";
             HttpURLConnection license = connection(path, null);
             Response content = read(license);
-            assertEquals(HttpURLConnection.HTTP_OK, content.status());
+            assertEquals(HTTP_OK, content.status());
             assertEquals("text/plain; charset=UTF-8", license.getHeaderField("Content-Type"));
             assertTrue(
                 content.body()
@@ -522,10 +538,10 @@ class ServerLifecycleHttpTest {
                     .contains("Copyright"));
             HttpURLConnection head = connection(path, null);
             head.setRequestMethod("HEAD");
-            assertEquals(HttpURLConnection.HTTP_OK, head.getResponseCode());
+            assertEquals(HTTP_OK, head.getResponseCode());
             assertEquals(
                 content.body()
-                    .getBytes(StandardCharsets.UTF_8).length,
+                    .getBytes(UTF_8).length,
                 head.getContentLength());
         }
     }
@@ -538,21 +554,21 @@ class ServerLifecycleHttpTest {
         HttpURLConnection head = connection("/assets/web/http-test.mjs", null);
         head.setRequestMethod("HEAD");
         Response metadata = read(head);
-        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals(HTTP_OK, metadata.status());
         assertEquals("", metadata.body());
         assertEquals(
             content.body()
-                .getBytes(StandardCharsets.UTF_8).length,
+                .getBytes(UTF_8).length,
             head.getContentLength());
         assertEquals(get.getHeaderField("Content-Type"), head.getHeaderField("Content-Type"));
         HttpURLConnection write = connection("/assets/web/http-test.mjs", null);
         write.setRequestMethod("POST");
-        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, read(write).status());
+        assertEquals(HTTP_BAD_METHOD, read(write).status());
         assertEquals("GET, HEAD", write.getHeaderField("Allow"));
         for (String path : new String[] { "/assets/web/missing.mjs", "/assets/web/index.html",
             "/assets/web/../login.html", "/assets/web/%2e%2e/login.html", "/assets/web/../../junit-platform.properties",
             "/assets/web/%2e%2e%5clogin.html", "/assets/web/config.toml" }) {
-            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, null).status(), path);
+            assertEquals(HTTP_NOT_FOUND, get(path, null).status(), path);
         }
     }
 
@@ -562,7 +578,7 @@ class ServerLifecycleHttpTest {
         String path = "/assets/web/http-test.mjs";
         HttpURLConnection first = connection(path, null);
         Response content = read(first);
-        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        assertEquals(HTTP_OK, content.status());
         String etag = first.getHeaderField("ETag");
         assertNotNull(etag);
         assertEquals("no-cache", first.getHeaderField("Cache-Control"));
@@ -571,7 +587,7 @@ class ServerLifecycleHttpTest {
         HttpURLConnection unchanged = connection(path, null);
         unchanged.setRequestProperty("If-None-Match", etag);
         Response notModified = read(unchanged);
-        assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, notModified.status());
+        assertEquals(HTTP_NOT_MODIFIED, notModified.status());
         assertEquals("", notModified.body());
         assertEquals(etag, unchanged.getHeaderField("ETag"));
         assertEquals("no-cache", unchanged.getHeaderField("Cache-Control"));
@@ -579,27 +595,27 @@ class ServerLifecycleHttpTest {
         for (String validator : new String[] { "W/" + etag, "\"other\", " + etag, "*" }) {
             HttpURLConnection listed = connection(path, null);
             listed.setRequestProperty("If-None-Match", validator);
-            assertEquals(HttpURLConnection.HTTP_NOT_MODIFIED, read(listed).status(), validator);
+            assertEquals(HTTP_NOT_MODIFIED, read(listed).status(), validator);
         }
 
         HttpURLConnection changed = connection(path, null);
         changed.setRequestProperty("If-None-Match", "\"stale\"");
         Response refreshed = read(changed);
-        assertEquals(HttpURLConnection.HTTP_OK, refreshed.status());
+        assertEquals(HTTP_OK, refreshed.status());
         assertEquals(content.body(), refreshed.body());
         assertEquals(etag, changed.getHeaderField("ETag"));
 
         HttpURLConnection head = connection(path, null);
         head.setRequestMethod("HEAD");
-        assertEquals(HttpURLConnection.HTTP_OK, read(head).status());
+        assertEquals(HTTP_OK, read(head).status());
         assertEquals(etag, head.getHeaderField("ETag"));
         assertEquals(
             content.body()
-                .getBytes(StandardCharsets.UTF_8).length,
+                .getBytes(UTF_8).length,
             head.getContentLength());
 
         HttpURLConnection style = connection("/assets/web/http-test.css", null);
-        assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+        assertEquals(HTTP_OK, read(style).status());
         assertNotEquals(etag, style.getHeaderField("ETag"));
     }
 
@@ -608,10 +624,10 @@ class ServerLifecycleHttpTest {
         startApi();
         for (String selector : new String[] { "", "?ui=next", "?ui=previous" }) {
             HttpURLConnection failure = browserForm("/" + selector, "username=admin&password=wrong");
-            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(failure).status());
+            assertEquals(HTTP_MOVED_TEMP, read(failure).status());
             assertEquals("?INVALID_PASSWORD", failure.getHeaderField("Location"));
             HttpURLConnection success = browserForm("/" + selector, "username=admin&password=lifecycle-password");
-            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(success).status());
+            assertEquals(HTTP_MOVED_TEMP, read(success).status());
             assertEquals(".", success.getHeaderField("Location"));
             assertTrue(
                 success.getHeaderField("Set-Cookie")
@@ -628,12 +644,12 @@ class ServerLifecycleHttpTest {
         config.set("general.public_mode", true);
         startApi();
         HttpURLConnection registration = browserForm("/?ui=next", "register=Player&password=player-password");
-        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
+        assertEquals(HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
         String location = registration.getHeaderField("Location");
         assertTrue(location.startsWith("?confirmregistration&token="));
         assertFalse(location.contains("&ui="));
         Response confirmation = get("/" + location, null);
-        assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
+        assertEquals(HTTP_OK, confirmation.status());
         assertEquals(pageResource("/assets/login.html"), confirmation.body());
     }
 
@@ -643,10 +659,10 @@ class ServerLifecycleHttpTest {
         String token = login();
         for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
             Response loginPage = get(path, null);
-            assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
+            assertEquals(HTTP_OK, loginPage.status());
             assertEquals(pageResource("/assets/login.html"), loginPage.body());
             Response page = get(path, token);
-            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            assertEquals(HTTP_OK, page.status());
             assertEquals(pageResource("/assets/web/index.html"), page.body());
         }
     }
@@ -656,7 +672,7 @@ class ServerLifecycleHttpTest {
         startApi();
         HttpURLConnection connection = connection("/api/context", null);
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
         assertEquals(
             "OK",
@@ -679,8 +695,8 @@ class ServerLifecycleHttpTest {
             data.get("user")
                 .isJsonNull());
         assertEquals("no-store", connection.getHeaderField("Cache-Control"));
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", null).status());
-        assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get("/api/bootstrap", null).status());
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/grids", null).status());
+        assertEquals(HTTP_NOT_FOUND, get("/api/bootstrap", null).status());
 
         config.set("general.public_mode", true);
         JsonObject publicData = new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
@@ -736,7 +752,7 @@ class ServerLifecycleHttpTest {
         String token = login();
         HttpURLConnection connection = connection("/api/context", token);
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         assertFalse(
             new Gson().fromJson(response.body(), JsonObject.class)
                 .getAsJsonObject("data")
@@ -793,7 +809,7 @@ class ServerLifecycleHttpTest {
         startApi();
         String token = login(username, "player-password");
         Response page = get("/", token);
-        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        assertEquals(HTTP_OK, page.status());
         JsonObject user = contextUser(get("/api/context", token).body());
         assertFalse(
             new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
@@ -829,7 +845,7 @@ class ServerLifecycleHttpTest {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -883,7 +899,7 @@ class ServerLifecycleHttpTest {
             startApi();
             String token = login();
             Response page = get("/", token);
-            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            assertEquals(HTTP_OK, page.status());
             Response context = get("/api/context", token);
             JsonObject metadata = new Gson().fromJson(context.body(), JsonObject.class)
                 .getAsJsonObject("data");
@@ -910,7 +926,7 @@ class ServerLifecycleHttpTest {
 
     private static String pageResource(String path) throws IOException {
         try (InputStream input = ServerLifecycleHttpTest.class.getResourceAsStream(path)) {
-            return IOUtils.toString(input, StandardCharsets.UTF_8);
+            return IOUtils.toString(input, UTF_8);
         }
     }
 
@@ -929,7 +945,7 @@ class ServerLifecycleHttpTest {
             HttpURLConnection head = connection(path, token);
             head.setRequestMethod("HEAD");
             assertEquals("", read(head).body());
-            assertEquals(expected.getBytes(StandardCharsets.UTF_8).length, head.getContentLength());
+            assertEquals(expected.getBytes(UTF_8).length, head.getContentLength());
         }
     }
 
@@ -953,14 +969,14 @@ class ServerLifecycleHttpTest {
         assertNotSame(firstContext.getSession(), secondContext.getSession());
         HttpURLConnection logout = connection("/api/auth/logout", first);
         logout.setRequestMethod("POST");
-        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertEquals(HTTP_OK, read(logout).status());
         assertFalse(
             firstContext.getSession()
                 .isValid(System.currentTimeMillis()));
         assertTrue(
             secondContext.getSession()
                 .isValid(System.currentTimeMillis()));
-        assertEquals(HttpURLConnection.HTTP_OK, get("/api/context", second).status());
+        assertEquals(HTTP_OK, get("/api/context", second).status());
     }
 
     @Test
@@ -982,13 +998,13 @@ class ServerLifecycleHttpTest {
                 .isJsonNull());
         HttpURLConnection logout = connection("/api/auth/logout", token);
         logout.setRequestMethod("POST");
-        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertEquals(HTTP_OK, read(logout).status());
         assertTrue(
             new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
                 .getAsJsonObject("data")
                 .get("user")
                 .isJsonNull());
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/grids", token).status());
 
         config.set("general.allow_no_password_on_localhost", true);
         JsonObject local = contextUser(get("/api/context", null).body());
@@ -1022,7 +1038,7 @@ class ServerLifecycleHttpTest {
     void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
         startApi();
         String token = login();
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+        assertEquals(HTTP_OK, performSyncedRequest(token).status());
 
         config.writeRaw("[general\nport = 2324");
         assertFalse(
@@ -1033,7 +1049,7 @@ class ServerLifecycleHttpTest {
         assertEquals("lifecycle-password", Config.INSTANCE.general.password);
         assertFalse(Config.INSTANCE.general.publicMode);
         assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+        assertEquals(HTTP_OK, performSyncedRequest(token).status());
     }
 
     @Test
@@ -1045,7 +1061,7 @@ class ServerLifecycleHttpTest {
         startHttpServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
-        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
+        assertEquals(HTTP_OK, firstWorld.status());
         assertTrue(
             firstWorld.body()
                 .contains("\"status\":\"OK\""));
@@ -1059,13 +1075,13 @@ class ServerLifecycleHttpTest {
 
         Response secondWorld = get("/api/grids", token);
         assertEquals(
-            HttpURLConnection.HTTP_UNAUTHORIZED,
+            HTTP_UNAUTHORIZED,
             secondWorld.status(),
             "a token issued for the old world must no longer authorize");
 
         String secondWorldToken = login();
         Response secondWorldAuthorized = performSyncedRequest(secondWorldToken);
-        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status());
+        assertEquals(HTTP_OK, secondWorldAuthorized.status());
         assertTrue(
             secondWorldAuthorized.body()
                 .contains("\"status\":\"OK\""));
@@ -1092,17 +1108,17 @@ class ServerLifecycleHttpTest {
                     throw new RuntimeException(e);
                 }
             });
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + SECONDS.toNanos(2);
             while (AE2Controller.requests.isEmpty() && !oldRequest.isDone() && System.nanoTime() < deadline) {
                 Thread.sleep(5L);
             }
             assertFalse(oldRequest.isDone(), "the worker should be waiting for the queued lookup");
 
             CoreEngine.onServerStopping();
-            oldRequest.get(5, TimeUnit.SECONDS);
+            oldRequest.get(5, SECONDS);
 
             assertEquals(
-                HttpURLConnection.HTTP_UNAVAILABLE,
+                HTTP_UNAVAILABLE,
                 exchange.responseCode,
                 "stopping must release a worker waiting for PlayerList");
             assertEquals("SERVER_STOPPING", responseStatus(exchange));
@@ -1120,7 +1136,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -1178,7 +1194,7 @@ class ServerLifecycleHttpTest {
 
         authRouter().handle(exchange);
 
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+        assertEquals(HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", responseStatus(exchange));
         assertEquals(0, playerListLookups.get(), "a timed-out queued lookup must not run later");
         assertTrue(AE2Controller.requests.isEmpty());
@@ -1197,7 +1213,7 @@ class ServerLifecycleHttpTest {
 
         assertTimeout(Duration.ofSeconds(1), () -> authRouter().handle(exchange));
 
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+        assertEquals(HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", responseStatus(exchange));
         assertEquals(32, AE2Controller.requests.size());
     }
@@ -1211,7 +1227,7 @@ class ServerLifecycleHttpTest {
 
         Response response = get("/api/grids", token);
 
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status());
+        assertEquals(HTTP_UNAVAILABLE, response.status());
         assertTrue(
             response.body()
                 .contains("\"status\":\"SERVER_BUSY\""));
@@ -1226,7 +1242,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -1292,7 +1308,7 @@ class ServerLifecycleHttpTest {
                 }
             });
 
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + SECONDS.toNanos(2);
             while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
                 Thread.sleep(5L);
             }
@@ -1300,10 +1316,10 @@ class ServerLifecycleHttpTest {
             assertEquals(0, playerListLookups.get(), "the HTTP worker must not inspect PlayerList");
 
             CoreEngine.onServerTick();
-            request.get(2, TimeUnit.SECONDS);
+            request.get(2, SECONDS);
 
             assertEquals(1, playerListLookups.get());
-            assertEquals(HttpURLConnection.HTTP_CONFLICT, exchange.responseCode);
+            assertEquals(HTTP_CONFLICT, exchange.responseCode);
             assertEquals("NOT_ONLINE", responseStatus(exchange));
         } finally {
             httpWorker.shutdownNow();
@@ -1318,7 +1334,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -1382,17 +1398,17 @@ class ServerLifecycleHttpTest {
                 }
             });
 
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + SECONDS.toNanos(2);
             while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
                 Thread.sleep(5L);
             }
             assertFalse(request.isDone());
 
             CoreEngine.onServerTick();
-            request.get(2, TimeUnit.SECONDS);
+            request.get(2, SECONDS);
 
             assertEquals(1, playerListLookups.get());
-            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, exchange.responseCode);
+            assertEquals(HTTP_MOVED_TEMP, exchange.responseCode);
             assertEquals(
                 "?NOT_ONLINE",
                 exchange.getResponseHeaders()
@@ -1431,11 +1447,10 @@ class ServerLifecycleHttpTest {
                     throw new RuntimeException(e);
                 }
             });
-            oldRequest.get(2, TimeUnit.SECONDS);
+            oldRequest.get(2, SECONDS);
 
-            assertEquals(HttpURLConnection.HTTP_OK, exchange.responseCode);
-            JsonObject response = new Gson()
-                .fromJson(exchange.responseBody.toString(StandardCharsets.UTF_8.name()), JsonObject.class)
+            assertEquals(HTTP_OK, exchange.responseCode);
+            JsonObject response = new Gson().fromJson(exchange.responseBody.toString(UTF_8.name()), JsonObject.class)
                 .getAsJsonObject("data");
             assertFalse(
                 response.get("isAdmin")
@@ -1474,7 +1489,7 @@ class ServerLifecycleHttpTest {
         String token = login("canonicalplayer", "player-password");
         Response response = get("/api/context", token);
 
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         assertEquals(
             "CanonicalPlayer",
             contextUser(response.body()).get("username")
@@ -1487,7 +1502,7 @@ class ServerLifecycleHttpTest {
         String token = login();
         HttpURLConnection connection = connection("/api/grids", token);
         Response response = performSyncedRequest(() -> read(connection));
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         assertTrue(
             connection.getHeaderField("Content-Type")
                 .startsWith("application/json"));
@@ -1509,8 +1524,8 @@ class ServerLifecycleHttpTest {
         HttpURLConnection connection = connection("/api/grids?logout&grid=not-a-key", null);
         connection.setRequestProperty("Cookie", "other=value;authenticationToken=" + token);
         Response response = performSyncedRequest(() -> read(connection));
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(() -> get("/api/grids", token)).status());
+        assertEquals(HTTP_OK, response.status());
+        assertEquals(HTTP_OK, performSyncedRequest(() -> get("/api/grids", token)).status());
     }
 
     @Test
@@ -1520,15 +1535,15 @@ class ServerLifecycleHttpTest {
         HttpURLConnection unmarked = connection("/api/auth/logout", null);
         unmarked.setRequestMethod("POST");
         unmarked.setRequestProperty("Cookie", "authenticationToken=" + token);
-        assertEquals(HttpURLConnection.HTTP_FORBIDDEN, read(unmarked).status());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+        assertEquals(HTTP_FORBIDDEN, read(unmarked).status());
+        assertEquals(HTTP_OK, performSyncedRequest(token).status());
 
         HttpURLConnection marked = connection("/api/auth/logout", null);
         marked.setRequestMethod("POST");
         marked.setRequestProperty("Cookie", "authenticationToken=" + token);
         marked.setRequestProperty("X-AE2-Request", "true");
         Response logout = read(marked);
-        assertEquals(HttpURLConnection.HTTP_OK, logout.status());
+        assertEquals(HTTP_OK, logout.status());
         JsonObject envelope = new Gson().fromJson(logout.body(), JsonObject.class);
         assertEquals(
             "OK",
@@ -1538,7 +1553,7 @@ class ServerLifecycleHttpTest {
             envelope.get("data")
                 .isJsonNull());
         assertNull(marked.getHeaderField("Set-Cookie"), "nested API routes must not install page cookies");
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/grids", token).status());
     }
 
     @Test
@@ -1546,15 +1561,15 @@ class ServerLifecycleHttpTest {
         startApi();
         String token = login();
         for (String path : new String[] { "/auth", "/auth?revoke", "/grids" }) {
-            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, token).status());
+            assertEquals(HTTP_NOT_FOUND, get(path, token).status());
         }
-        assertEquals(HttpURLConnection.HTTP_OK, get("/?logout", token).status());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
-        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, get("/api/auth/logout", token).status());
+        assertEquals(HTTP_OK, get("/?logout", token).status());
+        assertEquals(HTTP_OK, performSyncedRequest(token).status());
+        assertEquals(HTTP_BAD_METHOD, get("/api/auth/logout", token).status());
         HttpURLConnection logout = connection("/api/auth/logout", token);
         logout.setRequestMethod("POST");
-        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+        assertEquals(HTTP_OK, read(logout).status());
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/grids", token).status());
     }
 
     @Test
@@ -1563,7 +1578,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -1618,7 +1633,7 @@ class ServerLifecycleHttpTest {
             null,
             "{\"username\":\"Player\",\"password\":\"player-password\"}");
         Response response = performSyncedRequest(() -> read(registration));
-        assertEquals(HttpURLConnection.HTTP_ACCEPTED, response.status());
+        assertEquals(HTTP_ACCEPTED, response.status());
         JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
         assertEquals(
             "OK",
@@ -1637,7 +1652,7 @@ class ServerLifecycleHttpTest {
         startApi();
         Response response = read(
             jsonPost("/api/auth/login", null, "{\"username\":\"admin\",\"password\":\"incorrect\"}"));
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, response.status());
+        assertEquals(HTTP_UNAUTHORIZED, response.status());
         assertEquals(
             "INVALID_PASSWORD",
             new Gson().fromJson(response.body(), JsonObject.class)
@@ -1647,7 +1662,7 @@ class ServerLifecycleHttpTest {
         CoreDataTestFixture.reset();
         Response missing = read(
             jsonPost("/api/auth/login", null, "{\"username\":\"MissingPlayer\",\"password\":\"incorrect\"}"));
-        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, missing.status());
+        assertEquals(HTTP_UNAUTHORIZED, missing.status());
         assertEquals(
             "INVALID_USER",
             new Gson().fromJson(missing.body(), JsonObject.class)
@@ -1664,7 +1679,7 @@ class ServerLifecycleHttpTest {
             connection.setRequestProperty("Authorization", authorization);
             connection.setRequestProperty("Cookie", "authenticationToken=" + token);
             Response response = read(connection);
-            assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, response.status());
+            assertEquals(HTTP_UNAUTHORIZED, response.status());
             assertEquals(
                 "UNAUTHORIZED",
                 new Gson().fromJson(response.body(), JsonObject.class)
@@ -1679,7 +1694,7 @@ class ServerLifecycleHttpTest {
         startApi();
         for (String path : new String[] { "/api/grids/extra", "/api/gridsXYZ", "/api/openapi.json" }) {
             Response response = get(path, null);
-            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, response.status());
+            assertEquals(HTTP_NOT_FOUND, response.status());
             assertEquals(
                 "NOT_FOUND",
                 new Gson().fromJson(response.body(), JsonObject.class)
@@ -1689,7 +1704,7 @@ class ServerLifecycleHttpTest {
         HttpURLConnection connection = connection("/api/grids", null);
         connection.setRequestMethod("POST");
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, response.status());
+        assertEquals(HTTP_BAD_METHOD, response.status());
         assertTrue(
             connection.getHeaderField("Allow")
                 .contains("GET"));
@@ -1706,16 +1721,16 @@ class ServerLifecycleHttpTest {
         String token = login();
         fillServerThreadQueue();
         Response busy = get("/api/grids", token);
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, busy.status());
+        assertEquals(HTTP_UNAVAILABLE, busy.status());
         assertEquals(
             "SERVER_BUSY",
             new Gson().fromJson(busy.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
         CoreEngine.onServerTick();
-        CoreEngine.GRID_IDENTITIES.clear();
+        GRID_IDENTITIES.clear();
         Response failed = performSyncedRequest(() -> get("/api/grids", token));
-        assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, failed.status());
+        assertEquals(HTTP_INTERNAL_ERROR, failed.status());
         assertEquals(
             "INTERNAL_ERROR",
             new Gson().fromJson(failed.body(), JsonObject.class)
@@ -1754,9 +1769,8 @@ class ServerLifecycleHttpTest {
                     + "\r\n\r\n"
                     + body;
                 socket.getOutputStream()
-                    .write(request.getBytes(StandardCharsets.US_ASCII));
-                BufferedReader response = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                    .write(request.getBytes(US_ASCII));
+                BufferedReader response = new BufferedReader(new InputStreamReader(socket.getInputStream(), US_ASCII));
                 assertEquals(
                     scenario[3],
                     response.readLine()
@@ -1785,10 +1799,7 @@ class ServerLifecycleHttpTest {
             exchange.getRequestHeaders()
                 .set("X-Forwarded-Proto", "https");
             new WebHandler().handle(exchange);
-            assertEquals(
-                peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
-                exchange.responseCode,
-                peer);
+            assertEquals(peer.equals("192.0.2.11") ? HTTP_MOVED_TEMP : HTTP_FORBIDDEN, exchange.responseCode, peer);
         }
     }
 
@@ -1799,11 +1810,11 @@ class ServerLifecycleHttpTest {
         connection.setInstanceFollowRedirects(false);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
-        byte[] body = "username=admin&password=lifecycle-password".getBytes(StandardCharsets.UTF_8);
+        byte[] body = "username=admin&password=lifecycle-password".getBytes(UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(body);
         }
-        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(connection).status());
+        assertEquals(HTTP_MOVED_TEMP, read(connection).status());
         String cookie = connection.getHeaderField("Set-Cookie");
         assertFalse(
             cookie.toLowerCase()
@@ -1826,7 +1837,7 @@ class ServerLifecycleHttpTest {
                 .isEmpty());
         HttpURLConnection api = connection("/api/grids", null);
         api.setRequestProperty("Cookie", cookie.split(";", 2)[0]);
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(() -> read(api)).status());
+        assertEquals(HTTP_OK, performSyncedRequest(() -> read(api)).status());
     }
 
     @Test
@@ -1836,7 +1847,7 @@ class ServerLifecycleHttpTest {
         HttpURLConnection preflight = connection("/api/grids", null);
         preflight.setRequestMethod("OPTIONS");
         preflight.setRequestProperty("Origin", "https://example.org");
-        assertEquals(HttpURLConnection.HTTP_NO_CONTENT, read(preflight).status());
+        assertEquals(HTTP_NO_CONTENT, read(preflight).status());
         assertTrue(
             preflight.getHeaderField("Access-Control-Allow-Methods")
                 .contains("GET"));
@@ -1845,7 +1856,7 @@ class ServerLifecycleHttpTest {
         HttpURLConnection head = connection("/api/grids", token);
         head.setRequestMethod("HEAD");
         Response response = performSyncedRequest(() -> read(head));
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         assertEquals("", response.body());
     }
 
@@ -1862,7 +1873,7 @@ class ServerLifecycleHttpTest {
             public InputStream getRequestBody() {
                 readingBody.countDown();
                 try {
-                    assertTrue(releaseBody.await(5, TimeUnit.SECONDS));
+                    assertTrue(releaseBody.await(5, SECONDS));
                 } catch (InterruptedException exception) {
                     Thread.currentThread()
                         .interrupt();
@@ -1881,13 +1892,13 @@ class ServerLifecycleHttpTest {
                     throw new IllegalStateException(exception);
                 }
             });
-            assertTrue(readingBody.await(2, TimeUnit.SECONDS));
+            assertTrue(readingBody.await(2, SECONDS));
             CoreEngine.onServerStopping();
             CoreEngine.onServerStopped();
             startHttpServer();
             releaseBody.countDown();
-            oldRequest.get(3, TimeUnit.SECONDS);
-            assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
+            oldRequest.get(3, SECONDS);
+            assertEquals(HTTP_UNAVAILABLE, exchange.responseCode);
             assertEquals("SERVER_STOPPING", responseStatus(exchange));
         } finally {
             releaseBody.countDown();
@@ -1904,7 +1915,7 @@ class ServerLifecycleHttpTest {
 
     @SuppressWarnings("CharsetObjectCanBeUsed") // Tests also run with Java 8.
     private static String responseStatus(PostExchange exchange) throws IOException {
-        return new Gson().fromJson(exchange.responseBody.toString(StandardCharsets.UTF_8.name()), JsonObject.class)
+        return new Gson().fromJson(exchange.responseBody.toString(UTF_8.name()), JsonObject.class)
             .get("status")
             .getAsString();
     }
@@ -1951,7 +1962,7 @@ class ServerLifecycleHttpTest {
         body.addProperty("password", password);
         HttpURLConnection connection = jsonPost("/api/auth/login", null, body.toString());
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(HTTP_OK, response.status());
         assertNull(
             connection.getHeaderField("Set-Cookie"),
             "API login returns a token without installing browser cookies");
@@ -1966,7 +1977,7 @@ class ServerLifecycleHttpTest {
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json");
         connection.setDoOutput(true);
-        byte[] encoded = body.getBytes(StandardCharsets.UTF_8);
+        byte[] encoded = body.getBytes(UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(encoded);
         }
@@ -1980,7 +1991,7 @@ class ServerLifecycleHttpTest {
         connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
         connection.setDoOutput(true);
         try (OutputStream output = connection.getOutputStream()) {
-            output.write(body.getBytes(StandardCharsets.UTF_8));
+            output.write(body.getBytes(UTF_8));
         }
         return connection;
     }
@@ -1994,13 +2005,13 @@ class ServerLifecycleHttpTest {
         ExecutorService client = Executors.newSingleThreadExecutor();
         try {
             Future<Response> response = client.submit(request);
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + SECONDS.toNanos(2);
             while (AE2Controller.requests.isEmpty() && !response.isDone() && System.nanoTime() < deadline) {
                 Thread.sleep(5L);
             }
             assertFalse(AE2Controller.requests.isEmpty(), "the authenticated request should reach the tick queue");
             CoreEngine.onServerTick();
-            return response.get(3, TimeUnit.SECONDS);
+            return response.get(3, SECONDS);
         } finally {
             client.shutdownNow();
         }
@@ -2025,8 +2036,7 @@ class ServerLifecycleHttpTest {
     @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
     private static Response read(HttpURLConnection connection) throws IOException {
         int status = connection.getResponseCode();
-        InputStream stream = status >= HttpURLConnection.HTTP_BAD_REQUEST ? connection.getErrorStream()
-            : connection.getInputStream();
+        InputStream stream = status >= HTTP_BAD_REQUEST ? connection.getErrorStream() : connection.getInputStream();
         if (stream == null) {
             return new Response(status, "");
         }
@@ -2036,7 +2046,7 @@ class ServerLifecycleHttpTest {
             while ((read = input.read(buffer)) >= 0) {
                 output.write(buffer, 0, read);
             }
-            return new Response(status, output.toString(StandardCharsets.UTF_8.name()));
+            return new Response(status, output.toString(UTF_8.name()));
         }
     }
 

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
+import static appeng.api.networking.crafting.CalculationStrategy.REPORT_MISSING_ITEMS;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -17,7 +19,6 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import appeng.api.networking.IGrid;
-import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingProvider;
@@ -120,7 +121,7 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
             () -> actionSrc,
             (AEKey) stack,
             amount,
-            CalculationStrategy.REPORT_MISSING_ITEMS);
+            REPORT_MISSING_ITEMS);
         return (Future<IAECraftingJob>) (Object) job;
     }
 

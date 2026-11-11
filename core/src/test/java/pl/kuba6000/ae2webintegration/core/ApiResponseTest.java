@@ -1,12 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.IOUtils;
@@ -21,7 +21,7 @@ class ApiResponseTest {
     void boundedSerializationCountsActualUtf8Bytes() {
         TextBody body = new TextBody("é");
         String expected = "{\"text\":\"é\"}";
-        int bytes = expected.getBytes(StandardCharsets.UTF_8).length;
+        int bytes = expected.getBytes(UTF_8).length;
         assertEquals(
             expected,
             ApiResponse.bounded(200, body, bytes)
@@ -44,9 +44,7 @@ class ApiResponseTest {
                 .getFirst("Content-Encoding"));
         assertEquals(
             eligible.json(),
-            IOUtils.toString(
-                new GZIPInputStream(new ByteArrayInputStream(compressed.output.toByteArray())),
-                StandardCharsets.UTF_8));
+            IOUtils.toString(new GZIPInputStream(new ByteArrayInputStream(compressed.output.toByteArray())), UTF_8));
         assertEquals(compressed.output.size(), compressed.length);
 
         Exchange excluded = new Exchange("GET", "gzip;q=0, *;q=1");
@@ -54,7 +52,7 @@ class ApiResponseTest {
         assertNull(
             excluded.getResponseHeaders()
                 .getFirst("Content-Encoding"));
-        assertEquals(eligible.json(), new String(excluded.output.toByteArray(), StandardCharsets.UTF_8));
+        assertEquals(eligible.json(), new String(excluded.output.toByteArray(), UTF_8));
 
         Exchange head = new Exchange("HEAD", "gzip");
         eligible.send(head);

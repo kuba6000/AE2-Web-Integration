@@ -1,5 +1,16 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static com.mojang.blaze3d.vertex.VertexSorting.ORTHOGRAPHIC_Z;
+import static net.minecraft.client.Minecraft.ON_OSX;
+import static net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS;
+import static org.lwjgl.opengl.GL11.GL_BACK;
+import static org.lwjgl.opengl.GL11.GL_CCW;
+import static org.lwjgl.opengl.GL11.GL_LEQUAL;
+import static org.lwjgl.opengl.GL11.GL_STENCIL_TEST;
+import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
+import static org.lwjgl.opengl.GL21.GL_PIXEL_UNPACK_BUFFER;
+
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,7 +26,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -24,21 +34,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL21;
 
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexSorting;
 
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -87,17 +94,18 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         }
     }
 
-    void item(@NotNull ItemStack item, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
+    void item(@NotNull ItemStack item, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, graphics -> graphics.renderItem(item, 0, 0));
     }
 
-    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures)
+        throws IIconCapture.RenderFailure {
         capture(key, captures, graphics -> {
             IClientFluidTypeExtensions attributes = IClientFluidTypeExtensions.of(stack.getFluid());
             ResourceLocation still = attributes.getStillTexture(stack);
             if (still == null) throw new IllegalArgumentException("Fluid has no inventory sprite");
-            TextureAtlasSprite sprite = minecraft.getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
+            TextureAtlasSprite sprite = minecraft.getTextureAtlas(BLOCK_ATLAS)
                 .apply(still);
             int tint = attributes.getTintColor(stack);
             RenderSystem.enableBlend();
@@ -116,8 +124,8 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Consumer<GuiGraphics> draw)
-        throws RenderFailure {
+    private void capture(@NotNull StableKey key, @NotNull List<PackExportWriter.Capture> captures,
+        @NotNull Consumer<GuiGraphics> draw) throws IIconCapture.RenderFailure {
         RenderSystem.assertOnRenderThread();
         // Export runs at the exclusive RenderFrame.Pre boundary, before ordinary GUI/world tessellation.
         ByteBufferBuilder immediate = Tesselator.getInstance().buffer;
@@ -184,7 +192,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
                 snapshotCount++;
             }
         }
-        throw new RenderFailure(renderFailure);
+        throw new IIconCapture.RenderFailure(renderFailure);
     }
 
     private void discardBuffers(@NotNull ByteBufferBuilder immediate) {
@@ -222,16 +230,16 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     private void setup() {
         long started = System.nanoTime();
         try {
-            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
-            GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, 0);
-            if (target == null) target = new TextureTarget(ICON_SIZE, ICON_SIZE, true, Minecraft.ON_OSX);
+            GL15.glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            GL15.glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            if (target == null) target = new TextureTarget(ICON_SIZE, ICON_SIZE, true, ON_OSX);
             RenderSystem.disableScissor();
             RenderSystem.colorMask(true, true, true, true);
             RenderSystem.depthMask(true);
             target.setClearColor(0, 0, 0, 0);
-            target.clear(Minecraft.ON_OSX);
+            target.clear(ON_OSX);
             target.bindWrite(true);
-            RenderSystem.setProjectionMatrix(projection, VertexSorting.ORTHOGRAPHIC_Z);
+            RenderSystem.setProjectionMatrix(projection, ORTHOGRAPHIC_Z);
             RenderSystem.getModelViewStack()
                 .identity();
             RenderSystem.applyModelViewMatrix();
@@ -240,14 +248,14 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
             RenderSystem.setShaderFogStart(Float.MAX_VALUE);
             RenderSystem.setShaderFogEnd(Float.MAX_VALUE);
             RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
+            RenderSystem.depthFunc(GL_LEQUAL);
             RenderSystem.enableCull();
-            GL11.glCullFace(GL11.GL_BACK);
-            GL11.glFrontFace(GL11.GL_CCW);
+            GL11.glCullFace(GL_BACK);
+            GL11.glFrontFace(GL_CCW);
             RenderSystem.disablePolygonOffset();
             RenderSystem.disableColorLogicOp();
-            GL11.glDisable(GL11.GL_STENCIL_TEST);
-            GL20.glBlendEquationSeparate(GL14.GL_FUNC_ADD, GL14.GL_FUNC_ADD);
+            GL11.glDisable(GL_STENCIL_TEST);
+            GL20.glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableBlend();
             Lighting.setupFor3DItems();
@@ -258,20 +266,20 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures)
-        throws RenderFailure {
+    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures) throws IIconCapture.RenderFailure {
         candidate.render(this, key, captures);
     }
 
     @Override
     public @Nullable IIconAnimation animation(@NotNull IconCandidate candidate, @NotNull StableKey key)
-        throws RenderFailure {
-        RenderFailure preparationFailure = null;
+        throws IIconCapture.RenderFailure {
+        IIconCapture.RenderFailure preparationFailure = null;
         IIconAnimation result = null;
         try (RenderState ignored = state.snapshot()) {
             try {
                 result = SpriteAnimation.create(minecraft, this, candidate, key);
-            } catch (RenderFailure failure) {
+            } catch (IIconCapture.RenderFailure failure) {
                 preparationFailure = failure;
             }
         } catch (RuntimeException | Error failure) {
@@ -287,17 +295,18 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         return SpriteAnimation.sampled(minecraft, this, candidate, key);
     }
 
-    static @NotNull RenderFailure animationFailure(@NotNull Throwable failure) {
+    static @NotNull IIconCapture.RenderFailure animationFailure(@NotNull Throwable failure) {
         Throwable cause = failure instanceof ReportedException || failure instanceof ExceptionInInitializerError
             ? failure.getCause()
             : failure;
         if (cause instanceof VirtualMachineError fatal) throw fatal;
         if (cause instanceof ThreadDeath fatal) throw fatal;
-        return new RenderFailure(cause == null ? failure : cause);
+        return new IIconCapture.RenderFailure(cause == null ? failure : cause);
     }
 
-    void animated(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures,
-        @NotNull CaptureKind kind, long timing, @NotNull LongSupplier clock) throws RenderFailure {
+    void animated(@NotNull IconCandidate candidate, @NotNull StableKey key,
+        @NotNull List<PackExportWriter.Capture> captures, @NotNull CaptureKind kind, long timing,
+        @NotNull LongSupplier clock) throws IIconCapture.RenderFailure {
         captureKind = kind;
         captureTiming = timing;
         drawClock = clock;
@@ -310,7 +319,7 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
     }
 
     @Override
-    public void drain(@NotNull List<Capture> captures) {
+    public void drain(@NotNull List<PackExportWriter.Capture> captures) {
         readback.drain(captures);
     }
 

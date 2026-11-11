@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraftforge.fluids.Fluid.BUCKET_VOLUME;
+import static net.minecraftforge.oredict.OreDictionary.WILDCARD_VALUE;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -123,7 +126,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             Map.Entry<String, Fluid> fluid = fluids.next();
             context = "fluid/" + fluid.getKey();
             fluidCandidates++;
-            return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), Fluid.BUCKET_VOLUME));
+            return IconCandidate.fluid(context, new FluidStack(fluid.getValue(), BUCKET_VOLUME));
         }
         if (recipes != null && !recipes.done()) {
             try {
@@ -158,7 +161,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
             oreDictionarySkippedInvalid++;
             return null;
         }
-        if (stack.getItemDamage() == OreDictionary.WILDCARD_VALUE) {
+        if (stack.getItemDamage() == WILDCARD_VALUE) {
             oreDictionarySkippedWildcard++;
             return null;
         }

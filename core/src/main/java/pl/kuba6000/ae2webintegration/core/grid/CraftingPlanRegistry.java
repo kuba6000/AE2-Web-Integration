@@ -1,12 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.grid;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
@@ -29,7 +30,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 public final class CraftingPlanRegistry {
 
     private static final int MAX_PLANS = 3;
-    private static final long RETENTION_NANOS = TimeUnit.MINUTES.toNanos(15);
+    private static final long RETENTION_NANOS = MINUTES.toNanos(15);
     private static final long NOT_COMPLETED_OBSERVED = Long.MIN_VALUE;
 
     /** A calculation and its detached original request, retained and removed together. */

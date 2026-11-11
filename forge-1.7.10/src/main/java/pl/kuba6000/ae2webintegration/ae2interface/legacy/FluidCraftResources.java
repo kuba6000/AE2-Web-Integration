@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import static net.minecraftforge.common.util.Constants.NBT.TAG_COMPOUND;
+import static net.minecraftforge.common.util.Constants.NBT.TAG_STRING;
+
 import net.minecraft.item.Item;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.common.util.Constants;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 
@@ -24,7 +26,7 @@ public final class FluidCraftResources {
     /** Reads AE2FC's pinned Fluid/FluidTag format without constructing its display item or fluid stack. */
     public static @Nullable Fluid getFluid(IAEItemStack stack) {
         NBTTagCompound tag = (NBTTagCompound) stack.getTagCompound();
-        if (tag == null || !tag.hasKey("Fluid", Constants.NBT.TAG_STRING)) return null;
+        if (tag == null || !tag.hasKey("Fluid", TAG_STRING)) return null;
         return FluidRegistry.getFluid(
             tag.getString("Fluid")
                 .toLowerCase());
@@ -32,7 +34,7 @@ public final class FluidCraftResources {
 
     public static int getComponentCount(IAEItemStack stack) {
         NBTTagCompound tag = (NBTTagCompound) stack.getTagCompound();
-        if (tag == null || !tag.hasKey("FluidTag", Constants.NBT.TAG_COMPOUND)) return 0;
+        if (tag == null || !tag.hasKey("FluidTag", TAG_COMPOUND)) return 0;
         return tag.getCompoundTag("FluidTag")
             .func_150296_c()
             .size();

@@ -1,5 +1,9 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS;
+import static net.minecraft.world.item.Items.SPYGLASS;
+import static net.minecraft.world.item.Items.TRIDENT;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,10 +19,8 @@ import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraftforge.client.ForgeHooksClient;
 import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.minecraftforge.fluids.FluidStack;
@@ -30,8 +32,9 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation;
-import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture.RenderFailure;
-import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconAnimation.Kind;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.CaptureKind;
 import pl.kuba6000.ae2webintegration.core.icons.export.SpriteTimeline;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -75,7 +78,7 @@ final class SpriteAnimation implements IIconAnimation {
     }
 
     static @Nullable IIconAnimation create(Minecraft minecraft, ModernIconRenderer renderer, IconCandidate candidate,
-        StableKey key) throws RenderFailure {
+        StableKey key) throws IIconCapture.RenderFailure {
         Set<TextureAtlasSprite> used = new LinkedHashSet<>();
         boolean sampled;
         try {
@@ -87,7 +90,7 @@ final class SpriteAnimation implements IIconAnimation {
                     .getStillTexture(fluid);
                 if (still == null) return null;
                 used.add(
-                    minecraft.getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
+                    minecraft.getTextureAtlas(BLOCK_ATLAS)
                         .apply(still));
                 sampled = false;
             }
@@ -150,9 +153,9 @@ final class SpriteAnimation implements IIconAnimation {
     private static boolean collectItem(Minecraft minecraft, ItemStack item, Set<TextureAtlasSprite> sprites) {
         BakedModel model = minecraft.getItemRenderer()
             .getModel(item, minecraft.level, minecraft.player, 0);
-        if (item.is(Items.TRIDENT) || item.is(Items.SPYGLASS)) {
+        if (item.is(TRIDENT) || item.is(SPYGLASS)) {
             model = minecraft.getModelManager()
-                .getModel(ModelResourceLocation.vanilla(item.is(Items.TRIDENT) ? "trident" : "spyglass", "inventory"));
+                .getModel(ModelResourceLocation.vanilla(item.is(TRIDENT) ? "trident" : "spyglass", "inventory"));
         }
         model = ForgeHooksClient.handleCameraTransforms(new PoseStack(), model, ItemDisplayContext.GUI, false);
         if (model.isCustomRenderer()) return true;
@@ -179,7 +182,8 @@ final class SpriteAnimation implements IIconAnimation {
     }
 
     @Override
-    public boolean capture(@NotNull List<Capture> captures, @NotNull LongSupplier drawClock) throws RenderFailure {
+    public boolean capture(@NotNull List<PackExportWriter.Capture> captures, @NotNull LongSupplier drawClock)
+        throws IIconCapture.RenderFailure {
         if (timeline == null) {
             renderer.animated(candidate, key, captures, CaptureKind.SAMPLE, 0, drawClock);
             return true;
@@ -191,14 +195,14 @@ final class SpriteAnimation implements IIconAnimation {
         }
         SpriteTimeline.Frame frame = timeline.frames()
             .get(step++);
-        RenderFailure drawFailure = null;
+        IIconCapture.RenderFailure drawFailure = null;
         try (RenderState ignored = renderer.controlledState();
             AtlasPixels pixels = new AtlasPixels(minecraft, sprites)) {
             pixels.changing();
             try {
                 for (int i = 0; i < sprites.size(); i++) upload(sprites.get(i), tickers.get(i), frame.tick());
                 renderer.animated(candidate, key, captures, CaptureKind.FRAME, frame.durationMillis(), drawClock);
-            } catch (RenderFailure failure) {
+            } catch (IIconCapture.RenderFailure failure) {
                 drawFailure = failure;
             }
         } catch (RuntimeException | Error failure) {
@@ -210,12 +214,13 @@ final class SpriteAnimation implements IIconAnimation {
             .size();
     }
 
-    private void upload(TextureAtlasSprite sprite, SpriteContents.Ticker ticker, int tick) throws RenderFailure {
+    private void upload(TextureAtlasSprite sprite, SpriteContents.Ticker ticker, int tick)
+        throws IIconCapture.RenderFailure {
         RenderSystem.bindTexture(
             minecraft.getTextureManager()
                 .getTexture(sprite.atlasLocation())
                 .getId());
-        RenderFailure uploadFailure = null;
+        IIconCapture.RenderFailure uploadFailure = null;
         try {
             SpriteContents.AnimatedTexture animation = sprite.contents().animatedTexture;
             long cycle = 0;

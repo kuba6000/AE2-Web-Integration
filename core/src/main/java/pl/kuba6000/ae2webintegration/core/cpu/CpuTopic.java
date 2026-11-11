@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.cpu;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -7,7 +9,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -179,9 +180,7 @@ public final class CpuTopic extends LiveTopic {
             long spent = row.timeSpent(at);
             item.shareInCraftingTime = total == 0 ? 1d : (double) spent / (double) total;
             item.shareInCraftingTimeCombined = elapsed > 0 ? Math.min((double) spent / (double) elapsed, 1d) : 0d;
-            item.craftsPerSec = spent > 0
-                ? (double) row.craftedTotal() / (spent / (double) TimeUnit.SECONDS.toMillis(1))
-                : 0d;
+            item.craftsPerSec = spent > 0 ? (double) row.craftedTotal() / (spent / (double) SECONDS.toMillis(1)) : 0d;
         }
     }
 

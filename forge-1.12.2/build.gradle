@@ -1,5 +1,7 @@
+import static org.gradle.jvm.toolchain.JvmVendorSpec.AZUL
 // Based on GregTechCEu/Buildscripts, maintained in this repository; it no longer updates itself.
 
+import com.diffplug.blowdryer.Blowdryer
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.gtnewhorizons.retrofuturagradle.MinecraftExtension
 import com.gtnewhorizons.retrofuturagradle.mcp.MCPTasks
@@ -16,7 +18,6 @@ import org.jetbrains.gradle.ext.Gradle
 
 import javax.inject.Inject
 
-import static org.gradle.internal.logging.text.StyledTextOutput.Style
 
 plugins {
     id 'java'
@@ -189,7 +190,7 @@ pluginManager.withPlugin('org.jetbrains.kotlin.jvm') {
 
 // Spotless
 //noinspection GroovyAssignabilityCheck
-project.extensions.add(com.diffplug.blowdryer.Blowdryer, 'Blowdryer', com.diffplug.blowdryer.Blowdryer) // make Blowdryer available in plugin application
+project.extensions.add(Blowdryer, 'Blowdryer', Blowdryer) // make Blowdryer available in plugin application
 if (enableSpotless.toBoolean()) {
     apply plugin: 'com.diffplug.spotless'
 
@@ -259,7 +260,7 @@ java {
             languageVersion.set(JavaLanguageVersion.of(8))
         }
         // Azul covers the most platforms for Java 8+ toolchains, crucially including MacOS arm64
-        vendor.set(JvmVendorSpec.AZUL)
+        vendor.set(AZUL)
     }
     if (!noPublishedSources.toBoolean()) {
         withSourcesJar()
@@ -279,7 +280,7 @@ tasks.withType(JavaCompile).configureEach {
 
         javaCompiler.set(javaToolchains.compilerFor {
             languageVersion.set(JavaLanguageVersion.of(17))
-            vendor.set(JvmVendorSpec.AZUL)
+            vendor.set(AZUL)
         })
     }
 }

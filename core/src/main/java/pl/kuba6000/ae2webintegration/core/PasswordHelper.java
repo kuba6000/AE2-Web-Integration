@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Random;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -67,7 +68,7 @@ public class PasswordHelper {
      * vulnerability.
      * <p>
      * Uses {@link SecureRandom} for the same reason session tokens do: this value ends up in the config
-     * file as the admin password, and java.util.Random derives its 48-bit seed from the clock.
+     * file as the admin password, and {@link Random} derives its 48-bit seed from the clock.
      */
     public static String generateDefaultPassword() {
         return generateToken(DEFAULT_PASSWORD_LENGTH);

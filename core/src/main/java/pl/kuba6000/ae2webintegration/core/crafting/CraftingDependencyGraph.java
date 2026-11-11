@@ -6,6 +6,8 @@ import java.util.List;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.crafting.CraftingRecipeCapture.SummaryKind;
+
 /**
  * Resource-mediated navigation through captured recipe declarations. Local capture IDs remain the
  * node references; a resource shared by several recipes or a cycle is never expanded into copies.
@@ -178,7 +180,7 @@ public final class CraftingDependencyGraph {
                 .isEmpty();
             for (CraftingRecipeCapture.Recipe recipe : capture.recipes()) allCaptured &= recipe.complete();
             for (CraftingRecipeCapture.Summary summary : capture.summaries()) {
-                if (summary.kind() != CraftingRecipeCapture.SummaryKind.MISSING) continue;
+                if (summary.kind() != SummaryKind.MISSING) continue;
                 if (summary.amount() < 0) throw new IllegalArgumentException("Negative missing quantity");
                 int resource = summary.resourceId();
                 observed[resource] = true;

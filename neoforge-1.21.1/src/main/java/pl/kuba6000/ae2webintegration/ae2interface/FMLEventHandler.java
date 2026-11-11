@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
+import static pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap.ADMIN_PERMISSION_LEVEL;
+
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -10,7 +12,6 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.UpdateNotifier;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
 
 @EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class FMLEventHandler {
@@ -30,9 +31,7 @@ public class FMLEventHandler {
             serverPlayer.getGameProfile()
                 .getName());
         CoreEngine.onPlayerSeen(identity);
-        UpdateNotifier.onPlayerLoggedIn(
-            new PlayerMessenger(),
-            identity,
-            serverPlayer.hasPermissions(CommandBootstrap.ADMIN_PERMISSION_LEVEL));
+        UpdateNotifier
+            .onPlayerLoggedIn(new PlayerMessenger(), identity, serverPlayer.hasPermissions(ADMIN_PERMISSION_LEVEL));
     }
 }

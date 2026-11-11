@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,7 +46,7 @@ final class SqliteHistoryRetention {
     }
 
     private static final int PRUNE_BATCH_SIZE = 1000;
-    private static final long MAINTENANCE_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
+    private static final long MAINTENANCE_INTERVAL_MILLIS = MINUTES.toMillis(1);
 
     private long nextMaintenance;
 
@@ -55,7 +57,7 @@ final class SqliteHistoryRetention {
     void prune(@NotNull Connection db, long gridId, boolean expire, int maxRowsPerGrid) throws SQLException {
         GridBudget budget = budget(db, gridId);
         long count = budget.count();
-        long expiry = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(budget.retentionDays());
+        long expiry = System.currentTimeMillis() - DAYS.toMillis(budget.retentionDays());
         while (true) {
             boolean overCapacity = count > maxRowsPerGrid;
             if (!overCapacity && !expire) return;
@@ -205,7 +207,7 @@ final class SqliteHistoryRetention {
             ResultSet policies = grids.executeQuery()) {
             while (policies.next()) {
                 long gridId = policies.getLong("id");
-                long expiry = now - TimeUnit.DAYS.toMillis(policies.getInt("retention_days"));
+                long expiry = now - DAYS.toMillis(policies.getInt("retention_days"));
                 PruneBatch batch = selectBatch(db, gridId, expiry, false, 1);
                 if (batch.points.isEmpty()) continue;
                 PrunePoint point = batch.points.get(0);

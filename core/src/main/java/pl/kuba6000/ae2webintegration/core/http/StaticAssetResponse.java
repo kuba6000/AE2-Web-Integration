@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
+import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
+import static java.net.HttpURLConnection.HTTP_OK;
+
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -61,13 +63,13 @@ public final class StaticAssetResponse {
             exchange.getRequestHeaders()
                 .getFirst("If-None-Match"),
             etag)) {
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_MODIFIED, -1);
+            exchange.sendResponseHeaders(HTTP_NOT_MODIFIED, -1);
             exchange.close();
             return;
         }
         exchange.getResponseHeaders()
             .set("Content-Type", contentType);
-        sendBytes(exchange, HttpURLConnection.HTTP_OK, bytes);
+        sendBytes(exchange, HTTP_OK, bytes);
     }
 
     /** Writes a complete in-memory body; HEAD receives the headers and {@code Content-Length} only. */

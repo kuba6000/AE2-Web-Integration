@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import static net.minecraftforge.fluids.Fluid.BUCKET_VOLUME;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -7,7 +9,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
@@ -80,7 +81,7 @@ final class JeiRecipeCatalogue {
             }
             if (value instanceof FluidStack stack && stack.getFluid() != null) {
                 FluidStack copy = stack.copy();
-                copy.amount = Fluid.BUCKET_VOLUME;
+                copy.amount = BUCKET_VOLUME;
                 fluidCandidates++;
                 return IconCandidate.fluid(context, copy);
             }

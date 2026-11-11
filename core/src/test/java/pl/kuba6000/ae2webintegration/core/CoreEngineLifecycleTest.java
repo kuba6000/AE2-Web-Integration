@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,18 +43,18 @@ class CoreEngineLifecycleTest extends GridTestScope {
     void serverTickWaitsForControllerValidationBeforeRestoringSavedBindings() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(900_202L);
         TestGridFixtures.track(grid);
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         worlds.initialize(gridSave);
-        assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
+        assertNull(GRID_IDENTITIES.getKey(grid));
         IAE previous = AE2Controller.AE2Interface;
         try {
             AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
             CoreEngine.onServerTick();
-            assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
-            CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-            assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-            assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
+            assertNull(GRID_IDENTITIES.getKey(grid));
+            GRID_IDENTITIES.controllerValidated(grid);
+            assertEquals(key, GRID_IDENTITIES.getKey(grid));
+            assertTrue(TestGridFixtures.isTracked(GRID_IDENTITIES, key));
         } finally {
             AE2Controller.AE2Interface = previous;
         }
@@ -62,7 +64,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
     void serverStoppedClearsWorldRuntimeStateButPreservesProcessState() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(900_201L);
         TestGridFixtures.track(grid);
-        StableKey gridKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey gridKey = GRID_IDENTITIES.getKey(grid);
         assertNotNull(gridKey);
         GridData gridData = GridData.getOrCreate(gridKey);
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
@@ -85,7 +87,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             IServerPlatform processPlatform = new IServerPlatform() {
 
                 @Override
-                public java.nio.file.Path getModFile() {
+                public Path getModFile() {
                     return null;
                 }
 
@@ -145,13 +147,13 @@ class CoreEngineLifecycleTest extends GridTestScope {
                     .isTracked(worlds.registry(new File(gridSave, "ae2webintegration/grid-identities.json")), gridKey),
                 "settings remain in the stopped save");
             assertFalse(
-                TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),
+                TestGridFixtures.isTracked(GRID_IDENTITIES, gridKey),
                 "the stopped world must not leak tracking into another world");
             assertFalse(
                 CommandProcessor.registerPlayer(registeringPlayer, registrationToken)
                     .isSuccess());
             assertNull(AE2Controller.itemIdentities.resolve(itemKey));
-            assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
+            assertNull(GRID_IDENTITIES.getGrid(gridKey));
             assertNull(AE2JobTracker.findActiveJob(cpu));
             assertNull(CoreEngine.getCraftingHistory());
             assertNull(gridData.getJob(planId));

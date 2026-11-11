@@ -1,5 +1,19 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import static net.minecraft.nbt.Tag.TAG_BYTE;
+import static net.minecraft.nbt.Tag.TAG_BYTE_ARRAY;
+import static net.minecraft.nbt.Tag.TAG_COMPOUND;
+import static net.minecraft.nbt.Tag.TAG_DOUBLE;
+import static net.minecraft.nbt.Tag.TAG_END;
+import static net.minecraft.nbt.Tag.TAG_FLOAT;
+import static net.minecraft.nbt.Tag.TAG_INT;
+import static net.minecraft.nbt.Tag.TAG_INT_ARRAY;
+import static net.minecraft.nbt.Tag.TAG_LIST;
+import static net.minecraft.nbt.Tag.TAG_LONG;
+import static net.minecraft.nbt.Tag.TAG_LONG_ARRAY;
+import static net.minecraft.nbt.Tag.TAG_SHORT;
+import static net.minecraft.nbt.Tag.TAG_STRING;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -34,7 +48,7 @@ final class CanonicalNbt {
         @Nullable CompoundTag original, @NotNull PrimitiveSink sink) {
         CanonicalNbt writer = new CanonicalNbt();
         writer.nodes = 1; // The envelope itself is the root compound.
-        sink.putByte((byte) Tag.TAG_COMPOUND);
+        sink.putByte((byte) TAG_COMPOUND);
         if (original == null || original.isEmpty()) {
             writeInt(sink, components == null ? 2 : 3);
             writer.writeStringField("#t", type, sink);
@@ -72,7 +86,7 @@ final class CanonicalNbt {
         checkChildren(1);
         nodes++;
         StableKey.writeText(sink, name);
-        sink.putByte((byte) Tag.TAG_STRING);
+        sink.putByte((byte) TAG_STRING);
         StableKey.writeText(sink, value);
     }
 
@@ -86,52 +100,52 @@ final class CanonicalNbt {
             throw new IllegalArgumentException("Native identity exceeds traversal bounds");
         }
         switch (tag.getId()) {
-            case Tag.TAG_END:
+            case TAG_END:
                 throw new IllegalArgumentException("Unexpected NBT end tag");
-            case Tag.TAG_BYTE:
+            case TAG_BYTE:
                 sink.putByte(((NumericTag) tag).getAsByte());
                 break;
-            case Tag.TAG_SHORT:
+            case TAG_SHORT:
                 sink.putShort(Short.reverseBytes(((NumericTag) tag).getAsShort()));
                 break;
-            case Tag.TAG_INT:
+            case TAG_INT:
                 writeInt(sink, ((NumericTag) tag).getAsInt());
                 break;
-            case Tag.TAG_LONG:
+            case TAG_LONG:
                 writeLong(sink, ((NumericTag) tag).getAsLong());
                 break;
-            case Tag.TAG_FLOAT:
+            case TAG_FLOAT:
                 writeInt(sink, Float.floatToIntBits(((NumericTag) tag).getAsFloat()));
                 break;
-            case Tag.TAG_DOUBLE:
+            case TAG_DOUBLE:
                 writeLong(sink, Double.doubleToLongBits(((NumericTag) tag).getAsDouble()));
                 break;
-            case Tag.TAG_STRING:
+            case TAG_STRING:
                 StableKey.writeText(sink, tag.getAsString());
                 break;
-            case Tag.TAG_BYTE_ARRAY:
+            case TAG_BYTE_ARRAY:
                 byte[] bytes = ((ByteArrayTag) tag).getAsByteArray();
                 writeInt(sink, bytes.length);
                 sink.putBytes(bytes);
                 break;
-            case Tag.TAG_INT_ARRAY:
+            case TAG_INT_ARRAY:
                 int[] ints = ((IntArrayTag) tag).getAsIntArray();
                 writeInt(sink, ints.length);
                 for (int value : ints) writeInt(sink, value);
                 break;
-            case Tag.TAG_LONG_ARRAY:
+            case TAG_LONG_ARRAY:
                 long[] longs = ((LongArrayTag) tag).getAsLongArray();
                 writeInt(sink, longs.length);
                 for (long value : longs) writeLong(sink, value);
                 break;
-            case Tag.TAG_LIST:
+            case TAG_LIST:
                 ListTag list = (ListTag) tag;
                 checkChildren(list.size());
-                sink.putByte(list.isEmpty() ? Tag.TAG_END : list.getElementType());
+                sink.putByte(list.isEmpty() ? TAG_END : list.getElementType());
                 writeInt(sink, list.size());
                 for (Tag element : list) if (!writePayload(element, sink, depth + 1)) return false;
                 break;
-            case Tag.TAG_COMPOUND:
+            case TAG_COMPOUND:
                 CompoundTag compound = (CompoundTag) tag;
                 checkChildren(compound.size());
                 List<String> names = new ArrayList<>(compound.getAllKeys());

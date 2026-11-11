@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import static appeng.api.ids.AEComponents.MISSING_CONTENT_AEKEY_DATA;
+
 import java.util.Map;
 import java.util.Optional;
 
@@ -19,7 +21,6 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.ids.AEComponents;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
@@ -68,9 +69,7 @@ public final class NativeItemIdentity {
     /** Encodes the native item directly without creating an AE key or copying its stack. */
     public static @Nullable StableKey getKey(@NotNull ItemStack stack, @NotNull HolderLookup.Provider registries) {
         if (stack.isEmpty()) return null;
-        CustomData original = stack.is(AEItems.MISSING_CONTENT.asItem())
-            ? stack.get(AEComponents.MISSING_CONTENT_AEKEY_DATA)
-            : null;
+        CustomData original = stack.is(AEItems.MISSING_CONTENT.asItem()) ? stack.get(MISSING_CONTENT_AEKEY_DATA) : null;
         return getKey(
             "item",
             BuiltInRegistries.ITEM.getKey(stack.getItem())

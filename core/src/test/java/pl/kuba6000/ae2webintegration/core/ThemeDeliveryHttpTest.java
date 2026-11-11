@@ -1,12 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -53,7 +53,7 @@ class ThemeDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public java.nio.file.Path getModFile() {
+            public Path getModFile() {
                 return null;
             }
 
@@ -124,7 +124,7 @@ class ThemeDeliveryHttpTest {
         Path archive = install(
             "list.zip",
             manifest("list"),
-            Collections.singletonMap("data.txt", "example".getBytes(StandardCharsets.UTF_8)));
+            Collections.singletonMap("data.txt", "example".getBytes(UTF_8)));
         config.set("general.default_theme", "server:list");
         port = HttpServerTestFixture.startWorld(config);
         JsonObject catalog = catalog();
@@ -152,7 +152,7 @@ class ThemeDeliveryHttpTest {
         assertEquals("text/javascript; charset=UTF-8", script.getHeaderField("Content-Type"));
         assertEquals("nosniff", script.getHeaderField("X-Content-Type-Options"));
         try (InputStream input = script.getInputStream()) {
-            assertEquals("export default {};", IOUtils.toString(input, StandardCharsets.UTF_8));
+            assertEquals("export default {};", IOUtils.toString(input, UTF_8));
         }
         HttpURLConnection head = connection("/themes/list/style.css");
         head.setRequestMethod("HEAD");
@@ -189,7 +189,7 @@ class ThemeDeliveryHttpTest {
         assertEquals("no-cache", first.getHeaderField("Cache-Control"));
         assertEquals("nosniff", first.getHeaderField("X-Content-Type-Options"));
         try (InputStream input = first.getInputStream()) {
-            assertEquals("first", IOUtils.toString(input, StandardCharsets.UTF_8));
+            assertEquals("first", IOUtils.toString(input, UTF_8));
         }
 
         HttpURLConnection unchanged = connection("/themes/one/data.txt");
@@ -203,7 +203,7 @@ class ThemeDeliveryHttpTest {
         stale.setRequestProperty("If-None-Match", "\"stale\"");
         assertEquals(200, stale.getResponseCode());
         try (InputStream input = stale.getInputStream()) {
-            assertEquals("first", IOUtils.toString(input, StandardCharsets.UTF_8));
+            assertEquals("first", IOUtils.toString(input, UTF_8));
         }
 
         HttpURLConnection other = connection("/themes/two/data.txt");
@@ -224,7 +224,7 @@ class ThemeDeliveryHttpTest {
     }
 
     private static byte[] bytes(String text) {
-        return text.getBytes(StandardCharsets.UTF_8);
+        return text.getBytes(UTF_8);
     }
 
     private Path install(String filename, String manifest, Map<String, byte[]> extra) throws Exception {
@@ -232,9 +232,9 @@ class ThemeDeliveryHttpTest {
         Files.createDirectories(folder);
         Path file = folder.resolve(filename);
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
-            entry(zip, "theme.json", manifest.getBytes(StandardCharsets.UTF_8));
-            entry(zip, "theme.js", "export default {};".getBytes(StandardCharsets.UTF_8));
-            entry(zip, "style.css", "body {}".getBytes(StandardCharsets.UTF_8));
+            entry(zip, "theme.json", manifest.getBytes(UTF_8));
+            entry(zip, "theme.js", "export default {};".getBytes(UTF_8));
+            entry(zip, "style.css", "body {}".getBytes(UTF_8));
             for (Map.Entry<String, byte[]> asset : extra.entrySet()) entry(zip, asset.getKey(), asset.getValue());
         }
         return file;
@@ -343,7 +343,7 @@ class ThemeDeliveryHttpTest {
         HttpURLConnection connection = connection("/api/themes");
         assertEquals(200, connection.getResponseCode());
         try (InputStream input = connection.getInputStream()) {
-            return new Gson().fromJson(IOUtils.toString(input, StandardCharsets.UTF_8), JsonObject.class)
+            return new Gson().fromJson(IOUtils.toString(input, UTF_8), JsonObject.class)
                 .getAsJsonObject("data");
         }
     }
