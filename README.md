@@ -306,9 +306,15 @@ config file. The session mechanism is the same as in public mode.
 
 ### Localhost access
 
-Connections from the loopback address (`127.0.0.1`/`localhost`) are authenticated as admin by default. This is
-controlled by `allow_no_password_on_localhost`. When a reverse proxy is used, this rule applies to the client
-address resolved from the proxy headers.
+Loopback clients are authenticated as admin by default when using `localhost`, one of its subdomains
+(such as `www.localhost`), or a literal loopback IP address. Localhost names may also have a trailing dot.
+This is controlled by `allow_no_password_on_localhost`. A browser `Origin`, when present, must match the
+request's protocol, host and port; different local names are separate origins.
+
+Behind a reverse proxy, the client address is resolved from trusted forwarding headers as described below.
+A proxy or TCP tunnel that presents external clients as loopback can grant them password-free admin access.
+If it cannot preserve the original client address, disable `allow_no_password_on_localhost` before exposing
+the panel through it.
 
 ## Reverse proxy setup
 
@@ -338,10 +344,10 @@ prevents a client from granting itself localhost access by sending a forged
 
 For HTTPS termination, preserve the public `Host` header (including any nonstandard port) and set
 `X-Forwarded-Proto` to the public protocol, `http` or `https`. The mod accepts this protocol header only
-from the same trusted proxies described above. It is used to validate the origin of browser login and
-registration forms when `Sec-Fetch-Site` is absent. The proxy must overwrite `X-Forwarded-Proto`, not
-forward an arbitrary client value or append a list. With multiple proxy hops, the last trusted proxy
-must supply the verified public protocol.
+from the same trusted proxies described above. It is used by implicit localhost access checks and to validate
+browser login and registration origins when `Sec-Fetch-Site` is absent. The proxy must overwrite
+`X-Forwarded-Proto`, not forward an arbitrary client value or append a list. With multiple proxy hops, the
+last trusted proxy must supply the verified public protocol.
 
 Example Nginx configuration for a proxy running on the same machine:
 

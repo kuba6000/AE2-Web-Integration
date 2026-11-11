@@ -67,12 +67,18 @@ class CoreDataTest {
     // --- persistence: a bad file must never cost anyone their account ---
 
     @Test
-    void verifyPasswordReturnsFalseForAKnownPlayerWithNoStoredPassword() {
-        CoreData.setPassword(REGISTERED_PLAYER, "hash");
+    void passwordReplacementInvalidatesAnAccountReadWithThePreviousCredential() throws Exception {
+        assertTrue(
+            CoreData.setPassword(REGISTERED_PLAYER, PasswordHelper.generateStrongPasswordHash("first-password")));
         CoreData.Account account = CoreData.getAccount("Player");
-        CoreData.setPassword(REGISTERED_PLAYER, "");
+        assertNotNull(account);
+        assertTrue(CoreData.verifyPassword(account, "first-password"));
 
-        assertFalse(CoreData.verifyPassword(account, "anything"));
+        assertTrue(
+            CoreData.setPassword(REGISTERED_PLAYER, PasswordHelper.generateStrongPasswordHash("second-password")));
+
+        assertFalse(CoreData.verifyPassword(account, "first-password"));
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount("Player"), "second-password"));
     }
 
     @Test
@@ -191,7 +197,7 @@ class CoreDataTest {
         assertEquals(unreadableAccounts, readDataFile());
         assertAccount("Player", REGISTERED_PLAYER);
         assertNull(CoreData.getAccount("RenamedPlayer"));
-        assertFalse(CoreData.setPassword(REGISTERED_PLAYER, ""));
+        assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "replacementhash"));
         assertEquals("storedhash", CoreData.getCredentialVersion(REGISTERED_UUID));
     }
 

@@ -424,7 +424,7 @@ class ServerLifecycleHttpTest {
                 .get("token")
                 .getAsString();
             assertEquals(200, get("/api/themes", token).status());
-            CoreData.setPassword(player, "");
+            assertTrue(CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("replacement-password")));
             assertEquals(401, get("/api/themes", token).status());
             CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
             String second = login("SessionPlayer", "player-password");
@@ -1072,7 +1072,9 @@ class ServerLifecycleHttpTest {
         strings = { "other.example", "localhost.other.example:2324", "127.0.0.1.other.example", "192.0.2.10:2324",
             "[2001:db8::1]:2324", "user@localhost:2324", "localhost:2324/path", "localhost:2324?query",
             "localhost:2324#fragment", "localhost:70000", "localhost:invalid", "localhost:",
-            "localhost:2324, other.example", "localhost:2324\r\nHost: other.example" })
+            "localhost:2324, other.example", "localhost:2324\r\nHost: other.example", "evillocalhost:2324",
+            "www.localhost.example:2324", ".localhost:2324", "www..localhost:2324", "www.localhost..:2324",
+            "-www.localhost:2324", "www-.localhost:2324", "www_local.localhost:2324", "%77ww.localhost:2324" })
     void localAdminRejectsNonLocalOrMalformedAuthorities(String host) throws Exception {
         config.set("general.allow_no_password_on_localhost", true);
         startApi();
@@ -1084,7 +1086,10 @@ class ServerLifecycleHttpTest {
         value = { "localhost|", "LOCALHOST:2324|http://localhost:2324", "127.0.0.1:2324|",
             "127.0.0.2:2324|http://127.0.0.2:2324", "[::1]:2324|http://[::1]:2324",
             "[0:0:0:0:0:0:0:1]:2324|http://[0:0:0:0:0:0:0:1]:2324", "localhost|http://localhost:80",
-            "localhost:80|http://localhost" },
+            "localhost:80|http://localhost", "www.localhost:2324|", "www.localhost:2324|http://www.localhost:2324",
+            "terminal.demo.localhost:2324|http://terminal.demo.localhost:2324",
+            "WWW.LoCaLhOsT:2324|http://www.localhost:2324", "service-1.localhost|",
+            "localhost.:2324|http://localhost.:2324", "www.localhost.:2324|http://www.localhost.:2324" },
         delimiter = '|')
     void localAdminAcceptsLocalAuthoritiesAndMatchingOrigins(String host, String origin) throws Exception {
         config.set("general.allow_no_password_on_localhost", true);
@@ -1092,6 +1097,16 @@ class ServerLifecycleHttpTest {
         assertEquals(
             HttpURLConnection.HTTP_OK,
             rawGetStatus("Host: " + host + (origin == null ? "" : "\r\nOrigin: " + origin)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "http://localhost:2324", "http://other.localhost:2324", "http://www.localhost:2325",
+            "https://www.localhost:2324", "http://www.localhost.:2324", "null" })
+    void localSubdomainAdminStillRequiresItsOwnOrigin(String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HTTP_UNAUTHORIZED, rawGetStatus("Host: www.localhost:2324\r\nOrigin: " + origin));
     }
 
     @Test
@@ -1126,13 +1141,14 @@ class ServerLifecycleHttpTest {
             rawGetStatus("Host: localhost:2324\r\nOrigin: https://localhost:2324\r\nX-Forwarded-Proto: " + protocol));
     }
 
-    @Test
-    void localAuthorityDoesNotOverrideTheResolvedRemoteClientAddress() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = { "localhost", "www.localhost", "www.localhost." })
+    void localAuthorityDoesNotOverrideTheResolvedRemoteClientAddress(String host) throws Exception {
         config.set("general.allow_no_password_on_localhost", true);
         startApi();
         assertEquals(
             HttpURLConnection.HTTP_UNAUTHORIZED,
-            rawGetStatus("Host: localhost:2324\r\nOrigin: http://localhost:2324\r\nX-Forwarded-For: 192.0.2.10"));
+            rawGetStatus("Host: " + host + ":2324\r\nOrigin: http://" + host + ":2324\r\nX-Forwarded-For: 192.0.2.10"));
     }
 
     @Test

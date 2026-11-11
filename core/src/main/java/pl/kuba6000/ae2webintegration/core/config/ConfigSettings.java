@@ -53,7 +53,7 @@ public final class ConfigSettings {
         /** Grant password-free administrator access to loopback clients using a local authority and origin. */
         @Path("allow_no_password_on_localhost")
         @Comment({
-            "Allow loopback clients using localhost or a loopback IP to access the panel as admin without a password.",
+            "Allow loopback clients using localhost (including subdomains) or a loopback IP to access the panel as admin without a password.",
             "A browser Origin, when present, must match the request's protocol, host and port." })
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean allowNoPasswordOnLocalhost = true;

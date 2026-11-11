@@ -17,7 +17,6 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.common.io.Files;
-import com.google.gson.Gson;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -170,19 +169,16 @@ public class CoreData {
         }
     }
 
-    public static synchronized boolean setPassword(PlayerIdentity player, String passwordHash) {
+    /** Publishes a generated password hash and revokes sessions only after saving successfully. */
+    public static synchronized boolean setPassword(@NotNull PlayerIdentity player, @NotNull String passwordHash) {
         if (instance.loadFailed) {
             LOG.error("Cannot change accounts after web data failed to load");
             return false;
         }
         UUID playerUuid = player.uuid;
         CoreData updated = instance.copy();
-        if (passwordHash == null || passwordHash.isEmpty()) {
-            updated.passwords.remove(playerUuid);
-        } else {
-            updated.passwords.put(playerUuid, passwordHash);
-            updated.recordUsername(playerUuid, player.name);
-        }
+        updated.passwords.put(playerUuid, passwordHash);
+        updated.recordUsername(playerUuid, player.name);
         if (!saveChanges(updated)) return false;
         instance = updated;
         AuthService.invalidatePlayer(playerUuid);
@@ -209,7 +205,6 @@ public class CoreData {
     }
 
     public static synchronized void loadData() {
-        Gson gson = GSONUtils.GSON_BUILDER.create();
         File file = dataFile();
         if (!file.exists()) {
             if (instance.loadFailed) {
@@ -224,7 +219,7 @@ public class CoreData {
         try {
             CoreData loaded;
             try (Reader reader = Files.newReader(file, UTF_8)) {
-                loaded = gson.fromJson(reader, CoreData.class);
+                loaded = GSONUtils.GSON.fromJson(reader, CoreData.class);
             }
             if (loaded == null) {
                 // An empty or null-valued file deserializes to null without throwing, so this is not

@@ -9,6 +9,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -183,11 +184,15 @@ public final class AuthService {
         }
         URI target = parseHttpOrigin(scheme + "://" + hosts.get(0));
         if (target == null) return false;
-        String host = target.getHost();
+        String host = target.getHost()
+            .toLowerCase(Locale.ROOT);
         if (host.startsWith("[")) host = host.substring(1, host.length() - 1);
-        // Parse literal addresses only: resolving an arbitrary hostname would permit DNS rebinding.
-        if (!"localhost".equalsIgnoreCase(host) && !(InetAddresses.isInetAddress(host) && InetAddresses.forString(host)
-            .isLoopbackAddress())) return false;
+        else if (host.endsWith(".")) host = host.substring(0, host.length() - 1);
+        // RFC 6761 reserves localhost and its subdomains; address parsing must not perform DNS lookups.
+        if (!host.equals("localhost") && !host.endsWith(".localhost")
+            && !(InetAddresses.isInetAddress(host) && InetAddresses.forString(host)
+                .isLoopbackAddress()))
+            return false;
         List<String> origins = exchange.getRequestHeaders()
             .get("Origin");
         if (origins == null) return true; // Navigations, same-origin GETs and non-browser clients may omit Origin.
