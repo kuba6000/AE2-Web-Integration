@@ -1786,6 +1786,20 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void unauthenticatedRequestsAndAuthenticatedLoginAttemptsShareOneBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 2);
+        startApi();
+        String token = login();
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/themes", null).status());
+
+        Response denied = read(
+            jsonPost("/api/auth/login", token, "{\"username\":\"admin\",\"password\":\"incorrect\"}"));
+
+        assertEquals(429, denied.status());
+        assertEquals(HTTP_OK, get("/api/themes", token).status(), "ordinary authenticated reads remain usable");
+    }
+
+    @Test
     void credentialBudgetAlsoProtectsRegistrationBeforeGameThreadAdmission() throws Exception {
         config.set("general.max_requests_before_logged_in_per_minute", 1);
         startApi();
@@ -1801,6 +1815,26 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(denied.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "X-Forwarded-For", "X-Real-IP" })
+    void trustedProxyClientsHaveSeparateLoginBudgets(String clientHeader) throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String[] clients = { "203.0.113.7", "203.0.113.7", "198.51.100.8" };
+        int[] expected = { HTTP_UNAUTHORIZED, 429, HTTP_UNAUTHORIZED };
+        for (int index = 0; index < clients.length; index++) {
+            HttpURLConnection request = connection("/api/auth/login", null);
+            request.setRequestMethod("POST");
+            request.setRequestProperty("Content-Type", "application/json");
+            request.setRequestProperty(clientHeader, clients[index]);
+            request.setDoOutput(true);
+            try (OutputStream output = request.getOutputStream()) {
+                output.write("{\"username\":\"admin\",\"password\":\"incorrect\"}".getBytes(UTF_8));
+            }
+            assertEquals(expected[index], read(request).status(), clients[index]);
+        }
     }
 
     @ParameterizedTest

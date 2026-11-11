@@ -74,12 +74,11 @@ public final class ConfigSettings {
         public boolean publicMode = true;
 
         /**
-         * Maximum unauthenticated requests and, independently, credential attempts per client per minute, from 1 to
-         * 1000.
+         * Maximum unauthenticated requests and credential attempts per client per minute, from 1 to 1000.
          */
         @Path("max_requests_before_logged_in_per_minute")
         @Comment({ "Unauthenticated requests per client per minute (1-1000).",
-            "Login and registration attempts share a separate budget of the same size, even with a valid session." })
+            "Login and registration attempts use this same budget, even with a valid session." })
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public int maxRequestsBeforeLoggedInPerMinute = 20;
 

@@ -47,7 +47,6 @@ public final class AuthService {
     private static final ConcurrentHashMap<UUID, PendingRegistration> registrations = new ConcurrentHashMap<>();
     // Initialized by reloadHttpSettings() before the HTTP listener starts accepting requests.
     private static volatile RateLimiter rateLimiter;
-    private static volatile @Nullable RateLimiter credentialRateLimiter;
     private static volatile ClientAddressResolver clientAddressResolver;
     private static volatile @Nullable SessionStore sessionStore;
     private static @Nullable ScheduledExecutorService persistence;
@@ -112,9 +111,6 @@ public final class AuthService {
         rateLimiter = new RateLimiter(
             Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute,
             RATE_LIMIT_WINDOW_MILLIS);
-        credentialRateLimiter = new RateLimiter(
-            Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute,
-            RATE_LIMIT_WINDOW_MILLIS);
         clientAddressResolver = ClientAddressResolver.fromConfig(Config.INSTANCE.general.trustedProxies);
     }
 
@@ -140,17 +136,11 @@ public final class AuthService {
 
     public static boolean isRateLimited(@NotNull HttpExchange exchange) {
         InetAddress client = resolveClientAddress(exchange);
-        return !isAlreadyIdentified(exchange, client) && !rateLimiter.isAllowed(client);
-    }
-
-    /** Existing sessions do not exempt credential attempts from their shared per-address budget. */
-    private static @NotNull ApiStatus admitCredentialAttempt(@NotNull AE2Controller.RequestContext context) {
-        RateLimiter limiter = credentialRateLimiter;
-        if (!AE2Controller.isCurrentHTTPLifecycle(context.getLifecycleGeneration()) || limiter == null) {
-            return ApiStatus.SERVER_STOPPING;
-        }
-        return limiter.isAllowed(resolveClientAddress(context.getExchange())) ? ApiStatus.OK
-            : ApiStatus.TOO_MANY_REQUESTS;
+        String path = exchange.getRequestURI()
+            .getRawPath();
+        boolean credentialAttempt = exchange.getRequestMethod()
+            .equals("POST") && (path.equals("/api/auth/login") || path.equals("/api/auth/register"));
+        return (credentialAttempt || !isAlreadyIdentified(exchange, client)) && !rateLimiter.isAllowed(client);
     }
 
     /** Password checks remain behind the limiter; this check only reads existing credentials. */
@@ -275,10 +265,9 @@ public final class AuthService {
     }
 
     /** Verifies credentials and publishes a session only into the originating HTTP lifecycle. */
-    public static @NotNull LoginResult login(@NotNull AE2Controller.RequestContext context, @NotNull String username,
-        @NotNull String password, boolean rememberMe) {
-        ApiStatus admission = admitCredentialAttempt(context);
-        if (admission != ApiStatus.OK) return LoginResult.failure(admission);
+    public static @NotNull LoginResult login(long generation, @NotNull String username, @NotNull String password,
+        boolean rememberMe) {
+        if (!AE2Controller.isCurrentHTTPLifecycle(generation)) return LoginResult.failure(ApiStatus.SERVER_STOPPING);
         WebPrincipal principal;
         String credential;
         if (username.equalsIgnoreCase("admin") || !Config.INSTANCE.general.publicMode) {
@@ -299,7 +288,7 @@ public final class AuthService {
         SessionStore store;
         boolean evicted;
         synchronized (authenticationStateLock) {
-            if (!AE2Controller.isCurrentHTTPLifecycle(context.getLifecycleGeneration()))
+            if (!AE2Controller.isCurrentHTTPLifecycle(generation))
                 return LoginResult.failure(ApiStatus.SERVER_STOPPING);
             if (!credential.equals(credentialFor(principal))) return LoginResult.failure(ApiStatus.INVALID_PASSWORD);
             evicted = rememberMe && evictOldestRemembered(principal);
@@ -345,10 +334,10 @@ public final class AuthService {
     }
 
     /** The online-player lookup runs on the game thread; password hashing runs on the caller's HTTP thread. */
-    public static @NotNull RegistrationResult register(@NotNull AE2Controller.RequestContext context,
-        @NotNull String username, @NotNull String password) {
-        ApiStatus admission = admitCredentialAttempt(context);
-        if (admission != ApiStatus.OK) return new RegistrationResult(admission, null);
+    public static @NotNull RegistrationResult register(long generation, @NotNull String username,
+        @NotNull String password) {
+        if (!AE2Controller.isCurrentHTTPLifecycle(generation))
+            return new RegistrationResult(ApiStatus.SERVER_STOPPING, null);
         UUID uuid;
         try {
             uuid = AE2Controller.findOnlinePlayerOnServerThread(username);
@@ -364,7 +353,7 @@ public final class AuthService {
         }
         String token = PasswordHelper.generateToken(CONFIRMATION_TOKEN_LENGTH);
         synchronized (authenticationStateLock) {
-            if (!AE2Controller.isCurrentHTTPLifecycle(context.getLifecycleGeneration())) {
+            if (!AE2Controller.isCurrentHTTPLifecycle(generation)) {
                 return new RegistrationResult(ApiStatus.SERVER_STOPPING, null);
             }
             registrations.put(uuid, new PendingRegistration(token, passwordHash));
@@ -422,7 +411,6 @@ public final class AuthService {
             store = sessionStore;
             sessionStore = null;
             adminCredential = null;
-            credentialRateLimiter = null;
             registrations.clear();
             previous = sessions;
             sessions = new ConcurrentHashMap<>();

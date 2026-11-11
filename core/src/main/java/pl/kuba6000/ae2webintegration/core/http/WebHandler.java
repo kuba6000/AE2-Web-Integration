@@ -74,7 +74,7 @@ public final class WebHandler implements HttpHandler {
                 exchange.getResponseHeaders()
                     .add("Set-Cookie", sessionCookie(cookieToken, -1));
             } else if (exchange.getRequestMethod()
-                .equals("POST") && handleForm(arrival)) {
+                .equals("POST") && handleForm(exchange, arrival.getLifecycleGeneration())) {
                     return;
                 }
         }
@@ -118,8 +118,7 @@ public final class WebHandler implements HttpHandler {
     }
 
     /** Returns whether the form produced its own response instead of rendering the login page. */
-    private static boolean handleForm(AE2Controller.RequestContext context) throws IOException {
-        HttpExchange exchange = context.getExchange();
+    private static boolean handleForm(HttpExchange exchange, long generation) throws IOException {
         if (!isSameOriginBrowserPost(exchange)) {
             exchange.sendResponseHeaders(HTTP_FORBIDDEN, -1);
             return true;
@@ -128,14 +127,8 @@ public final class WebHandler implements HttpHandler {
         Map<String, String> input = HTTPUtils.parseQueryString(readBody(exchange));
         if (input.containsKey("register") && input.containsKey("password")) {
             AuthService.RegistrationResult result = AuthService
-                .register(context, input.get("register"), input.get("password"));
+                .register(generation, input.get("register"), input.get("password"));
             switch (result.status()) {
-                case TOO_MANY_REQUESTS -> sendText(
-                    exchange,
-                    result.status()
-                        .httpStatus(),
-                    result.status()
-                        .name());
                 case SERVER_BUSY, SERVER_STOPPING, TIMEOUT, INTERNAL_ERROR -> sendText(
                     exchange,
                     HTTP_UNAVAILABLE,
@@ -151,12 +144,11 @@ public final class WebHandler implements HttpHandler {
         }
         if (input.containsKey("username") && input.containsKey("password")) {
             AuthService.LoginResult result = AuthService
-                .login(context, input.get("username"), input.get("password"), input.containsKey("remember"));
-            if (result.status() == ApiStatus.SERVER_STOPPING || result.status() == ApiStatus.TOO_MANY_REQUESTS) {
+                .login(generation, input.get("username"), input.get("password"), input.containsKey("remember"));
+            if (result.status() == ApiStatus.SERVER_STOPPING) {
                 sendText(
                     exchange,
-                    result.status()
-                        .httpStatus(),
+                    HTTP_UNAVAILABLE,
                     result.status()
                         .name());
             } else if (result.status() != ApiStatus.OK) {
