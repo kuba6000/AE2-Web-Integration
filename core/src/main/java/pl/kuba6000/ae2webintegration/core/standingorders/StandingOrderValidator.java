@@ -63,7 +63,8 @@ public final class StandingOrderValidator {
         }
     }
 
-    private static void validateName(String name) throws InvalidStandingOrderException {
+    /** Checks a definition name; also applied to the name a standing order carries as a crafting requester. */
+    public static void validateName(@NotNull String name) throws InvalidStandingOrderException {
         if (name.isEmpty() || name.length() > MAX_NAME_LENGTH) {
             throw new InvalidStandingOrderException(Reason.NAME_LENGTH, "name");
         }

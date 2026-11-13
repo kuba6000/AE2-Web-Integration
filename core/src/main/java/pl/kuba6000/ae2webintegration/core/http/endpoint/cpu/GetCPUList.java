@@ -130,7 +130,10 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean hasTrackingInfo = false;
-        /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+        /**
+         * Player, automation, web and standing order requesters of the tracked job, in submission order; empty when
+         * unavailable.
+         */
         public @NotNull List<CraftingRequester> requesters = Collections.emptyList();
         /** Requester name from AE2 when no tracked requesters are available; null when unavailable. */
         public @Nullable String nativeRequesterName;

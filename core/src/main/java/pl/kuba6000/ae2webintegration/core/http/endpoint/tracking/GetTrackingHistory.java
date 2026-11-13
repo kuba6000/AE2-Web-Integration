@@ -88,7 +88,8 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @param timeDone     completion time in Unix epoch milliseconds
      * @param wasCancelled whether the crafting work was cancelled
      * @param finalOutput  requested output of the job
-     * @param requesters   player, automation and web requesters, in submission order; empty when unavailable
+     * @param requesters   player, automation, web and standing order requesters, in submission order; empty when
+     *                     unavailable
      * @param id           history entry ID, as a decimal string
      * @example timeStarted 1700000000000
      * @example timeDone 1700000010000

@@ -204,15 +204,58 @@ class CraftingHistoryStoreTest {
     }
 
     @Test
-    void invalidAndRepeatedNonPlayerSourcesAreRejectedWithoutPublishingJobs() throws Exception {
+    void standingOrderRequestersKeepKeyAndNameAcrossReopenAndHistoryPages() throws Exception {
         StableKey grid = StableKey.random();
+        StableKey plastic = StableKey.random();
+        StableKey circuits = StableKey.random();
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.standingOrder(plastic, "Keep plastic"),
+                CraftingRequester.web(),
+                CraftingRequester.standingOrder(circuits, "Keep circuits")));
+        long id;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            id = new SqliteCraftingHistoryStore(database).append(grid, job);
+        }
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            CompletedCrafting read = store.read(grid, id);
+            assertNotNull(read);
+            assertEquals(job.requesters(), read.requesters());
+            assertEquals(
+                job.requesters(),
+                store.list(grid, null, 10)
+                    .entries()
+                    .get(0)
+                    .requesters());
+            CraftingRequester order = read.requesters()
+                .get(2);
+            assertEquals(CraftingRequester.Source.STANDING_ORDER, order.source());
+            assertEquals(circuits, order.orderKey());
+            assertEquals("Keep circuits", order.orderName());
+            assertNull(order.player());
+        }
+    }
+
+    @Test
+    void repeatedNonPlayerSourcesAndOrdersAreRejectedWithoutPublishingJobs() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey orderKey = StableKey.random();
         CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
         List<List<CraftingRequester>> invalid = Arrays.asList(
             Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation()),
             Arrays.asList(CraftingRequester.web(), CraftingRequester.web()),
-            Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null)),
-            Collections.singletonList(
-                new CraftingRequester(CraftingRequester.Source.WEB, new PlayerIdentity(UUID.randomUUID(), "Alex"))));
+            Arrays.asList(
+                CraftingRequester.standingOrder(orderKey, "Keep plastic"),
+                CraftingRequester.standingOrder(orderKey, "Renamed")));
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
