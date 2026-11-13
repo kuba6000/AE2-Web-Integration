@@ -278,6 +278,7 @@ tasks.register('testSqlite336', Test) {
         includeTestsMatching '*GridSettingsLifecycleTest'
         includeTestsMatching '*ResourcePinStoreTest'
         includeTestsMatching '*ResourcePinGroupsTest'
+        includeTestsMatching '*StandingOrderStoreTest'
         includeTestsMatching '*HistoryMeasurementTest'
         includeTestsMatching '*LiveDataPolicyTest'
         includeTestsMatching '*SqliteStorageHistory*Test'

@@ -87,6 +87,7 @@ public final class ResourceCatalogue {
                     WHERE resource_id = ?
                 )
                 AND NOT EXISTS (SELECT 1 FROM resource_pins WHERE resource_id = ?)
+                AND NOT EXISTS (SELECT 1 FROM standing_order_resources WHERE resource_id = ?)
                 AND NOT EXISTS (SELECT 1 FROM crafting_resources WHERE resource_id = ?)
             """)) {
             for (Long resourceId : resources) {
@@ -95,6 +96,7 @@ public final class ResourceCatalogue {
                 delete.setLong(3, resourceId);
                 delete.setLong(4, resourceId);
                 delete.setLong(5, resourceId);
+                delete.setLong(6, resourceId);
                 delete.addBatch();
             }
             if (!resources.isEmpty()) delete.executeBatch();

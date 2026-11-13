@@ -691,6 +691,57 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    void standingOrdersSettingIsOptionalValidatedAndDurable() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        JsonObject initial = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            initial.get("standingOrdersEnabled")
+                .getAsBoolean());
+        Reply disabled = request("PATCH", path, headers, "{\"standingOrdersEnabled\":false}");
+        assertEquals(HTTP_OK, disabled.status());
+        assertFalse(
+            disabled.json()
+                .getAsJsonObject("data")
+                .get("standingOrdersEnabled")
+                .getAsBoolean());
+        GridPersistentData restored = worlds.registry(
+            gridSave.toPath()
+                .resolve("ae2webintegration/grid-identities.json")
+                .toFile())
+            .getPersistentData(key);
+        assertNotNull(restored);
+        assertFalse(
+            restored.getSettings()
+                .isStandingOrdersEnabled());
+        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
+            assertEquals(
+                HTTP_BAD_REQUEST,
+                request("PATCH", path, headers, "{\"isTracked\":true,\"standingOrdersEnabled\":" + invalid + "}")
+                    .status());
+        }
+        JsonObject unchanged = request("PATCH", path, headers, "{\"isTracked\":true}").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            unchanged.get("isTracked")
+                .getAsBoolean());
+        assertFalse(
+            unchanged.get("standingOrdersEnabled")
+                .getAsBoolean());
+        Reply enabled = request("PATCH", path, headers, "{\"standingOrdersEnabled\":true}");
+        assertEquals(HTTP_OK, enabled.status());
+        assertTrue(
+            enabled.json()
+                .getAsJsonObject("data")
+                .get("standingOrdersEnabled")
+                .getAsBoolean());
+    }
+
+    @Test
     void storageHistorySettingIsIndependentAndPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);

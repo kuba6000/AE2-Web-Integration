@@ -20,6 +20,8 @@ public final class GridSettingsData {
     private boolean isStorageTracked;
     /** Whether this grid records accepted resource input/output history. */
     private boolean isFlowTracked;
+    /** Whether this grid's standing orders may run; the global server switch still applies. */
+    private boolean standingOrdersEnabled = true;
     /** Seconds between durable stock samples, independent of terminal refreshes. */
     private int stockSampleIntervalSeconds;
     private int flowFlushIntervalSeconds;
@@ -60,6 +62,7 @@ public final class GridSettingsData {
             GridSettingsData result = new GridSettingsData(policy, craftingPolicy);
             result.isTracked = isTracked;
             result.trackMachineCrafting = trackMachineCrafting;
+            result.standingOrdersEnabled = standingOrdersEnabled;
             result.isStorageTracked = isStorageTracked;
             result.isFlowTracked = isFlowTracked;
             result.stockSampleIntervalSeconds = stockSampleIntervalSeconds;
@@ -134,6 +137,20 @@ public final class GridSettingsData {
         synchronized (lock) {
             if (trackMachineCrafting == value) return;
             trackMachineCrafting = value;
+            markDirty.run();
+        }
+    }
+
+    public boolean isStandingOrdersEnabled() {
+        synchronized (lock) {
+            return standingOrdersEnabled;
+        }
+    }
+
+    public void setStandingOrdersEnabled(boolean value) {
+        synchronized (lock) {
+            if (standingOrdersEnabled == value) return;
+            standingOrdersEnabled = value;
             markDirty.run();
         }
     }
@@ -237,6 +254,7 @@ public final class GridSettingsData {
     public boolean isDefault() {
         synchronized (lock) {
             return !isTracked && !trackMachineCrafting
+                && standingOrdersEnabled
                 && !isStorageTracked
                 && !isFlowTracked
                 && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds.defaultValue

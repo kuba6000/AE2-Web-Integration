@@ -14,6 +14,8 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
  * @param trackMachineCrafting         whether new machine-requested jobs are recorded when crafting tracking is enabled
  * @param isStorageTracked             whether stored resource quantities are sampled
  * @param isFlowTracked                whether resource input and output are recorded
+ * @param standingOrdersEnabled        whether this network's standing orders may run; the server-wide setting still
+ *                                     applies
  * @param name                         custom network name; empty when unnamed
  * @param stockSampleIntervalSeconds   seconds between saved stock samples, independent of live terminal updates
  * @param flowFlushIntervalSeconds     seconds covered by each saved input/output total
@@ -25,9 +27,9 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
  */
 @Desugar
 public record GridSettingsView(boolean isTracked, boolean trackMachineCrafting, boolean isStorageTracked,
-    boolean isFlowTracked, @NotNull String name, int stockSampleIntervalSeconds, int flowFlushIntervalSeconds,
-    int historyRetentionDays, int craftingHistoryRetentionDays, @NotNull ConfigSettings.ResourceHistory limits,
-    @NotNull ConfigSettings.CraftingHistory craftingLimits) {
+    boolean isFlowTracked, boolean standingOrdersEnabled, @NotNull String name, int stockSampleIntervalSeconds,
+    int flowFlushIntervalSeconds, int historyRetentionDays, int craftingHistoryRetentionDays,
+    @NotNull ConfigSettings.ResourceHistory limits, @NotNull ConfigSettings.CraftingHistory craftingLimits) {
 
     public static @NotNull GridSettingsView from(@NotNull GridSettingsData settings,
         @NotNull ConfigSettings.ResourceHistory limits, @NotNull ConfigSettings.CraftingHistory craftingLimits) {
@@ -36,6 +38,7 @@ public record GridSettingsView(boolean isTracked, boolean trackMachineCrafting, 
             settings.isTrackMachineCrafting(),
             settings.isStorageTracked(),
             settings.isFlowTracked(),
+            settings.isStandingOrdersEnabled(),
             settings.getName(),
             settings.getStockSampleIntervalSeconds(),
             settings.getFlowFlushIntervalSeconds(),
