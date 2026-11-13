@@ -15,6 +15,8 @@ import java.lang.annotation.Target;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -55,8 +57,7 @@ class GSONUtilsTest {
 
     @Test
     void inputShapeProjectsBothDirectionsAndPreservesSharedAdapters() {
-        Gson gson = GSONUtils.createBuilder()
-            .create();
+        Gson gson = GSONUtils.GSON;
         ProjectionValue value = new ProjectionValue();
         JsonObject json = gson.toJsonTree(new Projection(value))
             .getAsJsonObject();
@@ -95,8 +96,7 @@ class GSONUtilsTest {
 
     @Test
     void inputShapeSupportsNullAndRecursiveWrappedValues() {
-        Gson gson = GSONUtils.createBuilder()
-            .create();
+        Gson gson = GSONUtils.GSON;
         assertEquals("null", gson.toJson(null, Projection.class));
         assertNull(gson.fromJson("null", Projection.class));
         ProjectionValue value = new ProjectionValue();
@@ -104,6 +104,14 @@ class GSONUtilsTest {
         Projection decoded = gson.fromJson(gson.toJson(new Projection(value)), Projection.class);
         assertEquals(value.key, decoded.value().next.value().key);
         assertNull(decoded.value().next.value().next);
+    }
+
+    @Test
+    void standardJsonRetainsExplicitNullsAndHtmlEscaping() {
+        Map<String, String> value = new LinkedHashMap<>();
+        value.put("name", "<widget>");
+        value.put("missing", null);
+        assertEquals("{\"name\":\"\\u003cwidget\\u003e\",\"missing\":null}", GSONUtils.GSON.toJson(value));
     }
 
     @TempDir

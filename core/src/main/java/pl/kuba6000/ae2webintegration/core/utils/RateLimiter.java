@@ -6,13 +6,11 @@ import java.util.Map;
 import java.util.function.LongSupplier;
 
 /**
- * Per-address request budget for <b>unauthenticated</b> traffic, guarding the login endpoint against
- * password guessing.
+ * Per-address request budget. Callers decide exemptions for ordinary authenticated traffic; credential
+ * attempts remain bounded even when the request carries an existing valid session.
  * <p>
- * There is deliberately no whitelist here. Callers decide who is exempt: a request carrying a valid
- * session token never reaches this class at all. An earlier version whitelisted an IP once anyone from it
- * logged in, which meant a single login behind NAT or a reverse proxy disabled the limit for everyone
- * sharing that address - defeating the purpose exactly where it mattered.
+ * There is deliberately no whitelist here. Whitelisting an IP once anyone from it logs in would disable
+ * protection for everyone sharing that address behind NAT or a reverse proxy.
  */
 public class RateLimiter {
 

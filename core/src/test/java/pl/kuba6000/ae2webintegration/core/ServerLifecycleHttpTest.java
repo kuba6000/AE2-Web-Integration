@@ -65,6 +65,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
@@ -256,6 +257,7 @@ class ServerLifecycleHttpTest {
         CoreDataTestFixture.reset();
         try {
             config.set("general.public_mode", true);
+            config.set("general.max_requests_before_logged_in_per_minute", 100);
             PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
             CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
             startApi();
@@ -304,6 +306,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void concurrentRememberedLoginsKeepOnlyTwentyUsableTokensAfterRestart() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 100);
         startApi();
         String ordinary = login();
         ExecutorService clients = Executors.newFixedThreadPool(6);
@@ -421,7 +424,7 @@ class ServerLifecycleHttpTest {
                 .get("token")
                 .getAsString();
             assertEquals(200, get("/api/themes", token).status());
-            CoreData.setPassword(player, "");
+            assertTrue(CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("replacement-password")));
             assertEquals(401, get("/api/themes", token).status());
             CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
             String second = login("SessionPlayer", "player-password");
@@ -1052,6 +1055,113 @@ class ServerLifecycleHttpTest {
         assertEquals(HTTP_OK, performSyncedRequest(token).status());
     }
 
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "https://other.example", "http://other.example:2324", "http://localhost:2325",
+            "https://localhost:2324", "http://127.0.0.1:2324", "", "null", "http://localhost:2324/path",
+            "http://user@localhost:2324", "http://localhost:2324?query", "http://localhost:2324#fragment",
+            "http://localhost:2324 http://other.example", "http://localhost:2324\r\nOrigin: http://other.example" })
+    void localAdminRejectsForeignOrMalformedOrigins(String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus("Host: localhost:2324\r\nOrigin: " + origin));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "other.example", "localhost.other.example:2324", "127.0.0.1.other.example", "192.0.2.10:2324",
+            "[2001:db8::1]:2324", "user@localhost:2324", "localhost:2324/path", "localhost:2324?query",
+            "localhost:2324#fragment", "localhost:70000", "localhost:invalid", "localhost:", "evillocalhost:2324",
+            "www.localhost.example:2324", ".localhost:2324", "www..localhost:2324", "www.localhost..:2324",
+            "-www.localhost:2324", "www-.localhost:2324", "www_local.localhost:2324", "%77ww.localhost:2324" })
+    void localAdminRejectsNonLocalOrMalformedAuthorities(String host) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus("Host: " + host));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "localhost:2324, other.example", "localhost:2324\r\nHost: other.example" })
+    void localAdminRejectsAmbiguousHostHeaders(String host) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        int status = rawGetStatus("Host: " + host);
+        // JDK HTTP parsers may reject ambiguous Host headers before authentication runs.
+        assertTrue(
+            status == HTTP_BAD_REQUEST || status == HTTP_UNAUTHORIZED,
+            () -> "Ambiguous Host headers must be rejected; received HTTP " + status);
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        value = { "localhost|", "LOCALHOST:2324|http://localhost:2324", "127.0.0.1:2324|",
+            "127.0.0.2:2324|http://127.0.0.2:2324", "[::1]:2324|http://[::1]:2324",
+            "[0:0:0:0:0:0:0:1]:2324|http://[0:0:0:0:0:0:0:1]:2324", "localhost|http://localhost:80",
+            "localhost:80|http://localhost", "www.localhost:2324|", "www.localhost:2324|http://www.localhost:2324",
+            "terminal.demo.localhost:2324|http://terminal.demo.localhost:2324",
+            "WWW.LoCaLhOsT:2324|http://www.localhost:2324", "service-1.localhost|",
+            "localhost.:2324|http://localhost.:2324", "www.localhost.:2324|http://www.localhost.:2324" },
+        delimiter = '|')
+    void localAdminAcceptsLocalAuthoritiesAndMatchingOrigins(String host, String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            rawGetStatus("Host: " + host + (origin == null ? "" : "\r\nOrigin: " + origin)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "http://localhost:2324", "http://other.localhost:2324", "http://www.localhost:2325",
+            "https://www.localhost:2324", "http://www.localhost.:2324", "null" })
+    void localSubdomainAdminStillRequiresItsOwnOrigin(String origin) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(HTTP_UNAUTHORIZED, rawGetStatus("Host: www.localhost:2324\r\nOrigin: " + origin));
+    }
+
+    @Test
+    void explicitSessionsStillAuthenticateWithoutImplicitLocalTrust() throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        String token = login();
+        String headers = "Host: terminal.example\r\nOrigin: https://other.example";
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, rawGetStatus(headers));
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers + "\r\nAuthorization: Bearer " + token));
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers + "\r\nCookie: authenticationToken=" + token));
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus(headers + "\r\nCookie: authenticationToken=" + token + "\r\nAuthorization: Bearer invalid"));
+    }
+
+    @Test
+    void localAdminAcceptsHttpsOriginFromTheTrustedLocalProxy() throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        String headers = "Host: localhost:2324\r\nOrigin: https://localhost:2324\r\nX-Forwarded-Proto: https";
+        assertEquals(HttpURLConnection.HTTP_OK, rawGetStatus(headers));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "invalid", "https, http", "https\r\nX-Forwarded-Proto: https" })
+    void localAdminRejectsAmbiguousForwardedProtocols(String protocol) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus("Host: localhost:2324\r\nOrigin: https://localhost:2324\r\nX-Forwarded-Proto: " + protocol));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "localhost", "www.localhost", "www.localhost." })
+    void localAuthorityDoesNotOverrideTheResolvedRemoteClientAddress(String host) throws Exception {
+        config.set("general.allow_no_password_on_localhost", true);
+        startApi();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            rawGetStatus("Host: " + host + ":2324\r\nOrigin: http://" + host + ":2324\r\nX-Forwarded-For: 192.0.2.10"));
+    }
+
     @Test
     void secondServerLifecycleRebindsRejectsTheOldTokenAndServesANewSession() throws Exception {
         IAE processInterface = TestGridFixtures.ae();
@@ -1648,6 +1758,102 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void validSessionDoesNotBypassLoginAttemptLimit() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            config.set("general.max_requests_before_logged_in_per_minute", 2);
+            CoreData.setPassword(
+                new PlayerIdentity(UUID.randomUUID(), "SessionPlayer"),
+                PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            String token = login("SessionPlayer", "player-password");
+            String guess = "{\"username\":\"admin\",\"password\":\"incorrect\"}";
+
+            assertEquals(401, read(jsonPost("/api/auth/login", token, guess)).status());
+            Response denied = read(jsonPost("/api/auth/login", token, guess));
+
+            assertEquals(429, denied.status());
+            assertEquals(
+                "TOO_MANY_REQUESTS",
+                new Gson().fromJson(denied.body(), JsonObject.class)
+                    .get("status")
+                    .getAsString());
+            assertEquals(200, get("/api/themes", token).status(), "ordinary authenticated reads remain usable");
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void unauthenticatedRequestsAndAuthenticatedLoginAttemptsShareOneBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 2);
+        startApi();
+        String token = login();
+        assertEquals(HTTP_UNAUTHORIZED, get("/api/themes", null).status());
+
+        Response denied = read(
+            jsonPost("/api/auth/login", token, "{\"username\":\"admin\",\"password\":\"incorrect\"}"));
+
+        assertEquals(429, denied.status());
+        assertEquals(HTTP_OK, get("/api/themes", token).status(), "ordinary authenticated reads remain usable");
+    }
+
+    @Test
+    void credentialBudgetAlsoProtectsRegistrationBeforeGameThreadAdmission() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String token = login();
+        fillServerThreadQueue();
+
+        Response denied = read(
+            jsonPost("/api/auth/register", token, "{\"username\":\"Player\",\"password\":\"player-password\"}"));
+
+        assertEquals(429, denied.status());
+        assertEquals(
+            "TOO_MANY_REQUESTS",
+            new Gson().fromJson(denied.body(), JsonObject.class)
+                .get("status")
+                .getAsString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "X-Forwarded-For", "X-Real-IP" })
+    void trustedProxyClientsHaveSeparateLoginBudgets(String clientHeader) throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String[] clients = { "203.0.113.7", "203.0.113.7", "198.51.100.8" };
+        int[] expected = { HTTP_UNAUTHORIZED, 429, HTTP_UNAUTHORIZED };
+        for (int index = 0; index < clients.length; index++) {
+            HttpURLConnection request = connection("/api/auth/login", null);
+            request.setRequestMethod("POST");
+            request.setRequestProperty("Content-Type", "application/json");
+            request.setRequestProperty(clientHeader, clients[index]);
+            request.setDoOutput(true);
+            try (OutputStream output = request.getOutputStream()) {
+                output.write("{\"username\":\"admin\",\"password\":\"incorrect\"}".getBytes(UTF_8));
+            }
+            assertEquals(expected[index], read(request).status(), clients[index]);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "username=admin&password=incorrect", "register=Player&password=player-password" })
+    void browserFormsShareCredentialBudgetWithJsonAttempts(String form) throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 2);
+        startApi();
+        String token = login();
+        assertEquals(
+            401,
+            read(jsonPost("/api/auth/login", token, "{\"username\":\"admin\",\"password\":\"incorrect\"}")).status());
+
+        Response denied = read(browserForm("/", form));
+
+        assertEquals(429, denied.status());
+        assertEquals(200, get("/api/themes", token).status(), "credential admission does not revoke the session");
+    }
+
+    @Test
     void jsonLoginRetainsItsDomainFailureCode() throws Exception {
         startApi();
         Response response = read(
@@ -2019,6 +2225,19 @@ class ServerLifecycleHttpTest {
 
     private Response get(String path, String token) throws IOException {
         return read(connection(path, token));
+    }
+
+    private int rawGetStatus(String headers) throws IOException {
+        // A raw request preserves browser authority/origin headers restricted by HttpURLConnection.
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(5000);
+            socket.getOutputStream()
+                .write(("GET /api/themes HTTP/1.1\r\n" + headers + "\r\nConnection: close\r\n\r\n").getBytes(US_ASCII));
+            BufferedReader response = new BufferedReader(new InputStreamReader(socket.getInputStream(), US_ASCII));
+            return Integer.parseInt(
+                response.readLine()
+                    .split(" ")[1]);
+        }
     }
 
     private HttpURLConnection connection(String path, String token) throws IOException {

@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -16,6 +18,8 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
 
@@ -25,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreDataTest {
@@ -62,12 +67,18 @@ class CoreDataTest {
     // --- persistence: a bad file must never cost anyone their account ---
 
     @Test
-    void verifyPasswordReturnsFalseForAKnownPlayerWithNoStoredPassword() {
-        CoreData.setPassword(REGISTERED_PLAYER, "hash");
+    void passwordReplacementInvalidatesAnAccountReadWithThePreviousCredential() throws Exception {
+        assertTrue(
+            CoreData.setPassword(REGISTERED_PLAYER, PasswordHelper.generateStrongPasswordHash("first-password")));
         CoreData.Account account = CoreData.getAccount("Player");
-        CoreData.setPassword(REGISTERED_PLAYER, "");
+        assertNotNull(account);
+        assertTrue(CoreData.verifyPassword(account, "first-password"));
 
-        assertFalse(CoreData.verifyPassword(account, "anything"));
+        assertTrue(
+            CoreData.setPassword(REGISTERED_PLAYER, PasswordHelper.generateStrongPasswordHash("second-password")));
+
+        assertFalse(CoreData.verifyPassword(account, "first-password"));
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount("Player"), "second-password"));
     }
 
     @Test
@@ -110,6 +121,114 @@ class CoreDataTest {
         CoreData.loadData();
 
         assertEquals(garbage, readDataFile(), "a failed read must not persist over the file it failed on");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "{ this is not json", "", "null" })
+    void aFailedInitialLoadDoesNotAllowLaterPasswordChangesToReplaceTheSourceFile(String unreadableAccounts)
+        throws Exception {
+        writeDataFile(unreadableAccounts);
+        CoreData.loadData();
+
+        boolean changed = CoreData.setPassword(REGISTERED_PLAYER, "newhash");
+
+        assertEquals(unreadableAccounts, readDataFile());
+        assertFalse(changed);
+        assertNull(CoreData.getAccount("Player"));
+    }
+
+    @Test
+    void aFailedLoadDoesNotAllowAnUpdatePreferenceToReplaceTheSourceFile() throws Exception {
+        String unreadableAccounts = "{ this is not json";
+        writeDataFile(unreadableAccounts);
+        CoreData.loadData();
+        ReleaseManifest.Release release = ReleaseManifest
+            .parse(
+                """
+                    {"version":"1.20.1","releases":{"stable":{
+                      "newest":"2.1.0","timestamp":1700000000,"github_release_tag":"2.1.0-forge-1.20.1",
+                      "github_release_url":"https://github.com/example/repo/releases/tag/2.1.0-forge-1.20.1",
+                      "github_release_download_url":"https://github.com/example/repo/releases/download/2.1.0-forge-1.20.1/mod.jar"
+                    },"prerelease":null}}
+                    """,
+                "1.20.1")
+            .findUpdate("2.0.0-forge-1.20.1", "forge");
+        assertNotNull(release);
+
+        assertThrows(IOException.class, () -> CoreData.skipUpdate("1.20.1", "forge", release));
+
+        assertEquals(unreadableAccounts, readDataFile());
+        assertFalse(CoreData.isUpdateSkipped("1.20.1", "forge", release));
+    }
+
+    @Test
+    void failedLoadStaysQuarantinedUntilAnAccountFileLoadsSuccessfully() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        String savedAccounts = readDataFile();
+        writeDataFile("{ this is not json");
+        CoreData.loadData();
+        Files.delete(dataFile().toPath());
+
+        CoreData.loadData();
+
+        assertFalse(dataFile().exists());
+        assertFalse(CoreData.setPassword(OTHER_PLAYER, "otherhash"));
+        assertAccount("Player", REGISTERED_PLAYER);
+        assertNull(CoreData.getAccount("OtherPlayer"));
+
+        writeDataFile(savedAccounts);
+        CoreData.loadData();
+        assertTrue(CoreData.setPassword(OTHER_PLAYER, "otherhash"));
+        CoreDataTestFixture.reset();
+        CoreData.loadData();
+        assertAccount("Player", REGISTERED_PLAYER);
+        assertAccount("OtherPlayer", OTHER_PLAYER);
+    }
+
+    @Test
+    void aFailedReloadDoesNotAllowPlayerRenamesToReplaceTheSourceFile() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        String unreadableAccounts = "{ this is not json";
+        writeDataFile(unreadableAccounts);
+        CoreData.loadData();
+
+        CoreData.observePlayer(new PlayerIdentity(REGISTERED_UUID, "RenamedPlayer"));
+
+        assertEquals(unreadableAccounts, readDataFile());
+        assertAccount("Player", REGISTERED_PLAYER);
+        assertNull(CoreData.getAccount("RenamedPlayer"));
+        assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "replacementhash"));
+        assertEquals("storedhash", CoreData.getCredentialVersion(REGISTERED_UUID));
+    }
+
+    @Test
+    void aFailedPasswordSavePreservesAccountsAndNameOwnershipUntilRetry() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        CoreData.setPassword(OTHER_PLAYER, "otherhash");
+        String savedAccounts = readDataFile();
+        PlayerIdentity renamed = new PlayerIdentity(REGISTERED_UUID, "OtherPlayer");
+        Path blocker = new File(dataFile() + ".tmp").toPath();
+        Files.createDirectory(blocker);
+        Files.write(blocker.resolve("keep-directory-nonempty"), new byte[] { 1 });
+        try {
+            assertFalse(CoreData.setPassword(renamed, "newhash"));
+            assertEquals(savedAccounts, readDataFile());
+            assertAccount("Player", REGISTERED_PLAYER);
+            assertAccount("OtherPlayer", OTHER_PLAYER);
+            assertEquals("storedhash", CoreData.getCredentialVersion(REGISTERED_UUID));
+            assertEquals("otherhash", CoreData.getCredentialVersion(OTHER_UUID));
+        } finally {
+            Files.delete(blocker.resolve("keep-directory-nonempty"));
+            Files.delete(blocker);
+        }
+
+        assertTrue(CoreData.setPassword(renamed, "newhash"));
+        CoreDataTestFixture.reset();
+        CoreData.loadData();
+        assertNull(CoreData.getAccount("Player"));
+        assertAccount("OtherPlayer", renamed);
+        assertEquals("newhash", CoreData.getCredentialVersion(REGISTERED_UUID));
+        assertEquals("otherhash", CoreData.getCredentialVersion(OTHER_UUID));
     }
 
     @Test

@@ -17,7 +17,6 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.common.io.Files;
-import com.google.gson.Gson;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -58,6 +57,9 @@ public class CoreData {
     // All mutations, saves and suppression reads share the class lock, including account changes.
     private @Nullable SkippedUpdate skippedUpdate;
 
+    // A failed reload retains the last known accounts, but cannot authorize replacing the unreadable file.
+    private transient boolean loadFailed;
+
     @Desugar
     private record SkippedUpdate(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String version,
         @NotNull Channel channel, @NotNull String tag) {}
@@ -78,6 +80,7 @@ public class CoreData {
         @NotNull ReleaseManifest.Release release) throws IOException {
         if (isUpdateSkipped(minecraftVersion, loader, release)) return;
         CoreData data = instance;
+        if (data.loadFailed) throw new IOException("Cannot save update preferences after web data failed to load");
         SkippedUpdate previous = data.skippedUpdate;
         data.skippedUpdate = new SkippedUpdate(minecraftVersion, loader, release.version, release.channel, release.tag);
         try {
@@ -157,51 +160,66 @@ public class CoreData {
             return;
         }
         CoreData data = instance;
+        if (data.loadFailed) return;
         if (!data.passwords.containsKey(player.uuid)) {
             return;
         }
         if (data.recordUsername(player.uuid, player.name)) {
-            saveChanges();
+            saveChanges(data);
         }
     }
 
-    public static synchronized boolean setPassword(PlayerIdentity player, String passwordHash) {
-        UUID playerUuid = player.uuid;
-        if (passwordHash == null || passwordHash.isEmpty()) {
-            instance.passwords.remove(playerUuid);
-            AuthService.invalidatePlayer(playerUuid);
-            saveChanges();
-            return true;
+    /** Publishes a generated password hash and revokes sessions only after saving successfully. */
+    public static synchronized boolean setPassword(@NotNull PlayerIdentity player, @NotNull String passwordHash) {
+        if (instance.loadFailed) {
+            LOG.error("Cannot change accounts after web data failed to load");
+            return false;
         }
-
-        instance.passwords.put(playerUuid, passwordHash);
+        UUID playerUuid = player.uuid;
+        CoreData updated = instance.copy();
+        updated.passwords.put(playerUuid, passwordHash);
+        updated.recordUsername(playerUuid, player.name);
+        if (!saveChanges(updated)) return false;
+        instance = updated;
         AuthService.invalidatePlayer(playerUuid);
-        instance.recordUsername(playerUuid, player.name);
-        saveChanges();
         return true;
     }
 
-    private static synchronized void saveChanges() {
-        CoreData data = instance;
+    private @NotNull CoreData copy() {
+        CoreData copy = new CoreData();
+        copy.passwords.putAll(passwords);
+        copy.usernames.putAll(usernames);
+        copy.usernameToUUID.putAll(usernameToUUID);
+        copy.skippedUpdate = skippedUpdate;
+        return copy;
+    }
+
+    private static synchronized boolean saveChanges(CoreData data) {
         try {
             GSONUtils.writeAtomically(dataFile(), data);
+            return true;
         } catch (Exception e) {
             LOG.error("Failed to save web data", e);
+            return false;
         }
     }
 
     public static synchronized void loadData() {
-        Gson gson = GSONUtils.GSON_BUILDER.create();
         File file = dataFile();
         if (!file.exists()) {
+            if (instance.loadFailed) {
+                LOG.error("Web data file is missing after a failed load; restore it before saving changes");
+                return;
+            }
             LOG.info("Web data file not found, creating a new one.");
-            saveChanges();
+            saveChanges(instance);
             return;
         }
+        instance.loadFailed = true;
         try {
             CoreData loaded;
             try (Reader reader = Files.newReader(file, UTF_8)) {
-                loaded = gson.fromJson(reader, CoreData.class);
+                loaded = GSONUtils.GSON.fromJson(reader, CoreData.class);
             }
             if (loaded == null) {
                 // An empty or null-valued file deserializes to null without throwing, so this is not

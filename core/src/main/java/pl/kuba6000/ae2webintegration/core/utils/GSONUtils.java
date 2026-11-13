@@ -29,6 +29,7 @@ public class GSONUtils {
 
     private static final Map<Class<? extends Annotation>, Gson> PROJECTED_GSONS = new HashMap<>();
     public static final GsonBuilder GSON_BUILDER = createBuilder();
+    public static final Gson GSON = GSON_BUILDER.create();
 
     /** Creates an independent builder with the shared API adapters. */
     public static GsonBuilder createBuilder() {
@@ -117,9 +118,6 @@ public class GSONUtils {
      *                     a failed non-atomic replacement may affect the target.
      */
     public static void writeAtomically(File target, Object value) throws IOException {
-        AtomicFileWriter.write(
-            target,
-            writer -> GSON_BUILDER.create()
-                .toJson(value, writer));
+        AtomicFileWriter.write(target, writer -> GSON.toJson(value, writer));
     }
 }

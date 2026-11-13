@@ -9,7 +9,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
@@ -33,8 +32,6 @@ public abstract class IRequest {
             return false;
         }
     }
-
-    protected static GsonBuilder JSONBuilder = GSONUtils.GSON_BUILDER;
 
     @Desugar
     private record RequestResult<T>(@NotNull ApiStatus status, @Nullable T data) implements IResponseBody {}
@@ -69,8 +66,7 @@ public abstract class IRequest {
                 return response;
             }
             if (response == null) {
-                String json = JSONBuilder.create()
-                    .toJson(body);
+                String json = GSONUtils.GSON.toJson(body);
                 response = context != null && !context.isLifecycleUnchanged()
                     ? ApiResponse.error(ApiStatus.SERVER_STOPPING)
                     : new ApiResponse(httpStatus, json);
@@ -122,8 +118,7 @@ public abstract class IRequest {
     /** Serializes a declared API response on the handler thread, then publishes status and body together. */
     protected final void respond(int httpStatus, @NotNull IResponseBody body) {
         if (completion.isDone()) return;
-        String json = JSONBuilder.create()
-            .toJson(body);
+        String json = GSONUtils.GSON.toJson(body);
         completion.complete(new ResponseResult(new ApiResponse(httpStatus, json)));
     }
 

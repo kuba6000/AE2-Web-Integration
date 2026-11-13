@@ -167,7 +167,9 @@ public final class CraftingPlanRegistry {
         @NotNull CraftingOptions options, boolean autoStart) {
         int id = nextId.getAndIncrement();
         retire(plans.put(id, new Entry(plan, finalOutput, options, autoStart)));
-        retire(plans.remove(id - MAX_PLANS));
+        Entry displaced = plans.remove(id - MAX_PLANS);
+        retire(displaced);
+        if (displaced != null && !displaced.plan.isDone()) displaced.plan.cancel(true);
         return id;
     }
 

@@ -42,6 +42,8 @@ public class CommandProcessor {
             case NOT_PENDING -> CommandResult
                 .error("You have to initialize the registration on the web interface first!");
             case INVALID_TOKEN -> CommandResult.error("Invalid token!");
+            case STORAGE_UNAVAILABLE -> CommandResult
+                .error("Account data could not be saved. Ask an administrator to check the server logs, then retry.");
             case SUCCESS -> CommandResult.success("Registered successfully!");
         };
     }

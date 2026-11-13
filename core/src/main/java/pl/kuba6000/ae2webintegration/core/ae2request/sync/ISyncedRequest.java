@@ -50,7 +50,11 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     public final void runOnServerThread(IAE ae) {
         if (context != null) {
             try {
-                grids = GridAccess.list(ae);
+                if (gridKey == null) grids = GridAccess.list(ae);
+                else {
+                    GridAccess.View candidate = GridAccess.find(gridKey);
+                    grids = candidate == null ? Collections.emptyList() : Collections.singletonList(candidate);
+                }
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to prepare grid identities", e);
             }

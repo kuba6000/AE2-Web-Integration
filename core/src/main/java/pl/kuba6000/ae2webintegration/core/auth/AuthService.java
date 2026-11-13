@@ -5,9 +5,11 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.common.net.InetAddresses;
 import com.sun.net.httpserver.HttpExchange;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
@@ -72,7 +75,8 @@ public final class AuthService {
     public enum ConfirmationResult {
         SUCCESS,
         NOT_PENDING,
-        INVALID_TOKEN
+        INVALID_TOKEN,
+        STORAGE_UNAVAILABLE
     }
 
     /** Restores remembered logins before accepting requests and applies changed authentication settings. */
@@ -132,7 +136,11 @@ public final class AuthService {
 
     public static boolean isRateLimited(@NotNull HttpExchange exchange) {
         InetAddress client = resolveClientAddress(exchange);
-        return !isAlreadyIdentified(exchange, client) && !rateLimiter.isAllowed(client);
+        String path = exchange.getRequestURI()
+            .getRawPath();
+        boolean credentialAttempt = exchange.getRequestMethod()
+            .equals("POST") && (path.equals("/api/auth/login") || path.equals("/api/auth/register"));
+        return (credentialAttempt || !isAlreadyIdentified(exchange, client)) && !rateLimiter.isAllowed(client);
     }
 
     /** Password checks remain behind the limiter; this check only reads existing credentials. */
@@ -147,7 +155,66 @@ public final class AuthService {
     private static boolean isLocalAccess(@NotNull HttpExchange exchange, @NotNull InetAddress client) {
         return !exchange.getRequestHeaders()
             .containsKey("Authorization") && Config.INSTANCE.general.allowNoPasswordOnLocalhost
-            && client.isLoopbackAddress();
+            && client.isLoopbackAddress()
+            && hasMatchingLocalOrigin(exchange);
+    }
+
+    /** Loopback transport alone must not grant a foreign webpage implicit administrator access. */
+    private static boolean hasMatchingLocalOrigin(@NotNull HttpExchange exchange) {
+        List<String> hosts = exchange.getRequestHeaders()
+            .get("Host");
+        if (hosts == null || hosts.size() != 1) return false;
+        String scheme = "http";
+        List<String> forwarded = exchange.getRequestHeaders()
+            .get("X-Forwarded-Proto");
+        if (forwarded != null && isTrustedProxy(exchange)) {
+            if (forwarded.size() != 1) return false;
+            scheme = forwarded.get(0)
+                .trim();
+        }
+        URI target = parseHttpOrigin(scheme + "://" + hosts.get(0));
+        if (target == null) return false;
+        String host = target.getHost()
+            .toLowerCase(Locale.ROOT);
+        if (host.startsWith("[")) host = host.substring(1, host.length() - 1);
+        else if (host.endsWith(".")) host = host.substring(0, host.length() - 1);
+        // RFC 6761 reserves localhost and its subdomains; address parsing must not perform DNS lookups.
+        if (!host.equals("localhost") && !host.endsWith(".localhost")
+            && !(InetAddresses.isInetAddress(host) && InetAddresses.forString(host)
+                .isLoopbackAddress()))
+            return false;
+        List<String> origins = exchange.getRequestHeaders()
+            .get("Origin");
+        if (origins == null) return true; // Navigations, same-origin GETs and non-browser clients may omit Origin.
+        if (origins.size() != 1) return false;
+        URI source = parseHttpOrigin(origins.get(0));
+        return source != null && target.getScheme()
+            .equalsIgnoreCase(source.getScheme())
+            && target.getHost()
+                .equalsIgnoreCase(source.getHost())
+            && effectivePort(target) == effectivePort(source);
+    }
+
+    private static @Nullable URI parseHttpOrigin(@NotNull String value) {
+        try {
+            URI uri = URI.create(value);
+            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null
+                || uri.getRawUserInfo() != null
+                || !uri.getRawPath()
+                    .isEmpty()
+                || uri.getRawQuery() != null
+                || uri.getRawFragment() != null
+                || uri.getPort() > 65535
+                || value.endsWith(":")) return null;
+            return uri;
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private static int effectivePort(@NotNull URI origin) {
+        return origin.getPort() < 0 ? ("https".equalsIgnoreCase(origin.getScheme()) ? 443 : 80) : origin.getPort();
     }
 
     /** An explicit Authorization header always takes precedence over browser cookies. */
@@ -200,6 +267,7 @@ public final class AuthService {
     /** Verifies credentials and publishes a session only into the originating HTTP lifecycle. */
     public static @NotNull LoginResult login(long generation, @NotNull String username, @NotNull String password,
         boolean rememberMe) {
+        if (!AE2Controller.isCurrentHTTPLifecycle(generation)) return LoginResult.failure(ApiStatus.SERVER_STOPPING);
         WebPrincipal principal;
         String credential;
         if (username.equalsIgnoreCase("admin") || !Config.INSTANCE.general.publicMode) {
@@ -268,6 +336,8 @@ public final class AuthService {
     /** The online-player lookup runs on the game thread; password hashing runs on the caller's HTTP thread. */
     public static @NotNull RegistrationResult register(long generation, @NotNull String username,
         @NotNull String password) {
+        if (!AE2Controller.isCurrentHTTPLifecycle(generation))
+            return new RegistrationResult(ApiStatus.SERVER_STOPPING, null);
         UUID uuid;
         try {
             uuid = AE2Controller.findOnlinePlayerOnServerThread(username);
@@ -300,9 +370,12 @@ public final class AuthService {
             if (registration == null) return ConfirmationResult.NOT_PENDING;
             if (!registration.token()
                 .equals(token)) return ConfirmationResult.INVALID_TOKEN;
-            registrations.remove(player.uuid);
         }
-        CoreData.setPassword(player, registration.passwordHash());
+        if (!CoreData.setPassword(player, registration.passwordHash())) return ConfirmationResult.STORAGE_UNAVAILABLE;
+        synchronized (authenticationStateLock) {
+            // Do not consume a newer registration submitted while account data was being saved.
+            registrations.remove(player.uuid, registration);
+        }
         return ConfirmationResult.SUCCESS;
     }
 

@@ -50,9 +50,11 @@ public final class ConfigSettings {
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public String password = PasswordHelper.generateDefaultPassword();
 
-        /** Grant administrator access to loopback clients without a password. */
+        /** Grant password-free administrator access to loopback clients using a local authority and origin. */
         @Path("allow_no_password_on_localhost")
-        @Comment("Allow loopback clients to access the panel as admin without a password.")
+        @Comment({
+            "Allow loopback clients using localhost (including subdomains) or a loopback IP to access the panel as admin without a password.",
+            "A browser Origin, when present, must match the request's protocol, host and port." })
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean allowNoPasswordOnLocalhost = true;
 
@@ -71,9 +73,12 @@ public final class ConfigSettings {
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public boolean publicMode = true;
 
-        /** Maximum unauthenticated requests per client per minute, from 1 to 1000. */
+        /**
+         * Maximum unauthenticated requests and credential attempts per client per minute, from 1 to 1000.
+         */
         @Path("max_requests_before_logged_in_per_minute")
-        @Comment("Unauthenticated requests per client per minute (1-1000).")
+        @Comment({ "Unauthenticated requests per client per minute (1-1000).",
+            "Login and registration attempts use this same budget, even with a valid session." })
         @WebSetting(WebSetting.Access.FILE_ONLY)
         public int maxRequestsBeforeLoggedInPerMinute = 20;
 

@@ -29,6 +29,16 @@ public final class GridAccess {
         return player != null && grid.web$hasAccess(player.uuid);
     }
 
+    /** Server thread only: resolves one validated binding and checks its current native availability. */
+    public static @Nullable View find(@NotNull StableKey key) throws IOException {
+        GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        synchronized (registry) {
+            if (!registry.isInitialized()) throw new IOException("Grid identities are not initialized for this save");
+            IAEGrid grid = registry.getGrid(key);
+            return GridFilter.isUsable(grid) ? new View(grid, key) : null;
+        }
+    }
+
     /** Server thread only: resolves currently usable grids without reading their permission maps. */
     public static @NotNull List<View> list(@NotNull IAE ae) throws IOException {
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;

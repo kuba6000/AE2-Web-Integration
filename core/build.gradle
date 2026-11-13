@@ -126,6 +126,8 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // Archive-boundary fixtures encode padded PNG pages concurrently.
+    maxHeapSize = '2g'
 }
 
 sourceSets {

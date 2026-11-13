@@ -32,10 +32,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
     }
 
     public static ApiResponse of(int status, @NotNull IResponseBody body) {
-        return new ApiResponse(
-            status,
-            GSONUtils.GSON_BUILDER.create()
-                .toJson(body));
+        return new ApiResponse(status, GSONUtils.GSON.toJson(body));
     }
 
     /** Serialize eagerly within an uncompressed UTF-8 byte budget and allow negotiated compression. */
@@ -43,8 +40,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
         if (maxBytes < 0) throw new IllegalArgumentException("Negative response limit");
         LimitedBytes bytes = new LimitedBytes(maxBytes);
         Writer writer = new OutputStreamWriter(bytes, UTF_8);
-        GSONUtils.GSON_BUILDER.create()
-            .toJson(body, writer);
+        GSONUtils.GSON.toJson(body, writer);
         try {
             writer.flush();
         } catch (IOException failure) {

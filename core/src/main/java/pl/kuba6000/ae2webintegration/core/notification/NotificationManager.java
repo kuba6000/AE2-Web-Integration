@@ -13,6 +13,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
@@ -26,18 +27,28 @@ public class NotificationManager extends Thread {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - WEBHOOK NOTIFICATION INTEGRATION");
 
-    private static NotificationManager thread;
+    private static @Nullable NotificationManager thread;
 
-    private static final BlockingQueue<IMessage> toPush = new LinkedBlockingQueue<>();
-    private static volatile List<INotificationDestination> destinations = Collections.emptyList();
+    private static final int MAX_PENDING_MESSAGES = 256;
+    private final BlockingQueue<IMessage> toPush = new LinkedBlockingQueue<>(MAX_PENDING_MESSAGES);
+    private volatile List<INotificationDestination> destinations;
+    private volatile boolean running = true;
 
     private static final long FRACTIONAL_SECONDS_THRESHOLD_MILLIS = 5000L;
 
-    public static void init() {
-        LOG.info("Initializing NotificationManager");
-        if (thread != null) shutdown();
+    private NotificationManager(List<INotificationDestination> destinations) {
+        super("AE2Web-Notifications");
+        this.destinations = destinations;
+        setDaemon(true);
+    }
 
-        reloadSettings();
+    public static synchronized void init() {
+        LOG.info("Initializing NotificationManager");
+        shutdown();
+
+        List<INotificationDestination> destinations = configuredDestinations();
+        NotificationManager worker = new NotificationManager(destinations);
+        thread = worker;
 
         if (!Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
@@ -49,29 +60,36 @@ public class NotificationManager extends Thread {
                 Notifications will be disabled!""", Severity.WARNING));
         }
 
-        thread = new NotificationManager();
-        thread.setDaemon(true);
-        thread.start();
+        worker.start();
     }
 
     /** Replaces destinations without starting a worker or sending a startup notification. */
-    public static void reloadSettings() {
+    public static synchronized void reloadSettings() {
+        if (thread != null) thread.destinations = configuredDestinations();
+    }
+
+    private static List<INotificationDestination> configuredDestinations() {
         List<INotificationDestination> updated = new ArrayList<>();
         DiscordDestination discord = new DiscordDestination();
         if (discord.isUsable()) updated.add(discord);
         NtfyDestination ntfy = new NtfyDestination();
         if (ntfy.isUsable()) updated.add(ntfy);
-        destinations = Collections.unmodifiableList(updated);
+        return Collections.unmodifiableList(updated);
     }
 
-    public static void shutdown() {
-        thread.interrupt();
+    public static synchronized void shutdown() {
+        NotificationManager previous = thread;
         thread = null;
+        if (previous != null) {
+            previous.running = false;
+            previous.interrupt();
+            previous.toPush.clear();
+        }
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored") // Enqueue success is not exposed by this fire-and-forget API.
-    public static void postMessageNonBlocking(IMessage message) {
-        toPush.offer(message);
+    @SuppressWarnings("ResultOfMethodCallIgnored") // Fire-and-forget delivery drops newest when full or stopped.
+    public static synchronized void postMessageNonBlocking(IMessage message) {
+        if (thread != null) thread.toPush.offer(message);
     }
 
     public static String formatDuration(long durationMillis) {
@@ -97,17 +115,26 @@ public class NotificationManager extends Thread {
             && craftedAmount >= Config.INSTANCE.notifications.minimumCraftingAmount;
     }
 
-    private static void postMessage(IMessage message) {
+    private void postMessage(IMessage message) {
         for (INotificationDestination destination : destinations) {
-            if (destination.supports(message)) {
-                destination.sendNotification(message);
+            if (!running) return;
+            try {
+                if (destination.supports(message)) {
+                    destination.sendNotification(message);
+                }
+            } catch (RuntimeException failure) {
+                // Destination exceptions can contain webhook credentials or player/resource names.
+                LOG.warn(
+                    "Notification delivery failed ({})",
+                    failure.getClass()
+                        .getSimpleName());
             }
         }
     }
 
     @Override
     public void run() {
-        while (!isInterrupted()) {
+        while (running && !isInterrupted()) {
             try {
                 postMessage(toPush.take());
             } catch (InterruptedException e) {

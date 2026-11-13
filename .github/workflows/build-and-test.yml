@@ -20,6 +20,10 @@ jobs:
       run:
         working-directory: core
     runs-on: ubuntu-24.04
+    container:
+      # Keep the image version aligned with core/tools/ui-tests/package-lock.json.
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
     steps:
       - name: Checkout core
         uses: actions/checkout@v4
@@ -35,16 +39,6 @@ jobs:
       - name: Install browser test tools
         working-directory: core/tools/ui-tests
         run: npm ci
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('core/tools/ui-tests/package-lock.json') }}
-
-      - name: Install Playwright Chromium
-        working-directory: core/tools/ui-tests
-        run: npx playwright install --with-deps chromium
 
       - name: Test terminal in Chromium
         working-directory: core/tools/ui-tests
