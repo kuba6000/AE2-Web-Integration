@@ -77,6 +77,14 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
     }
 
     @Shadow
+    public abstract boolean canEmitFor(AEKey key);
+
+    @Override
+    public boolean web$canEmitFor(IAEKey key) {
+        return canEmitFor((AEKey) key);
+    }
+
+    @Shadow
     public abstract Set<AEKey> getCraftables(AEKeyFilter filter);
 
     @Override
