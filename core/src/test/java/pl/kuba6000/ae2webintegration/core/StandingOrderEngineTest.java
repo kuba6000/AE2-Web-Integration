@@ -375,7 +375,7 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.calculations.get(0).future.completeExceptionally(new IllegalStateException("No patterns"));
         tick(0);
         assertEquals(SUBMIT_FAILED, status(order));
-        assertEquals("Calculation failed: No patterns", snapshot(order).message());
+        assertEquals("Calculation failed", snapshot(order).message());
         tick(30_000);
         assertEquals(2, grid.calculations.size());
     }
@@ -514,9 +514,7 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.failReads = true;
         tick(MINUTE);
         assertEquals(WAITING_FOR_STOCK, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("Native read failed"));
+        assertEquals("The last stock read failed", snapshot(order).message());
         grid.failReads = false;
         grid.stock("so-plastic", 100);
         tick(2 * MINUTE);
@@ -1155,6 +1153,60 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         assertEquals(CALCULATING, status(order));
         assertEquals(32, grid.calculations.get(1).amount);
+    }
+
+    private void rename(StableKey order, int storedOrdinal, String name) {
+        engine.post(
+            gridKey,
+            new StandingOrderStore.Valid(
+                order,
+                storedOrdinal,
+                "admin",
+                new StandingOrderDefinition(name, true, below("so-plastic", 1000), fixed("so-plastic", 64), 0)));
+    }
+
+    @Test
+    void renamingAnOrderKeepsItsRunningCalculationAndTheNewNameIsUsedForTheSubmission() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        int stored = ordinal;
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        assertEquals(CALCULATING, status(order));
+        OrderGrid.Calculation calculation = grid.calculations.get(0);
+        rename(order, stored, "Renamed");
+        tick(0);
+        assertEquals(CALCULATING, status(order));
+        assertFalse(calculation.future.isCancelled());
+        assertEquals(1, grid.calculations.size());
+        calculation.future.complete(new FakeJob(false));
+        tick(0);
+        assertEquals("Renamed", grid.submissions.get(0).requester.orderName());
+    }
+
+    @Test
+    void renamingAnOrderKeepsTheBackoffOfItsFailureButAnyOtherEditClearsIt() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        int stored = ordinal;
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(true));
+        tick(0);
+        assertEquals(BLOCKED_MISSING, status(order));
+        rename(order, stored, "Renamed");
+        tick(0);
+        tick(1000);
+        assertEquals(BLOCKED_MISSING, status(order));
+        assertEquals(1, grid.calculations.size(), "The backoff still holds");
+        post(order, "Renamed", below("so-plastic", 1000), fixed("so-plastic", 32), true, 0);
+        tick(0);
+        assertEquals(CALCULATING, status(order));
+        assertEquals(2, grid.calculations.size());
     }
 
     private static final class Variant extends ItemIdentityRequestTest.Resource {

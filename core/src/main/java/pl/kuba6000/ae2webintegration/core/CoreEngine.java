@@ -38,6 +38,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
 import pl.kuba6000.ae2webintegration.core.telemetry.Telemetry;
@@ -94,6 +95,7 @@ public class CoreEngine {
     private static volatile @Nullable CpuLiveCoordinator cpuLive;
     private static volatile @Nullable StandingOrderStore standingOrderStore;
     private static volatile @Nullable StandingOrderEngine standingOrders;
+    private static volatile @Nullable StandingOrderEditor standingOrderEditor;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -205,6 +207,7 @@ public class CoreEngine {
             }
             standingOrders = orders;
             standingOrderStore = orderStore;
+            standingOrderEditor = new StandingOrderEditor(orderStore, orders, System::nanoTime);
             themes.close();
             themes = ThemeCatalog.load(
                 Config.getConfigFile("themes")
@@ -447,7 +450,7 @@ public class CoreEngine {
         if (previousStreams != null) previousStreams.close();
     }
 
-    /** Stored standing orders for HTTP workers; changes must also be posted to {@link #getStandingOrders()}. */
+    /** Stored standing orders for HTTP workers to read; changes go through {@link #getStandingOrderEditor()}. */
     public static @Nullable StandingOrderStore getStandingOrderStore() {
         return standingOrderStore;
     }
@@ -455,6 +458,11 @@ public class CoreEngine {
     /** Server-thread engine of the standing orders; its posting and status methods are safe from any thread. */
     public static @Nullable StandingOrderEngine getStandingOrders() {
         return standingOrders;
+    }
+
+    /** The only way HTTP workers change standing orders; it keeps the store and the engine in step. */
+    public static @Nullable StandingOrderEditor getStandingOrderEditor() {
+        return standingOrderEditor;
     }
 
     public static @Nullable CraftingHistoryService getCraftingHistory() {
@@ -472,6 +480,7 @@ public class CoreEngine {
         StandingOrderEngine orders = standingOrders;
         standingOrders = null;
         standingOrderStore = null;
+        standingOrderEditor = null;
         if (orders != null) orders.close();
         StorageTrackingCoordinator coordinator = storageCoordinator;
         if (coordinator != null) {

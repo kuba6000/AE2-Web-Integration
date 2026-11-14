@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.AbstractCollection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -101,6 +102,7 @@ class ApiRoutingHttpTest extends GridTestScope {
             }
         });
         router.register(Echo.class);
+        router.register(EchoTree.class);
         router.register(Read.class);
         router.register(FailingRead.class);
         router.register(DetachedRead.class);
@@ -225,6 +227,27 @@ class ApiRoutingHttpTest extends GridTestScope {
         @Override
         public void handle() {
             succeed(new Output(name, input.count(), input.enabled()));
+        }
+    }
+
+    @Endpoint(method = HttpMethod.POST, path = "/api/echo-tree")
+    public static class EchoTree extends ISyncedRequest {
+
+        @Body
+        Node root;
+
+        @Desugar
+        public record Node(@NotNull String label, @OptionalInput List<Node> children) {}
+
+        private static int count(Node node) {
+            int total = 1;
+            if (node.children() != null) for (Node child : node.children()) total += count(child);
+            return total;
+        }
+
+        @Override
+        public void handle() {
+            succeed(count(root));
         }
     }
 
@@ -430,6 +453,44 @@ class ApiRoutingHttpTest extends GridTestScope {
                     "Authorization: Bearer valid\r\nContent-Type: application/json\r\n",
                     body).status());
         }
+    }
+
+    @Test
+    void listsBindOnlyWhereTheTypedBodyDeclaresThemAndNestingIsBounded() throws Exception {
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        Reply tree = request(
+            "POST",
+            "/api/echo-tree",
+            headers,
+            "{\"label\":\"a\",\"children\":[{\"label\":\"b\"},{\"label\":\"c\",\"children\":[]},"
+                + "{\"label\":\"d\",\"children\":[{\"label\":\"e\"}]}]}");
+        assertEquals(HTTP_OK, tree.status());
+        assertEquals(
+            5,
+            tree.json()
+                .get("data")
+                .getAsInt());
+        // Every level is an object holding a list, so eight levels below the root reach the limit of sixteen
+        // nested containers.
+        assertEquals(HTTP_OK, request("POST", "/api/echo-tree", headers, nested(8)).status());
+        assertEquals(HTTP_BAD_REQUEST, request("POST", "/api/echo-tree", headers, nested(9)).status());
+        for (String body : new String[] { "{\"label\":\"a\",\"children\":{}}", "{\"label\":\"a\",\"children\":[1]}",
+            "{\"label\":\"a\",\"children\":[{\"label\":\"b\",\"label\":\"c\"}]}", "{\"label\":[\"a\"]}",
+            "[{\"label\":\"a\"}]", "{\"label\":\"a\",\"children\":[{}]}" }) {
+            assertEquals(HTTP_BAD_REQUEST, request("POST", "/api/echo-tree", headers, body).status(), body);
+        }
+        assertEquals(
+            HTTP_BAD_REQUEST,
+            request("PATCH", "/api/echo/example", headers, "{\"count\":[7]}").status(),
+            "A list is not a scalar member");
+    }
+
+    private static String nested(int levels) {
+        StringBuilder body = new StringBuilder();
+        for (int level = 0; level < levels; level++) body.append("{\"label\":\"n\",\"children\":[");
+        body.append("{\"label\":\"leaf\"}");
+        for (int level = 0; level < levels; level++) body.append("]}");
+        return body.toString();
     }
 
     @Test

@@ -188,6 +188,39 @@ class StandingOrderStoreTest extends GridTestScope {
     }
 
     @Test
+    void snapshotReadsTheGridsOrdersWithTheDescriptionsOfTheResourcesTheyReferenceOnly() throws Exception {
+        open();
+        StableKey other = grid(88505);
+        Valid first = store.create(grid, WebPrincipal.admin(), full(), descriptions());
+        Valid second = store.create(grid, WebPrincipal.admin(), simple("Second", PLATE), Collections.emptyMap());
+        store.create(other, WebPrincipal.admin(), simple("Theirs", DUST), descriptions());
+        StandingOrderStore.Snapshot snapshot = store.snapshot(grid);
+        assertEquals(Arrays.<Entry>asList(first, second), snapshot.orders());
+        Map<StableKey, ResourceDescriptor> expected = new HashMap<>();
+        for (StableKey resource : Arrays.asList(PLATE, INGOT, DUST))
+            expected.put(resource, descriptions().get(resource));
+        assertEquals(expected, snapshot.resources());
+        assertTrue(store.replace(grid, first.key(), simple("First", PLATE), Collections.emptyMap()));
+        StandingOrderStore.Snapshot reduced = store.snapshot(grid);
+        assertEquals(
+            Collections.singleton(PLATE),
+            reduced.resources()
+                .keySet());
+        assertEquals(
+            Collections.singleton(DUST),
+            store.snapshot(other)
+                .resources()
+                .keySet());
+        StandingOrderStore.Snapshot empty = store.snapshot(TestGridFixtures.key(1));
+        assertTrue(
+            empty.orders()
+                .isEmpty());
+        assertTrue(
+            empty.resources()
+                .isEmpty());
+    }
+
+    @Test
     void replaceChangesTheDefinitionAndResourcesButKeepsIdentityOrderAndCreator() throws Exception {
         open();
         Valid first = store.create(grid, TestGridFixtures.principal(3), full(), descriptions());

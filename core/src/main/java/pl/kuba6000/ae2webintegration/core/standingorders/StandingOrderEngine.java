@@ -106,6 +106,9 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     // ----- Boundary to other threads -----
 
+    // The engine applies posts in arrival order and never consults the store, so a caller must post each order's
+    // changes in the order the store committed them; StandingOrderEditor does this for HTTP changes.
+
     /** Adds an order or replaces its definition; a stored order that cannot be decoded is posted as invalid. */
     public void post(@NotNull StableKey grid, @NotNull StandingOrderStore.Entry entry) {
         inbox.add(new Define(grid, entry));
@@ -142,7 +145,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         // A complete read lists every stored and craftable resource, so a referenced one that is absent holds zero.
         for (StableKey resource : state.referenced) quantities.putIfAbsent(resource, 0L);
         state.baseline = new StockBaseline(observation.observedAt(), quantities);
-        state.stockFailure = null;
+        state.stockFailed = false;
         state.changed = true;
     }
 
@@ -151,7 +154,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         GridState state = grids.get(grid);
         if (state == null) return;
         state.baseline = null;
-        state.stockFailure = describe(failure);
+        state.stockFailed = true;
         state.changed = true;
     }
 
@@ -229,6 +232,10 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             order = new OrderState(entry.key(), gridKey);
             orders.put(entry.key(), order);
             grid.orders.add(order);
+        } else if (renamedOnly(order, entry)) {
+            // Nothing the engine evaluates changed, so a running calculation and the failure state stay as they are.
+            order.definition = ((StandingOrderStore.Valid) entry).definition();
+            return;
         } else {
             cancelCalculation(order);
         }
@@ -267,6 +274,18 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             coordinator.requestStockRead(grid.key);
         }
         enqueue(order);
+    }
+
+    private static boolean renamedOnly(OrderState order, StandingOrderStore.Entry entry) {
+        StandingOrderDefinition previous = order.definition;
+        if (previous == null || !(entry instanceof StandingOrderStore.Valid valid)) return false;
+        StandingOrderDefinition next = valid.definition();
+        return order.ordinal == entry.ordinal() && new StandingOrderDefinition(
+            next.name(),
+            previous.enabled(),
+            previous.trigger(),
+            previous.action(),
+            previous.cooldownSeconds()).equals(next);
     }
 
     private void delete(StableKey gridKey, StableKey orderKey) {
@@ -320,7 +339,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             grid.seen = availability == Availability.UNAVAILABLE ? null : live;
             grid.live = availability == Availability.ACTIVE ? live : null;
             grid.baseline = null;
-            grid.stockFailure = null;
+            grid.stockFailed = false;
             for (OrderState order : grid.orders) {
                 cancelCalculation(order);
                 enqueue(order);
@@ -372,7 +391,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                     enqueueFirst(order);
                 }
             } catch (ExecutionException | RuntimeException failure) {
-                fail(order, StandingOrderStatus.SUBMIT_FAILED, "Calculation failed: " + describe(failure), now);
+                LOG.warn("Calculation of standing order {} failed", order.key, failure);
+                fail(order, StandingOrderStatus.SUBMIT_FAILED, "Calculation failed", now);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread()
                     .interrupt();
@@ -415,7 +435,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         } catch (RuntimeException failure) {
             LOG.warn("Standing order {} failed unexpectedly", order.key, failure);
             cancelCalculation(order);
-            fail(order, StandingOrderStatus.SUBMIT_FAILED, "Unexpected error: " + describe(failure), now);
+            fail(order, StandingOrderStatus.SUBMIT_FAILED, "Unexpected error", now);
         }
         publish(order, grid);
     }
@@ -490,8 +510,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             setStatus(
                 order,
                 StandingOrderStatus.WAITING_FOR_STOCK,
-                grid.stockFailure == null ? "Waiting for the first stock read of the network"
-                    : "The last stock read failed: " + grid.stockFailure,
+                grid.stockFailed ? "The last stock read failed" : "Waiting for the first stock read of the network",
                 now);
             return;
         }
@@ -648,7 +667,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             .openStandingOrder(order.key, definition.name())) {
             error = crafting.web$submitJob(plan, target, true, live);
         } catch (RuntimeException failure) {
-            error = describe(failure);
+            LOG.warn("Submitting the job of standing order {} failed", order.key, failure);
+            error = "Submitting the job failed";
         }
         if (error != null) {
             fail(order, StandingOrderStatus.SUBMIT_FAILED, error, now);
@@ -913,7 +933,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         /** The native network orders are evaluated against; present exactly while the grid is ACTIVE. */
         private @Nullable IAEGrid live;
         private @Nullable StockBaseline baseline;
-        private @Nullable String stockFailure;
+        private boolean stockFailed;
         private long intervalMillis;
         private boolean hasEnabledOrder;
         private boolean leased;

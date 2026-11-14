@@ -22,6 +22,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -80,6 +81,13 @@ public final class StandingOrderStore {
     public record Invalid(@NotNull StableKey key, int ordinal, @NotNull String createdBy,
         @NotNull InvalidStandingOrderException failure) implements Entry {}
 
+    /**
+     * A grid's orders together with the catalogue descriptions of every resource they refer to, read in one
+     * transaction.
+     */
+    @Desugar
+    public record Snapshot(@NotNull List<Entry> orders, @NotNull Map<StableKey, ResourceDescriptor> resources) {}
+
     private final @NotNull WorldDatabase database;
     private final @NotNull IntSupplier maxOrdersPerGrid;
 
@@ -92,6 +100,11 @@ public final class StandingOrderStore {
     /** The grid's orders in display order; an unknown grid has none. */
     public @NotNull List<Entry> list(@NotNull StableKey grid) throws IOException {
         return database.read(db -> load(db, grid, null));
+    }
+
+    /** The grid's orders in display order with their resources' descriptions; an unknown grid has neither. */
+    public @NotNull Snapshot snapshot(@NotNull StableKey grid) throws IOException {
+        return database.read(db -> new Snapshot(load(db, grid, null), describe(db, grid)));
     }
 
     /** The orders of every grid that has any, each in display order, for loading them all at server start. */
@@ -363,6 +376,41 @@ public final class StandingOrderStore {
             }
         }
         return entries;
+    }
+
+    private static @NotNull Map<StableKey, ResourceDescriptor> describe(@NotNull Connection db, @NotNull StableKey grid)
+        throws SQLException {
+        Map<StableKey, ResourceDescriptor> descriptions = new LinkedHashMap<>();
+        try (PreparedStatement query = db.prepareStatement("""
+            SELECT DISTINCT h.item_key, h.registry_namespace, h.registry_path, h.components, h.damage,
+                h.display_name, h.resource_type, h.base_key
+            FROM standing_order_resources r
+            JOIN standing_orders o ON o.order_key = r.order_key
+            JOIN grids g ON g.id = o.grid_id
+            JOIN history_resources h ON h.id = r.resource_id
+            WHERE g.grid_key = ?
+            ORDER BY h.item_key
+            """)) {
+            query.setString(1, grid.toString());
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    StableKey item = StableKey.parse(rows.getString(1));
+                    String base = rows.getString(8);
+                    descriptions.put(
+                        item,
+                        new ResourceDescriptor(
+                            rows.getString(2),
+                            rows.getString(3),
+                            rows.getInt(4),
+                            rows.getInt(5),
+                            rows.getString(6),
+                            ResourceType.valueOf(rows.getString(7)),
+                            item,
+                            base == null ? null : StableKey.parse(base)));
+                }
+            }
+        }
+        return descriptions;
     }
 
     private static void bind(@NotNull PreparedStatement query, @NotNull StableKey grid, @Nullable StableKey order)
