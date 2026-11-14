@@ -9,8 +9,13 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ClientAddressResolverTest {
 
@@ -34,18 +39,29 @@ class ClientAddressResolverTest {
 
     // --- nothing is trusted by default ---
 
-    @Test
-    void withoutConfigurationARemoteHeaderIsIgnored() {
-        // Loopback and same-machine peers are trusted implicitly, so use a genuinely remote peer here.
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("");
-        assertEquals(OUTSIDER, resolver.resolve(OUTSIDER, LOCAL, header("203.0.113.7"), null));
+    private static Stream<Arguments> headersFromAnUntrustedPeer() {
+        InetAddress lanDevice = addr("192.168.1.10");
+        InetAddress neighbour = addr("192.168.1.77");
+        return Stream.of(
+            // Loopback and same-machine peers are trusted implicitly, so use a genuinely remote peer here.
+            Arguments.of("no configuration", "", OUTSIDER, LOCAL, header("203.0.113.7"), null),
+            // The C-32 guard: without this, anyone could claim to be localhost and gain admin.
+            Arguments.of("spoofed localhost", "10.0.0.1", OUTSIDER, LOCAL, header("127.0.0.1"), header("127.0.0.1")),
+            // A LAN device has no localhost privileges today; trusting it would let it claim to be 127.0.0.1
+            // and, with allow_no_password_on_localhost, become admin.
+            Arguments.of("empty config and a LAN peer", "", lanDevice, LOCAL, header("127.0.0.1"), null),
+            // Same private range, but its source address is not the one it connected to.
+            Arguments.of("a different LAN machine", "", neighbour, addr("192.168.1.50"), header("127.0.0.1"), null),
+            Arguments.of("an unknown local address", "", OUTSIDER, null, header("127.0.0.1"), null));
     }
 
-    @Test
-    void spoofedForwardedForFromAnUntrustedPeerIsIgnored() {
-        // The C-32 guard: without this, anyone could claim to be localhost and gain admin.
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("10.0.0.1");
-        assertEquals(OUTSIDER, resolver.resolve(OUTSIDER, LOCAL, header("127.0.0.1"), header("127.0.0.1")));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("headersFromAnUntrustedPeer")
+    void forwardingHeadersFromAnUntrustedPeerAreIgnored(String description, String config, InetAddress peer,
+        InetAddress local, List<String> forwardedFor, List<String> realIp) {
+        ClientAddressResolver resolver = ClientAddressResolver.fromConfig(config);
+        assertFalse(resolver.isTrusted(peer));
+        assertEquals(peer, resolver.resolve(peer, local, forwardedFor, realIp));
     }
 
     // --- trusted peer ---
@@ -84,32 +100,15 @@ class ClientAddressResolverTest {
 
     // --- CIDR ---
 
-    @Test
-    void cidrEntryMatchesInsideTheRangeOnly() {
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("10.0.0.0/8");
-        assertTrue(resolver.isTrusted(addr("10.1.2.3")));
-        assertTrue(resolver.isTrusted(addr("10.255.255.255")));
-        assertFalse(resolver.isTrusted(addr("11.0.0.1")));
-    }
-
-    @Test
-    void cidrWithNonZeroHostBitsStillMatchesItsNetwork() {
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("192.168.1.55/24");
-        assertTrue(resolver.isTrusted(addr("192.168.1.1")));
-        assertFalse(resolver.isTrusted(addr("192.168.2.1")));
-    }
-
-    @Test
-    void addressFamiliesDoNotMatchAcrossEachOther() {
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("10.0.0.0/8");
-        assertFalse(resolver.isTrusted(addr("::1")));
-    }
-
-    @Test
-    void ipv6EntriesAreSupported() {
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("::1");
-        assertTrue(resolver.isTrusted(addr("::1")));
-        assertFalse(resolver.isTrusted(addr("::2")));
+    @ParameterizedTest(name = "{0} trusts {1}: {2}")
+    @CsvSource({ "10.0.0.0/8, 10.1.2.3, true", "10.0.0.0/8, 10.255.255.255, true", "10.0.0.0/8, 11.0.0.1, false",
+        "192.168.1.55/24, 192.168.1.1, true", "192.168.1.55/24, 192.168.2.1, false", "10.0.0.0/8, ::1, false",
+        "::1, ::1, true", "::1, ::2, false" })
+    void configuredEntriesTrustExactlyTheirOwnNetwork(String config, String probe, boolean expected) {
+        assertEquals(
+            expected,
+            ClientAddressResolver.fromConfig(config)
+                .isTrusted(addr(probe)));
     }
 
     // --- robustness: never throw, always fall back to the peer ---
@@ -155,15 +154,6 @@ class ClientAddressResolverTest {
         assertEquals(CLIENT, resolver.resolve(addr("::1"), LOCAL, header("203.0.113.7"), null));
     }
 
-    @Test
-    void anEmptyConfigDoesNotTrustTheLocalNetwork() {
-        // A LAN device has no localhost privileges today; trusting it would let it claim to be 127.0.0.1
-        // and, with allow_no_password_on_localhost, become admin.
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("");
-        assertFalse(resolver.isTrusted(addr("192.168.1.10")));
-        assertEquals(addr("192.168.1.10"), resolver.resolve(addr("192.168.1.10"), LOCAL, header("127.0.0.1"), null));
-    }
-
     // --- a proxy on this machine that targets a real interface instead of localhost ---
 
     @Test
@@ -186,20 +176,6 @@ class ClientAddressResolverTest {
 
         assertEquals(own, resolved);
         assertFalse(resolved.isLoopbackAddress(), "must not be granted localhost trust");
-    }
-
-    @Test
-    void aDifferentLanMachineIsStillNotTrusted() {
-        // Same private range, but its source address is not the one it connected to.
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("");
-        InetAddress neighbour = addr("192.168.1.77");
-        assertEquals(neighbour, resolver.resolve(neighbour, addr("192.168.1.50"), header("127.0.0.1"), null));
-    }
-
-    @Test
-    void anUnknownLocalAddressDoesNotWidenTrust() {
-        ClientAddressResolver resolver = ClientAddressResolver.fromConfig("");
-        assertEquals(OUTSIDER, resolver.resolve(OUTSIDER, null, header("127.0.0.1"), null));
     }
 
     @Test

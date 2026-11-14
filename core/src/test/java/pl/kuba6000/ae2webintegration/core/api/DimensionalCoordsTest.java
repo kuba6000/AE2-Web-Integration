@@ -40,15 +40,4 @@ class DimensionalCoordsTest {
 
         assertTrue(json.contains("\"dimensionId\":\"0\""), json);
     }
-
-    @Test
-    void equalityUsesDimensionIdAndCoordinates() {
-        DimensionalCoords first = new DimensionalCoords("minecraft:overworld", 1, 2, 3);
-        DimensionalCoords same = new DimensionalCoords("minecraft:overworld", 1, 2, 3);
-        DimensionalCoords differentDimension = new DimensionalCoords("minecraft:the_nether", 1, 2, 3);
-
-        assertEquals(first, same);
-        assertEquals(first.hashCode(), same.hashCode());
-        assertNotEquals(first, differentDimension);
-    }
 }

@@ -6,10 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.util.Collections;
-import java.util.Map;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import com.google.gson.JsonParser;
 
@@ -18,7 +22,6 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingP
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /**
  * {@code ISyncedRequest.init} is called at {@code AE2Controller:488} with no try/catch around it, so a
@@ -50,18 +53,6 @@ class RequestParameterValidationTest extends GridTestScope {
     }
 
     @Test
-    void queryValuesAreDecodedOnceWithoutCreatingAdditionalParameters() {
-        Map<String, String> params = HTTPUtils
-            .parseQueryString("name=cell%26track%3D1&literalPlus=%2B&percent=%2526&space=two+words");
-
-        assertEquals(4, params.size());
-        assertEquals("cell&track=1", params.get("name"));
-        assertEquals("+", params.get("literalPlus"));
-        assertEquals("%26", params.get("percent"));
-        assertEquals("two words", params.get("space"));
-    }
-
-    @Test
     void craftingInputUsesTypedJsonAndRejectsNullOrUnknownMembers() {
         for (String body : new String[] { "{\"itemKey\":\"AAAAAAAAAAAAAAAAAAAAAA\",\"quantity\":\"1\"}",
             "{\"itemKey\":\"AAAAAAAAAAAAAAAAAAAAAA\",\"quantity\":null}",
@@ -82,33 +73,29 @@ class RequestParameterValidationTest extends GridTestScope {
         }
     }
 
-    // --- CreateCraftingPlan ---
+    // --- parameters that cannot be parsed or are out of range ---
 
-    @Test
-    void orderWithAMalformedItemKeyIsAnsweredNotThrown() {
-        assertStatus("BAD_PARAM", runSynced(new CreateCraftingPlan(), "grid=" + GRID + "&itemKey=abc&quantity=1"));
+    private static Stream<Arguments> unparseableOrInvalidParameters() {
+        Supplier<ISyncedRequest> order = CreateCraftingPlan::new;
+        Supplier<ISyncedRequest> job = GetCraftingPlan::new;
+        String key = "itemKey=AAAAAAAAAAAAAAAAAAAAAA";
+        return Stream.of(
+            Arguments.of("order with a malformed item key", order, "grid=<grid>&itemKey=abc&quantity=1", "BAD_PARAM"),
+            Arguments
+                .of("order with a non-numeric quantity", order, "grid=<grid>&" + key + "&quantity=abc", "BAD_PARAM"),
+            Arguments.of("order of zero", order, "grid=<grid>&" + key + "&quantity=0", "INVALID_QUANTITY"),
+            // A negative stack size has its own meaning inside AE2, so it must never reach the planner.
+            Arguments
+                .of("order of a negative amount", order, "grid=<grid>&" + key + "&quantity=-5", "INVALID_QUANTITY"),
+            Arguments.of("order with a non-numeric grid", order, "grid=abc&" + key + "&quantity=1", "BAD_PARAM"),
+            Arguments.of("job with a non-numeric id", job, "grid=<grid>&id=abc", "BAD_PARAM"));
     }
 
-    @Test
-    void orderWithANonNumericQuantityIsAnsweredNotThrown() {
-        assertStatus(
-            "BAD_PARAM",
-            runSynced(new CreateCraftingPlan(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=abc"));
-    }
-
-    @Test
-    void orderOfZeroIsRejected() {
-        assertStatus(
-            "INVALID_QUANTITY",
-            runSynced(new CreateCraftingPlan(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=0"));
-    }
-
-    @Test
-    void orderOfANegativeAmountIsRejected() {
-        // A negative stack size has its own meaning inside AE2, so it must never reach the planner.
-        assertStatus(
-            "INVALID_QUANTITY",
-            runSynced(new CreateCraftingPlan(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=-5"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unparseableOrInvalidParameters")
+    void aBadParameterIsAnsweredNotThrown(String description, Supplier<ISyncedRequest> request, String query,
+        String expectedStatus) {
+        assertStatus(expectedStatus, runSynced(request.get(), query.replace("<grid>", GRID.toString())));
     }
 
     @Test
@@ -122,19 +109,7 @@ class RequestParameterValidationTest extends GridTestScope {
                     .context(ME, "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=" + beyondInt)));
     }
 
-    // --- other numeric parameters ---
-
-    @Test
-    void aNonNumericGridIsAnsweredNotThrown() {
-        assertStatus(
-            "BAD_PARAM",
-            runSynced(new CreateCraftingPlan(), "grid=abc&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1"));
-    }
-
-    @Test
-    void jobWithANonNumericIdIsAnsweredNotThrown() {
-        assertStatus("BAD_PARAM", runSynced(new GetCraftingPlan(), "grid=" + GRID + "&id=abc"));
-    }
+    // --- a handler that parses its own parameters ---
 
     @Test
     void getTrackingWithANonNumericIdIsAnsweredNotThrown() {

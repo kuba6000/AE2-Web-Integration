@@ -14,13 +14,17 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -227,11 +231,23 @@ class OutputSnapshotTest extends GridTestScope {
         }
     }
 
-    @Test
-    void failedIdentityPreservesDisplayWithOrdinaryNullableJsonFields() {
+    private static Stream<Arguments> nativeIdentityFailures() {
+        return Stream.of(
+            Arguments
+                .of("codec throws IllegalStateException", (Consumer<Resource>) key -> key.brokenIdentity = true, 9L),
+            Arguments.of(
+                "identity throws UnsupportedOperationException",
+                (Consumer<Resource>) key -> key.unsupportedIdentity = true,
+                4L));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nativeIdentityFailures")
+    void failedNativeIdentityCannotEscapeSnapshotCaptureAndPreservesDisplayWithNullableJsonFields(String description,
+        Consumer<Resource> failure, long quantity) {
         Resource key = new Resource();
-        key.brokenIdentity = true;
-        ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, 9)));
+        failure.accept(key);
+        ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, quantity)));
         assertNotNull(snapshot);
         Map<String, ResourceStack> response = new LinkedHashMap<>();
         response.put("output", new ResourceStack(snapshot, null));
@@ -246,7 +262,7 @@ class OutputSnapshotTest extends GridTestScope {
             output.get("displayName")
                 .getAsString());
         assertEquals(
-            9,
+            quantity,
             output.get("quantity")
                 .getAsLong());
         assertTrue(
@@ -269,25 +285,6 @@ class OutputSnapshotTest extends GridTestScope {
         assertEquals(requestedKey, output.itemKey);
         assertEquals(37, output.quantity);
         assertEquals("Resource", output.displayName);
-    }
-
-    @Test
-    void unsupportedNativeIdentityCannotEscapeSnapshotCapture() {
-        Resource key = new Resource();
-        key.unsupportedIdentity = true;
-        ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, 4)));
-        assertNotNull(snapshot);
-        JsonObject json = new JsonParser().parse(
-            GSON_BUILDER.create()
-                .toJson(new ResourceStack(snapshot, null)))
-            .getAsJsonObject();
-        assertEquals(
-            4,
-            json.get("quantity")
-                .getAsLong());
-        assertTrue(
-            json.get("itemKey")
-                .isJsonNull());
     }
 
     @Test

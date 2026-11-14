@@ -657,20 +657,6 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void defaultUiRequiresAuthenticationAndIgnoresObsoleteSelectors() throws Exception {
-        startApi();
-        String token = login();
-        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
-            Response loginPage = get(path, null);
-            assertEquals(HTTP_OK, loginPage.status());
-            assertEquals(pageResource("/assets/login.html"), loginPage.body());
-            Response page = get(path, token);
-            assertEquals(HTTP_OK, page.status());
-            assertEquals(pageResource("/assets/web/index.html"), page.body());
-        }
-    }
-
-    @Test
     void contextProvidesPublicMetadataWithoutGrantingAccess() throws Exception {
         startApi();
         HttpURLConnection connection = connection("/api/context", null);
@@ -934,10 +920,10 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
+    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisionsAndIgnoreObsoleteSelectors() throws Exception {
         startApi();
         String token = login();
-        for (String path : new String[] { "/", "/index.html" }) {
+        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
             HttpURLConnection anonymous = connection(path, null);
             assertEquals(pageResource("/assets/login.html"), read(anonymous).body());
             assertEquals("no-store", anonymous.getHeaderField("Cache-Control"));
@@ -1325,22 +1311,6 @@ class ServerLifecycleHttpTest {
 
         assertEquals(HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", responseStatus(exchange));
-        assertEquals(32, AE2Controller.requests.size());
-    }
-
-    @Test
-    void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
-        worlds.initialize(new File(tempDirectory, "test-save"));
-        startHttpServer();
-        String token = login();
-        fillServerThreadQueue();
-
-        Response response = get("/api/grids", token);
-
-        assertEquals(HTTP_UNAVAILABLE, response.status());
-        assertTrue(
-            response.body()
-                .contains("\"status\":\"SERVER_BUSY\""));
         assertEquals(32, AE2Controller.requests.size());
     }
 
@@ -1933,6 +1903,7 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(busy.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
+        assertEquals(32, AE2Controller.requests.size(), "the refused request must not be enqueued");
         CoreEngine.onServerTick();
         GRID_IDENTITIES.clear();
         Response failed = performSyncedRequest(() -> get("/api/grids", token));

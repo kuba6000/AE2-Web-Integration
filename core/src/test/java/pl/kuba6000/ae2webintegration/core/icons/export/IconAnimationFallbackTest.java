@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
@@ -29,6 +30,8 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonParser;
@@ -98,18 +101,19 @@ class IconAnimationFallbackTest {
         }
     }
 
-    @Test
-    void failedControlledCleanupAbortsPublicationRatherThanStartingLiveSamples() throws Exception {
-        Renderer renderer = new Renderer();
-        renderer.failClose = true;
-        finish(session(renderer), renderer.clock);
-        assertNoPack();
+    private static Stream<Arguments> recoveryFailures() {
+        return Stream.of(
+            Arguments.of("controlled cleanup fails", (Consumer<Renderer>) renderer -> renderer.failClose = true),
+            Arguments
+                .of("readback fails while recovering", (Consumer<Renderer>) renderer -> renderer.failDrain = true));
     }
 
-    @Test
-    void readbackFailureWhileRecoveringAbortsPublication() throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("recoveryFailures")
+    void aFailedRecoveryAbortsPublicationRatherThanStartingLiveSamples(String description, Consumer<Renderer> failure)
+        throws Exception {
         Renderer renderer = new Renderer();
-        renderer.failDrain = true;
+        failure.accept(renderer);
         finish(session(renderer), renderer.clock);
         assertNoPack();
     }
