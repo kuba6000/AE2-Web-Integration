@@ -8,9 +8,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -78,19 +84,21 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
         }
     }
 
-    @Test
-    void retiringTheIdentityDeniesAccessEvenWhileGridIsReferenced() {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
-        StableKey key = GRID_IDENTITIES.getKey(grid);
-        GRID_IDENTITIES.controllerRemoved(grid.position());
-        assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
+    private static Stream<Arguments> lifecycleEventsThatRetireAnAuthorizedGrid() {
+        return Stream.of(
+            Arguments.of(
+                "retiring the identity while the grid is still referenced",
+                (Consumer<TestGridFixtures.TestGrid>) grid -> GRID_IDENTITIES.controllerRemoved(grid.position())),
+            Arguments.of("stopping the save", (Consumer<TestGridFixtures.TestGrid>) grid -> GRID_IDENTITIES.clear()));
     }
 
-    @Test
-    void stoppingTheSaveDeniesAccess() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("lifecycleEventsThatRetireAnAuthorizedGrid")
+    void aLifecycleEventDeniesAccessToAPreviouslyAuthorizedPlayer(String description,
+        Consumer<TestGridFixtures.TestGrid> event) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
         StableKey key = GRID_IDENTITIES.getKey(grid);
-        GRID_IDENTITIES.clear();
+        event.accept(grid);
         assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
     }
 
@@ -101,14 +109,10 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
         assertNull(GridData.find(key));
     }
 
-    @Test
-    void malformedTokenIsRejected() {
-        assertStatus("BAD_PARAM", run(ME, "grid=invalid"));
-    }
-
-    @Test
-    void requestWithoutGridIsRejected() {
-        assertStatus("BAD_PARAM", run(ME, ""));
+    @ParameterizedTest(name = "query \"{0}\"")
+    @ValueSource(strings = { "grid=invalid", "" })
+    void aMissingOrMalformedGridTokenIsRejected(String query) {
+        assertStatus("BAD_PARAM", run(ME, query));
     }
 
     @Test

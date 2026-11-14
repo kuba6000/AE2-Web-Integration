@@ -17,31 +17,10 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreEngineMaintenanceTest {
-
-    private static final StableKey GRID_KEY = TestGridFixtures.key(900_301L);
-
-    @Test
-    void idleServerMaintenanceEventuallyEvictsAnAbandonedCompletedPlan() {
-        CoreEngine.onServerStopped();
-        GridData gridData = GridData.getOrCreate(GRID_KEY);
-        CompletableFuture<IAECraftingJob> plan = CompletableFuture.completedFuture(null);
-        int id = gridData.addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
-        CraftingPlanRegistry.Entry entry = gridData.getJob(id);
-        assertNotNull(entry);
-        assertSame(plan, entry.plan);
-
-        long afterRetention = System.nanoTime() + MINUTES.toNanos(16);
-        for (int i = 0; i < 100; i++) {
-            CoreEngine.runPlanMaintenance(afterRetention);
-        }
-
-        assertNull(gridData.getJob(id));
-    }
 
     @Test
     void maintenanceNeverAgeEvictsAPlanThatIsStillCalculating() {

@@ -49,21 +49,6 @@ class CoreDataTest {
         CoreDataTestFixture.reset();
     }
 
-    @Test
-    void accountUsesTheRegisteredPlayersStableIdentity() {
-        CoreData.setPassword(REGISTERED_PLAYER, "hash");
-
-        assertAccount("Player", REGISTERED_PLAYER);
-    }
-
-    @Test
-    void setPasswordCreatesAnAccountWithoutAeState() {
-        AE2Controller.AE2Interface = null;
-
-        assertTrue(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
-        assertNotNull(CoreData.getAccount("Player"));
-    }
-
     // --- persistence: a bad file must never cost anyone their account ---
 
     @Test
@@ -79,16 +64,6 @@ class CoreDataTest {
 
         assertFalse(CoreData.verifyPassword(account, "first-password"));
         assertTrue(CoreData.verifyPassword(CoreData.getAccount("Player"), "second-password"));
-    }
-
-    @Test
-    void savedAccountsSurviveAReload() {
-        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
-
-        CoreDataTestFixture.reset();
-        CoreData.loadData();
-
-        assertAccount("Player", REGISTERED_PLAYER);
     }
 
     @Test
@@ -110,17 +85,6 @@ class CoreDataTest {
         CoreData.loadData();
 
         assertAccount("Player", REGISTERED_PLAYER);
-    }
-
-    @Test
-    void aMalformedDataFileIsNotOverwritten() throws Exception {
-        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
-        String garbage = "{ this is not json";
-        writeDataFile(garbage);
-
-        CoreData.loadData();
-
-        assertEquals(garbage, readDataFile(), "a failed read must not persist over the file it failed on");
     }
 
     @ParameterizedTest

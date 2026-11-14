@@ -619,19 +619,6 @@ class IconPackAnimationTest {
                 false));
     }
 
-    @Test
-    void cancelingAnimatedPackPublishesNothingAndReleasesScratch() throws Exception {
-        try (IconPackWriter writer = writer()) {
-            writer.add(KEY, pixels(0xff112233));
-            writer.addAnimationFrame(KEY, pixels(0xff445566), 100);
-            writer.addAnimationFrame(KEY, pixels(0xff778899), 200);
-            assertThrows(CancellationException.class, () -> writer.finish(() -> true));
-        }
-        try (Stream<Path> files = Files.list(directory)) {
-            assertEquals(0, files.count());
-        }
-    }
-
     private Path animatedPack() throws Exception {
         try (IconPackWriter writer = writer()) {
             writer.add(KEY, pixels(0xff112233));

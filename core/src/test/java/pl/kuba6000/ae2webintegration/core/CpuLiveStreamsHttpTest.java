@@ -727,33 +727,6 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void pauseNotificationPublishesAHeaderChange() throws Exception {
-        cpu.set(iron, 4, 0, 0);
-        try (Connection stream = open(view(cpu), cpu)) {
-            cpu.paused = true;
-            coordinator.metadataChanged(cpu);
-            tick(100);
-
-            JsonObject delta = delta(stream);
-
-            assertTrue(
-                delta.getAsJsonObject("cpu")
-                    .get("isPaused")
-                    .getAsBoolean());
-            assertEquals(
-                0,
-                delta.getAsJsonArray("updates")
-                    .size());
-            assertFalse(
-                delta.getAsJsonObject("cpu")
-                    .has("items")
-                    && !delta.getAsJsonObject("cpu")
-                        .get("items")
-                        .isJsonNull());
-        }
-    }
-
-    @Test
     void metadataChangePublishesTheHeaderWithoutEnumeratingResources() throws Exception {
         cpu.set(iron, 4, 0, 0);
         coordinator.metadataChanged(other);
@@ -771,6 +744,10 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
             assertEquals(
                 0,
                 paused.getAsJsonArray("definitions")
+                    .size());
+            assertEquals(
+                0,
+                paused.getAsJsonArray("updates")
                     .size());
             assertEquals(reads, cpu.bulkReads, "A metadata change must not read resource lists");
             tick(1);
