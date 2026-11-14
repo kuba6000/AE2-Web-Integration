@@ -9,8 +9,6 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
 
 /**
  * Who requested a crafting job.
@@ -23,6 +21,9 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
 @Desugar
 public record CraftingRequester(@NotNull Source source, @Nullable PlayerIdentity player, @Nullable StableKey orderKey,
     @Nullable String orderName) {
+
+    /** Longest persisted standing order name, in characters; the crafting history column enforces it. */
+    public static final int MAX_ORDER_NAME_LENGTH = 128;
 
     public enum Source {
         PLAYER,
@@ -37,12 +38,12 @@ public record CraftingRequester(@NotNull Source source, @Nullable PlayerIdentity
             || isMissingOrPresent(isOrder, orderName)) {
             throw new IllegalArgumentException("Requester identity does not match source " + source);
         }
-        if (orderName != null) {
-            try {
-                StandingOrderValidator.validateName(orderName);
-            } catch (InvalidStandingOrderException e) {
-                throw new IllegalArgumentException("Invalid standing order name", e);
-            }
+        // Only what the history table accepts, so every stored requester loads; the name rules of an order are
+        // enforced where orders are created and edited.
+        if (orderName != null && (orderName.trim()
+            .isEmpty() || orderName.length() > MAX_ORDER_NAME_LENGTH)) {
+            throw new IllegalArgumentException(
+                "Standing order name must be 1 to " + MAX_ORDER_NAME_LENGTH + " characters");
         }
     }
 

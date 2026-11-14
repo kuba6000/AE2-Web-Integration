@@ -18,7 +18,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture values.
 class CraftingRequesterTest {
@@ -63,13 +62,21 @@ class CraftingRequesterTest {
     }
 
     @Test
-    void orderNamesFollowTheDefinitionNameRules() {
-        String longest = String.join("", Collections.nCopies(StandingOrderValidator.MAX_NAME_LENGTH, "x"));
+    void orderNamesOnlyHaveToFitTheHistoryTable() {
+        String longest = String.join("", Collections.nCopies(CraftingRequester.MAX_ORDER_NAME_LENGTH, "x"));
         assertEquals(
             longest,
             CraftingRequester.standingOrder(orderKey, longest)
                 .orderName());
-        for (String name : new String[] { "", longest + "x", " padded", "padded ", "bad\nname", "bad\u0000name" }) {
+        // The rules for the names of orders are enforced where orders are created and edited; a name that history
+        // stored under any earlier rule must still load.
+        for (String name : new String[] { " padded", "padded ", "bad\nname", "bad\u0000name", "\té \u0001" }) {
+            assertEquals(
+                name,
+                CraftingRequester.standingOrder(orderKey, name)
+                    .orderName());
+        }
+        for (String name : new String[] { "", "   ", "\t\n", longest + "x" }) {
             assertThrows(
                 IllegalArgumentException.class,
                 () -> CraftingRequester.standingOrder(orderKey, name),

@@ -390,6 +390,75 @@ class CoreEngineTest {
     }
 
     @Test
+    void standingOrdersThatCannotBeReadAtStartDoNotStopTheOtherWorldServices() throws Exception {
+        IAE previous = AE2Controller.AE2Interface;
+        TestPlatform platform = new TestPlatform(configRoot, false, true);
+        CoreEngine.init(platform);
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        try {
+            CoreEngine.onServerStarted();
+            ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("so-broken", 20, false);
+            ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771202, iron);
+            StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+            StableKey ironKey = iron.web$getKey();
+            CoreEngine.getStandingOrderStore()
+                .create(
+                    gridKey,
+                    WebPrincipal.admin(),
+                    new StandingOrderDefinition(
+                        "Keep iron",
+                        true,
+                        new Condition.StockBelow(ironKey, 5),
+                        new CraftAction(
+                            ironKey,
+                            new AmountPolicy.Fixed(64),
+                            new CraftingOptions(false, false),
+                            CpuTarget.any()),
+                        0),
+                    Collections.singletonMap(
+                        ironKey,
+                        new ResourceDescriptor(
+                            "example",
+                            "so-broken",
+                            0,
+                            0,
+                            "so-broken",
+                            ResourceType.ITEM,
+                            ironKey,
+                            null)));
+            CoreEngine.onServerStopping();
+            CoreEngine.onServerStopped();
+            Path databaseFile = new File(platform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath();
+            try (WorldDatabase world = new WorldDatabase(databaseFile, Config.INSTANCE.resourceHistory)) {
+                world.open();
+                world.write(db -> {
+                    try (java.sql.Statement sql = db.createStatement()) {
+                        // A key that is no key makes reading the orders fail, while the schema itself stays intact.
+                        sql.execute("PRAGMA defer_foreign_keys = ON");
+                        sql.execute("UPDATE standing_orders SET order_key = 'not a key'");
+                        sql.execute("UPDATE standing_order_resources SET order_key = 'not a key'");
+                    }
+                    return null;
+                });
+            }
+
+            CoreEngine.onServerStarted();
+            assertNotNull(CoreEngine.getStorageTracking(), "History, pins and terminals still start");
+            assertNotNull(CoreEngine.getResourcePins());
+            assertNotNull(CoreEngine.getTerminalRegistry());
+            assertNotNull(CoreEngine.getCraftingHistory());
+            assertNotNull(CoreEngine.getStandingOrders(), "The engine runs, with no orders");
+            assertNotNull(CoreEngine.getStandingOrderEditor());
+            AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+            assertDoesNotThrow(CoreEngine::onServerTick);
+        } finally {
+            CoreEngine.onServerStopped();
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+
+    @Test
     void shutdownPersistsAnUnobservedIdentityBeforeClearingWorldState() {
         CoreEngine.init(new TestPlatform(configRoot, false));
         Config.INSTANCE.general.port = 0;

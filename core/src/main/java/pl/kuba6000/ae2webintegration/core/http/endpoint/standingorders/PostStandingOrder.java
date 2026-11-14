@@ -22,8 +22,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * Adds an order after the network's others. Orders belong to the network, not to their creator, and run as the
  * network's web player. Creating needs network access and, unless the account is an administrator, the server's
  * allow_players setting. Every resource must be known to the network: open its terminal before choosing a resource
- * that was never stored. Creating an order may make the server read the whole network once, so a network accepts one
- * such change every 5 seconds.
+ * that was never stored. Creating an order may make the server read the whole network once; such reads are spaced
+ * by the server and never refused.
  *
  * @pathParam gridKey Persistent network identifier.
  * @response 200 {@link Response} The network's standing orders including the new one.
@@ -40,8 +40,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the network's read allowance is not available yet, or the
- *           unauthenticated request rate limit was exceeded.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
  * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
  * @responseExample 400
@@ -67,7 +66,7 @@ public final class PostStandingOrder extends StandingOrderRequest {
     @Override
     public void handle() {
         StandingOrderEditor editor = editor();
-        if (editor == null || refusesChange()) return;
+        if (editor == null || refusesNewWork()) return;
         StandingOrderDefinition definition = definition(input);
         if (definition == null) return;
         try {
@@ -80,9 +79,6 @@ public final class PostStandingOrder extends StandingOrderRequest {
             return;
         } catch (StandingOrderStore.UnknownResource unknown) {
             deny(ApiStatus.ITEM_NOT_FOUND);
-            return;
-        } catch (StandingOrderEditor.TooManyReadRequests tooSoon) {
-            deny(ApiStatus.TOO_MANY_REQUESTS);
             return;
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);

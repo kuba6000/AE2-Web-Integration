@@ -470,10 +470,10 @@ class ApiRoutingHttpTest extends GridTestScope {
             tree.json()
                 .get("data")
                 .getAsInt());
-        // Every level is an object holding a list, so eight levels below the root reach the limit of sixteen
-        // nested containers.
-        assertEquals(HTTP_OK, request("POST", "/api/echo-tree", headers, nested(8)).status());
-        assertEquals(HTTP_BAD_REQUEST, request("POST", "/api/echo-tree", headers, nested(9)).status());
+        // Every level is an object holding a list: seven levels and the leaf are 15 nested containers, eight are 17,
+        // past the 16 the router accepts, the body itself included.
+        assertEquals(HTTP_OK, request("POST", "/api/echo-tree", headers, nested(7)).status());
+        assertEquals(HTTP_BAD_REQUEST, request("POST", "/api/echo-tree", headers, nested(8)).status());
         for (String body : new String[] { "{\"label\":\"a\",\"children\":{}}", "{\"label\":\"a\",\"children\":[1]}",
             "{\"label\":\"a\",\"children\":[{\"label\":\"b\",\"label\":\"c\"}]}", "{\"label\":[\"a\"]}",
             "[{\"label\":\"a\"}]", "{\"label\":\"a\",\"children\":[{}]}" }) {

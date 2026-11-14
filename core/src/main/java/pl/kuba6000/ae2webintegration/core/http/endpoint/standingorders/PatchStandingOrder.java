@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -24,9 +25,9 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * trigger or action replaces that whole part. The merged definition is validated like a new one, and the order keeps
  * its identifier and position. An order whose stored definition cannot be read has no values to keep: it can only be
  * repaired by sending every member. Editing needs network access and, unless the account is an administrator, the
- * server allow_players setting. An edit that makes the order refer to a resource it did not use, or enables it, may
- * make the server read the whole network once, so a network accepts one such change every 5 seconds; other edits are
- * not limited.
+ * server allow_players setting. While standing orders are disabled on the server an order can still be edited and
+ * switched off, but not switched on. An edit that makes the order refer to a resource it did not use, or enables it,
+ * may make the server read the whole network once; such reads are spaced by the server and never refused.
  *
  * @pathParam gridKey Persistent network identifier.
  * @pathParam orderKey Standing order identifier.
@@ -36,16 +37,15 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  *           (MISSING_FIELD); data names the reason and the member.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied, or only administrators may change
- *           standing orders. STANDING_ORDERS_DISABLED: standing orders are disabled on the server. CSRF_REJECTED:
- *           cookie or configured-local mutations require X-AE2-Request: true.
+ *           standing orders. STANDING_ORDERS_DISABLED: the edit would switch on an order while standing orders are
+ *           disabled on the server. CSRF_REJECTED: cookie or configured-local mutations require X-AE2-Request: true.
  * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found. STANDING_ORDER_NOT_FOUND: the network has no
  *           such order. ITEM_NOT_FOUND: a resource is not known to the network.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the network's read allowance is not available yet, or the
- *           unauthenticated request rate limit was exceeded.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
  * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
  * @responseExample 400 {"status":"INVALID_STANDING_ORDER","data":{"reason":"NAME_LENGTH","path":""}}
@@ -74,22 +74,22 @@ public final class PatchStandingOrder extends StandingOrderRequest {
         StandingOrderEditor editor = editor();
         if (editor == null || refusesChange()) return;
         try {
-            if (!editor.update(gridKey, orderKey, current -> merged(current, input), this::descriptions)) {
-                deny(ApiStatus.STANDING_ORDER_NOT_FOUND);
-                return;
+            switch (editor.update(
+                gridKey,
+                orderKey,
+                current -> merged(current, input),
+                this::descriptions,
+                Config.INSTANCE.standingOrders.enabled)) {
+                case NOT_FOUND -> deny(ApiStatus.STANDING_ORDER_NOT_FOUND);
+                case ENABLING_REFUSED -> deny(ApiStatus.STANDING_ORDERS_DISABLED);
+                case UPDATED -> reply();
             }
         } catch (InvalidStandingOrderException invalid) {
             reject(invalid);
-            return;
         } catch (StandingOrderStore.UnknownResource unknown) {
             deny(ApiStatus.ITEM_NOT_FOUND);
-            return;
-        } catch (StandingOrderEditor.TooManyReadRequests tooSoon) {
-            deny(ApiStatus.TOO_MANY_REQUESTS);
-            return;
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }
-        reply();
     }
 }

@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -139,7 +140,6 @@ public class CoreEngine {
         StandingOrderStore orderStore = new StandingOrderStore(
             database,
             () -> Config.INSTANCE.standingOrders.maxOrdersPerGrid);
-        Map<StableKey, List<StandingOrderStore.Entry>> storedOrders;
         try {
             database.open();
             GRID_IDENTITIES.initialize(
@@ -148,7 +148,6 @@ public class CoreEngine {
                     .toPath());
             history.initialize();
             craftings.maintain();
-            storedOrders = orderStore.listAll();
         } catch (IOException | RuntimeException | LinkageError failure) {
             GRID_IDENTITIES.clear();
             try {
@@ -159,6 +158,7 @@ public class CoreEngine {
             if (failure instanceof LinkageError linkageFailure) throw linkageFailure;
             throw new IllegalStateException("Failed to initialize world database: " + databaseFile, failure);
         }
+        Map<StableKey, List<StandingOrderStore.Entry>> storedOrders = loadStandingOrders(orderStore);
         try {
             worldDatabase = database;
             ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -207,7 +207,7 @@ public class CoreEngine {
             }
             standingOrders = orders;
             standingOrderStore = orderStore;
-            standingOrderEditor = new StandingOrderEditor(orderStore, orders, System::nanoTime);
+            standingOrderEditor = new StandingOrderEditor(orderStore, orders);
             themes.close();
             themes = ThemeCatalog.load(
                 Config.getConfigFile("themes")
@@ -220,6 +220,20 @@ public class CoreEngine {
         } catch (RuntimeException failure) {
             onServerStopping();
             LOG.error("World services failed during startup", failure);
+        }
+    }
+
+    /**
+     * Standing orders are an optional feature of the world database: when they cannot be read the engine starts
+     * without orders, so history, pins and terminals keep working. The failure is logged; the orders endpoints read the
+     * same table and report it as a server error until the server is restarted with a readable database.
+     */
+    private static Map<StableKey, List<StandingOrderStore.Entry>> loadStandingOrders(StandingOrderStore store) {
+        try {
+            return store.listAll();
+        } catch (IOException | RuntimeException failure) {
+            LOG.error("Standing orders could not be read and are not running", failure);
+            return Collections.emptyMap();
         }
     }
 
@@ -237,9 +251,11 @@ public class CoreEngine {
         if (coordinator != null && ae != null) {
             long now = System.currentTimeMillis();
             coordinator.applySettings(Config.INSTANCE.resourceTracking, now);
-            coordinator.tick(ae, now);
-            // Standing orders use the stock reads of this very tick, so both share one clock reading.
+            // Standing orders use the stock reads of this very tick, so both share one clock reading, and the
+            // orders are applied first so that even the first read after server start finds them.
             StandingOrderEngine orders = standingOrders;
+            if (orders != null) orders.applyPosted(now);
+            coordinator.tick(ae, now);
             if (orders != null) orders.tick(now);
         }
         CpuLiveCoordinator cpus = cpuLive;

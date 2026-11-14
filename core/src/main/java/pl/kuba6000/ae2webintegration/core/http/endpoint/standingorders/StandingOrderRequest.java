@@ -75,10 +75,11 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
     public record Rejection(@NotNull InvalidStandingOrderException.Reason reason, @NotNull String path) {}
 
     /**
-     * @param serverEnabled whether standing orders are enabled on the server; when false nothing runs and nothing can
-     *                      be changed
+     * @param serverEnabled whether standing orders are enabled on the server; when false nothing runs, orders can
+     *                      only be deleted or switched off, and none can be created, switched on or run
      * @param gridEnabled   whether standing orders are switched on for this network
-     * @param canEdit       whether the current account may create, change, delete and run orders now
+     * @param canEdit       whether the current account may change orders: it needs the server's allow_players setting
+     *                      unless it is an administrator. Does not account for serverEnabled.
      * @param maxOrders     orders this network may hold
      * @param orders        the network's orders in display order
      * @param resources     descriptions of the resources the orders refer to, by resource identifier
@@ -113,17 +114,26 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
     }
 
     /**
-     * Changing orders needs grid access, checked on init, and the server's permission and switch; answers and returns
-     * true when the change is not allowed.
+     * Changing orders needs grid access, checked on init, and the server's players permission; answers and returns
+     * true when the change is not allowed. Deleting and switching orders off stay possible while standing orders are
+     * disabled, so that they can be cleaned up.
      */
     protected final boolean refusesChange() {
-        ConfigSettings.StandingOrders settings = Config.INSTANCE.standingOrders;
-        if (!settings.allowPlayers && !context.getPrincipal()
+        if (!Config.INSTANCE.standingOrders.allowPlayers && !context.getPrincipal()
             .isAdmin()) {
             deny(ApiStatus.NO_PERMISSIONS);
             return true;
         }
-        if (!settings.enabled) {
+        return false;
+    }
+
+    /**
+     * Creating and running orders additionally need standing orders enabled on the server; answers and returns true
+     * when the change is not allowed.
+     */
+    protected final boolean refusesNewWork() {
+        if (refusesChange()) return true;
+        if (!Config.INSTANCE.standingOrders.enabled) {
             deny(ApiStatus.STANDING_ORDERS_DISABLED);
             return true;
         }
@@ -223,8 +233,8 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
             resources.put(resource.getKey(), new OrderResource(resource.getValue(), mappings));
         }
         ConfigSettings.StandingOrders settings = Config.INSTANCE.standingOrders;
-        boolean canEdit = settings.enabled && (settings.allowPlayers || context.getPrincipal()
-            .isAdmin());
+        boolean canEdit = settings.allowPlayers || context.getPrincipal()
+            .isAdmin();
         respondDetached(
             HTTP_OK,
             new Response(

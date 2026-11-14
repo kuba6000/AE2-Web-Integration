@@ -306,6 +306,11 @@ public final class ConfigSettings {
         @Comment("Minutes after which a standing order's crafting job is reported as long-running. The job is never cancelled.")
         public int longRunningJobMinutes = 60;
 
+        /** Minutes a standing order's crafting calculation may run before it is cancelled. From 1 to 1440. */
+        @Path("max_calculation_minutes")
+        @Comment("Minutes after which a standing order's crafting calculation is cancelled and the order backs off (1-1440). Calculations on large networks can take minutes.")
+        public int maxCalculationMinutes = 10;
+
     }
 
     void validate() {
@@ -343,6 +348,9 @@ public final class ConfigSettings {
         }
         if (standingOrders.longRunningJobMinutes < 1) {
             throw new IllegalArgumentException("standing_orders.long_running_job_minutes must be positive");
+        }
+        if (standingOrders.maxCalculationMinutes < 1 || standingOrders.maxCalculationMinutes > 1440) {
+            throw new IllegalArgumentException("standing_orders.max_calculation_minutes must be between 1 and 1440");
         }
     }
 }

@@ -6,6 +6,7 @@ import java.util.Map;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException.Reason;
 
@@ -16,8 +17,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderExc
  */
 public final class StandingOrderValidator {
 
-    /** Longest accepted name, in UTF-16 characters. */
-    public static final int MAX_NAME_LENGTH = 128;
+    /** Longest accepted name, in UTF-16 characters; the crafting history keeps the name of a submitting order. */
+    public static final int MAX_NAME_LENGTH = CraftingRequester.MAX_ORDER_NAME_LENGTH;
     /** The root condition is at depth 1. */
     public static final int MAX_TREE_DEPTH = 4;
     /** Counts every condition, groups included. */
@@ -63,8 +64,7 @@ public final class StandingOrderValidator {
         }
     }
 
-    /** Checks a definition name; also applied to the name a standing order carries as a crafting requester. */
-    public static void validateName(@NotNull String name) throws InvalidStandingOrderException {
+    private static void validateName(@NotNull String name) throws InvalidStandingOrderException {
         if (name.isEmpty() || name.length() > MAX_NAME_LENGTH) {
             throw new InvalidStandingOrderException(Reason.NAME_LENGTH, "name");
         }

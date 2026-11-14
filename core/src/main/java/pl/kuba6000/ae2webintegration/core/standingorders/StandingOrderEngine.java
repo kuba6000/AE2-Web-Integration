@@ -4,8 +4,10 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,6 +48,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
 import pl.kuba6000.ae2webintegration.core.tracking.StockObservationListener;
@@ -55,6 +58,14 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 /**
  * Runs the stored standing orders on the server thread: evaluates each network's orders whenever a complete stock
  * read of it arrives, calculates and submits crafting jobs and follows them until they leave their CPU.
+ * <p>
+ * A tick costs only in-memory work: it applies posted commands, polls running calculations, fires due timers and
+ * evaluates queued orders. The native state of a network (availability, the settings switches, the stock lease) is
+ * read on demand: when a stock read arrives, when a command concerns the network, before an order is evaluated, and
+ * by a sweep every 5 s that notices changes nothing else would. A network that is only briefly unavailable blocks
+ * starting and submitting while it is away and loses nothing; everything it had read or calculated is dropped only
+ * when the native network object was replaced, when it was switched off, or when no stock read arrived for longer
+ * than its sample interval.
  * <p>
  * Everything except {@link #post}, {@link #postDeletion}, {@link #requestRun} and {@link #snapshot} is server-thread
  * only; those four are the boundary to HTTP threads and never touch engine state. The engine creates itself as the
@@ -66,6 +77,12 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final long BACKOFF_FIRST_MILLIS = SECONDS.toMillis(30);
     private static final long BACKOFF_MAX_MILLIS = MINUTES.toMillis(10);
+    /** How often every network is looked at even when nothing happened to it. */
+    public static final long SWEEP_MILLIS = SECONDS.toMillis(5);
+    /** A stock read may arrive this late after its interval before the stock it delivered is considered stale. */
+    private static final long STALE_GRACE_MILLIS = SECONDS.toMillis(30);
+    /** Missing ingredients published with a blocked order, largest first. */
+    private static final int MAX_MISSING = 5;
 
     private final StorageTrackingCoordinator coordinator;
     private final GridIdentityRegistry identities;
@@ -83,6 +100,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private final List<OrderState> calculating = new ArrayList<>();
     private final Map<StableKey, CpuView> cpuViews = new HashMap<>();
     private ConfigSettings.StandingOrders config;
+    private long epoch;
+    private long nextSweep;
     private @Nullable Map<ServerCapability, Boolean> tickCapabilities;
     private @Nullable String lastTickFailure;
 
@@ -137,7 +156,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     @Override
     public void stockObserved(@NotNull StableKey grid, @NotNull StorageObservation observation) {
         GridState state = grids.get(grid);
-        if (state == null || !state.fed) return;
+        // A network that was not synced yet may be fed already; the first sync drops what turns out to be unfed.
+        if (state == null || !state.fed && state.availability != null) return;
         Map<StableKey, Long> quantities = new HashMap<>();
         for (StorageObservation.Row row : observation.rows()) {
             if (state.referenced.contains(row.itemKey())) quantities.put(row.itemKey(), row.quantity());
@@ -146,7 +166,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         for (StableKey resource : state.referenced) quantities.putIfAbsent(resource, 0L);
         state.baseline = new StockBaseline(observation.observedAt(), quantities);
         state.stockFailed = false;
-        state.changed = true;
+        state.readWanted = false;
+        state.pending = true;
     }
 
     @Override
@@ -155,10 +176,18 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         if (state == null) return;
         state.baseline = null;
         state.stockFailed = true;
-        state.changed = true;
+        state.pending = true;
     }
 
     // ----- Tick (server thread) -----
+
+    /**
+     * Applies the posted changes now, so that a stock read the coordinator takes before {@link #tick} in the same
+     * server tick already finds the orders it is for, as at server start.
+     */
+    public void applyPosted(long nowMillis) {
+        guarded("inbox", () -> drainInbox(nowMillis));
+    }
 
     /**
      * Applies posted changes, follows calculations and evaluates what is due within the configured budget. Call after
@@ -168,8 +197,13 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         guarded("settings", () -> config = settings.get());
         cpuViews.clear();
         tickCapabilities = null;
-        guarded("inbox", this::drainInbox);
-        for (GridState grid : grids.values()) guarded("grid sync", () -> syncGrid(grid));
+        epoch++;
+        guarded("inbox", () -> drainInbox(nowMillis));
+        boolean sweep = nowMillis >= nextSweep;
+        if (sweep) nextSweep = nowMillis + SWEEP_MILLIS;
+        for (GridState grid : grids.values()) {
+            if (sweep || grid.pending) guarded("grid sync", () -> syncGrid(grid, nowMillis));
+        }
         guarded("calculations", () -> pollCalculations(nowMillis));
         guarded("timers", () -> fireTimers(nowMillis));
         guarded("evaluation", () -> runWork(nowMillis));
@@ -193,7 +227,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     @Override
     public void close() {
         for (OrderState order : orders.values()) {
-            cancelCalculation(order);
+            dropCalculation(order);
             order.removed = true;
         }
         for (GridState grid : grids.values()) {
@@ -210,22 +244,22 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         snapshots.clear();
     }
 
-    private void drainInbox() {
+    private void drainInbox(long now) {
         Command command;
         while ((command = inbox.poll()) != null) {
             Command posted = command;
             // One bad command must not hold back the ones behind it.
-            guarded("command", () -> apply(posted));
+            guarded("command", () -> apply(posted, now));
         }
     }
 
-    private void apply(Command command) {
-        if (command instanceof Define define) define(define.grid(), define.entry());
+    private void apply(Command command, long now) {
+        if (command instanceof Define define) define(define.grid(), define.entry(), now);
         else if (command instanceof Delete delete) delete(delete.grid(), delete.order());
-        else runNow(((RunNow) command).grid(), ((RunNow) command).order());
+        else runNow(((RunNow) command).grid(), ((RunNow) command).order(), now);
     }
 
-    private void define(StableKey gridKey, StandingOrderStore.Entry entry) {
+    private void define(StableKey gridKey, StandingOrderStore.Entry entry, long now) {
         GridState grid = grids.computeIfAbsent(gridKey, GridState::new);
         OrderState order = orders.get(entry.key());
         if (order == null) {
@@ -237,7 +271,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             order.definition = ((StandingOrderStore.Valid) entry).definition();
             return;
         } else {
-            cancelCalculation(order);
+            cancelCalculation(order, now);
         }
         order.ordinal = entry.ordinal();
         // An edit may remove the cause of a failure, so it must not wait for the old backoff.
@@ -264,11 +298,16 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                     order.definition.action()
                         .resource())) {
             order.forgetJob();
+            if (order.status == StandingOrderStatus.CRAFTING || order.status == StandingOrderStatus.CRAFTING_LONG
+                || order.status == StandingOrderStatus.COOLDOWN) {
+                setStatus(order, StandingOrderStatus.IDLE, null, now);
+            }
         }
         grid.orders.sort(
             Comparator.comparingInt((OrderState o) -> o.ordinal)
                 .thenComparing(o -> o.key.toString()));
         grid.refresh();
+        grid.pending = true;
         if (grid.availability == Availability.ACTIVE && grid.baseline != null
             && !grid.baseline.covers(grid.referenced)) {
             coordinator.requestStockRead(grid.key);
@@ -291,7 +330,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private void delete(StableKey gridKey, StableKey orderKey) {
         OrderState order = orders.get(orderKey);
         if (order == null || !order.grid.equals(gridKey)) return;
-        cancelCalculation(order);
+        dropCalculation(order);
         order.removed = true;
         orders.remove(orderKey);
         snapshots.remove(orderKey);
@@ -304,66 +343,100 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             cpuViews.remove(gridKey);
         } else {
             grid.refresh();
+            grid.pending = true;
         }
     }
 
-    private void runNow(StableKey gridKey, StableKey orderKey) {
+    private void runNow(StableKey gridKey, StableKey orderKey, long now) {
         OrderState order = orders.get(orderKey);
         GridState grid = grids.get(gridKey);
         if (order == null || grid == null || !order.grid.equals(gridKey)) return;
-        if (order.definition == null || !order.definition.enabled() || grid.availability != Availability.ACTIVE) return;
+        if (order.definition == null || !order.definition.enabled()) return;
+        ensureSynced(grid, now);
+        if (grid.availability != Availability.ACTIVE) return;
         order.backoffUntil = 0;
         order.cooldownUntil = 0;
         coordinator.requestStockRead(gridKey);
     }
 
     /**
-     * Follows the network's availability, its switches and its stock lease; queues the orders when anything new
-     * arrived.
+     * Reads the native state of the network once per tick at most, however many things ask for it: availability, the
+     * switches and the stock lease. Orders are queued again when anything they depend on changed.
      */
-    private void syncGrid(GridState grid) {
+    private void ensureSynced(GridState grid, long now) {
+        if (grid.syncedEpoch != epoch) syncGrid(grid, now);
+    }
+
+    /**
+     * Follows the network's availability, its switches and its stock lease. Only a switched-off network, a replaced
+     * native network and stock that is older than its feed allows end what the network's orders hold; a network
+     * that is merely unavailable keeps everything and only blocks starting and submitting while it is away.
+     */
+    private void syncGrid(GridState grid, long now) {
+        grid.syncedEpoch = epoch;
+        boolean wake = grid.pending;
+        grid.pending = false;
         IAEGrid live = identities.getGrid(grid.key);
         GridPersistentData data = identities.getPersistentData(grid.key);
         GridSettingsData gridSettings = data == null ? null : data.getSettings();
         Availability availability;
-        if (live == null || gridSettings == null || !isUsable(live)) availability = Availability.UNAVAILABLE;
+        if (gridSettings == null) availability = Availability.UNAVAILABLE;
         else if (!config.enabled || !gridSettings.isStandingOrdersEnabled()) availability = Availability.SWITCHED_OFF;
+        else if (live == null || !isUsable(live)) availability = Availability.UNAVAILABLE;
         else availability = Availability.ACTIVE;
         boolean tracked = gridSettings != null && gridSettings.isStorageTracked();
         if (gridSettings != null) grid.intervalMillis = SECONDS.toMillis(gridSettings.getStockSampleIntervalSeconds());
-        boolean replaced = availability != Availability.UNAVAILABLE && live != grid.seen;
-        if (availability != grid.availability || replaced) {
-            // Whatever was calculated or read belongs to the previous network state.
-            grid.fed = false;
-            grid.availability = availability;
-            grid.seen = availability == Availability.UNAVAILABLE ? null : live;
-            grid.live = availability == Availability.ACTIVE ? live : null;
+        boolean replaced = availability == Availability.ACTIVE && grid.everSeen && grid.seen.get() != live;
+        boolean switchedOff = availability == Availability.SWITCHED_OFF
+            && grid.availability != Availability.SWITCHED_OFF;
+        boolean stale = grid.baseline != null && isStale(grid, grid.baseline, now);
+        if (replaced || switchedOff || stale) {
+            // Whatever was calculated or read belongs to a network state that no longer exists.
+            for (OrderState order : grid.orders) cancelCalculation(order, now);
             grid.baseline = null;
             grid.stockFailed = false;
-            for (OrderState order : grid.orders) {
-                cancelCalculation(order);
-                enqueue(order);
-            }
+            grid.readWanted = true;
+            wake = true;
         }
-        boolean lease = availability == Availability.ACTIVE && grid.hasEnabledOrder && !tracked;
+        if (availability == Availability.ACTIVE && (replaced || !grid.everSeen)) {
+            grid.seen = new WeakReference<>(live);
+            grid.everSeen = true;
+        }
+        if (availability != grid.availability) wake = true;
+        grid.availability = availability;
+        grid.live = availability == Availability.ACTIVE ? live : null;
+        boolean lease = gridSettings != null && availability != Availability.SWITCHED_OFF
+            && grid.hasEnabledOrder
+            && !tracked;
         if (lease != grid.leased) {
             grid.leased = lease;
             if (lease) coordinator.leaseStock(grid.key);
             else coordinator.releaseStock(grid.key);
         }
         // Stock is only trustworthy while something keeps reading it; without a feed it would age unnoticed.
-        boolean fed = availability == Availability.ACTIVE && (tracked || lease);
-        if (!fed) grid.baseline = null;
-        else if (!grid.fed) coordinator.requestStockRead(grid.key);
+        boolean fed = gridSettings != null && availability != Availability.SWITCHED_OFF && (tracked || lease);
+        if (!fed) {
+            if (grid.baseline != null) wake = true;
+            grid.baseline = null;
+            grid.readWanted = false;
+        } else if (!grid.fed && (grid.baseline == null || isStale(grid, grid.baseline, now))) {
+            grid.readWanted = true;
+        }
         grid.fed = fed;
-        if (grid.changed) {
-            grid.changed = false;
+        if (grid.readWanted && availability == Availability.ACTIVE) {
+            grid.readWanted = false;
+            coordinator.requestStockRead(grid.key);
+        }
+        if (wake) {
             for (OrderState order : grid.orders) {
-                if (order.status != StandingOrderStatus.CALCULATING && order.status != StandingOrderStatus.SUBMIT
-                    && order.definition != null
-                    && order.definition.enabled()) enqueue(order);
+                if (order.definition != null && order.definition.enabled()) enqueue(order);
             }
         }
+    }
+
+    /** Whether the network's stock feed should have delivered a newer read by now. */
+    private static boolean isStale(GridState grid, StockBaseline baseline, long now) {
+        return now - baseline.observedAt > grid.intervalMillis + STALE_GRACE_MILLIS;
     }
 
     private static boolean isUsable(IAEGrid grid) {
@@ -375,31 +448,75 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     }
 
     private void pollCalculations(long now) {
+        long limit = MINUTES.toMillis(config.maxCalculationMinutes);
         for (int index = calculating.size() - 1; index >= 0; index--) {
             OrderState order = calculating.get(index);
             Future<IAECraftingJob> future = order.calculation;
-            if (future == null || !future.isDone()) continue;
+            if (future == null) continue;
             GridState grid = grids.get(order.grid);
+            if (!future.isDone()) {
+                if (now - order.calculationStartedAt < limit) continue;
+                LOG.warn(
+                    "Calculation of standing order {} exceeded {} minutes",
+                    order.key,
+                    config.maxCalculationMinutes);
+                dropCalculation(order);
+                fail(
+                    order,
+                    StandingOrderStatus.SUBMIT_FAILED,
+                    Cause.of(StandingOrderReason.CALCULATION_TIMED_OUT),
+                    now);
+                publish(order, grid);
+                continue;
+            }
             releaseCalculation(order, grid);
             try {
                 IAECraftingJob job = future.get();
                 if (job.web$isSimulation() && !order.simulationAllowed) {
-                    fail(order, StandingOrderStatus.BLOCKED_MISSING, "The network lacks ingredients for the job", now);
+                    fail(order, StandingOrderStatus.BLOCKED_MISSING, Cause.missing(missingIngredients(job, grid)), now);
                 } else {
+                    // The plan is checked again and submitted by the evaluation queued first.
                     order.job = job;
-                    setStatus(order, StandingOrderStatus.SUBMIT, null, now);
                     enqueueFirst(order);
                 }
             } catch (ExecutionException | RuntimeException failure) {
                 LOG.warn("Calculation of standing order {} failed", order.key, failure);
-                fail(order, StandingOrderStatus.SUBMIT_FAILED, "Calculation failed", now);
+                fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread()
                     .interrupt();
-                fail(order, StandingOrderStatus.SUBMIT_FAILED, "Calculation was interrupted", now);
+                fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
             }
             publish(order, grid);
         }
+    }
+
+    /**
+     * The largest shortfalls of a calculated job, as the crafting plan endpoint describes them. Read from the job
+     * itself, so it costs no stock read; it runs once per blocked calculation, never per tick.
+     */
+    private static List<StandingOrderSnapshot.MissingIngredient> missingIngredients(IAECraftingJob job,
+        @Nullable GridState grid) {
+        IAEGrid live = grid == null ? null : grid.seen.get();
+        if (live == null) return Collections.emptyList();
+        List<StandingOrderSnapshot.MissingIngredient> missing = new ArrayList<>();
+        try {
+            for (ICraftingPlanSummaryEntry entry : job.web$generateSummary(live)
+                .web$getEntries()) {
+                long amount = entry.web$getMissingAmount();
+                if (amount <= 0) continue;
+                IAEKey what = entry.web$getWhat();
+                missing.add(
+                    new StandingOrderSnapshot.MissingIngredient(what.web$getKey(), what.web$getDisplayName(), amount));
+            }
+        } catch (RuntimeException unreadable) {
+            LOG.warn("The missing ingredients of a standing order calculation could not be read", unreadable);
+            return Collections.emptyList();
+        }
+        missing.sort(
+            Comparator.comparingLong(StandingOrderSnapshot.MissingIngredient::amount)
+                .reversed());
+        return Collections.unmodifiableList(new ArrayList<>(missing.subList(0, Math.min(missing.size(), MAX_MISSING))));
     }
 
     private void fireTimers(long now) {
@@ -434,8 +551,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             evaluateChecked(order, grid, now);
         } catch (RuntimeException failure) {
             LOG.warn("Standing order {} failed unexpectedly", order.key, failure);
-            cancelCalculation(order);
-            fail(order, StandingOrderStatus.SUBMIT_FAILED, "Unexpected error", now);
+            cancelCalculation(order, now);
+            fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.UNEXPECTED_ERROR), now);
         }
         publish(order, grid);
     }
@@ -443,48 +560,71 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private void evaluateChecked(OrderState order, GridState grid, long now) {
         StandingOrderDefinition definition = order.definition;
         if (definition == null) {
-            String reason = order.invalid == null ? "" : order.invalid.getMessage();
-            setStatus(order, StandingOrderStatus.UNAVAILABLE, "The stored definition is invalid: " + reason, now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.INVALID_DEFINITION), now);
             return;
         }
         if (!definition.enabled()) {
-            cancelCalculation(order);
+            // Cooldown and backoff end with the order's activity, but a job it started may still finish while it is
+            // off: enabling it again must still wait for a read taken after that job left its CPU.
+            cancelCalculation(order, now);
+            order.cooldownUntil = 0;
+            order.backoffUntil = 0;
+            order.failures = 0;
+            if (order.craftingSince != 0) order.disabledWhileCrafting = true;
             setStatus(order, StandingOrderStatus.DISABLED, null, now);
             return;
         }
+        ensureSynced(grid, now);
         IAEGrid live = grid.live;
         if (live == null) {
-            cancelCalculation(order);
-            setStatus(
-                order,
-                grid.availability == Availability.SWITCHED_OFF ? StandingOrderStatus.SWITCHED_OFF
-                    : StandingOrderStatus.GRID_UNAVAILABLE,
-                null,
-                now);
+            if (grid.availability == Availability.SWITCHED_OFF) {
+                cancelCalculation(order, now);
+                setStatus(order, StandingOrderStatus.SWITCHED_OFF, null, now);
+            } else {
+                // A network that is away only blocks: a running calculation, a finished plan and a job keep going.
+                setStatus(order, StandingOrderStatus.GRID_UNAVAILABLE, null, now);
+            }
             return;
         }
-        switch (order.status) {
-            case CALCULATING -> {
-            }
-            case SUBMIT -> {
-                IAECraftingJob plan = order.job;
-                order.job = null;
-                start(order, grid, live, definition, plan, now);
-            }
-            case CRAFTING, CRAFTING_LONG -> follow(order, grid, live, definition, now);
-            default -> start(order, grid, live, definition, null, now);
+        if (order.calculation != null) {
+            checkCalculation(order, grid, live, definition, now);
+            return;
         }
+        IAECraftingJob plan = order.job;
+        order.job = null;
+        if (plan == null && order.craftingSince != 0) follow(order, grid, live, definition, now);
+        else start(order, grid, live, definition, plan, now);
+    }
+
+    /** A running calculation continues unless a newer stock read shows that its trigger no longer holds. */
+    private void checkCalculation(OrderState order, GridState grid, IAEGrid live, StandingOrderDefinition definition,
+        long now) {
+        StockBaseline baseline = grid.baseline;
+        if (baseline != null && baseline.observedAt > order.calculationBaselineAt) {
+            order.calculationBaselineAt = baseline.observedAt;
+            if (definition.trigger()
+                .evaluate(new Input(grid, live, baseline)) == Truth.FALSE) {
+                cancelCalculation(order, now);
+                return;
+            }
+        }
+        setStatus(order, StandingOrderStatus.CALCULATING, null, now);
     }
 
     /** A running job: report how long it has been going and notice when it left its CPU. */
     private void follow(OrderState order, GridState grid, IAEGrid live, StandingOrderDefinition definition, long now) {
+        boolean disabledWhileCrafting = order.disabledWhileCrafting;
+        order.disabledWhileCrafting = false;
         if (cpuView(grid, live).finalOutputs.contains(
             definition.action()
                 .resource())) {
             enterCrafting(order, now);
             return;
         }
-        long cooldown = SECONDS.toMillis(definition.cooldownSeconds());
+        // A job that ended while its order was off has no cooldown to serve; only the stale-data guard applies, and
+        // the read it waits for is asked for instead of left to the next sample.
+        if (disabledWhileCrafting) coordinator.requestStockRead(grid.key);
+        long cooldown = disabledWhileCrafting ? 0 : SECONDS.toMillis(definition.cooldownSeconds());
         order.craftingSince = 0;
         order.settledAt = now;
         order.cooldownUntil = now + cooldown;
@@ -507,56 +647,45 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         if (order.status == StandingOrderStatus.COOLDOWN) setStatus(order, StandingOrderStatus.IDLE, null, now);
         StockBaseline baseline = grid.baseline;
         if (baseline == null) {
-            setStatus(
+            waitForStock(
                 order,
-                StandingOrderStatus.WAITING_FOR_STOCK,
-                grid.stockFailed ? "The last stock read failed" : "Waiting for the first stock read of the network",
+                grid.stockFailed ? StandingOrderReason.READ_FAILED : StandingOrderReason.WAITING_FIRST_READ,
                 now);
             return;
         }
         // A job that just left its CPU may still be missing from older reads, and would be ordered again.
         if (baseline.observedAt < order.settledAt) {
-            setStatus(
-                order,
-                StandingOrderStatus.WAITING_FOR_STOCK,
-                "Waiting for a stock read taken after the last job finished",
-                now);
+            waitForStock(order, StandingOrderReason.WAITING_FRESH_READ_AFTER_JOB, now);
             return;
         }
         CraftAction action = definition.action();
         try {
             StandingOrderValidator.validateCapabilities(definition, capabilities());
         } catch (InvalidStandingOrderException unsupported) {
-            setStatus(order, StandingOrderStatus.UNAVAILABLE, "The server does not support " + unsupported.path(), now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.unsupported(unsupported.path()), now);
             return;
         }
-        IAEKey resource = resolve(action.resource());
+        IAEKey resource;
+        try {
+            resource = AE2Controller.itemIdentities.resolve(action.resource());
+        } catch (ItemIdentityRegistry.Ambiguous ambiguous) {
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.ambiguous(action.resource()), now);
+            return;
+        }
         if (resource == null) {
-            setStatus(
-                order,
-                StandingOrderStatus.UNAVAILABLE,
-                "The resource is not known on this network, or is ambiguous",
-                now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.UNKNOWN_RESOURCE), now);
             return;
         }
         for (StableKey triggerResource : order.triggerResources) {
             if (isAmbiguous(triggerResource)) {
-                setStatus(
-                    order,
-                    StandingOrderStatus.UNAVAILABLE,
-                    "A resource of the trigger is ambiguous on this network, so its stock cannot be read",
-                    now);
+                setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.ambiguous(triggerResource), now);
                 return;
             }
         }
         Truth trigger = definition.trigger()
             .evaluate(new Input(grid, live, baseline));
         if (trigger == Truth.UNKNOWN) {
-            setStatus(
-                order,
-                StandingOrderStatus.WAITING_FOR_STOCK,
-                "Waiting for a stock read that includes the resources of this order",
-                now);
+            waitForStock(order, StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, now);
             return;
         }
         if (trigger == Truth.FALSE) {
@@ -566,22 +695,18 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             return;
         }
         if (now < order.backoffUntil) {
-            setStatus(order, order.failureStatus, order.failureMessage, now);
+            setStatus(order, order.failureStatus, order.failureCause, now);
             schedule(order, order.backoffUntil);
             return;
         }
         IAECraftingGrid crafting = live.web$getCraftingGrid();
         // Order matters on legacy adapters: the crafting check rebuilds stale pattern state first.
         if (!crafting.web$isCurrentlyCraftable(resource)) {
-            setStatus(order, StandingOrderStatus.UNAVAILABLE, "The resource is not craftable", now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.NOT_CRAFTABLE), now);
             return;
         }
         if (crafting.web$canEmitFor(resource)) {
-            setStatus(
-                order,
-                StandingOrderStatus.UNAVAILABLE,
-                "The resource is provided by a level emitter and cannot be ordered",
-                now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.EMITTER_BACKED), now);
             return;
         }
         CpuView cpus = cpuView(grid, live);
@@ -603,46 +728,43 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             setStatus(
                 order,
                 StandingOrderStatus.WAITING_FOR_CPU,
-                selected == null ? "No idle crafting CPU accepts standing orders"
-                    : "The selected crafting CPU is not idle or does not accept standing orders",
+                Cause.of(
+                    selected == null ? StandingOrderReason.NO_IDLE_CPU : StandingOrderReason.SELECTED_CPU_UNAVAILABLE),
                 now);
             return;
         }
         OptionalLong stored = baseline.stored(action.resource());
         if (!stored.isPresent()) {
-            setStatus(
-                order,
-                StandingOrderStatus.WAITING_FOR_STOCK,
-                "Waiting for a stock read that includes the resources of this order",
-                now);
+            waitForStock(order, StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, now);
             return;
         }
         OrderAmount amount = action.amount()
             .orderAmount(stored.getAsLong());
         if (amount.outcome() == OrderAmount.Outcome.NOTHING_TO_ORDER) {
-            setStatus(order, StandingOrderStatus.IDLE, "Nothing to order: the stock already reaches the target", now);
+            setStatus(order, StandingOrderStatus.IDLE, Cause.of(StandingOrderReason.NOTHING_TO_ORDER), now);
             return;
         }
         if (amount.outcome() == OrderAmount.Outcome.OVERFLOW) {
-            setStatus(order, StandingOrderStatus.UNAVAILABLE, "The amount to order cannot be computed", now);
+            setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.AMOUNT_OVERFLOW), now);
             return;
         }
         if (plan != null) {
             // Orders only ever plan up to the batch limit, so a still positive need cannot be overshot by more.
             submit(order, definition, live, crafting, plan, target, now);
         } else {
-            beginCalculation(order, grid, definition, live, crafting, resource, amount.amount(), now);
+            beginCalculation(order, grid, baseline, definition, live, crafting, resource, amount.amount(), now);
         }
     }
 
-    private void beginCalculation(OrderState order, GridState grid, StandingOrderDefinition definition, IAEGrid live,
-        IAECraftingGrid crafting, IAEKey resource, long amount, long now) {
+    private void waitForStock(OrderState order, StandingOrderReason reason, long now) {
+        setStatus(order, StandingOrderStatus.WAITING_FOR_STOCK, Cause.of(reason), now);
+    }
+
+    private void beginCalculation(OrderState order, GridState grid, StockBaseline baseline,
+        StandingOrderDefinition definition, IAEGrid live, IAECraftingGrid crafting, IAEKey resource, long amount,
+        long now) {
         if (grid.inFlight >= config.maxCalculationsInFlightPerGrid) {
-            setStatus(
-                order,
-                StandingOrderStatus.QUEUED,
-                "The network already runs the allowed number of calculations",
-                now);
+            setStatus(order, StandingOrderStatus.QUEUED, Cause.of(StandingOrderReason.CALCULATION_SLOTS_FULL), now);
             return;
         }
         order.calculation = crafting.web$beginCraftingJob(
@@ -651,6 +773,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             amount,
             definition.action()
                 .options());
+        order.calculationStartedAt = now;
+        order.calculationBaselineAt = baseline.observedAt;
         order.plannedAmount = amount;
         order.simulationAllowed = definition.action()
             .options()
@@ -668,10 +792,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             error = crafting.web$submitJob(plan, target, true, live);
         } catch (RuntimeException failure) {
             LOG.warn("Submitting the job of standing order {} failed", order.key, failure);
-            error = "Submitting the job failed";
+            fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.SUBMIT_ERROR), now);
+            return;
         }
         if (error != null) {
-            fail(order, StandingOrderStatus.SUBMIT_FAILED, error, now);
+            fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.submitError(error), now);
             return;
         }
         // The submission changed the CPUs; later orders of this tick must not count on the earlier picture.
@@ -684,9 +809,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     private void enterCrafting(OrderState order, long now) {
         long threshold = MINUTES.toMillis(config.longRunningJobMinutes);
-        if (order.status != StandingOrderStatus.CRAFTING && order.status != StandingOrderStatus.CRAFTING_LONG) {
-            order.craftingSince = now;
-        }
+        // The job has been running since it was submitted or first seen, whatever the status showed in between.
+        if (order.craftingSince == 0) order.craftingSince = now;
         if (now - order.craftingSince >= threshold) {
             setStatus(order, StandingOrderStatus.CRAFTING_LONG, null, now);
         } else {
@@ -696,28 +820,33 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     }
 
     /** Records a failure and keeps the order from starting again until its exponentially growing backoff passed. */
-    private void fail(OrderState order, StandingOrderStatus status, String message, long now) {
+    private void fail(OrderState order, StandingOrderStatus status, Cause cause, long now) {
         order.failures++;
         long delay = BACKOFF_FIRST_MILLIS << Math.min(order.failures - 1, 16);
         order.backoffUntil = now + Math.min(delay, BACKOFF_MAX_MILLIS);
         order.failureStatus = status;
-        order.failureMessage = message;
-        setStatus(order, status, message, now);
+        order.failureCause = cause;
+        setStatus(order, status, cause, now);
         schedule(order, order.backoffUntil);
     }
 
-    private void setStatus(OrderState order, StandingOrderStatus status, @Nullable String message, long now) {
-        if (order.status == status && Objects.equals(order.message, message)) return;
+    private void setStatus(OrderState order, StandingOrderStatus status, @Nullable Cause cause, long now) {
+        if (order.status == status && Objects.equals(order.cause, cause)) return;
         order.status = status;
-        order.message = message;
+        order.cause = cause;
         order.changedAt = now;
     }
 
     private void publish(OrderState order, @Nullable GridState grid) {
         if (order.removed) return;
+        Cause cause = order.cause;
         StandingOrderSnapshot next = new StandingOrderSnapshot(
             order.status,
-            order.message,
+            cause == null ? null : cause.reason(),
+            cause == null ? null : cause.resource(),
+            cause == null ? null : cause.path(),
+            cause == null ? null : cause.submitError(),
+            cause == null ? Collections.emptyList() : cause.missing(),
             order.changedAt,
             order.lastSubmittedAmount,
             nextCheck(order, grid),
@@ -731,7 +860,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         return switch (order.status) {
             case COOLDOWN -> order.cooldownUntil;
             case BLOCKED_MISSING, SUBMIT_FAILED -> order.backoffUntil;
-            case CALCULATING, SUBMIT, DISABLED, SWITCHED_OFF, GRID_UNAVAILABLE -> 0;
+            case CALCULATING, DISABLED, SWITCHED_OFF, GRID_UNAVAILABLE -> 0;
             default -> grid == null || grid.baseline == null ? 0 : grid.baseline.observedAt + grid.intervalMillis;
         };
     }
@@ -758,18 +887,21 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     // ----- Calculations -----
 
-    /** Drops a running calculation or a finished plan that was not submitted yet. */
-    private void cancelCalculation(OrderState order) {
+    /** Drops a running calculation or a finished plan that was not submitted yet, without touching the status. */
+    private void dropCalculation(OrderState order) {
         Future<IAECraftingJob> future = order.calculation;
         if (future != null) {
             if (!future.isDone()) future.cancel(true);
             releaseCalculation(order, grids.get(order.grid));
         }
         order.job = null;
-        if (order.status == StandingOrderStatus.CALCULATING || order.status == StandingOrderStatus.SUBMIT) {
-            order.status = StandingOrderStatus.IDLE;
-            order.message = null;
-        }
+    }
+
+    /** Like {@link #dropCalculation}; an order that was calculating goes back to idle. */
+    private void cancelCalculation(OrderState order, long now) {
+        boolean calculating = order.calculation != null || order.job != null;
+        dropCalculation(order);
+        if (calculating) setStatus(order, StandingOrderStatus.IDLE, null, now);
     }
 
     private void releaseCalculation(OrderState order, @Nullable GridState grid) {
@@ -795,14 +927,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             tickCapabilities = current;
         }
         return current;
-    }
-
-    private static @Nullable IAEKey resolve(StableKey resource) {
-        try {
-            return AE2Controller.itemIdentities.resolve(resource);
-        } catch (ItemIdentityRegistry.Ambiguous ambiguous) {
-            return null;
-        }
     }
 
     private static boolean isAmbiguous(StableKey resource) {
@@ -849,6 +973,32 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     @Desugar
     private record Timer(long at, OrderState order) {}
+
+    /** Why an order has its status, as published in the snapshot. */
+    @Desugar
+    private record Cause(StandingOrderReason reason, @Nullable StableKey resource, @Nullable String path,
+        @Nullable String submitError, List<StandingOrderSnapshot.MissingIngredient> missing) {
+
+        private static Cause of(StandingOrderReason reason) {
+            return new Cause(reason, null, null, null, Collections.emptyList());
+        }
+
+        private static Cause ambiguous(StableKey resource) {
+            return new Cause(StandingOrderReason.AMBIGUOUS_RESOURCE, resource, null, null, Collections.emptyList());
+        }
+
+        private static Cause unsupported(String path) {
+            return new Cause(StandingOrderReason.CAPABILITY_UNAVAILABLE, null, path, null, Collections.emptyList());
+        }
+
+        private static Cause submitError(String error) {
+            return new Cause(StandingOrderReason.SUBMIT_REJECTED, null, null, error, Collections.emptyList());
+        }
+
+        private static Cause missing(List<StandingOrderSnapshot.MissingIngredient> missing) {
+            return new Cause(StandingOrderReason.MISSING_INGREDIENTS, null, null, null, missing);
+        }
+    }
 
     /** Quantities of the resources the network's orders refer to, from one complete stock read. */
     @Desugar
@@ -928,8 +1078,13 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private final List<OrderState> orders = new ArrayList<>();
         private final Set<StableKey> referenced = new HashSet<>();
         private @Nullable Availability availability;
-        /** The usable native network last seen, to notice that it was replaced. */
-        private @Nullable IAEGrid seen;
+        /**
+         * The usable native network last seen, to notice that it was replaced; weak so that an unloaded network is not
+         * kept alive.
+         */
+        private WeakReference<IAEGrid> seen = new WeakReference<>(null);
+        /** Whether a usable native network was seen at all; the first one is not a replacement. */
+        private boolean everSeen;
         /** The native network orders are evaluated against; present exactly while the grid is ACTIVE. */
         private @Nullable IAEGrid live;
         private @Nullable StockBaseline baseline;
@@ -938,7 +1093,12 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private boolean hasEnabledOrder;
         private boolean leased;
         private boolean fed;
-        private boolean changed;
+        /** A stock read arrived or an order changed, so the network's state is read and its orders evaluated. */
+        private boolean pending;
+        /** The tick whose native read of the network is current. */
+        private long syncedEpoch = -1;
+        /** A read is wanted as soon as the network is fed and usable, because there is no usable stock. */
+        private boolean readWanted;
         private int inFlight;
 
         private GridState(StableKey key) {
@@ -980,18 +1140,23 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private @Nullable InvalidStandingOrderException invalid;
         private final Set<StableKey> triggerResources = new HashSet<>();
         private StandingOrderStatus status = StandingOrderStatus.IDLE;
-        private @Nullable String message;
+        private @Nullable Cause cause;
         private long changedAt;
         private long craftingSince;
+        /** The order was disabled while its job ran, so the cooldown of that job ended with its activity. */
+        private boolean disabledWhileCrafting;
         private long lastSubmittedAmount;
         private long settledAt;
         private long cooldownUntil;
         private long backoffUntil;
         private int failures;
         private StandingOrderStatus failureStatus = StandingOrderStatus.SUBMIT_FAILED;
-        private @Nullable String failureMessage;
+        private @Nullable Cause failureCause;
         private long wakeAt;
         private @Nullable Future<IAECraftingJob> calculation;
+        private long calculationStartedAt;
+        /** Observation time of the stock the calculation started from or was last compared with. */
+        private long calculationBaselineAt;
         private @Nullable IAECraftingJob job;
         private long plannedAmount;
         private boolean simulationAllowed;
@@ -1006,15 +1171,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         /** The crafted resource changed, so a running job, cooldown and failures no longer belong to this order. */
         private void forgetJob() {
             craftingSince = 0;
+            disabledWhileCrafting = false;
             settledAt = 0;
             cooldownUntil = 0;
             backoffUntil = 0;
             failures = 0;
-            if (status == StandingOrderStatus.CRAFTING || status == StandingOrderStatus.CRAFTING_LONG
-                || status == StandingOrderStatus.COOLDOWN) {
-                status = StandingOrderStatus.IDLE;
-                message = null;
-            }
         }
     }
 }

@@ -471,10 +471,21 @@ class StandingOrderHttpTest {
                 .getAsString(),
             "Stock is above the trigger");
         assertTrue(
-            status.has("message") && status.has("changedAt")
+            status.has("reason") && status.has("resource")
+                && status.has("path")
+                && status.has("submitError")
+                && status.has("changedAt")
                 && status.has("lastSubmittedAmount")
                 && status.has("nextCheckAt")
                 && status.has("craftingSince"));
+        assertFalse(status.has("message"), "Status details are codes, not text");
+        assertTrue(
+            status.has("missing") && status.getAsJsonArray("missing")
+                .size() == 0);
+        assertTrue(
+            status.get("reason")
+                .isJsonNull(),
+            "Nothing to explain while the trigger does not hold");
         assertTrue(
             status.get("changedAt")
                 .getAsLong() > 0);
@@ -781,18 +792,45 @@ class StandingOrderHttpTest {
         tick();
         assertRejected(request("POST", run, OWNER, ""), HTTP_CONFLICT, "STANDING_ORDER_NOT_RUNNABLE", null, null);
         GridSwitch.set(gridKey, true);
+        // The engine looks at the network again when a change of the order reaches it, or at its next sweep.
+        assertEquals(HTTP_OK, request("PATCH", order(seeded), OWNER, "{\"cooldownSeconds\":5}").status());
         tick();
         assertEquals(HTTP_ACCEPTED, request("POST", run, OWNER, "").status());
     }
 
+    private String order(StandingOrderStore.Valid seeded) {
+        return orders + "/" + seeded.key();
+    }
+
     @Test
-    void theReadCostOfAChangeIsJudgedOnTheMergedDefinition() throws Exception {
+    void changesThatCostAReadAreNeverRefusedForTheirCost() throws Exception {
         StandingOrderStore.Valid seeded = seed("Off", false, plate.web$getKey());
-        String order = orders + "/" + seeded.key();
+        String order = order(seeded);
         assertEquals(HTTP_OK, request("PATCH", order, OWNER, "{\"name\":\"Renamed\"}").status());
+        for (int toggle = 0; toggle < 3; toggle++) {
+            assertEquals(HTTP_OK, request("PATCH", order, OWNER, "{\"enabled\":true}").status());
+            assertEquals(HTTP_OK, request("PATCH", order, OWNER, "{\"enabled\":false}").status());
+        }
         assertEquals(HTTP_OK, request("PATCH", order, OWNER, "{\"enabled\":true}").status());
-        assertEquals(HTTP_OK, request("PATCH", order, OWNER, "{\"enabled\":false}").status());
-        assertRejected(request("PATCH", order, OWNER, "{\"enabled\":true}"), 429, "TOO_MANY_REQUESTS", null, null);
+        assertEquals(
+            HTTP_OK,
+            request(
+                "PATCH",
+                order,
+                OWNER,
+                "{\"action\":"
+                    + platesBelow(definition -> object(definition, "action").addProperty("resource", key(ingot)))
+                        .getAsJsonObject("action")
+                    + "}")
+                .status());
+        for (int run = 0; run < 3; run++) {
+            assertEquals(HTTP_ACCEPTED, request("POST", order + "/run", OWNER, "").status());
+        }
+        assertEquals(
+            2,
+            data(post(OWNER, platesBelow(definition -> definition.addProperty("name", "Second"))))
+                .getAsJsonArray("orders")
+                .size());
     }
 
     @Test
@@ -1051,9 +1089,11 @@ class StandingOrderHttpTest {
             assertFalse(
                 listing.get("serverEnabled")
                     .getAsBoolean());
-            assertFalse(
+            assertEquals(
+                headers.equals(ADMIN),
                 listing.get("canEdit")
-                    .getAsBoolean());
+                    .getAsBoolean(),
+                "canEdit is the account's permission; serverEnabled tells what the server accepts");
             assertEquals(
                 1,
                 listing.getAsJsonArray("orders")
@@ -1104,9 +1144,9 @@ class StandingOrderHttpTest {
     }
 
     @Test
-    void aDisabledServerFeatureRefusesEveryChangeEvenFromAnAdministrator() throws Exception {
-        StandingOrderStore.Valid seeded = seed("Seeded", true, plate.web$getKey());
-        String order = orders + "/" + seeded.key();
+    void aDisabledServerFeatureStillAllowsCleaningUpButRefusesCreatingRunningAndEnabling() throws Exception {
+        StandingOrderStore.Valid on = seed("On", true, plate.web$getKey());
+        StandingOrderStore.Valid off = seed("Off", false, ingot.web$getKey());
         String valid = platesBelow(definition -> {}).toString();
         Config.INSTANCE.standingOrders.enabled = false;
         for (String headers : new String[] { OWNER, ADMIN }) {
@@ -1117,30 +1157,58 @@ class StandingOrderHttpTest {
                 null,
                 null);
             assertRejected(
-                request("PATCH", order, headers, valid),
+                request("POST", order(on) + "/run", headers, ""),
                 HTTP_FORBIDDEN,
                 "STANDING_ORDERS_DISABLED",
                 null,
                 null);
             assertRejected(
-                request("DELETE", order, headers, ""),
-                HTTP_FORBIDDEN,
-                "STANDING_ORDERS_DISABLED",
-                null,
-                null);
-            assertRejected(
-                request("POST", order + "/run", headers, ""),
+                request("PATCH", order(off), headers, "{\"enabled\":true}"),
                 HTTP_FORBIDDEN,
                 "STANDING_ORDERS_DISABLED",
                 null,
                 null);
         }
+        assertFalse(
+            ((StandingOrderStore.Valid) CoreEngine.getStandingOrderStore()
+                .get(gridKey, off.key())).definition()
+                .enabled(),
+            "A refused enabling changes nothing");
         assertEquals(
-            Collections.singletonList(seeded),
+            2,
             CoreEngine.getStandingOrderStore()
-                .list(gridKey));
+                .list(gridKey)
+                .size());
+
+        assertEquals(HTTP_OK, request("PATCH", order(on), OWNER, "{\"name\":\"Renamed\"}").status());
+        assertEquals(HTTP_OK, request("PATCH", order(off), OWNER, "{\"name\":\"Renamed too\"}").status());
+        assertEquals(HTTP_OK, request("PATCH", order(on), OWNER, "{\"enabled\":false}").status());
+        assertEquals(HTTP_OK, request("PATCH", order(on), ADMIN, "{\"enabled\":false}").status(), "Already off");
+        assertEquals(HTTP_OK, request("DELETE", order(on), OWNER, "").status());
+        assertEquals(HTTP_OK, request("DELETE", order(off), ADMIN, "").status());
+        assertTrue(
+            CoreEngine.getStandingOrderStore()
+                .list(gridKey)
+                .isEmpty());
+        assertRejected(request("DELETE", order(on), OWNER, ""), HTTP_NOT_FOUND, "STANDING_ORDER_NOT_FOUND", null, null);
+
         Config.INSTANCE.standingOrders.enabled = true;
-        assertEquals(HTTP_OK, request("PATCH", order, OWNER, valid).status());
+        assertEquals(HTTP_OK, post(OWNER, platesBelow(definition -> {})).status());
+    }
+
+    @Test
+    void aDisabledServerFeatureStillHonoursThePlayersSettingForCleaningUp() throws Exception {
+        StandingOrderStore.Valid seeded = seed("Seeded", true, plate.web$getKey());
+        Config.INSTANCE.standingOrders.enabled = false;
+        Config.INSTANCE.standingOrders.allowPlayers = false;
+        assertRejected(request("DELETE", order(seeded), OWNER, ""), HTTP_FORBIDDEN, "NO_PERMISSIONS", null, null);
+        assertRejected(
+            request("PATCH", order(seeded), OWNER, "{\"enabled\":false}"),
+            HTTP_FORBIDDEN,
+            "NO_PERMISSIONS",
+            null,
+            null);
+        assertEquals(HTTP_OK, request("DELETE", order(seeded), ADMIN, "").status());
     }
 
     @Test
@@ -1202,53 +1270,6 @@ class StandingOrderHttpTest {
             1,
             data(post(OWNER, largest)).getAsJsonArray("orders")
                 .size());
-    }
-
-    // ----- Rate limit -----
-
-    @Test
-    void changesThatCostAReadAreLimitedPerNetworkWhileOtherEditsAreNot() throws Exception {
-        JsonObject listing = data(post(OWNER, platesBelow(definition -> {})));
-        String order = orders + "/" + orderKey(listing);
-        assertRejected(
-            post(OWNER, platesBelow(definition -> definition.addProperty("name", "Second"))),
-            429,
-            "TOO_MANY_REQUESTS",
-            null,
-            null);
-        assertRejected(request("POST", order + "/run", OWNER, ""), 429, "TOO_MANY_REQUESTS", null, null);
-        assertRejected(
-            request(
-                "PATCH",
-                order,
-                OWNER,
-                platesBelow(definition -> object(definition, "action").addProperty("resource", key(ingot))).toString()),
-            429,
-            "TOO_MANY_REQUESTS",
-            null,
-            null);
-        assertEquals(
-            1,
-            list(OWNER).getAsJsonArray("orders")
-                .size(),
-            "Rejected changes store nothing");
-        for (String name : new String[] { "Renamed", "Renamed again" }) {
-            assertEquals(
-                HTTP_OK,
-                request(
-                    "PATCH",
-                    order,
-                    OWNER,
-                    platesBelow(definition -> definition.addProperty("name", name)).toString()).status());
-        }
-        assertEquals(
-            HTTP_OK,
-            request(
-                "PATCH",
-                order,
-                OWNER,
-                platesBelow(definition -> definition.addProperty("enabled", false)).toString()).status());
-        assertEquals(HTTP_OK, request("DELETE", order, OWNER, "").status());
     }
 
     // ----- Plumbing -----

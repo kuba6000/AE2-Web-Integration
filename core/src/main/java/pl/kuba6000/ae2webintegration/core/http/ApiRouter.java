@@ -49,7 +49,10 @@ public final class ApiRouter implements HttpHandler {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final int MAX_BODY_BYTES = 8 * 1024;
-    // A standing order condition tree nests at most four groups, each an object and a list, within a document.
+    // At most 16 nested objects and lists, the body itself included. A valid standing order has at most 8: the body,
+    // then
+    // an object per condition level and a list per group above the deepest level. The rest leaves room for the
+    // validator to name a tree that is too deep instead of the router refusing it unread.
     private static final int MAX_NESTING = 16;
 
     @Desugar
@@ -256,7 +259,7 @@ public final class ApiRouter implements HttpHandler {
 
     /** Bounded objects retain duplicate-key rejection at every nested configuration level. */
     private static JsonObject readObject(JsonReader reader, int depth) throws IOException, InvalidInput {
-        if (depth > MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
+        if (depth >= MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
         JsonObject object = new JsonObject();
         reader.beginObject();
         while (reader.hasNext()) {
@@ -269,7 +272,7 @@ public final class ApiRouter implements HttpHandler {
     }
 
     private static JsonArray readArray(JsonReader reader, int depth) throws IOException, InvalidInput {
-        if (depth > MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
+        if (depth >= MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
         JsonArray array = new JsonArray();
         reader.beginArray();
         while (reader.hasNext()) array.add(readValue(reader, depth));

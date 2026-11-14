@@ -18,7 +18,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  *
  * <p>
  * Removes the order and cancels its running calculation. A crafting job it already submitted keeps running. Deleting
- * needs network access and, unless the account is an administrator, the server's allow_players setting.
+ * needs network access and, unless the account is an administrator, the server's allow_players setting; it also works
+ * while standing orders are disabled on the server.
  *
  * @pathParam gridKey Persistent network identifier.
  * @pathParam orderKey Standing order identifier.
@@ -26,8 +27,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied, or only administrators may change
- *           standing orders. STANDING_ORDERS_DISABLED: standing orders are disabled on the server. CSRF_REJECTED:
- *           cookie or configured-local mutations require X-AE2-Request: true.
+ *           standing orders. CSRF_REJECTED: cookie or configured-local mutations require X-AE2-Request: true.
  * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found. STANDING_ORDER_NOT_FOUND: the network has no
  *           such order.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
@@ -39,7 +39,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
- * @responseExample 403 {"status":"STANDING_ORDERS_DISABLED","data":null}
+ * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
  * @responseExample 404 {"status":"STANDING_ORDER_NOT_FOUND","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}

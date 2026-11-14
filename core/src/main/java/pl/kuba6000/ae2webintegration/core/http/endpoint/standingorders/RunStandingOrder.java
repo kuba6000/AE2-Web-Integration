@@ -26,8 +26,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * Asks the server to check the order at its next tick without waiting for its cooldown or backoff, reading the network
  * once more. The usual conditions still apply: nothing is crafted unless the trigger holds, a CPU is free and the order
  * is not already running. Poll the standing order list for the outcome. Running needs network access and, unless the
- * account is an administrator, the server's allow_players setting. A network accepts one change that costs a read
- * every 5 seconds, shared with creating orders and edits that add resources.
+ * account is an administrator, the server's allow_players setting, and standing orders enabled on the server. The
+ * extra read of the network is spaced by the server and never refused.
  *
  * @pathParam gridKey Persistent network identifier.
  * @pathParam orderKey Standing order identifier.
@@ -45,8 +45,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
- * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the network's read allowance is not available yet, or the
- *           unauthenticated request rate limit was exceeded.
+ * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
  * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
@@ -80,15 +79,13 @@ public final class RunStandingOrder extends StandingOrderRequest {
     @Override
     public void handle() {
         StandingOrderEditor editor = editor();
-        if (editor == null || refusesChange()) return;
+        if (editor == null || refusesNewWork()) return;
         try {
             switch (editor.run(gridKey, orderKey)) {
                 case NOT_FOUND -> deny(ApiStatus.STANDING_ORDER_NOT_FOUND);
                 case NOT_RUNNABLE -> deny(ApiStatus.STANDING_ORDER_NOT_RUNNABLE);
                 case QUEUED -> respond(HTTP_ACCEPTED, new Response(ApiStatus.OK, null));
             }
-        } catch (StandingOrderEditor.TooManyReadRequests tooSoon) {
-            deny(ApiStatus.TOO_MANY_REQUESTS);
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }

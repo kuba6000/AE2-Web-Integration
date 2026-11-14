@@ -40,8 +40,10 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.standingorders.AmountPolicy;
@@ -51,6 +53,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.CraftAction;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderReason;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderSnapshot;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStatus;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
@@ -69,6 +72,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 class StandingOrderEngineTest extends GridTestScope {
 
     private static final long MINUTE = 60_000;
+    private static final long SWEEP = StandingOrderEngine.SWEEP_MILLIS;
     private static final CraftingOptions PLAIN = new CraftingOptions(false, false);
     private static final CraftAction FILL_PLASTIC = new CraftAction(
         key("so-plastic"),
@@ -254,6 +258,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(WAITING_FOR_CPU, status(waiting));
+        assertEquals(StandingOrderReason.NO_IDLE_CPU, snapshot(waiting).reason());
         assertEquals(IDLE, status(counted));
         assertTrue(grid.calculations.isEmpty());
 
@@ -280,6 +285,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(WAITING_FOR_CPU, status(order));
+        assertEquals(StandingOrderReason.SELECTED_CPU_UNAVAILABLE, snapshot(order).reason());
         assertNotNull(other);
         selected.finish();
         tick(MINUTE);
@@ -305,6 +311,7 @@ class StandingOrderEngineTest extends GridTestScope {
             grid.calculations.get(attempt).future.complete(new FakeJob(true));
             tick(0);
             assertEquals(BLOCKED_MISSING, status(order));
+            assertEquals(StandingOrderReason.MISSING_INGREDIENTS, snapshot(order).reason());
             long delay = delaysSeconds[attempt] * 1000;
             assertEquals(now + delay, snapshot(order).nextCheckAt());
             tick(delay - 1);
@@ -314,6 +321,103 @@ class StandingOrderEngineTest extends GridTestScope {
         }
         assertTrue(grid.submissions.isEmpty());
         assertEquals(delaysSeconds.length + 1, grid.calculations.size());
+    }
+
+    @Test
+    void aBlockedOrderNamesTheFiveLargestShortfallsOfItsCalculation() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        FakeJob job = new FakeJob(
+            true,
+            shortfall("so-a", 3),
+            shortfall("so-b", 40),
+            shortfall("so-c", 0),
+            shortfall("so-d", 12),
+            shortfall("so-e", 7),
+            shortfall("so-f", 99),
+            shortfall("so-g", 1),
+            shortfall("so-h", 20));
+        int storage = grid.storageReads;
+        grid.calculations.get(0).future.complete(job);
+        tick(0);
+        assertEquals(BLOCKED_MISSING, status(order));
+        assertEquals(StandingOrderReason.MISSING_INGREDIENTS, snapshot(order).reason());
+        assertEquals(1, job.summaries);
+        assertEquals(storage, grid.storageReads, "The shortfalls come from the job, not from another stock read");
+        List<StandingOrderSnapshot.MissingIngredient> missing = snapshot(order).missing();
+        assertEquals(5, missing.size());
+        long[] amounts = { 99, 40, 20, 12, 7 };
+        String[] names = { "so-f", "so-b", "so-h", "so-d", "so-e" };
+        for (int index = 0; index < 5; index++) {
+            assertEquals(
+                amounts[index],
+                missing.get(index)
+                    .amount());
+            assertEquals(
+                names[index],
+                missing.get(index)
+                    .displayName());
+            assertEquals(
+                key(names[index]),
+                missing.get(index)
+                    .resource());
+        }
+        tick(30_000);
+        grid.calculations.get(1).future.complete(new FakeJob(false));
+        tick(0);
+        assertEquals(CRAFTING, status(order));
+        assertTrue(
+            snapshot(order).missing()
+                .isEmpty(),
+            "Only the blocked status carries shortfalls");
+    }
+
+    @Test
+    void aSummaryThatCannotBeReadStillBlocksTheOrderWithoutShortfalls() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        FakeJob job = new FakeJob(true, shortfall("so-a", 3));
+        job.summaryFails = true;
+        grid.calculations.get(0).future.complete(job);
+        tick(0);
+        assertEquals(BLOCKED_MISSING, status(order));
+        assertTrue(
+            snapshot(order).missing()
+                .isEmpty());
+    }
+
+    private static ICraftingPlanSummaryEntry shortfall(String id, long missing) {
+        ItemIdentityRequestTest.Resource what = new ItemIdentityRequestTest.Resource(id, 0, false);
+        return new ICraftingPlanSummaryEntry() {
+
+            @Override
+            public IAEKey web$getWhat() {
+                return what;
+            }
+
+            @Override
+            public long web$getMissingAmount() {
+                return missing;
+            }
+
+            @Override
+            public long web$getStoredAmount() {
+                return 0;
+            }
+
+            @Override
+            public long web$getCraftAmount() {
+                return 0;
+            }
+        };
     }
 
     @Test
@@ -331,10 +435,12 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(new CraftingOptions(false, true), grid.calculations.get(0).options);
-        grid.calculations.get(0).future.complete(new FakeJob(true));
+        FakeJob simulated = new FakeJob(true);
+        grid.calculations.get(0).future.complete(simulated);
         tick(1000);
         assertEquals(CRAFTING, status(order));
         assertEquals(1, grid.submissions.size());
+        assertEquals(0, simulated.summaries, "A plan that is submitted anyway is not summarized");
     }
 
     @Test
@@ -350,7 +456,8 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.calculations.get(0).future.complete(new FakeJob(false));
         tick(1000);
         assertEquals(SUBMIT_FAILED, status(order));
-        assertEquals("No suitable CPU found for the crafting job.", snapshot(order).message());
+        assertEquals(StandingOrderReason.SUBMIT_REJECTED, snapshot(order).reason());
+        assertEquals("No suitable CPU found for the crafting job.", snapshot(order).submitError());
         assertEquals(now + 30_000, snapshot(order).nextCheckAt());
         assertEquals(0, snapshot(order).lastSubmittedAmount());
 
@@ -361,7 +468,8 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.calculations.get(1).future.complete(new FakeJob(false));
         tick(1000);
         assertEquals(CRAFTING, status(order));
-        assertNull(snapshot(order).message());
+        assertNull(snapshot(order).reason());
+        assertNull(snapshot(order).submitError());
     }
 
     @Test
@@ -375,7 +483,8 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.calculations.get(0).future.completeExceptionally(new IllegalStateException("No patterns"));
         tick(0);
         assertEquals(SUBMIT_FAILED, status(order));
-        assertEquals("Calculation failed", snapshot(order).message());
+        assertEquals(StandingOrderReason.CALCULATION_FAILED, snapshot(order).reason());
+        assertNull(snapshot(order).submitError(), "Only the crafting system's own message is free text");
         tick(30_000);
         assertEquals(2, grid.calculations.size());
     }
@@ -383,7 +492,7 @@ class StandingOrderEngineTest extends GridTestScope {
     // ----- Re-check before submit -----
 
     @Test
-    void aPlanIsDroppedWhenTheTriggerNoLongerHoldsOnTheLatestRead() {
+    void aFinishedPlanIsDroppedWhenTheTriggerNoLongerHoldsOnTheLatestRead() {
         grid.addCpu();
         grid.stock("so-plastic", 100);
         grid.craftable("so-plastic");
@@ -391,12 +500,65 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         grid.stock("so-plastic", 5000);
-        tick(MINUTE);
-        assertEquals(CALCULATING, status(order), "A running calculation is left alone until it finishes");
         grid.calculations.get(0).future.complete(new FakeJob(false));
-        tick(1000);
+        tick(MINUTE);
         assertEquals(IDLE, status(order));
         assertTrue(grid.submissions.isEmpty());
+    }
+
+    @Test
+    void aRunningCalculationIsCancelledWhenANewerReadShowsThatTheTriggerNoLongerHolds() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        OrderGrid.Calculation calculation = grid.calculations.get(0);
+        assertEquals(CALCULATING, status(order));
+
+        grid.stock("so-plastic", 900);
+        tick(MINUTE);
+        assertEquals(CALCULATING, status(order), "A trigger that still holds keeps the calculation");
+        assertFalse(calculation.future.isCancelled());
+
+        grid.stock("so-plastic", 5000);
+        tick(MINUTE);
+        assertTrue(calculation.future.isCancelled());
+        assertEquals(IDLE, status(order));
+        assertEquals(now, snapshot(order).changedAt());
+        assertEquals(1, grid.calculations.size());
+        assertTrue(grid.submissions.isEmpty());
+
+        grid.stock("so-plastic", 100);
+        tick(MINUTE);
+        assertEquals(CALCULATING, status(order), "The freed slot starts the order again when its trigger holds");
+        assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void aCalculationThatRunsLongerThanTheLimitIsCancelledAndTheOrderBacksOff() {
+        settings.maxCalculationMinutes = 2;
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        OrderGrid.Calculation calculation = grid.calculations.get(0);
+        tick(2 * MINUTE - 1);
+        assertEquals(CALCULATING, status(order));
+        assertFalse(calculation.future.isCancelled());
+        tick(1);
+        assertTrue(calculation.future.isCancelled());
+        assertEquals(SUBMIT_FAILED, status(order));
+        assertEquals(StandingOrderReason.CALCULATION_TIMED_OUT, snapshot(order).reason());
+        assertEquals(now + 30_000, snapshot(order).nextCheckAt());
+        tick(30_000 - 1);
+        assertEquals(1, grid.calculations.size(), "The backoff holds");
+        tick(1);
+        assertEquals(CALCULATING, status(order));
+        assertEquals(2, grid.calculations.size(), "The slot of the cancelled calculation is free again");
     }
 
     @Test
@@ -459,9 +621,7 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.calculations.get(0).future.complete(new FakeJob(false));
         tick(1000);
         assertEquals(IDLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .startsWith("Nothing to order"));
+        assertEquals(StandingOrderReason.NOTHING_TO_ORDER, snapshot(order).reason());
         assertTrue(grid.submissions.isEmpty());
     }
 
@@ -474,6 +634,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(UNAVAILABLE, status(order));
+        assertEquals(StandingOrderReason.AMOUNT_OVERFLOW, snapshot(order).reason());
         assertTrue(grid.calculations.isEmpty());
     }
 
@@ -488,6 +649,7 @@ class StandingOrderEngineTest extends GridTestScope {
         StableKey first = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
         tick(0);
         assertEquals(WAITING_FOR_STOCK, status(first));
+        assertEquals(StandingOrderReason.WAITING_FIRST_READ, snapshot(first).reason());
         tick(1000);
         assertEquals(IDLE, status(first));
         int reads = grid.storageReads;
@@ -495,6 +657,7 @@ class StandingOrderEngineTest extends GridTestScope {
         StableKey second = post("Extra", below("so-extra", 100), fixed("so-plastic", 64));
         tick(0);
         assertEquals(WAITING_FOR_STOCK, status(second));
+        assertEquals(StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, snapshot(second).reason());
         tick(1000);
         assertEquals(reads + 1, grid.storageReads, "A resource missing from the baseline costs one extra read");
         assertEquals(CALCULATING, status(second));
@@ -514,7 +677,7 @@ class StandingOrderEngineTest extends GridTestScope {
         grid.failReads = true;
         tick(MINUTE);
         assertEquals(WAITING_FOR_STOCK, status(order));
-        assertEquals("The last stock read failed", snapshot(order).message());
+        assertEquals(StandingOrderReason.READ_FAILED, snapshot(order).reason());
         grid.failReads = false;
         grid.stock("so-plastic", 100);
         tick(2 * MINUTE);
@@ -539,6 +702,7 @@ class StandingOrderEngineTest extends GridTestScope {
         cpu.finish();
         tick(1000);
         assertEquals(WAITING_FOR_STOCK, status(order), "The held read predates the end of the job");
+        assertEquals(StandingOrderReason.WAITING_FRESH_READ_AFTER_JOB, snapshot(order).reason());
         assertEquals(1, grid.calculations.size());
         tick(MINUTE);
         assertEquals(CALCULATING, status(order));
@@ -578,6 +742,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(UNAVAILABLE, status(order));
+        assertEquals(StandingOrderReason.UNKNOWN_RESOURCE, snapshot(order).reason());
         grid.craftable("so-ghost");
         tick(MINUTE);
         assertEquals(CALCULATING, status(order));
@@ -591,9 +756,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(UNAVAILABLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("not craftable"));
+        assertEquals(StandingOrderReason.NOT_CRAFTABLE, snapshot(order).reason());
         assertTrue(grid.calculations.isEmpty());
     }
 
@@ -607,9 +770,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(UNAVAILABLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("emitter"));
+        assertEquals(StandingOrderReason.EMITTER_BACKED, snapshot(order).reason());
         assertTrue(grid.calculations.isEmpty());
     }
 
@@ -627,9 +788,8 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(UNAVAILABLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("lightMode"));
+        assertEquals(StandingOrderReason.CAPABILITY_UNAVAILABLE, snapshot(order).reason());
+        assertEquals("action.options.lightMode", snapshot(order).path());
         capabilities.put(CRAFTING_LIGHT_MODE, true);
         tick(MINUTE);
         assertEquals(CALCULATING, status(order));
@@ -649,9 +809,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(MINUTE);
         assertEquals(UNAVAILABLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("UNSUPPORTED_VERSION"));
+        assertEquals(StandingOrderReason.INVALID_DEFINITION, snapshot(order).reason());
         assertEquals(0, grid.storageReads, "An undecodable order needs no stock");
     }
 
@@ -709,25 +867,129 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
-    void losingTheNetworkCancelsCalculationsAndShutdownCancelsEverything() {
+    void aBriefOutageOfTheNetworkOnlyBlocksAndKeepsEverythingTheOrderHolds() {
+        OrderGrid.Cpu cpu = grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        grid.onSubmit = () -> cpu.craft("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        OrderGrid.Calculation calculation = grid.calculations.get(0);
+        int reads = grid.storageReads;
+
+        // Only the engine looks at the network here: the tracking coordinator's own reactions are not under test.
+        grid.controllerState(AEControllerState.NO_CONTROLLER);
+        engineTick(SWEEP);
+        assertEquals(GRID_UNAVAILABLE, status(order));
+        assertFalse(calculation.future.isCancelled(), "A running calculation survives a brief outage");
+        calculation.future.complete(new FakeJob(false));
+        engineTick(SWEEP);
+        assertEquals(GRID_UNAVAILABLE, status(order));
+        assertTrue(grid.submissions.isEmpty(), "Nothing is submitted while the network is away");
+
+        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        engineTick(SWEEP);
+        assertEquals(CRAFTING, status(order), "The finished plan is checked and submitted once the network is back");
+        assertEquals(1, grid.submissions.size());
+        assertEquals(1, grid.calculations.size(), "The order was not calculated again");
+        assertEquals(reads, grid.storageReads, "The engine asks for no read because the network was away briefly");
+    }
+
+    @Test
+    void aBriefOutageKeepsTheStockSoOrdersNeitherWaitForNorRequestAnotherRead() {
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        assertEquals(IDLE, status(order));
+        int reads = grid.storageReads;
+        grid.stock("so-plastic", 100);
+
+        grid.controllerState(AEControllerState.NO_CONTROLLER);
+        engineTick(SWEEP);
+        assertEquals(GRID_UNAVAILABLE, status(order));
+        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        engineTick(SWEEP);
+        assertEquals(IDLE, status(order), "The stock read before the outage is still the baseline");
+        assertEquals(reads, grid.storageReads);
+        assertTrue(grid.calculations.isEmpty());
+    }
+
+    @Test
+    void anOutageLongerThanTheStockIntervalDropsTheStaleStockAndAsksForARead() {
         grid.addCpu();
         grid.stock("so-plastic", 100);
         grid.craftable("so-plastic");
         StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
         tick(0);
         tick(1000);
-        grid.controllerState(AEControllerState.NO_CONTROLLER);
-        tick(1000);
-        assertEquals(GRID_UNAVAILABLE, status(order));
-        assertTrue(grid.calculations.get(0).future.isCancelled());
+        OrderGrid.Calculation calculation = grid.calculations.get(0);
 
+        grid.controllerState(AEControllerState.NO_CONTROLLER);
+        for (int sweeps = 0; sweeps < 20; sweeps++) engineTick(SWEEP);
+        assertTrue(calculation.future.isCancelled(), "Stock that old belongs to a state that is gone");
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        engineTick(SWEEP);
+        assertEquals(WAITING_FOR_STOCK, status(order));
+        assertEquals(StandingOrderReason.WAITING_FIRST_READ, snapshot(order).reason());
+        int reads = grid.storageReads;
         tick(1000);
-        tick(1000);
+        assertTrue(grid.storageReads > reads, "A fresh read was taken once the network was back");
         assertEquals(CALCULATING, status(order));
-        Future<?> second = grid.calculations.get(1).future;
+        assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void anIdleTickReadsNothingFromTheNetworkAndOnlyTheSweepProbesIt() {
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        int probes = grid.pathingProbes;
+        int storage = grid.storageReads;
+        int cpus = grid.cpuReads;
+        for (int index = 0; index < 3; index++) engineTick(1000);
+        assertEquals(probes, grid.pathingProbes, "No availability probe between sweeps");
+        assertEquals(storage, grid.storageReads);
+        assertEquals(cpus, grid.cpuReads);
+        engineTick(SWEEP);
+        assertTrue(grid.pathingProbes > probes, "The sweep notices changes nothing else would");
+        assertEquals(cpus, grid.cpuReads);
+    }
+
+    @Test
+    void aSwitchChangeIsNoticedBySweepWithoutAnyOtherActivity() {
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStandingOrdersEnabled(false);
+        engineTick(1000);
+        assertEquals(IDLE, status(order), "Nothing looks at the network between sweeps");
+        engineTick(SWEEP);
+        assertEquals(SWITCHED_OFF, status(order));
+    }
+
+    @Test
+    void shutdownCancelsEveryCalculationAndForgetsTheOrders() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        Future<?> calculation = grid.calculations.get(0).future;
         engine.close();
-        assertTrue(second.isCancelled());
+        assertTrue(calculation.isCancelled());
         assertNull(engine.snapshot(order));
     }
 
@@ -740,7 +1002,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         settings.enabled = false;
-        tick(0);
+        tick(SWEEP);
         assertEquals(SWITCHED_OFF, status(order));
         assertTrue(grid.calculations.get(0).future.isCancelled());
         tick(1000);
@@ -749,12 +1011,12 @@ class StandingOrderEngineTest extends GridTestScope {
         GRID_IDENTITIES.getPersistentData(gridKey)
             .getSettings()
             .setStandingOrdersEnabled(false);
-        tick(0);
+        tick(SWEEP);
         assertEquals(SWITCHED_OFF, status(order));
         GRID_IDENTITIES.getPersistentData(gridKey)
             .getSettings()
             .setStandingOrdersEnabled(true);
-        tick(0);
+        tick(SWEEP);
         tick(1000);
         assertEquals(CALCULATING, status(order));
         assertEquals(2, grid.calculations.size());
@@ -832,9 +1094,8 @@ class StandingOrderEngineTest extends GridTestScope {
             .getSettings()
             .setStorageTracked(false);
         grid.stock("so-plastic", 100);
+        tick(SWEEP);
         tick(1000);
-        tick(1000);
-        tick(MINUTE);
         assertEquals(CALCULATING, status(order));
     }
 
@@ -862,6 +1123,168 @@ class StandingOrderEngineTest extends GridTestScope {
         assertEquals(reads + 1, grid.storageReads);
         assertEquals(CALCULATING, status(order));
         assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void repeatedRunRequestsAreCoalescedAndSpacedInsteadOfRefused() {
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStockSampleIntervalSeconds(900);
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        int reads = grid.storageReads;
+
+        // The engine takes a request in its part of a tick, so the coordinator reads on the tick after.
+        engine.requestRun(gridKey, order);
+        engine.requestRun(gridKey, order);
+        tick(0);
+        tick(1000);
+        assertEquals(reads + 1, grid.storageReads, "The first extra read is not delayed");
+        engine.requestRun(gridKey, order);
+        engine.requestRun(gridKey, order);
+        tick(0);
+        tick(1000);
+        tick(26_000);
+        assertEquals(reads + 1, grid.storageReads, "The next one waits for the minimum interval");
+        assertEquals(IDLE, status(order));
+        tick(3000);
+        assertEquals(reads + 2, grid.storageReads, "Both requests became one read");
+        tick(MINUTE);
+        assertEquals(reads + 2, grid.storageReads);
+    }
+
+    @Test
+    void anOrderWaitingForAThrottledReadShowsTheWaitingStatusUntilItArrives() {
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStockSampleIntervalSeconds(900);
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        grid.stock("so-extra", 50);
+        StableKey first = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        engine.requestRun(gridKey, first);
+        tick(0);
+        tick(1000);
+        int reads = grid.storageReads;
+
+        StableKey second = post("Extra", below("so-extra", 100), fixed("so-plastic", 64));
+        tick(0);
+        assertEquals(WAITING_FOR_STOCK, status(second));
+        assertEquals(StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, snapshot(second).reason());
+        tick(1000);
+        tick(26_000);
+        assertEquals(WAITING_FOR_STOCK, status(second), "The read is deferred, never refused");
+        assertEquals(reads, grid.storageReads);
+        tick(3000);
+        assertEquals(reads + 1, grid.storageReads);
+        assertEquals(CALCULATING, status(second));
+    }
+
+    @Test
+    void aSubmissionThatThrowsIsReportedAsACodeAndBacksOff() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        grid.onSubmit = () -> { throw new IllegalStateException("native submit failure with details"); };
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(1000);
+        assertEquals(SUBMIT_FAILED, status(order));
+        assertEquals(StandingOrderReason.SUBMIT_ERROR, snapshot(order).reason());
+        assertNull(snapshot(order).submitError(), "Exception text is logged, not published");
+        assertEquals(now + 30_000, snapshot(order).nextCheckAt());
+    }
+
+    @Test
+    void anOrderEnabledAgainAfterItsJobFinishedWhileItWasOffWaitsForAReadTakenAfterwardsButServesNoCooldown() {
+        // A tracked network keeps its stock feed while the only order is off.
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStorageTracked(true);
+        OrderGrid.Cpu cpu = grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        grid.onSubmit = () -> cpu.craft("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), true, 3600);
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(1000);
+        assertEquals(CRAFTING, status(order));
+        // Past the spacing of the extra read that gave the order its first stock.
+        tick(30_000);
+
+        post(order, "Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), false, 3600);
+        tick(0);
+        assertEquals(DISABLED, status(order));
+        cpu.finish();
+        post(order, "Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), true, 3600);
+        tick(0);
+        assertEquals(WAITING_FOR_STOCK, status(order), "The stock read in hand may predate the end of the job");
+        assertEquals(StandingOrderReason.WAITING_FRESH_READ_AFTER_JOB, snapshot(order).reason());
+        assertEquals(1, grid.calculations.size(), "Nothing is calculated before a later read");
+        int reads = grid.storageReads;
+
+        tick(1000);
+        assertEquals(reads + 1, grid.storageReads, "The read it waits for is requested, not left to the next sample");
+        assertEquals(CALCULATING, status(order), "That read releases the order, and no cooldown was served");
+        assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void anOrderEnabledAgainWhileItsJobStillRunsKeepsCraftingAndServesItsCooldownAtTheEnd() {
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStorageTracked(true);
+        OrderGrid.Cpu cpu = grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        grid.onSubmit = () -> cpu.craft("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), true, 3600);
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(1000);
+        post(order, "Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), false, 3600);
+        tick(0);
+        post(order, "Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64), true, 3600);
+        tick(0);
+        assertEquals(CRAFTING, status(order));
+        cpu.finish();
+        tick(MINUTE);
+        assertEquals(COOLDOWN, status(order), "The job ended while the order was on, so its cooldown applies");
+    }
+
+    @Test
+    void aStockTrackedNetworkWithOrdersIsReadOnceAtServerStart() {
+        GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings()
+            .setStorageTracked(true);
+        grid.addCpu();
+        grid.stock("so-plastic", 5000);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        // The server applies the stored orders before the first read, which the tracker takes in the same tick.
+        now += 1000;
+        engine.applyPosted(now);
+        coordinator.tick(ae, now);
+        engine.tick(now);
+        assertEquals(1, grid.storageReads);
+        assertEquals(IDLE, status(order), "That first sample is the baseline");
+        tick(1000);
+        tick(1000);
+        assertEquals(1, grid.storageReads, "Nobody asked for a second read");
+        tick(MINUTE);
+        assertEquals(2, grid.storageReads);
     }
 
     @Test
@@ -902,6 +1325,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(1000);
         assertEquals(CALCULATING, status(first));
         assertEquals(QUEUED, status(second));
+        assertEquals(StandingOrderReason.CALCULATION_SLOTS_FULL, snapshot(second).reason());
         assertEquals(1, grid.calculations.size());
         grid.calculations.get(0).future.complete(new FakeJob(false));
         tick(1000);
@@ -1002,9 +1426,8 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(MINUTE);
         tick(MINUTE);
         assertEquals(UNAVAILABLE, status(order));
-        assertTrue(
-            snapshot(order).message()
-                .contains("ambiguous"));
+        assertEquals(StandingOrderReason.AMBIGUOUS_RESOURCE, snapshot(order).reason());
+        assertEquals(key("so-trigger"), snapshot(order).resource());
         assertTrue(grid.calculations.isEmpty(), "A resource that cannot be read must not look empty");
     }
 
@@ -1024,10 +1447,10 @@ class StandingOrderEngineTest extends GridTestScope {
         assertEquals(COOLDOWN, status(order));
 
         grid.controllerState(AEControllerState.NO_CONTROLLER);
-        tick(1000);
+        tick(SWEEP);
         assertEquals(GRID_UNAVAILABLE, status(order));
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
-        tick(1000);
+        tick(SWEEP);
         tick(1000);
         tick(MINUTE);
         assertEquals(COOLDOWN, status(order));
@@ -1129,8 +1552,8 @@ class StandingOrderEngineTest extends GridTestScope {
         GRID_IDENTITIES.controllerValidated(replacement);
         assertEquals(gridKey, GRID_IDENTITIES.getKey(replacement));
         ae = TestGridFixtures.ae(replacement);
-        tick(1000);
-        assertTrue(first.future.isCancelled());
+        tick(SWEEP);
+        assertTrue(first.future.isCancelled(), "A calculation of another native network object is obsolete");
         tick(1000);
         tick(1000);
         assertEquals(CALCULATING, status(order));
@@ -1242,6 +1665,12 @@ class StandingOrderEngineTest extends GridTestScope {
         engine.tick(now);
     }
 
+    /** Advances only the engine, so that what the tracking coordinator does with the network does not interfere. */
+    private void engineTick(long millis) {
+        now += millis;
+        engine.tick(now);
+    }
+
     private @NotNull StandingOrderStatus status(StableKey order) {
         return snapshot(order).status();
     }
@@ -1288,9 +1717,13 @@ class StandingOrderEngineTest extends GridTestScope {
     private static final class FakeJob implements IAECraftingJob {
 
         private final boolean simulation;
+        private final List<ICraftingPlanSummaryEntry> entries;
+        private int summaries;
+        private boolean summaryFails;
 
-        private FakeJob(boolean simulation) {
+        private FakeJob(boolean simulation, ICraftingPlanSummaryEntry... entries) {
             this.simulation = simulation;
+            this.entries = Arrays.asList(entries);
         }
 
         @Override
@@ -1305,7 +1738,10 @@ class StandingOrderEngineTest extends GridTestScope {
 
         @Override
         public ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
-            throw new AssertionError("Standing orders never summarize a plan");
+            summaries++;
+            if (!simulation) throw new AssertionError("Only a blocked calculation is summarized");
+            if (summaryFails) throw new IllegalStateException("Native summary failed");
+            return () -> entries;
         }
     }
 
@@ -1444,6 +1880,7 @@ class StandingOrderEngineTest extends GridTestScope {
         private int storageReads;
         private int cpuReads;
         private int emitterQueries;
+        private int pathingProbes;
         private @Nullable StorageCapture capture;
 
         private OrderGrid() {
@@ -1472,6 +1909,12 @@ class StandingOrderEngineTest extends GridTestScope {
         @Override
         public IAECraftingGrid web$getCraftingGrid() {
             return this;
+        }
+
+        @Override
+        public IAEPathingGrid web$getPathingGrid() {
+            pathingProbes++;
+            return super.web$getPathingGrid();
         }
 
         @Override

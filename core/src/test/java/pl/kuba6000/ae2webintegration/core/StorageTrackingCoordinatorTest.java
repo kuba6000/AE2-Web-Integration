@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
@@ -503,6 +504,253 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .allMatch(point -> point.observedAt() == 2000),
                 "Only the scheduled sample is written to history");
             assertEquals(3, grid.storageReads);
+        }
+    }
+
+    @Test
+    void extraReadsOfOneGridCoalesceAndAreSpacedInsteadOfRefused() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("spacing-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710108, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(600);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size(), "The scheduled sample");
+
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 3000);
+            assertEquals(2, listener.observations.size(), "The first extra read is not delayed");
+
+            for (int request = 0; request < 5; request++) coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 4000);
+            coordinator.tick(TestGridFixtures.ae(grid), 32_999);
+            assertEquals(2, listener.observations.size(), "Further requests wait for the minimum interval");
+            coordinator.tick(TestGridFixtures.ae(grid), 33_000);
+            assertEquals(3, listener.observations.size(), "Five requests became one read");
+            coordinator.tick(TestGridFixtures.ae(grid), 34_000);
+            coordinator.tick(TestGridFixtures.ae(grid), 70_000);
+            assertEquals(3, listener.observations.size(), "A satisfied request is not taken again");
+            assertEquals(3, grid.storageReads);
+        }
+    }
+
+    @Test
+    void aScheduledSampleSatisfiesADeferredRequestAndDoesNotCountAsAnExtraRead() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("deferred-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710109, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(60);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size(), "Scheduled; the next one is due at 62000");
+
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 50_000);
+            assertEquals(2, listener.observations.size(), "An extra read at 50000");
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 51_000);
+            assertEquals(2, listener.observations.size(), "Deferred until 80000");
+            coordinator.tick(TestGridFixtures.ae(grid), 62_000);
+            assertEquals(3, listener.observations.size(), "The scheduled sample arrives first");
+            coordinator.tick(TestGridFixtures.ae(grid), 80_000);
+            assertEquals(3, listener.observations.size(), "It satisfied the request");
+
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 82_000);
+            assertEquals(
+                4,
+                listener.observations.size(),
+                "Only the extra read at 50000 counted, not the scheduled one at 62000");
+        }
+    }
+
+    @Test
+    void aLeasedGridThatBootsBrieflyKeepsItsSampleScheduleInsteadOfSamplingAgain() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("flap-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710110, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(600);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size());
+
+            for (int flap = 0; flap < 3; flap++) {
+                grid.controllerState(AEControllerState.NO_CONTROLLER);
+                coordinator.tick(TestGridFixtures.ae(grid), 3000 + flap * 2000L);
+                grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+                coordinator.tick(TestGridFixtures.ae(grid), 4000 + flap * 2000L);
+            }
+            assertEquals(1, listener.observations.size(), "A boot of the same network is no reason to read it again");
+            assertEquals(1, grid.storageReads);
+            coordinator.tick(TestGridFixtures.ae(grid), 601_000);
+            assertEquals(1, listener.observations.size());
+            coordinator.tick(TestGridFixtures.ae(grid), 602_000);
+            assertEquals(2, listener.observations.size(), "The schedule of the earlier sample still holds");
+        }
+    }
+
+    @Test
+    void aStockTrackedGridThatBootsBrieflyKeepsItsScheduleAndItsHistory() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("flap-tracked", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710111, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridSettingsData settings = GRID_IDENTITIES.getPersistentData(key)
+            .getSettings();
+        settings.setStorageTracked(true);
+        settings.setStockSampleIntervalSeconds(60);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            assertEquals(1, grid.storageReads);
+            grid.controllerState(AEControllerState.NO_CONTROLLER);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+            coordinator.tick(TestGridFixtures.ae(grid), 3000);
+            coordinator.tick(TestGridFixtures.ae(grid), 60_000);
+            assertEquals(1, grid.storageReads, "No sample until the one scheduled before the boot");
+            coordinator.tick(TestGridFixtures.ae(grid), 61_000);
+            assertEquals(2, grid.storageReads);
+            awaitStock(service, key, iron.web$getKey(), 61_000, 20);
+            assertEquals(
+                2,
+                service.history(key, null, 0, 100)
+                    .points()
+                    .stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
+                    .count(),
+                "The history holds exactly the two scheduled samples");
+        }
+    }
+
+    @Test
+    void aDeferredReadRequestSurvivesTheBootOfItsGridAndIsServedWhenTheSpacingPassed() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("flap-request", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710114, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(600);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 3000);
+            assertEquals(2, listener.observations.size(), "The extra read at 3000");
+
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 4000);
+            grid.controllerState(AEControllerState.NO_CONTROLLER);
+            coordinator.tick(TestGridFixtures.ae(grid), 5000);
+            grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+            coordinator.tick(TestGridFixtures.ae(grid), 6000);
+            coordinator.tick(TestGridFixtures.ae(grid), 32_999);
+            assertEquals(2, listener.observations.size(), "Still inside the spacing");
+            coordinator.tick(TestGridFixtures.ae(grid), 33_000);
+            assertEquals(3, listener.observations.size(), "The request outlived the boot");
+        }
+    }
+
+    @Test
+    void aBootThatOutlastsTheIntervalOrAReplacedGridSamplesAtOnce() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("flap-late", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710112, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridSettingsData settings = GRID_IDENTITIES.getPersistentData(key)
+            .getSettings();
+        settings.setStorageTracked(true);
+        settings.setStockSampleIntervalSeconds(60);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            grid.controllerState(AEControllerState.NO_CONTROLLER);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+            coordinator.tick(TestGridFixtures.ae(grid), 100_000);
+            assertEquals(2, grid.storageReads, "The sample due during the outage is taken when the network is back");
+
+            ItemIdentityRequestTest.Grid replacement = new ItemIdentityRequestTest.Grid(710112, iron);
+            GRID_IDENTITIES.controllerValidated(replacement);
+            assertEquals(key, GRID_IDENTITIES.getKey(replacement));
+            coordinator.tick(TestGridFixtures.ae(replacement), 101_000);
+            assertEquals(1, replacement.storageReads, "Another native network is read at once");
+        }
+    }
+
+    @Test
+    void anExtraReadThatIsInvalidatedStillCountsForTheSpacing() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("spacing-epoch", 20, false);
+        FaultGrid grid = new FaultGrid(710113, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(600);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size());
+            int reads = grid.contents.storageReads;
+
+            coordinator.requestStockRead(key);
+            grid.onStorageRead = () -> grid.capture.invalidateTerminal();
+            coordinator.tick(TestGridFixtures.ae(grid), 3000);
+            assertEquals(reads + 1, grid.contents.storageReads, "The extra read was attempted");
+            assertEquals(1, listener.observations.size(), "A read across a topology change is not a baseline");
+            coordinator.tick(TestGridFixtures.ae(grid), 3100);
+            coordinator.tick(TestGridFixtures.ae(grid), 32_999);
+            assertEquals(reads + 1, grid.contents.storageReads, "The attempt used up the spacing");
+            grid.onStorageRead = null;
+            coordinator.tick(TestGridFixtures.ae(grid), 33_000);
+            assertEquals(2, listener.observations.size(), "The request is still served once the spacing passed");
         }
     }
 

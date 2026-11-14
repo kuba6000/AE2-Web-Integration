@@ -17,7 +17,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +35,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderExc
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor.RunResult;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor.TooManyReadRequests;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor.UpdateResult;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -46,19 +45,17 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistor
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
- * Store and engine changes of one standing order as the HTTP layer drives them: serialized, and limited in how often
- * they may cost the network a read.
+ * Store and engine changes of one standing order as the HTTP layer drives them: serialized, and never refused because
+ * of what they cost the network.
  */
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture seeds and times.
 class StandingOrderEditorTest extends GridTestScope {
 
-    private static final long INTERVAL = MILLISECONDS.toNanos(StandingOrderEditor.MIN_READ_INTERVAL_MILLIS);
     private static final StableKey PLATE = TestGridFixtures.key(9201);
     private static final StableKey INGOT = TestGridFixtures.key(9202);
     private static final StableKey DUST = TestGridFixtures.key(9203);
 
     private final ConfigSettings.StandingOrders settings = new ConfigSettings.StandingOrders();
-    private final AtomicLong clock = new AtomicLong(1_000_000_000L);
     private final AtomicBoolean blockCreation = new AtomicBoolean();
     private final CountDownLatch creationEntered = new CountDownLatch(1);
     private final CountDownLatch creationMayFinish = new CountDownLatch(1);
@@ -97,7 +94,7 @@ class StandingOrderEditorTest extends GridTestScope {
             }
             return 128;
         });
-        editor = new StandingOrderEditor(store, engine, clock::get);
+        editor = new StandingOrderEditor(store, engine);
     }
 
     @AfterEach
@@ -134,9 +131,9 @@ class StandingOrderEditorTest extends GridTestScope {
         return engine.snapshot(order) != null;
     }
 
-    private boolean replace(StableKey grid, StableKey order, StandingOrderDefinition definition,
+    private UpdateResult replace(StableKey grid, StableKey order, StandingOrderDefinition definition,
         Map<StableKey, ResourceDescriptor> descriptions) throws Exception {
-        return editor.update(grid, order, current -> definition, ignored -> descriptions);
+        return editor.update(grid, order, current -> definition, ignored -> descriptions, true);
     }
 
     private void execute(String... statements) throws IOException {
@@ -147,10 +144,6 @@ class StandingOrderEditorTest extends GridTestScope {
                 }
                 return null;
             });
-    }
-
-    private void waitOutTheInterval() {
-        clock.addAndGet(INTERVAL);
     }
 
     @Test
@@ -170,12 +163,12 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderStore.Valid created = editor
             .create(grid, TestGridFixtures.principal(3), order("Keep plates", true, PLATE, PLATE), descriptions());
         StandingOrderDefinition changed = order("Renamed", false, PLATE, PLATE);
-        assertTrue(replace(grid, created.key(), changed, Collections.emptyMap()));
+        assertEquals(UpdateResult.UPDATED, replace(grid, created.key(), changed, Collections.emptyMap()));
         assertEquals(
             new StandingOrderStore.Valid(created.key(), created.ordinal(), created.createdBy(), changed),
             store.get(grid, created.key()));
         assertTrue(engineKnows(created.key()));
-        assertFalse(replace(grid, TestGridFixtures.key(5), changed, Collections.emptyMap()));
+        assertEquals(UpdateResult.NOT_FOUND, replace(grid, TestGridFixtures.key(5), changed, Collections.emptyMap()));
     }
 
     @Test
@@ -183,23 +176,25 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderStore.Valid created = editor
             .create(grid, WebPrincipal.admin(), order("Keep plates", true, PLATE, PLATE), descriptions());
         StableKey[] seen = new StableKey[1];
-        assertTrue(editor.update(grid, created.key(), current -> {
+        assertEquals(UpdateResult.UPDATED, editor.update(grid, created.key(), current -> {
             seen[0] = current.key();
             return order("Disabled", false, PLATE, PLATE);
-        }, ignored -> Collections.emptyMap()));
+        }, ignored -> Collections.emptyMap(), true));
         assertEquals(created.key(), seen[0]);
         assertFalse(
             ((StandingOrderStore.Valid) store.get(grid, created.key())).definition()
                 .enabled());
         assertThrows(InvalidStandingOrderException.class, () -> editor.update(grid, created.key(), current -> {
             throw new InvalidStandingOrderException(InvalidStandingOrderException.Reason.MISSING_FIELD, "name");
-        }, ignored -> Collections.emptyMap()));
-        assertFalse(
+        }, ignored -> Collections.emptyMap(), true));
+        assertEquals(
+            UpdateResult.NOT_FOUND,
             editor.update(
                 grid,
                 TestGridFixtures.key(5),
                 current -> fail("A missing order is never edited"),
-                ignored -> Collections.emptyMap()));
+                ignored -> Collections.emptyMap(),
+                true));
         assertEquals(
             "Disabled",
             ((StandingOrderStore.Valid) store.get(grid, created.key())).definition()
@@ -211,15 +206,17 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderDefinition definition = order("Keep plates", true, PLATE, PLATE);
         StandingOrderStore.Valid created = editor.create(grid, WebPrincipal.admin(), definition, descriptions());
         int[] lookups = new int[1];
-        assertTrue(editor.update(grid, created.key(), current -> definition, derived -> {
+        assertEquals(UpdateResult.UPDATED, editor.update(grid, created.key(), current -> definition, derived -> {
             lookups[0]++;
             return Collections.emptyMap();
-        }));
+        }, true));
         assertEquals(0, lookups[0], "An identical definition is not stored again");
-        assertTrue(editor.update(grid, created.key(), current -> order("Renamed", true, PLATE, PLATE), derived -> {
-            lookups[0]++;
-            return Collections.emptyMap();
-        }));
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(grid, created.key(), current -> order("Renamed", true, PLATE, PLATE), derived -> {
+                lookups[0]++;
+                return Collections.emptyMap();
+            }, true));
         assertEquals(1, lookups[0]);
         assertEquals(
             "Renamed",
@@ -228,20 +225,21 @@ class StandingOrderEditorTest extends GridTestScope {
     }
 
     @Test
-    void anOrderOfASwitchedOffNetworkIsNotRunnableAndDoesNotUseTheAllowance() throws Exception {
+    void anOrderOfASwitchedOffNetworkIsNotRunnable() throws Exception {
         StandingOrderStore.Valid created = editor
             .create(grid, WebPrincipal.admin(), order("Keep plates", true, PLATE, PLATE), descriptions());
-        waitOutTheInterval();
         settings.enabled = false;
         assertTrue(engineKnows(created.key()));
+        // The sweep that notices the switch runs at most five seconds after the change.
+        engine.tick(System.currentTimeMillis() + StandingOrderEngine.SWEEP_MILLIS);
         assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, created.key()));
         settings.enabled = true;
-        engineKnows(created.key());
+        engine.tick(System.currentTimeMillis() + 2 * StandingOrderEngine.SWEEP_MILLIS);
         assertEquals(RunResult.QUEUED, editor.run(grid, created.key()));
     }
 
     @Test
-    void invalidInputAndUnknownResourcesLeaveNothingBehindAndDoNotUseTheReadAllowance() throws Exception {
+    void invalidInputAndUnknownResourcesLeaveNothingBehind() throws Exception {
         StandingOrderDefinition unnamed = order("", true, PLATE, PLATE);
         assertThrows(
             InvalidStandingOrderException.class,
@@ -259,105 +257,89 @@ class StandingOrderEditorTest extends GridTestScope {
     }
 
     @Test
-    void creatingOrdersAndRunningThemShareOneReadAllowancePerNetwork() throws Exception {
-        StandingOrderStore.Valid first = editor
-            .create(grid, WebPrincipal.admin(), order("First", true, PLATE, PLATE), descriptions());
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> editor.create(grid, WebPrincipal.admin(), order("Second", true, INGOT, INGOT), descriptions()));
-        assertEquals(
-            1,
-            store.list(grid)
-                .size(),
-            "A rejected creation changes nothing");
-        assertThrows(TooManyReadRequests.class, () -> editor.run(grid, first.key()));
-        clock.addAndGet(INTERVAL - 1);
-        assertThrows(TooManyReadRequests.class, () -> editor.run(grid, first.key()));
-        clock.addAndGet(1);
-        assertEquals(RunResult.QUEUED, editor.run(grid, first.key()));
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> editor.create(grid, WebPrincipal.admin(), order("Second", true, INGOT, INGOT), descriptions()));
-        waitOutTheInterval();
-        assertNotNull(editor.create(grid, WebPrincipal.admin(), order("Second", true, INGOT, INGOT), descriptions()));
-    }
-
-    @Test
-    void networksHaveIndependentAllowances() throws Exception {
-        StableKey other = TestGridFixtures.resolvedKey(new TestGridFixtures.TestGrid(88602, false, CONTROLLER_ONLINE));
-        editor.create(grid, WebPrincipal.admin(), order("First", true, PLATE, PLATE), descriptions());
-        assertNotNull(editor.create(other, WebPrincipal.admin(), order("Other", true, PLATE, PLATE), descriptions()));
-    }
-
-    @Test
-    void anEditThatAddsNoResourceAndEnablesNothingNeverUsesTheAllowance() throws Exception {
-        StandingOrderStore.Valid created = editor
-            .create(grid, WebPrincipal.admin(), order("Keep", true, PLATE, PLATE), descriptions());
-        for (String name : new String[] { "Renamed", "Renamed again", "And again" }) {
-            assertTrue(replace(grid, created.key(), order(name, true, PLATE, PLATE), Collections.emptyMap()));
-        }
-        assertTrue(replace(grid, created.key(), order("Off", false, PLATE, PLATE), Collections.emptyMap()));
-        assertTrue(replace(grid, created.key(), order("Narrower", false, PLATE, PLATE), Collections.emptyMap()));
-        assertTrue(editor.delete(grid, created.key()), "Deleting is never limited");
-        // The creation above is still inside its interval: nothing in between used or reset the allowance.
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> editor.create(grid, WebPrincipal.admin(), order("Again", true, PLATE, PLATE), descriptions()));
-    }
-
-    @Test
-    void anEditThatAddsAResourceOrEnablesAnOrderUsesTheAllowance() throws Exception {
+    void changesThatMayCostAReadAreNeverRefusedForTheirCost() throws Exception {
         StandingOrderStore.Valid created = editor
             .create(grid, WebPrincipal.admin(), order("Keep", false, PLATE, PLATE), descriptions());
-        waitOutTheInterval();
-        assertTrue(replace(grid, created.key(), order("Keep", false, PLATE, INGOT), descriptions()));
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> replace(grid, created.key(), order("Keep", false, DUST, INGOT), descriptions()),
-            "A new trigger resource costs a read like a new crafted resource");
-        waitOutTheInterval();
-        assertTrue(replace(grid, created.key(), order("Keep", false, DUST, INGOT), descriptions()));
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> replace(grid, created.key(), order("Keep", true, DUST, INGOT), Collections.emptyMap()),
-            "Enabling a disabled order may start the network's stock feed");
-        waitOutTheInterval();
-        assertTrue(replace(grid, created.key(), order("Keep", true, DUST, INGOT), Collections.emptyMap()));
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> replace(grid, created.key(), order("Keep", true, PLATE, INGOT), descriptions()));
+        // Everything that used to be limited to one change every few seconds now goes through at once.
         assertEquals(
-            order("Keep", true, DUST, INGOT),
-            ((StandingOrderStore.Valid) store.get(grid, created.key())).definition(),
-            "A rejected edit changes nothing");
+            UpdateResult.UPDATED,
+            replace(grid, created.key(), order("Keep", false, PLATE, INGOT), descriptions()));
+        assertEquals(
+            UpdateResult.UPDATED,
+            replace(grid, created.key(), order("Keep", false, DUST, INGOT), descriptions()));
+        assertEquals(
+            UpdateResult.UPDATED,
+            replace(grid, created.key(), order("Keep", true, DUST, INGOT), Collections.emptyMap()));
+        assertNotNull(editor.create(grid, WebPrincipal.admin(), order("Second", true, INGOT, INGOT), descriptions()));
+        for (int run = 0; run < 3; run++) assertEquals(RunResult.QUEUED, editor.run(grid, created.key()));
     }
 
     @Test
-    void repairingAnOrderThatCannotBeReadTreatsEveryResourceAsNew() throws Exception {
+    void anOrderThatIsOffOrUnreadableMayOnlyBeSwitchedOnWhenTheCallerAllowsIt() throws Exception {
         StandingOrderStore.Valid created = editor
-            .create(grid, WebPrincipal.admin(), order("Keep", true, PLATE, PLATE), descriptions());
-        waitOutTheInterval();
+            .create(grid, WebPrincipal.admin(), order("Keep", false, PLATE, PLATE), descriptions());
+        StandingOrderDefinition enabled = order("Keep", true, PLATE, PLATE);
+        assertEquals(
+            UpdateResult.ENABLING_REFUSED,
+            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), false));
+        assertFalse(
+            ((StandingOrderStore.Valid) store.get(grid, created.key())).definition()
+                .enabled(),
+            "A refused edit changes nothing");
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(
+                grid,
+                created.key(),
+                current -> order("Renamed", false, PLATE, PLATE),
+                ignored -> Collections.emptyMap(),
+                false),
+            "Anything that does not switch an order on stays possible");
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), true));
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(
+                grid,
+                created.key(),
+                current -> order("Still on", true, PLATE, PLATE),
+                ignored -> Collections.emptyMap(),
+                false),
+            "Editing an order that is already on is not switching it on");
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(
+                grid,
+                created.key(),
+                current -> order("Off", false, PLATE, PLATE),
+                ignored -> Collections.emptyMap(),
+                false));
         execute("UPDATE standing_orders SET definition = '{\"broken\"' WHERE order_key = '" + created.key() + "'");
-        assertInstanceOf(StandingOrderStore.Invalid.class, store.get(grid, created.key()));
-        assertTrue(replace(grid, created.key(), order("Repaired", false, PLATE, PLATE), Collections.emptyMap()));
-        assertThrows(
-            TooManyReadRequests.class,
-            () -> editor.create(grid, WebPrincipal.admin(), order("Another", true, INGOT, INGOT), descriptions()),
-            "Nothing was known about the broken order's resources, so the repair used the allowance");
+        assertEquals(
+            UpdateResult.ENABLING_REFUSED,
+            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), false),
+            "Nothing is known about an order that cannot be read, so repairing it as enabled switches it on");
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(
+                grid,
+                created.key(),
+                current -> order("Repaired", false, PLATE, PLATE),
+                ignored -> Collections.emptyMap(),
+                false));
     }
 
     @Test
     void runningNeedsAnExistingValidEnabledOrder() throws Exception {
         StandingOrderStore.Valid enabled = editor
             .create(grid, WebPrincipal.admin(), order("On", true, PLATE, PLATE), descriptions());
-        waitOutTheInterval();
         StandingOrderStore.Valid disabled = editor
             .create(grid, WebPrincipal.admin(), order("Off", false, INGOT, INGOT), descriptions());
         assertEquals(RunResult.NOT_FOUND, editor.run(grid, TestGridFixtures.key(5)));
         assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, disabled.key()));
         execute("UPDATE standing_orders SET definition = '{\"broken\"' WHERE order_key = '" + enabled.key() + "'");
         assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, enabled.key()));
-        waitOutTheInterval();
         assertEquals(
             RunResult.NOT_FOUND,
             editor.run(TestGridFixtures.key(6), enabled.key()),
@@ -365,19 +347,9 @@ class StandingOrderEditorTest extends GridTestScope {
     }
 
     @Test
-    void aRunThatIsNotAllowedDoesNotUseTheAllowance() throws Exception {
-        StandingOrderStore.Valid disabled = editor
-            .create(grid, WebPrincipal.admin(), order("Off", false, INGOT, INGOT), descriptions());
-        waitOutTheInterval();
-        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, disabled.key()));
-        assertTrue(replace(grid, disabled.key(), order("Off", false, INGOT, PLATE), descriptions()));
-    }
-
-    @Test
     void changesAreMutuallyExclusiveSoAStoreWriteAndItsPostCannotBeOvertaken() throws Exception {
         StandingOrderStore.Valid existing = editor
             .create(grid, WebPrincipal.admin(), order("Existing", true, PLATE, PLATE), descriptions());
-        waitOutTheInterval();
         ExecutorService threads = Executors.newFixedThreadPool(3);
         try {
             blockCreation.set(true);

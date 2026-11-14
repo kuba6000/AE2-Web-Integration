@@ -267,6 +267,42 @@ class CraftingHistoryStoreTest {
     }
 
     @Test
+    void historyOfAStandingOrderWithAnOddButStorableNameStillLoads() throws Exception {
+        StableKey grid = StableKey.random();
+        String longest = String.join("", Collections.nCopies(CraftingRequester.MAX_ORDER_NAME_LENGTH, "é"));
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        // Names an earlier version of the definition rules may have accepted: untrimmed, with control characters.
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.standingOrder(StableKey.random(), "  padded\tname\n"),
+                CraftingRequester.standingOrder(StableKey.random(), longest)));
+        long id;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            id = new SqliteCraftingHistoryStore(database).append(grid, job);
+        }
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            assertEquals(
+                job.requesters(),
+                store.read(grid, id)
+                    .requesters());
+            assertEquals(
+                job.requesters(),
+                store.list(grid, null, 10)
+                    .entries()
+                    .get(0)
+                    .requesters());
+        }
+    }
+
+    @Test
     void persistedOrderingPositionsAndResourceQuantitiesCannotBeNegative() throws Exception {
         StableKey grid = StableKey.random();
         long now = System.currentTimeMillis();
