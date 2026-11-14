@@ -154,6 +154,78 @@ const historyDetail = {
 
 let browserLaunch;
 
+const listedCondition = (condition) => ({
+    type: condition.type,
+    resource: condition.resource ?? null,
+    amount: condition.amount ?? null,
+    count: condition.count ?? null,
+    children: condition.children?.map(listedCondition) ?? null,
+    child: condition.child ? listedCondition(condition.child) : null
+});
+
+/** A definition as the server lists it: members that do not apply to a type are explicit nulls. */
+function listedDefinition(definition) {
+    const { amount, cpu } = definition.action;
+    return {
+        ...definition,
+        trigger: listedCondition(definition.trigger),
+        action: {
+            ...definition.action,
+            amount: {
+                type: amount.type,
+                batch: amount.batch ?? null,
+                target: amount.target ?? null,
+                maxBatch: amount.maxBatch ?? null
+            },
+            cpu: { type: cpu.type, key: cpu.key ?? null }
+        }
+    };
+}
+
+// Simulates the standing order endpoints. `options.standingOrderFailure` answers the next change with that error.
+function standingOrdersEndpoint(options, request, resource, response) {
+    const state = options.standingOrders;
+    const key = resource.split('/')[5];
+    const body = options.requests.at(-1).body;
+    const reply = (status, httpStatus, data = null) => {
+        response.statusCode = httpStatus;
+        response.end(JSON.stringify({ status, data }));
+    };
+    if (request.method !== 'GET' && options.standingOrderFailure) {
+        const { status, httpStatus, data } = options.standingOrderFailure;
+        options.standingOrderFailure = null;
+        return reply(status, httpStatus, data);
+    }
+    const order = state.orders.find((entry) => entry.orderKey === key);
+    if (request.method === 'POST' && resource.endsWith('/run')) {
+        if (!order) return reply('STANDING_ORDER_NOT_FOUND', 404);
+        options.standingOrderRuns = (options.standingOrderRuns ?? 0) + 1;
+        return reply('OK', 202);
+    }
+    if (request.method === 'POST') {
+        state.orders.push({
+            orderKey: `order-${state.orders.length + 1}`,
+            definition: listedDefinition(body),
+            invalid: null,
+            status: null
+        });
+    } else if (request.method === 'PATCH') {
+        if (!order) return reply('STANDING_ORDER_NOT_FOUND', 404);
+        order.definition = listedDefinition({ ...(order.definition ?? {}), ...body });
+        order.invalid = null;
+    } else if (request.method === 'DELETE') {
+        if (!order) return reply('STANDING_ORDER_NOT_FOUND', 404);
+        state.orders = state.orders.filter((entry) => entry !== order);
+    }
+    response.end(
+        JSON.stringify({
+            status: 'OK',
+            icons: new URL(request.url, 'http://localhost').searchParams.get('icons') === 'true' ? options.icons : null,
+            data: state
+        })
+    );
+}
+
 // One browser serves every test of this process; each test gets its own context. A lost browser is relaunched.
 async function sharedBrowser() {
     const launch = (browserLaunch ??= chromium.launch({
@@ -225,6 +297,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 trackMachineCrafting: false,
                 isStorageTracked: false,
                 isFlowTracked: false,
+                standingOrdersEnabled: true,
                 stockSampleIntervalSeconds: 300,
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
@@ -241,6 +314,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 trackMachineCrafting: false,
                 isStorageTracked: false,
                 isFlowTracked: false,
+                standingOrdersEnabled: true,
                 stockSampleIntervalSeconds: 300,
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
@@ -253,7 +327,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 name: ''
             }
         },
-        accessSources: {}
+        accessSources: {},
+        standingOrders: {
+            serverEnabled: true,
+            gridEnabled: true,
+            canEdit: true,
+            maxOrders: 128,
+            orders: [],
+            resources: {}
+        }
     };
     const planRequests = new Map();
     function compactHome() {
@@ -619,6 +701,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                         }))
                     })
                 );
+            } else if (resource.includes('/standing-orders')) {
+                standingOrdersEndpoint(options, request, resource, response);
             } else if (resource.endsWith('/crafting-plans')) {
                 const input = options.requests.at(-1).body;
                 const item = options.itemsA.find((item) => item.itemKey === input.itemKey) || iron;
@@ -1017,6 +1101,7 @@ module.exports = {
     gridB,
     historyDetail,
     historyEntry,
+    listedDefinition,
     iron,
     openMobilePane,
     pauseClock,

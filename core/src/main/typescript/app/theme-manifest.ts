@@ -20,7 +20,8 @@ const views: readonly ThemeView[] = [
     'cpus',
     'history',
     'plan',
-    'tracking'
+    'tracking',
+    'standing-orders'
 ];
 
 export function validateThemePath(name: string): string {

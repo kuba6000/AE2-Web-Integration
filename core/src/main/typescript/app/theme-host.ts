@@ -88,6 +88,14 @@ export function mountTheme(
             updateGroup: application.pins.updateGroup,
             removeGroup: application.pins.removeGroup
         },
+        standingOrders: {
+            refresh: () => application.standingOrders.refresh(),
+            setEnabled: application.standingOrders.setEnabled,
+            run: application.standingOrders.run,
+            remove: application.standingOrders.remove,
+            edit: application.standingOrders.edit,
+            save: application.standingOrders.save
+        },
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {

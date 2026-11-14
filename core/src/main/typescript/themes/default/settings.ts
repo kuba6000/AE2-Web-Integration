@@ -109,6 +109,20 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const flowText = element('span');
     flowLabel.append(flowTracking, flowText);
     flowTracking.addEventListener('change', () => application.settings.edit('isFlowTracked', flowTracking.checked));
+    const standingLabel = element('label');
+    standingLabel.className = 'checkbox';
+    const standingOrders = element('input');
+    standingOrders.type = 'checkbox';
+    standingOrders.id = 'network-standing-orders';
+    standingOrders.setAttribute('aria-describedby', 'network-standing-orders-help');
+    const standingText = element('span');
+    standingLabel.append(standingOrders, standingText);
+    standingOrders.addEventListener('change', () =>
+        application.settings.edit('standingOrdersEnabled', standingOrders.checked)
+    );
+    const standingHelp = element('p');
+    standingHelp.id = 'network-standing-orders-help';
+    standingHelp.className = 'hint';
     const intervals = element('div');
     intervals.className = 'network-tracking-controls';
     function intervalControl(field: HistorySetting, id: string, labelKey: string, unitMillis: number) {
@@ -167,7 +181,19 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, machineLabel, flowLabel, storageLabel, intervals, actions);
+    form.append(
+        settingsTitle,
+        nameLabel,
+        nameHelp,
+        label,
+        machineLabel,
+        flowLabel,
+        storageLabel,
+        standingLabel,
+        standingHelp,
+        intervals,
+        actions
+    );
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -247,6 +273,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             machineText.textContent = t('trackMachineCrafting');
             storageText.textContent = t('recordResourceHistory');
             flowText.textContent = t('recordFlowHistory');
+            standingText.textContent = t('gridStandingOrders');
+            standingHelp.textContent = t('gridStandingOrdersHelp');
             nameText.textContent = t('networkName');
             nameHelp.textContent = t('networkNameHelp');
             settingsTitle.textContent = t('gridSettings');
@@ -257,6 +285,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                     state.draft.trackMachineCrafting !== state.current.trackMachineCrafting ||
                     state.draft.isStorageTracked !== state.current.isStorageTracked ||
                     state.draft.isFlowTracked !== state.current.isFlowTracked ||
+                    state.draft.standingOrdersEnabled !== state.current.standingOrdersEnabled ||
                     historySettingFields.some((field) => state.draft[field] !== state.current![field]) ||
                     state.draft.name.trim() !== state.current.name);
             status.textContent = '';
@@ -289,6 +318,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             storageTracking.disabled = state.saving || state.status !== 'ready';
             flowTracking.checked = state.draft.isFlowTracked;
             flowTracking.disabled = state.saving || state.status !== 'ready';
+            standingOrders.checked = state.draft.standingOrdersEnabled;
+            standingOrders.disabled = state.saving || state.status !== 'ready';
             let invalidInterval = false;
             for (const control of intervalControls) {
                 const { field, range, number, unitMillis } = control;
@@ -317,7 +348,9 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                 if (Number.isFinite(value)) range.value = String(value);
                 if (document.activeElement !== number) number.value = Number.isFinite(value) ? String(value) : '';
                 let disabled = state.saving || state.status !== 'ready' || !limits;
-                if (field === 'stockSampleIntervalSeconds') disabled ||= !state.draft.isStorageTracked;
+                // Standing orders read stock at this interval too, with or without recorded history.
+                if (field === 'stockSampleIntervalSeconds')
+                    disabled ||= !state.draft.isStorageTracked && !state.draft.standingOrdersEnabled;
                 if (field === 'flowFlushIntervalSeconds') disabled ||= !state.draft.isFlowTracked;
                 range.disabled = disabled;
                 number.disabled = disabled;

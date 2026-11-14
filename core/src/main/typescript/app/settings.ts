@@ -71,6 +71,7 @@ export function createGridSettings(
         trackMachineCrafting: false,
         isStorageTracked: false,
         isFlowTracked: false,
+        standingOrdersEnabled: false,
         stockSampleIntervalSeconds: 0,
         flowFlushIntervalSeconds: 0,
         historyRetentionDays: 0,
@@ -82,6 +83,7 @@ export function createGridSettings(
         trackMachineCrafting: false,
         isStorageTracked: false,
         isFlowTracked: false,
+        standingOrdersEnabled: false,
         stockSampleIntervalSeconds: false,
         flowFlushIntervalSeconds: false,
         historyRetentionDays: false,
@@ -160,6 +162,8 @@ export function createGridSettings(
                               !!previous?.uncertain && previous.desired.trackMachineCrafting !== undefined,
                           isStorageTracked: !!previous?.uncertain && previous.desired.isStorageTracked !== undefined,
                           isFlowTracked: !!previous?.uncertain && previous.desired.isFlowTracked !== undefined,
+                          standingOrdersEnabled:
+                              !!previous?.uncertain && previous.desired.standingOrdersEnabled !== undefined,
                           stockSampleIntervalSeconds:
                               !!previous?.uncertain && previous.desired.stockSampleIntervalSeconds !== undefined,
                           flowFlushIntervalSeconds:
@@ -194,6 +198,7 @@ export function createGridSettings(
                 if (!state.edited.trackMachineCrafting) state.draft.trackMachineCrafting = data.trackMachineCrafting;
                 if (!state.edited.isStorageTracked) state.draft.isStorageTracked = data.isStorageTracked;
                 if (!state.edited.isFlowTracked) state.draft.isFlowTracked = data.isFlowTracked;
+                if (!state.edited.standingOrdersEnabled) state.draft.standingOrdersEnabled = data.standingOrdersEnabled;
                 for (const field of historySettingFields) if (!state.edited[field]) state.draft[field] = data[field];
                 state.sources = sourcesForRoute;
                 state.status = 'ready';
@@ -259,6 +264,11 @@ export function createGridSettings(
                 desired.isStorageTracked = state.draft.isStorageTracked;
             if (state.draft.isFlowTracked !== state.current.isFlowTracked || uncertain?.isFlowTracked !== undefined)
                 desired.isFlowTracked = state.draft.isFlowTracked;
+            if (
+                state.draft.standingOrdersEnabled !== state.current.standingOrdersEnabled ||
+                uncertain?.standingOrdersEnabled !== undefined
+            )
+                desired.standingOrdersEnabled = state.draft.standingOrdersEnabled;
             for (const field of historySettingFields)
                 if (state.draft[field] !== state.current[field] || uncertain?.[field] !== undefined)
                     desired[field] = state.draft[field];
@@ -324,6 +334,8 @@ export function createGridSettings(
                     if (operation.desired.trackMachineCrafting !== undefined) state.edited.trackMachineCrafting = true;
                     if (operation.desired.isStorageTracked !== undefined) state.edited.isStorageTracked = true;
                     if (operation.desired.isFlowTracked !== undefined) state.edited.isFlowTracked = true;
+                    if (operation.desired.standingOrdersEnabled !== undefined)
+                        state.edited.standingOrdersEnabled = true;
                     for (const field of historySettingFields)
                         if (operation.desired[field] !== undefined) state.edited[field] = true;
                 }

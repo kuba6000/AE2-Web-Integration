@@ -1,4 +1,6 @@
 import type { PinsState } from './pins.js';
+import type { StandingOrdersState } from './standing-orders.js';
+import type { DraftChange } from './standing-order-model.js';
 import type { TerminalStreamState, TerminalUpdateHint } from './terminal.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
@@ -23,7 +25,8 @@ import type {
     AvailableUpdate,
     PinPlacement,
     ResourcePinUpdate,
-    HomePinGroupUpdate
+    HomePinGroupUpdate,
+    ResourceDescription
 } from './api-types.js';
 import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
@@ -68,6 +71,7 @@ export type ThemeState = ReadonlyData<{
     settings: SettingsState;
     serverSettings: ServerSettingsState;
     pins: PinsState;
+    standingOrders: StandingOrdersState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
 export type ThemeLifetime = {
@@ -102,6 +106,15 @@ export type ThemeApplication = {
         addGroup(name: string): Promise<void>;
         updateGroup(groupKey: string, update: HomePinGroupUpdate): Promise<void>;
         removeGroup(groupKey: string): Promise<void>;
+    };
+    readonly standingOrders: {
+        refresh(): Promise<void>;
+        setEnabled(orderKey: string, enabled: boolean): Promise<void>;
+        run(orderKey: string): Promise<void>;
+        remove(orderKey: string): Promise<void>;
+        /** Changes the editor draft; pass the description of a resource that the change chooses. */
+        edit(change: DraftChange, resource?: ReadonlyData<ResourceDescription>): void;
+        save(): Promise<void>;
     };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
@@ -187,5 +200,16 @@ export type ThemeDefinition = {
 export type { Route, Preferences, IconSprite, IconTarget, JsonValue, Dictionaries, Translator };
 export type * from './api-types.js';
 export type { PlanExportRequest, PlanExportStyle } from './plan-export.js';
+export type { StandingOrdersState, StandingOrderEditor, EditorCpu } from './standing-orders.js';
+export type {
+    DraftChange,
+    OrderDraft,
+    FlatRules,
+    LockedRules,
+    ConditionDraft,
+    ConditionKind,
+    FieldErrors,
+    FieldId
+} from './standing-order-model.js';
 export type { PlanExportSettings, PlanExportLayout, PlanExportGrid, PlanExportGeometry } from './plan-export-layout.js';
 export type { DrawableIcon, ResolvedIcons } from './icons.js';
