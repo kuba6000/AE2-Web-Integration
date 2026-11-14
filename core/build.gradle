@@ -232,6 +232,11 @@ pluginManager.withPlugin('idea') {
             includeTestsMatching '*CoreEngineTest'
             includeTestsMatching '*TelemetryTest'
             includeTestsMatching '*JarProofTest'
+            includeTestsMatching '*ReleaseManifestTest'
+            includeTestsMatching '*ThemeDeliveryHttpTest'
+            includeTestsMatching '*NotificationPayloadTest'
+            includeTestsMatching '*DiscordNotificationTest'
+            includeTestsMatching '*NtfyDestinationTest'
         }
         shouldRunAfter tasks.named('test')
     }
