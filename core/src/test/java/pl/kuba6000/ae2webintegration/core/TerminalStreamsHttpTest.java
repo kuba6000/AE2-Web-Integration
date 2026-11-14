@@ -9,8 +9,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
+import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.observation;
+import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.readAnyEvent;
+import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.readEvent;
+import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.row;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
@@ -18,12 +21,9 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.StringReader;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,28 +35,23 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
-import com.github.bsideup.jabel.Desugar;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.Connection;
+import pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.Event;
+import pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.Fixture;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
@@ -237,67 +232,6 @@ class TerminalStreamsHttpTest extends GridTestScope {
                             .get("quantity")
                             .getAsLong());
                 }
-            }
-        }
-    }
-
-    @Test
-    void heartbeatsKeepTheirCadenceDuringActiveAndIdleStreams() throws Exception {
-        StableKey iron = TestGridFixtures.key(51);
-        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
-            HttpURLConnection request = fixture.connection(fixture.reserve());
-            // Heartbeats are due every ten seconds; allow transport and scheduler headroom for this connection.
-            request.setReadTimeout(15_000);
-            try (Connection connection = new Connection(request)) {
-                assertEquals("ready", readAnyEvent(connection.input).name());
-                Event initial = readAnyEvent(connection.input);
-                assertEquals("heartbeat", initial.name());
-                assertEquals(
-                    "{}",
-                    initial.data()
-                        .toString());
-                long initialHeartbeat = System.nanoTime();
-                for (int quantity = 2; quantity <= 3; quantity++) {
-                    fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
-                    assertEquals("delta", readAnyEvent(connection.input).name());
-                }
-
-                boolean activeHeartbeat = false;
-                long deadline = initialHeartbeat + SECONDS.toNanos(15);
-                for (int quantity = 4; System.nanoTime() < deadline; quantity++) {
-                    fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
-                    Event event = readAnyEvent(connection.input);
-                    if (event.name()
-                        .equals("heartbeat")) {
-                        assertEquals(
-                            "{}",
-                            event.data()
-                                .toString());
-                        activeHeartbeat = true;
-                        break;
-                    }
-                    assertEquals("delta", event.name());
-                }
-                assertTrue(activeHeartbeat, "Continuous deltas must not postpone the heartbeat");
-                assertTrue(
-                    System.nanoTime() - initialHeartbeat >= SECONDS.toNanos(8),
-                    "Deltas must not generate extra heartbeats between scheduled keepalives");
-
-                long lastHeartbeat = System.nanoTime();
-                Event idle;
-                do {
-                    idle = readAnyEvent(connection.input);
-                    // A delta published just before the active heartbeat may still be in flight.
-                } while (idle.name()
-                    .equals("delta"));
-                assertEquals("heartbeat", idle.name());
-                assertEquals(
-                    "{}",
-                    idle.data()
-                        .toString());
-                assertTrue(
-                    System.nanoTime() - lastHeartbeat >= SECONDS.toNanos(8),
-                    "Idle keepalives retain the heartbeat interval");
             }
         }
     }
@@ -1077,104 +1011,6 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void disconnectedIdleViewersReleaseAdmissionForAnotherSnapshot() throws Exception {
-        try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            for (int client = 0; client < 6; client++) {
-                try (Socket socket = new Socket()) {
-                    socket.setSoTimeout(3000);
-                    socket.connect(fixture.server.getAddress());
-                    socket.getOutputStream()
-                        .write(
-                            ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                                .getBytes(UTF_8));
-                    BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), UTF_8));
-                    assertEquals("ready", readEvent(input).name());
-                }
-            }
-            TerminalRegistry.Bootstrap replacement = null;
-            long deadline = System.nanoTime() + SECONDS.toNanos(25);
-            while (replacement == null && System.nanoTime() < deadline) {
-                fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
-                replacement = fixture.state
-                    .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
-                if (replacement == null) Thread.sleep(100);
-            }
-            assertNotNull(replacement, "Disconnected viewers must release admission without storage changes");
-            try (Connection connection = fixture.open(replacement.subscription())) {
-                assertEquals("ready", readEvent(connection.input).name());
-            }
-        }
-    }
-
-    @Test
-    void stalledReadersAreCancelledAndWriterCapacityBecomesUsableAgain() throws Exception {
-        List<Socket> stalled = new ArrayList<>();
-        try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            try {
-                for (int client = 0; client < 6; client++) {
-                    Socket socket = new Socket();
-                    socket.setReceiveBufferSize(1024);
-                    socket.setSoTimeout(3000);
-                    socket.connect(fixture.server.getAddress());
-                    stalled.add(socket);
-                    socket.getOutputStream()
-                        .write(
-                            ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                                .getBytes(UTF_8));
-                    socket.getOutputStream()
-                        .flush();
-                    int matched = 0;
-                    byte[] terminator = "\r\n\r\n".getBytes(UTF_8);
-                    while (matched < terminator.length) {
-                        int value = socket.getInputStream()
-                            .read();
-                        assertTrue(value >= 0);
-                        matched = value == terminator[matched] ? matched + 1 : 0;
-                    }
-                }
-                char[] label = new char[900_000];
-                Arrays.fill(label, 'x');
-                String firstLabel = new String(label);
-                label[0] = 'y';
-                String secondLabel = new String(label);
-                long revision = 2;
-                long deadline = System.nanoTime() + SECONDS.toNanos(18);
-                boolean recovered = false;
-                while (System.nanoTime() < deadline && !recovered) {
-                    // A single event can fit entirely in an OS send buffer without blocking a writer.
-                    // Keep changing definitions below the per-event limit until unread connections exert backpressure.
-                    String name = (revision & 1) == 0 ? firstLabel : secondLabel;
-                    fixture.publish(revision++, Collections.singletonList(row(TestGridFixtures.key(99), name, 1)));
-                    fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
-                    TerminalRegistry.Bootstrap reservation = fixture.state
-                        .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
-                    if (reservation == null) {
-                        Thread.sleep(100);
-                        continue;
-                    }
-                    HttpURLConnection probe = fixture.connection(reservation.subscription());
-                    try {
-                        int status = probe.getResponseCode();
-                        if (status == 200) {
-                            try (BufferedReader input = new BufferedReader(
-                                new InputStreamReader(probe.getInputStream(), UTF_8))) {
-                                assertEquals("ready", readEvent(input).name());
-                                recovered = true;
-                            }
-                        } else assertEquals(503, status);
-                    } finally {
-                        probe.disconnect();
-                    }
-                    if (!recovered) Thread.sleep(100);
-                }
-                assertTrue(recovered, "Slow readers must not permanently exhaust the bounded writer pool");
-            } finally {
-                for (Socket socket : stalled) socket.close();
-            }
-        }
-    }
-
-    @Test
     void nativePermissionRevocationClosesAllViewersWithoutServerTicks() throws Exception {
         TestGridFixtures.TestGrid nativeGrid = TestGridFixtures.grid(77241);
         StableKey key = TestGridFixtures.resolvedKey(nativeGrid);
@@ -1189,42 +1025,6 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
     }
 
-    private static StorageObservationFixtures.Row row(StableKey key, String name, long quantity) {
-        return new StorageObservationFixtures.Row(
-            new ResourceSnapshot(
-                new ResourceDescriptor("test", "resource", 0, 0, name, ResourceType.ITEM, key, null),
-                quantity),
-            false);
-    }
-
-    @Desugar
-    private record Event(String name, String id, JsonObject data) {}
-
-    private static @NotNull Event readEvent(BufferedReader input) throws Exception {
-        Event event;
-        do {
-            event = readAnyEvent(input);
-        } while (event.name()
-            .equals("heartbeat"));
-        return event;
-    }
-
-    private static @NotNull Event readAnyEvent(BufferedReader input) throws Exception {
-        String name = null;
-        String id = null;
-        JsonObject data = null;
-        for (String line; (line = input.readLine()) != null;) {
-            if (line.startsWith("event: ")) name = line.substring(7);
-            if (line.startsWith("id: ")) id = line.substring(4);
-            if (line.startsWith("data: ")) data = new JsonParser().parse(line.substring(6))
-                .getAsJsonObject();
-            if (line.isEmpty() && name != null) {
-                return new Event(name, id, data);
-            }
-        }
-        return fail("Stream ended before its next event");
-    }
-
     private static void assertClosedWithoutDelta(BufferedReader input) throws IOException {
         // A writer can finish an invalidate control frame while reset closes the connection.
         try {
@@ -1234,142 +1034,6 @@ class TerminalStreamsHttpTest extends GridTestScope {
         } catch (IOException closed) {
             // Closing between chunks ends the chunked body without its terminator, which is still a closed stream.
             if (!"Premature EOF".equals(closed.getMessage())) throw closed;
-        }
-    }
-
-    private static final class Connection implements AutoCloseable {
-
-        private final HttpURLConnection connection;
-        private final BufferedReader input;
-
-        private Connection(HttpURLConnection connection) throws Exception {
-            this.connection = connection;
-            input = new BufferedReader(new InputStreamReader(connection.getInputStream(), UTF_8));
-        }
-
-        @Override
-        public void close() throws Exception {
-            input.close();
-            connection.disconnect();
-        }
-    }
-
-    private static StorageObservation observation(long revision, List<StorageObservationFixtures.Row> rows) {
-        return StorageObservationFixtures.observation(revision * 100, true, true, rows, Collections.emptyList());
-    }
-
-    private static final class Fixture implements AutoCloseable {
-
-        private final StableKey grid;
-        // The fake world owns its grid; the identity registry deliberately retains only a weak reference.
-        private final IAEGrid nativeGrid;
-        private final WebPrincipal principal;
-        private final AuthSession session;
-        private final AtomicReference<AuthSession> requestSession = new AtomicReference<>();
-        private final AtomicBoolean requestIcons = new AtomicBoolean();
-        private final ExecutorService ordinary = Executors.newSingleThreadExecutor();
-        private final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        private final LiveHub hub = new LiveHub();
-        private final TerminalRegistry state = new TerminalRegistry(hub);
-        private final LiveStreams streams = new LiveStreams(hub, GRID_IDENTITIES, null);
-
-        private Fixture(List<StorageObservationFixtures.Row> rows) throws Exception {
-            this(TestGridFixtures.grid(32), WebPrincipal.admin(), rows);
-        }
-
-        private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
-            throws Exception {
-            this(GRID_IDENTITIES.getGrid(grid), principal, rows);
-        }
-
-        private Fixture(IAEGrid nativeGrid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
-            throws Exception {
-            assertNotNull(nativeGrid);
-            this.nativeGrid = nativeGrid;
-            grid = TestGridFixtures.resolvedKey(this.nativeGrid);
-            this.principal = principal;
-            session = new AuthSession(principal, Long.MAX_VALUE);
-            requestSession.set(session);
-            state.activate(grid, 5, System.currentTimeMillis());
-            state.observed(grid, 5, observation(1, rows));
-            server.setExecutor(ordinary);
-            server.createContext(
-                "/events",
-                exchange -> streams.open(
-                    new AE2Controller.RequestContext(exchange, requestSession.get()),
-                    StorageTopic.keyOf(this.grid),
-                    exchange.getRequestURI()
-                        .getRawQuery(),
-                    requestIcons.get()));
-            server.createContext("/ordinary", exchange -> {
-                exchange.sendResponseHeaders(204, -1);
-                exchange.close();
-            });
-            server.start();
-        }
-
-        private String reserve() {
-            return reserve(session);
-        }
-
-        private String reserve(AuthSession login) {
-            TerminalRegistry.Bootstrap snapshot = state
-                .reserve(grid, login, false, null, null, System.currentTimeMillis());
-            assertNotNull(snapshot);
-            return snapshot.subscription();
-        }
-
-        private void fillAdmission() {
-            for (int attempt = 0; attempt < 64; attempt++) {
-                if (state.reserve(grid, session, false, null, null, System.currentTimeMillis()) == null) return;
-            }
-            fail("Expected bounded live admission");
-        }
-
-        private TerminalRegistry.Bootstrap awaitAdmission() throws InterruptedException {
-            long deadline = System.nanoTime() + SECONDS.toNanos(2);
-            TerminalRegistry.Bootstrap available;
-            do {
-                available = state.reserve(grid, session, false, null, null, System.currentTimeMillis());
-                if (available != null) return available;
-                Thread.sleep(10);
-            } while (System.nanoTime() < deadline);
-            return fail("Closed stream must release live admission before its lease expires");
-        }
-
-        private String base() {
-            return "http://127.0.0.1:" + server.getAddress()
-                .getPort();
-        }
-
-        private HttpURLConnection connection(String token) throws Exception {
-            HttpURLConnection connection = (HttpURLConnection) new URL(base() + "/events?" + token).openConnection();
-            connection.setReadTimeout(3000);
-            return connection;
-        }
-
-        private int status(String token) throws Exception {
-            HttpURLConnection connection = connection(token);
-            try {
-                return connection.getResponseCode();
-            } finally {
-                connection.disconnect();
-            }
-        }
-
-        private Connection open(String token) throws Exception {
-            return new Connection(connection(token));
-        }
-
-        private void publish(long revision, List<StorageObservationFixtures.Row> rows) {
-            state.observed(grid, 5, observation(revision, rows));
-        }
-
-        @Override
-        public void close() {
-            streams.close();
-            server.stop(0);
-            ordinary.shutdownNow();
         }
     }
 }

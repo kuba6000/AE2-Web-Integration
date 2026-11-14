@@ -128,6 +128,13 @@ test {
     useJUnitPlatform()
     // Archive-boundary fixtures encode padded PNG pages concurrently.
     maxHeapSize = '2g'
+    // The JVM default initial heap is a fraction of physical memory, which parallel forks would each commit.
+    minHeapSize = '128m'
+}
+
+// Test classes run in separate JVMs per fork; wall-clock waits and large fixtures then overlap.
+tasks.withType(Test).configureEach {
+    maxParallelForks = Math.min(8, Runtime.runtime.availableProcessors())
 }
 
 sourceSets {
@@ -190,9 +197,9 @@ pluginManager.withPlugin('idea') {
         testClassesDirs = sourceSets.test.output.classesDirs
         classpath = sourceSets.test.output + sourceSets.main.output + legacyRuntime
         useJUnitPlatform()
+        // Only suites that parse or write JSON through Gson; login and listener lifecycle are covered by the default run.
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
-            includeTestsMatching '*ServerLifecycleHttpTest'
             includeTestsMatching '*ServerSettingsHttpTest'
             includeTestsMatching '*GSONUtilsTest'
             includeTestsMatching '*StableKeyGsonTest'
@@ -243,15 +250,16 @@ tasks.register('testNightConfig383', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.output + sourceSets.main.output + modernNightConfigRuntime
     useJUnitPlatform()
+    // Only suites whose behaviour depends on parsing or writing the TOML configuration.
     filter {
         includeTestsMatching '*ConfigFileTest'
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
         includeTestsMatching '*CommandBootstrapTest'
         includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
-        includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*ServerLifecycleHttpTest.credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword'
+        includeTestsMatching '*ServerLifecycleHttpTest.failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking'
         includeTestsMatching '*ServerSettingsHttpTest'
-        includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')
 }
@@ -269,6 +277,7 @@ tasks.register('testSqlite336', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.output + sourceSets.main.output + sqlite336Runtime
     useJUnitPlatform()
+    // Only suites that read or write the world database; transport and listener lifecycle tests do not depend on the driver.
     filter {
         includeTestsMatching '*WorldDatabase*Test'
         includeTestsMatching '*WorldSchemaBootstrapTest'
@@ -286,9 +295,7 @@ tasks.register('testSqlite336', Test) {
         includeTestsMatching '*AE2JobTrackerLifecycleTest'
         includeTestsMatching '*CoreEngine*Test'
         includeTestsMatching '*ApiRoutingHttpTest'
-        includeTestsMatching '*ServerLifecycleHttpTest'
         includeTestsMatching '*TrackingStatisticsResponseTest'
-        includeTestsMatching '*TerminalStreamsHttpTest'
         includeTestsMatching '*LiveTerminalHttpTest'
     }
     shouldRunAfter tasks.named('test')
