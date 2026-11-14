@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -91,6 +92,23 @@ public final class StandingOrderStore {
     /** The grid's orders in display order; an unknown grid has none. */
     public @NotNull List<Entry> list(@NotNull StableKey grid) throws IOException {
         return database.read(db -> load(db, grid, null));
+    }
+
+    /** The orders of every grid that has any, each in display order, for loading them all at server start. */
+    public @NotNull Map<StableKey, List<Entry>> listAll() throws IOException {
+        return database.read(db -> {
+            List<StableKey> grids = new ArrayList<>();
+            try (PreparedStatement query = db.prepareStatement("""
+                SELECT g.grid_key FROM grids g
+                WHERE EXISTS (SELECT 1 FROM standing_orders o WHERE o.grid_id = g.id)
+                ORDER BY g.id
+                """); ResultSet rows = query.executeQuery()) {
+                while (rows.next()) grids.add(StableKey.parse(rows.getString(1)));
+            }
+            Map<StableKey, List<Entry>> result = new LinkedHashMap<>();
+            for (StableKey grid : grids) result.put(grid, load(db, grid, null));
+            return result;
+        });
     }
 
     public @Nullable Entry get(@NotNull StableKey grid, @NotNull StableKey order) throws IOException {

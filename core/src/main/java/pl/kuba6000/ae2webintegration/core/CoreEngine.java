@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.LongSupplier;
@@ -36,6 +38,8 @@ import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
 import pl.kuba6000.ae2webintegration.core.telemetry.Telemetry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
@@ -88,6 +92,8 @@ public class CoreEngine {
     private static volatile @Nullable TerminalRegistry terminalRegistry;
     private static volatile @Nullable CpuRegistry cpuRegistry;
     private static volatile @Nullable CpuLiveCoordinator cpuLive;
+    private static volatile @Nullable StandingOrderStore standingOrderStore;
+    private static volatile @Nullable StandingOrderEngine standingOrders;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -128,6 +134,10 @@ public class CoreEngine {
             Config.INSTANCE.craftingHistory);
         SqliteCraftingHistoryStore craftings = new SqliteCraftingHistoryStore(database);
         SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database);
+        StandingOrderStore orderStore = new StandingOrderStore(
+            database,
+            () -> Config.INSTANCE.standingOrders.maxOrdersPerGrid);
+        Map<StableKey, List<StandingOrderStore.Entry>> storedOrders;
         try {
             database.open();
             GRID_IDENTITIES.initialize(
@@ -136,6 +146,7 @@ public class CoreEngine {
                     .toPath());
             history.initialize();
             craftings.maintain();
+            storedOrders = orderStore.listAll();
         } catch (IOException | RuntimeException | LinkageError failure) {
             GRID_IDENTITIES.clear();
             try {
@@ -177,7 +188,23 @@ public class CoreEngine {
             liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
             StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
             storageTracking = service;
-            storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                trackingSettings,
+                terminals);
+            storageCoordinator = coordinator;
+            StandingOrderEngine orders = new StandingOrderEngine(
+                coordinator,
+                GRID_IDENTITIES,
+                () -> Config.INSTANCE.standingOrders,
+                () -> AE2Controller.AE2Interface.web$getCapabilities(),
+                System::nanoTime);
+            for (Map.Entry<StableKey, List<StandingOrderStore.Entry>> grid : storedOrders.entrySet()) {
+                for (StandingOrderStore.Entry order : grid.getValue()) orders.post(grid.getKey(), order);
+            }
+            standingOrders = orders;
+            standingOrderStore = orderStore;
             themes.close();
             themes = ThemeCatalog.load(
                 Config.getConfigFile("themes")
@@ -208,6 +235,9 @@ public class CoreEngine {
             long now = System.currentTimeMillis();
             coordinator.applySettings(Config.INSTANCE.resourceTracking, now);
             coordinator.tick(ae, now);
+            // Standing orders use the stock reads of this very tick, so both share one clock reading.
+            StandingOrderEngine orders = standingOrders;
+            if (orders != null) orders.tick(now);
         }
         CpuLiveCoordinator cpus = cpuLive;
         if (cpus != null) {
@@ -417,6 +447,16 @@ public class CoreEngine {
         if (previousStreams != null) previousStreams.close();
     }
 
+    /** Stored standing orders for HTTP workers; changes must also be posted to {@link #getStandingOrders()}. */
+    public static @Nullable StandingOrderStore getStandingOrderStore() {
+        return standingOrderStore;
+    }
+
+    /** Server-thread engine of the standing orders; its posting and status methods are safe from any thread. */
+    public static @Nullable StandingOrderEngine getStandingOrders() {
+        return standingOrders;
+    }
+
     public static @Nullable CraftingHistoryService getCraftingHistory() {
         return craftingHistory;
     }
@@ -429,6 +469,10 @@ public class CoreEngine {
         if (scheduler != null) scheduler.shutdown();
         resourcePins = null;
         stopLiveStreams();
+        StandingOrderEngine orders = standingOrders;
+        standingOrders = null;
+        standingOrderStore = null;
+        if (orders != null) orders.close();
         StorageTrackingCoordinator coordinator = storageCoordinator;
         if (coordinator != null) {
             coordinator.close();

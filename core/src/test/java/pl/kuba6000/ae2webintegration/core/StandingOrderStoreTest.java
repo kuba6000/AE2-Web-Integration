@@ -168,6 +168,26 @@ class StandingOrderStoreTest extends GridTestScope {
     }
 
     @Test
+    void listAllReturnsEveryGridThatHasOrdersWithTheirOrdersInDisplayOrder() throws Exception {
+        open();
+        StableKey other = grid(88503);
+        StableKey empty = grid(88504);
+        Valid first = store.create(grid, WebPrincipal.admin(), simple("First", PLATE), descriptions());
+        Valid second = store.create(grid, WebPrincipal.admin(), simple("Second", INGOT), descriptions());
+        Valid theirs = store.create(other, WebPrincipal.admin(), simple("Theirs", DUST), descriptions());
+        Map<StableKey, List<Entry>> all = store.listAll();
+        assertEquals(new HashSet<>(Arrays.asList(grid, other)), all.keySet());
+        assertFalse(all.containsKey(empty));
+        assertEquals(Arrays.<Entry>asList(first, second), all.get(grid));
+        assertEquals(Collections.<Entry>singletonList(theirs), all.get(other));
+        store.delete(other, theirs.key());
+        assertEquals(
+            Collections.singleton(grid),
+            store.listAll()
+                .keySet());
+    }
+
+    @Test
     void replaceChangesTheDefinitionAndResourcesButKeepsIdentityOrderAndCreator() throws Exception {
         open();
         Valid first = store.create(grid, TestGridFixtures.principal(3), full(), descriptions());

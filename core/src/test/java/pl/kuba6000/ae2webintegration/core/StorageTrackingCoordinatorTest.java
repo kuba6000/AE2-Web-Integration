@@ -11,6 +11,7 @@ import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackin
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -45,6 +46,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.StockObservationListener;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistoryStore;
@@ -53,6 +55,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryS
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
@@ -383,6 +386,261 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 service.history(healthyKey, null, 0, 100)
                     .points()
                     .isEmpty());
+        }
+    }
+
+    @Test
+    void stockLeaseTakesFullReadsAtTheGridIntervalWithoutHistoryOrTerminalActivation() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("lease-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710101, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(2);
+        RecordingStockListener listener = new RecordingStockListener();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            assertTrue(listener.observations.isEmpty(), "An untracked grid without a lease is never read");
+            assertNull(grid.web$getStorageCapture());
+
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size());
+            StorageObservation first = listener.observations.get(0);
+            assertEquals(key, listener.grids.get(0));
+            assertTrue(first.full());
+            assertEquals(2000, first.observedAt());
+            assertEquals(
+                20,
+                first.rows()
+                    .stream()
+                    .filter(
+                        row -> row.itemKey()
+                            .equals(iron.web$getKey()))
+                    .findFirst()
+                    .orElseThrow(AssertionError::new)
+                    .quantity());
+            coordinator.tick(TestGridFixtures.ae(grid), 3000);
+            assertEquals(1, listener.observations.size(), "The next read waits for the stock sample interval");
+            coordinator.tick(TestGridFixtures.ae(grid), 4000);
+            assertEquals(2, listener.observations.size());
+            assertEquals(2, grid.storageReads);
+            assertTrue(
+                service.history(key, null, 0, 100)
+                    .points()
+                    .isEmpty(),
+                "A lease takes a stock sample without writing history");
+            assertTrue(
+                terminals.viewedGrids(4000)
+                    .isEmpty(),
+                "A lease never activates the terminal view");
+
+            coordinator.releaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 5000);
+            assertNull(grid.web$getStorageCapture(), "Releasing the last need detaches the capture");
+            assertEquals(2, listener.observations.size());
+        }
+    }
+
+    @Test
+    void stockTrackingFeedsTheListenerFromItsOwnSamplesWithoutExtraReads() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("listener-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710102, iron);
+        StableKey key = trackStock(grid);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(2, listener.observations.size());
+            assertEquals(2, grid.storageReads, "The listener rides on the tracker's samples");
+            awaitStock(service, key, iron.web$getKey(), 1000, 20);
+        }
+    }
+
+    @Test
+    void requestedStockReadDeliversOneExtraObservationWithoutHistory() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("request-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710103, iron);
+        StableKey key = trackStock(grid);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("request-iron", 25, false));
+            coordinator.requestStockRead(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 1200);
+            assertEquals(2, listener.observations.size());
+            assertEquals(
+                25,
+                listener.observations.get(1)
+                    .rows()
+                    .get(0)
+                    .quantity());
+            coordinator.tick(TestGridFixtures.ae(grid), 1400);
+            assertEquals(2, listener.observations.size(), "A request is satisfied once");
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            StorageHistory history = awaitStock(service, key, iron.web$getKey(), 0, 25);
+            assertTrue(
+                history.points()
+                    .stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 25)
+                    .allMatch(point -> point.observedAt() == 2000),
+                "Only the scheduled sample is written to history");
+            assertEquals(3, grid.storageReads);
+        }
+    }
+
+    @Test
+    void failedStockReadIsReportedToTheListener() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("failure-iron", 20, false);
+        FaultGrid grid = new FaultGrid(710104, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(1);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            assertEquals(1, listener.observations.size());
+            grid.failEligibility = true;
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(Collections.singletonList(key), listener.failedGrids);
+        }
+    }
+
+    @Test
+    void aThrowingListenerNeitherLosesHistoryNorStartsBackoffNorEscapesTheTick() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("throwing-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710105, iron);
+        StableKey key = trackStock(grid);
+        AtomicInteger calls = new AtomicInteger();
+        StockObservationListener throwing = new StockObservationListener() {
+
+            @Override
+            public void stockObserved(@NotNull StableKey observed, @NotNull StorageObservation observation) {
+                calls.incrementAndGet();
+                throw new IllegalStateException("listener bug");
+            }
+
+            @Override
+            public void stockReadFailed(@NotNull StableKey failed, @NotNull RuntimeException failure) {
+                throw new IllegalStateException("listener bug");
+            }
+        };
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(throwing);
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(grid), 1000));
+            awaitStock(service, key, iron.web$getKey(), 1000, 20);
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("throwing-iron", 25, false));
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(grid), 2000));
+            awaitStock(service, key, iron.web$getKey(), 2000, 25);
+            assertEquals(2, calls.get(), "A throwing listener must not put the grid into failure backoff");
+        }
+    }
+
+    @Test
+    void aFailureReportThatThrowsDoesNotEscapeTheTick() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("throwing-failure", 20, false);
+        FaultGrid grid = new FaultGrid(710106, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(1);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(new StockObservationListener() {
+
+                @Override
+                public void stockObserved(@NotNull StableKey observed, @NotNull StorageObservation observation) {}
+
+                @Override
+                public void stockReadFailed(@NotNull StableKey failed, @NotNull RuntimeException failure) {
+                    throw new IllegalStateException("listener bug");
+                }
+            });
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            grid.failEligibility = true;
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(grid), 2000));
+        }
+    }
+
+    @Test
+    void aLeasedReadThatCrossesATerminalEpochIsRetriedOnTheNextTick() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("epoch-iron", 20, false);
+        FaultGrid grid = new FaultGrid(710107, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setStockSampleIntervalSeconds(1);
+        RecordingStockListener listener = new RecordingStockListener();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.setStockListener(listener);
+            coordinator.leaseStock(key);
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            assertEquals(1, listener.observations.size());
+            grid.onStorageRead = () -> {
+                grid.onStorageRead = null;
+                grid.capture.invalidateTerminal();
+            };
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertEquals(1, listener.observations.size(), "A read across a topology change is not a baseline");
+            coordinator.tick(TestGridFixtures.ae(grid), 2100);
+            assertEquals(
+                2,
+                listener.observations.size(),
+                "The lease retries at once instead of a whole interval later");
+        }
+    }
+
+    private static final class RecordingStockListener implements StockObservationListener {
+
+        private final List<StableKey> grids = new ArrayList<>();
+        private final List<StorageObservation> observations = new ArrayList<>();
+        private final List<StableKey> failedGrids = new ArrayList<>();
+
+        @Override
+        public void stockObserved(@NotNull StableKey grid, @NotNull StorageObservation observation) {
+            grids.add(grid);
+            observations.add(observation);
+        }
+
+        @Override
+        public void stockReadFailed(@NotNull StableKey grid, @NotNull RuntimeException failure) {
+            failedGrids.add(grid);
         }
     }
 
@@ -1669,6 +1927,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         private int storageAccesses;
         private boolean failEligibility;
         private int eligibilityReads;
+        private Runnable onStorageRead;
 
         private FaultGrid(long id, ItemIdentityRequestTest.Resource... resources) {
             super(id, false, CONTROLLER_ONLINE);
@@ -1697,6 +1956,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
 
         @Override
         public IStackList web$getStorageList() {
+            if (onStorageRead != null) onStorageRead.run();
             return contents.web$getStorageList();
         }
 
