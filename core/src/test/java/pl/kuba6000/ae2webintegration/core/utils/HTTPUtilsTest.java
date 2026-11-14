@@ -1,13 +1,16 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * The only parser standing between every endpoint and whatever a client chooses to send, so its job is
@@ -16,104 +19,61 @@ import org.junit.jupiter.api.Test;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class HTTPUtilsTest {
 
-    @Test
-    void nullAndEmptyYieldAnEmptyMap() {
-        assertTrue(
-            HTTPUtils.parseQueryString(null)
-                .isEmpty());
-        assertTrue(
-            HTTPUtils.parseQueryString("")
-                .isEmpty());
+    private static Map<String, String> parameters(String... keysAndValues) {
+        Map<String, String> expected = new LinkedHashMap<>();
+        for (int i = 0; i < keysAndValues.length; i += 2) expected.put(keysAndValues[i], keysAndValues[i + 1]);
+        return expected;
     }
 
-    @Test
-    void parsesPairs() {
-        Map<String, String> parsed = HTTPUtils.parseQueryString("grid=10&id=3");
-        assertEquals("10", parsed.get("grid"));
-        assertEquals("3", parsed.get("id"));
-        assertEquals(2, parsed.size());
-    }
-
-    @Test
-    void bareKeyMapsToAnEmptyValue() {
-        // ?logout, ?cancel, ?submit and ?track all rely on this shape.
-        Map<String, String> parsed = HTTPUtils.parseQueryString("logout");
-        assertTrue(parsed.containsKey("logout"));
-        assertEquals("", parsed.get("logout"));
-    }
-
-    @Test
-    void plusDecodesToSpace() {
-        assertEquals(
-            "two words",
-            HTTPUtils.parseQueryString("q=two+words")
-                .get("q"));
-    }
-
-    @Test
     @SuppressWarnings("UnnecessaryUnicodeEscape") // Keep the decoded code points explicit beside the URI escapes.
-    void percentEscapesDecodeAsUtf8() {
-        // Escapes rather than literals: the assertion is about byte-level decoding, and it should not
-        // depend on how this file happens to be read.
-        assertEquals(
-            "za\u017C\u00F3\u0142\u0107",
-            HTTPUtils.parseQueryString("name=za%C5%BC%C3%B3%C5%82%C4%87")
-                .get("name"));
+    private static Stream<Arguments> wellFormedQueries() {
+        return Stream.of(
+            Arguments.of("null", null, parameters()),
+            Arguments.of("empty", "", parameters()),
+            Arguments.of("pairs", "grid=10&id=3", parameters("grid", "10", "id", "3")),
+            // ?logout, ?cancel, ?submit and ?track all rely on a bare key mapping to an empty value.
+            Arguments.of("bare key", "logout", parameters("logout", "")),
+            Arguments.of("plus decodes to space", "q=two+words", parameters("q", "two words")),
+            // Escapes rather than literals: the assertion is about byte-level decoding, and it should not
+            // depend on how this file happens to be read.
+            Arguments.of(
+                "percent escapes decode as UTF-8",
+                "name=za%C5%BC%C3%B3%C5%82%C4%87",
+                parameters("name", "za\u017C\u00F3\u0142\u0107")),
+            Arguments.of("empty value is kept", "a=&b=2", parameters("a", "", "b", "2")),
+            Arguments.of("empty segments are ignored", "a=1&&b=2&", parameters("a", "1", "b", "2")),
+            Arguments.of("duplicate keys keep the last value", "a=1&a=2", parameters("a", "2")),
+            Arguments.of(
+                "values are decoded once without creating additional parameters",
+                "name=cell%26track%3D1&literalPlus=%2B&percent=%2526&space=two+words",
+                parameters("name", "cell&track=1", "literalPlus", "+", "percent", "%26", "space", "two words")));
     }
 
-    @Test
-    void anEmptyValueIsKept() {
-        Map<String, String> parsed = HTTPUtils.parseQueryString("a=&b=2");
-        assertEquals("", parsed.get("a"));
-        assertEquals("2", parsed.get("b"));
-    }
-
-    @Test
-    void emptySegmentsAreIgnored() {
-        Map<String, String> parsed = HTTPUtils.parseQueryString("a=1&&b=2&");
-        assertEquals("1", parsed.get("a"));
-        assertEquals("2", parsed.get("b"));
-        assertEquals(2, parsed.size());
-    }
-
-    @Test
-    void duplicateKeysKeepTheLastValue() {
-        assertEquals(
-            "2",
-            HTTPUtils.parseQueryString("a=1&a=2")
-                .get("a"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("wellFormedQueries")
+    void wellFormedQueryStringsDecodeIntoTheirParameters(String description, String query,
+        Map<String, String> expected) {
+        assertEquals(expected, HTTPUtils.parseQueryString(query));
     }
 
     // --- hostile input must not throw ---
 
-    @Test
-    void aMalformedEscapeIsSkippedRatherThanThrowing() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("malformedQueries")
+    void aMalformedParameterIsSkippedRatherThanThrowing(String description, String query,
+        Map<String, String> expected) {
         // URLDecoder raises IllegalArgumentException on %ZZ; letting that escape would drop the whole
-        // request, and it is reachable pre-auth from both the query string and a POST body.
-        Map<String, String> parsed = HTTPUtils.parseQueryString("bad=%ZZ&good=1");
-        assertEquals("1", parsed.get("good"), "a broken parameter must not take the rest with it");
-        assertFalse(parsed.containsKey("bad"));
+        // request, and it is reachable pre-auth from both the query string and a POST body. A broken
+        // parameter must not take the rest with it.
+        assertEquals(expected, HTTPUtils.parseQueryString(query));
     }
 
-    @Test
-    void aTrailingPercentIsSkippedRatherThanThrowing() {
-        Map<String, String> parsed = HTTPUtils.parseQueryString("good=1&bad=100%");
-        assertEquals("1", parsed.get("good"));
-        assertFalse(parsed.containsKey("bad"));
-    }
-
-    @Test
-    void aMalformedKeyIsSkippedRatherThanThrowing() {
-        Map<String, String> parsed = HTTPUtils.parseQueryString("%ZZ=x&good=1");
-        assertEquals("1", parsed.get("good"));
-        assertEquals(1, parsed.size());
-    }
-
-    @Test
-    void onlyMalformedInputYieldsAnEmptyMapAndNoThrow() {
-        assertTrue(
-            HTTPUtils.parseQueryString("%ZZ")
-                .isEmpty());
+    private static Stream<Arguments> malformedQueries() {
+        return Stream.of(
+            Arguments.of("malformed escape in a value", "bad=%ZZ&good=1", parameters("good", "1")),
+            Arguments.of("trailing percent in a value", "good=1&bad=100%", parameters("good", "1")),
+            Arguments.of("malformed escape in a key", "%ZZ=x&good=1", parameters("good", "1")),
+            Arguments.of("only malformed input", "%ZZ", parameters()));
     }
 
     // --- numeric parameters: null rather than an exception ---

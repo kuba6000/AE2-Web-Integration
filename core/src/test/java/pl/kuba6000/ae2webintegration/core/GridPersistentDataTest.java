@@ -7,9 +7,15 @@ import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CON
 import java.io.File;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -19,39 +25,59 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class GridPersistentDataTest extends GridTestScope {
 
-    @Test
-    void machineCraftingSettingPersistsIndependentlyAndClearingRestoresDefaults() throws Exception {
+    private static Stream<Arguments> settingsThatPersistWithoutMasterTracking() {
+        return Stream.of(
+            Arguments.of(
+                "machine crafting",
+                (BiConsumer<GridSettingsData, Object>) (settings, value) -> settings
+                    .setTrackMachineCrafting((Boolean) value),
+                (Function<GridSettingsData, Object>) GridSettingsData::isTrackMachineCrafting,
+                true,
+                false),
+            Arguments.of(
+                "name",
+                (BiConsumer<GridSettingsData, Object>) (settings, value) -> settings.setName((String) value),
+                (Function<GridSettingsData, Object>) GridSettingsData::getName,
+                "Factory",
+                ""));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("settingsThatPersistWithoutMasterTracking")
+    void aSettingPersistsWithoutTrackingAndClearingItRestoresDefaults(String description,
+        BiConsumer<GridSettingsData, Object> write, Function<GridSettingsData, Object> read, Object value,
+        Object cleared) throws Exception {
         StableKey key = GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
         assertNotNull(key);
         GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(data);
         GridSettingsData settings = data.getSettings();
-        assertFalse(settings.isTrackMachineCrafting());
-        settings.setTrackMachineCrafting(true);
+        assertEquals(cleared, read.apply(settings));
+        write.accept(settings, value);
         assertFalse(settings.isTracked());
         assertFalse(settings.isDefault());
+        GRID_IDENTITIES.saveIfDirty();
+        write.accept(settings, value);
         GRID_IDENTITIES.saveIfDirty();
         File file = new File(gridSave, "ae2webintegration/grid-identities.json");
         GridIdentityRegistry restarted = worlds.registry(file);
         GridPersistentData loaded = restarted.getPersistentData(key);
         assertNotNull(loaded);
-        assertTrue(
-            loaded.getSettings()
-                .isTrackMachineCrafting());
+        assertEquals(value, read.apply(loaded.getSettings()));
         assertFalse(
             loaded.getSettings()
                 .isTracked());
-        loaded.getSettings()
-            .setTrackMachineCrafting(false);
-        restarted.saveIfDirty();
-        GridPersistentData cleared = worlds.registry(file)
-            .getPersistentData(key);
-        assertNotNull(cleared);
         assertFalse(
-            cleared.getSettings()
-                .isTrackMachineCrafting());
+            loaded.getSettings()
+                .isDefault());
+        write.accept(loaded.getSettings(), cleared);
+        restarted.saveIfDirty();
+        GridPersistentData reloaded = worlds.registry(file)
+            .getPersistentData(key);
+        assertNotNull(reloaded);
+        assertEquals(cleared, read.apply(reloaded.getSettings()));
         assertTrue(
-            cleared.getSettings()
+            reloaded.getSettings()
                 .isDefault());
     }
 
@@ -90,48 +116,6 @@ class GridPersistentDataTest extends GridTestScope {
         settings.setFlowTracked(false);
         settings.setStockSampleIntervalSeconds(300);
         assertTrue(settings.isDefault());
-    }
-
-    @Test
-    void namePersistsWithoutTrackingAndClearingRestoresDefaults() throws Exception {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
-        StableKey key = GRID_IDENTITIES.getKey(grid);
-        assertNotNull(key);
-        GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
-        assertNotNull(data);
-        GridSettingsData settings = data.getSettings();
-        assertEquals("", settings.getName());
-        settings.setName("Factory");
-        GRID_IDENTITIES.saveIfDirty();
-        settings.setName("Factory");
-        GRID_IDENTITIES.saveIfDirty();
-        File file = new File(gridSave, "ae2webintegration/grid-identities.json");
-        GridIdentityRegistry restarted = worlds.registry(file);
-        GridPersistentData loaded = restarted.getPersistentData(key);
-        assertNotNull(loaded);
-        assertEquals(
-            "Factory",
-            loaded.getSettings()
-                .getName());
-        assertFalse(
-            loaded.getSettings()
-                .isTracked());
-        assertFalse(
-            loaded.getSettings()
-                .isDefault());
-        loaded.getSettings()
-            .setName("");
-        restarted.saveIfDirty();
-        GridPersistentData cleared = worlds.registry(file)
-            .getPersistentData(key);
-        assertNotNull(cleared);
-        assertEquals(
-            "",
-            cleared.getSettings()
-                .getName());
-        assertTrue(
-            cleared.getSettings()
-                .isDefault());
     }
 
     @Test

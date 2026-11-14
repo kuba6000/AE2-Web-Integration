@@ -191,19 +191,14 @@ class NotificationManagerTest {
         assertEquals(expected, NotificationManager.formatDuration(durationMillis));
     }
 
-    @Test
-    void durationThresholdFiltersShortCraftingJobs() {
-        config.set("notifications.minimum_crafting_duration_seconds", 300);
+    @ParameterizedTest(name = "{0} = {1}")
+    @CsvSource({ "notifications.minimum_crafting_duration_seconds, 300, 299999, 1, 300000, 1",
+        "notifications.minimum_crafting_amount, 1000, 1, 999, 1, 1000" })
+    void aMinimumThresholdFiltersSmallCraftingJobsAtItsBoundary(String key, int minimum, long belowDurationMillis,
+        long belowAmount, long atDurationMillis, long atAmount) {
+        config.set(key, minimum);
 
-        assertFalse(NotificationManager.shouldPostCraftingNotification(299_999L, 1L));
-        assertTrue(NotificationManager.shouldPostCraftingNotification(300_000L, 1L));
-    }
-
-    @Test
-    void amountThresholdFiltersSmallCraftingJobs() {
-        config.set("notifications.minimum_crafting_amount", 1000);
-
-        assertFalse(NotificationManager.shouldPostCraftingNotification(1L, 999L));
-        assertTrue(NotificationManager.shouldPostCraftingNotification(1L, 1000L));
+        assertFalse(NotificationManager.shouldPostCraftingNotification(belowDurationMillis, belowAmount));
+        assertTrue(NotificationManager.shouldPostCraftingNotification(atDurationMillis, atAmount));
     }
 }

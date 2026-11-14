@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class RateLimiterTest {
@@ -40,21 +42,16 @@ class RateLimiterTest {
     private static final InetAddress A = addr("203.0.113.1");
     private static final InetAddress B = addr("203.0.113.2");
 
-    @Test
-    void allowsExactlyTheConfiguredNumberOfRequests() {
-        RateLimiter limiter = limiter(20);
-        for (int i = 1; i <= 20; i++) {
-            assertTrue(limiter.isAllowed(A), "request " + i + " of 20 should be allowed");
+    @ParameterizedTest(name = "limit of {0}")
+    // The limit of 1 row is a regression guard: 1 is the config minimum, and denying even the first request
+    // made the web interface unusable.
+    @ValueSource(ints = { 1, 20 })
+    void allowsExactlyTheConfiguredNumberOfRequests(int max) {
+        RateLimiter limiter = limiter(max);
+        for (int i = 1; i <= max; i++) {
+            assertTrue(limiter.isAllowed(A), "request " + i + " of " + max + " should be allowed");
         }
-        assertFalse(limiter.isAllowed(A), "the 21st request should be denied");
-    }
-
-    @Test
-    void aLimitOfOneAllowsOneRequest() {
-        // The config minimum is 1. Denying even the first request made the web interface unusable.
-        RateLimiter limiter = limiter(1);
-        assertTrue(limiter.isAllowed(A));
-        assertFalse(limiter.isAllowed(A));
+        assertFalse(limiter.isAllowed(A), "request " + (max + 1) + " should be denied");
     }
 
     @Test

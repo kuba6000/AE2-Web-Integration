@@ -14,9 +14,13 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
@@ -86,26 +90,23 @@ class CoreEngineTickPumpTest {
         assertTrue(ran.isEmpty());
     }
 
-    @Test
-    void aThrowingHandlerDoesNotPropagateOutOfTheTick() {
-        queue("boom", r -> { throw new IllegalStateException("handler blew up"); });
+    private static Stream<Arguments> throwingHandlers() {
+        return Stream.of(Arguments.of("exception", (Consumer<TestRequest>) r -> {
+            throw new IllegalStateException("handler blew up");
+        }),
+            // A runaway handler ending in StackOverflowError must not take the server with it.
+            Arguments.of("error", (Consumer<TestRequest>) r -> { throw new StackOverflowError(); }));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("throwingHandlers")
+    void aThrowingHandlerNeverEscapesTheTickAndLeavesTheRequestAnsweredWithInternalError(String kind,
+        Consumer<TestRequest> handler) {
+        // Without the answer the HTTP worker waits for the full request timeout and reports TIMEOUT, which is
+        // both slow and the wrong reason.
+        TestRequest request = queue("boom", handler);
         assertDoesNotThrow(() -> CoreEngine.drainRequests(clock(0L)));
         assertEquals(Collections.singletonList("boom"), ran);
-    }
-
-    @Test
-    void anErrorIsCaughtTooNotJustAnException() {
-        // A runaway handler ending in StackOverflowError must not take the server with it.
-        queue("boom", r -> { throw new StackOverflowError(); });
-        assertDoesNotThrow(() -> CoreEngine.drainRequests(clock(0L)));
-    }
-
-    @Test
-    void aThrowingHandlerLeavesTheRequestAnsweredWithInternalError() {
-        // Without this the HTTP worker waits for the full request timeout and reports TIMEOUT, which is
-        // both slow and the wrong reason.
-        TestRequest request = queue("boom", r -> { throw new IllegalStateException(); });
-        CoreEngine.drainRequests(clock(0L));
         assertStatus("INTERNAL_ERROR", request);
     }
 

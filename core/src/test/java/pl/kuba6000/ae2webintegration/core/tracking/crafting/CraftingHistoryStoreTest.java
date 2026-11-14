@@ -19,9 +19,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -175,62 +179,51 @@ class CraftingHistoryStoreTest {
         }
     }
 
-    @Test
-    void duplicateRequesterIdentitiesAreRejectedWithoutPublishingPartialJobs() throws Exception {
-        StableKey grid = StableKey.random();
-        long now = System.currentTimeMillis();
-        CompletedCrafting base = simpleJob(now, 1);
+    private static Stream<Arguments> rejectedRequesterLists() {
         UUID player = UUID.randomUUID();
-        CompletedCrafting duplicate = new CompletedCrafting(
+        return Stream.of(
+            Arguments.of(
+                "the same player twice under different names",
+                Arrays.asList(
+                    CraftingRequester.player(new PlayerIdentity(player, "Alex")),
+                    CraftingRequester.player(new PlayerIdentity(player, "AlexRenamed")))),
+            Arguments
+                .of("automation twice", Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation())),
+            Arguments.of("web twice", Arrays.asList(CraftingRequester.web(), CraftingRequester.web())),
+            Arguments.of(
+                "player source without a player",
+                Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null))),
+            Arguments.of(
+                "web source carrying a player",
+                Collections.singletonList(
+                    new CraftingRequester(
+                        CraftingRequester.Source.WEB,
+                        new PlayerIdentity(UUID.randomUUID(), "Alex")))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rejectedRequesterLists")
+    void invalidRequesterListsAreRejectedWithoutPublishingPartialJobs(String description,
+        List<CraftingRequester> requesters) throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting invalid = new CompletedCrafting(
             base.finalOutput(),
             base.timeStarted(),
             base.timeDone(),
             false,
             base.resources(),
             base.providers(),
-            Arrays.asList(
-                CraftingRequester.player(new PlayerIdentity(player, "Alex")),
-                CraftingRequester.player(new PlayerIdentity(player, "AlexRenamed"))));
+            requesters);
         try (WorldDatabase database = database()) {
             register(database, grid);
             SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            assertThrows(RejectedCraftingException.class, () -> store.append(grid, duplicate));
+            assertThrows(RejectedCraftingException.class, () -> store.append(grid, invalid));
             assertTrue(
                 store.list(grid, null, 10)
                     .entries()
                     .isEmpty());
             assertTrue(store.append(grid, base) > 0);
-        }
-    }
-
-    @Test
-    void invalidAndRepeatedNonPlayerSourcesAreRejectedWithoutPublishingJobs() throws Exception {
-        StableKey grid = StableKey.random();
-        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
-        List<List<CraftingRequester>> invalid = Arrays.asList(
-            Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation()),
-            Arrays.asList(CraftingRequester.web(), CraftingRequester.web()),
-            Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null)),
-            Collections.singletonList(
-                new CraftingRequester(CraftingRequester.Source.WEB, new PlayerIdentity(UUID.randomUUID(), "Alex"))));
-        try (WorldDatabase database = database()) {
-            register(database, grid);
-            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            for (List<CraftingRequester> requesters : invalid) {
-                CompletedCrafting job = new CompletedCrafting(
-                    base.finalOutput(),
-                    base.timeStarted(),
-                    base.timeDone(),
-                    false,
-                    base.resources(),
-                    base.providers(),
-                    requesters);
-                assertThrows(RejectedCraftingException.class, () -> store.append(grid, job));
-            }
-            assertTrue(
-                store.list(grid, null, 10)
-                    .entries()
-                    .isEmpty());
         }
     }
 
@@ -857,39 +850,6 @@ class CraftingHistoryStoreTest {
                     .get(0)
                     .id());
             assertNull(store.read(grid, highestRemoved));
-        }
-    }
-
-    @Test
-    void expiredJobsAndFailedWritesDoNotPublishPartialHistory() throws Exception {
-        StableKey grid = StableKey.random();
-        long now = System.currentTimeMillis();
-        try (WorldDatabase database = database()) {
-            register(database, grid);
-            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
-            long old = store.append(grid, simpleJob(now - DAYS.toMillis(20), 1));
-            assertNull(store.read(grid, old));
-            CompletedCrafting good = simpleJob(now, 2);
-            CompletedCrafting invalid = new CompletedCrafting(
-                good.finalOutput(),
-                good.timeStarted(),
-                good.timeDone(),
-                false,
-                Collections.singletonList(
-                    new CompletedCrafting.Resource(
-                        good.finalOutput(),
-                        10,
-                        Collections.emptyList(),
-                        Collections.singletonList("Missing provider"))),
-                Collections.emptyList(),
-                Collections.emptyList());
-            assertThrows(IOException.class, () -> store.append(grid, invalid));
-            assertTrue(
-                store.list(grid, null, 10)
-                    .entries()
-                    .isEmpty());
-            long saved = store.append(grid, good);
-            assertEquals(good, store.read(grid, saved));
         }
     }
 

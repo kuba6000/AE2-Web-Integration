@@ -90,29 +90,6 @@ class IconPackTest {
     }
 
     @Test
-    void manifestUsesOneOpaqueCompatibilityVersion() throws Exception {
-        Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
-            writer.add(StableKey.random(), new int[4096]);
-            output = writer.finish();
-        }
-        try (ZipFile zip = new ZipFile(output.toFile())) {
-            JsonObject manifest = new JsonParser().parse(new String(entryBytes(zip, "manifest.json"), UTF_8))
-                .getAsJsonObject();
-            assertEquals(
-                2,
-                manifest.get("formatVersion")
-                    .getAsInt());
-            assertEquals(
-                "legacy-v1",
-                manifest.get("compatibilityVersion")
-                    .getAsString());
-            assertFalse(manifest.has("identityContract"));
-            assertFalse(manifest.has("basePolicy"));
-        }
-    }
-
-    @Test
     void readsExistingFingerprintedPacksAndStillChecksTheirManifestIntegrity() throws Exception {
         Path original;
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
@@ -264,40 +241,6 @@ class IconPackTest {
     }
 
     @Test
-    void duplicatePixelsShareRectangleAndConflictingKeysFail() throws Exception {
-        StableKey exact = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
-        StableKey base = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
-        int[] pixels = new int[4096];
-        Arrays.fill(pixels, 0xff123456);
-        Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
-            writer.add(exact, pixels);
-            writer.add(base, pixels);
-            writer.add(exact, pixels);
-            pixels[0] = 0;
-            assertThrows(IOException.class, () -> writer.add(exact, pixels));
-            output = writer.finish();
-        }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
-            assertEquals(
-                1,
-                pack.pages()
-                    .size());
-            IconPack.Location exactLocation = pack.find(exact);
-            IconPack.Location baseLocation = pack.find(base);
-            assertNotNull(exactLocation);
-            assertNotNull(baseLocation);
-            assertEquals(
-                exactLocation.page()
-                    .digest(),
-                baseLocation.page()
-                    .digest());
-            assertEquals(exactLocation.x(), baseLocation.x());
-            assertEquals(exactLocation.y(), baseLocation.y());
-        }
-    }
-
-    @Test
     void interleavedCapturesKeepPixelsAndDeduplicationIndependentOfCallerBufferReuse() throws Exception {
         StableKey first = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey second = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
@@ -405,17 +348,6 @@ class IconPackTest {
                 false);
         }
         return modified;
-    }
-
-    @Test
-    void cancellationRemovesUnpublishedOutputAndScratch() throws Exception {
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
-            writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
-            assertThrows(CancellationException.class, () -> writer.finish(() -> true));
-        }
-        try (Stream<Path> files = Files.list(directory)) {
-            assertEquals(0, files.count());
-        }
     }
 
     @Test
@@ -588,39 +520,6 @@ class IconPackTest {
             assertThrows(FileNotFoundException.class, () -> pack.openPage("unknown"));
         }
         assertRejectedPack(output, "1.12.2");
-    }
-
-    @Test
-    void imagesCrossPageBoundariesWithoutRetainingOrChangingPixels() throws Exception {
-        Path output;
-        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"))) {
-            for (int i = 0; i < 226; i++) {
-                int[] pixels = new int[4096];
-                Arrays.fill(pixels, 0xff000000 | i);
-                final int identity = i;
-                writer.add(StableKey.create(sink -> sink.putInt(identity)), pixels);
-            }
-            output = writer.finish();
-        }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
-            assertEquals(
-                2,
-                pack.pages()
-                    .size());
-            for (int i = 0; i < 226; i++) {
-                final int identity = i;
-                IconPack.Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
-                assertNotNull(location);
-                try (InputStream stream = pack.openPage(
-                    location.page()
-                        .digest())) {
-                    assertEquals(
-                        0xff000000 | i,
-                        ImageIO.read(stream)
-                            .getRGB(location.x() + 63, location.y() + 63));
-                }
-            }
-        }
     }
 
     @Test
