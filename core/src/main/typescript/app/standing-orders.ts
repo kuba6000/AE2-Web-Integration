@@ -5,9 +5,14 @@ import type {
     ResourceResponse,
     StandingOrder,
     StandingOrderDefinition,
+    StandingOrderReason,
     StandingOrderRejection,
+    StandingOrderRuntime,
     StandingOrdersListing
 } from './api-types.js';
+import type { Translator } from './i18n.js';
+import type { ReadonlyData } from './theme-api.js';
+import { plainMinecraftText } from './minecraft-text.js';
 import type { Notify } from './notifications.js';
 import { standingOrdersHref, type Route } from './router.js';
 import {
@@ -39,6 +44,8 @@ export type StandingOrderEditor = {
     /** A message key for a failure that belongs to no single field. */
     formError: string | null;
     saving: boolean;
+    /** The draft differs from what the editor opened with. */
+    dirty: boolean;
 };
 export type EditorCpu = { key: string; name: string; eligible: boolean };
 export type StandingOrdersState = {
@@ -71,10 +78,63 @@ const staleList = ['STANDING_ORDER_NOT_FOUND', 'STANDING_ORDER_NOT_RUNNABLE'];
 /** The message for a failed standing order request; unknown failures keep their own wire status as the key. */
 export function standingOrderErrorKey(status: string) {
     if (unconfirmed.includes(status)) return 'actionUnconfirmed';
-    if (status === 'TOO_MANY_REQUESTS') return 'standingOrderRateLimited';
     if (status === 'ITEM_NOT_FOUND') return 'standingOrderResourceUnknown';
     if (status === 'NO_PERMISSIONS') return 'standingOrderNoPermission';
     return status;
+}
+
+const statusReasons: Record<StandingOrderReason, true> = {
+    WAITING_FIRST_READ: true,
+    READ_FAILED: true,
+    WAITING_FRESH_READ_AFTER_JOB: true,
+    WAITING_READ_FOR_NEW_RESOURCES: true,
+    MISSING_INGREDIENTS: true,
+    CALCULATION_FAILED: true,
+    CALCULATION_TIMED_OUT: true,
+    SUBMIT_REJECTED: true,
+    SUBMIT_ERROR: true,
+    UNEXPECTED_ERROR: true,
+    INVALID_DEFINITION: true,
+    CAPABILITY_UNAVAILABLE: true,
+    UNKNOWN_RESOURCE: true,
+    AMBIGUOUS_RESOURCE: true,
+    NOT_CRAFTABLE: true,
+    EMITTER_BACKED: true,
+    AMOUNT_OVERFLOW: true,
+    NOTHING_TO_ORDER: true,
+    NO_IDLE_CPU: true,
+    SELECTED_CPU_UNAVAILABLE: true,
+    CALCULATION_SLOTS_FULL: true
+};
+/** Message keys of the definition members a CAPABILITY_UNAVAILABLE reason can name. */
+const optionLabels: Record<string, string> = {
+    'action.options.lightMode': 'craftingLightMode',
+    'action.options.ignoreMissing': 'ignoreMissing'
+};
+
+/**
+ * Why an order has its status, as text: the translated reason (null when there is none or this version does not
+ * know it), the crafting system's own error message as it came, and one line per missing ingredient.
+ */
+export function statusExplanation(
+    runtime: ReadonlyData<StandingOrderRuntime>,
+    resources: ReadonlyData<Record<string, ResourceDescription>>,
+    locale: Translator
+) {
+    const { common: t } = locale;
+    const { reason, resource, path } = runtime;
+    const resourceName = resource === null ? '' : (resources[resource]?.displayName ?? resource);
+    const option = path === null ? '' : Object.hasOwn(optionLabels, path) ? t(optionLabels[path]) : path;
+    return {
+        reason:
+            reason !== null && Object.hasOwn(statusReasons, reason)
+                ? t(`standingOrderStatusReason_${reason}`, { resource: plainMinecraftText(resourceName), option })
+                : null,
+        submitError: runtime.submitError,
+        missing: runtime.missing.map((entry) =>
+            t('standingOrderMissingIngredient', { amount: entry.amount, name: plainMinecraftText(entry.displayName) })
+        )
+    };
 }
 
 /** The network's standing orders and the editor draft; the engine's status is read, never computed here. */
@@ -103,6 +163,10 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
     /** Descriptions of resources chosen in the editor, which a listing does not carry until the order is saved. */
     let chosen: Record<string, ResourceDescription> = {};
     let cpusRead = false;
+    /** The listing was read after the current route was entered, so an order missing from it is really gone. */
+    let fresh = false;
+    /** The draft the editor opened with, for telling whether it was changed. */
+    let opened: OrderDraft | null = null;
     const gridKey = () => (route.view === 'standing-orders' ? route.gridKey : null);
 
     function cancel() {
@@ -130,13 +194,15 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         if (!editor || editor.status !== 'loading' || route.view !== 'standing-orders' || !route.editor) return;
         if (route.editor.order === null) {
             editor.draft = keepStockedDraft(route.editor.itemKey);
+            opened = editor.draft;
             editor.status = 'ready';
             return;
         }
         const wanted = route.editor.order;
         const order = state.orders.find((entry) => entry.orderKey === wanted);
         if (!order) {
-            editor.status = 'missing';
+            // Another client may have created it since the cached listing was read.
+            if (fresh) editor.status = 'missing';
             return;
         }
         editor.invalid = order.invalid;
@@ -144,10 +210,15 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             editor.definition = order.definition;
             editor.baseline = draftFromDefinition(order.definition);
             editor.draft = draftFromDefinition(order.definition);
-        } else editor.draft = keepStockedDraft(null);
+        } else {
+            // A repair is saved as a whole order; with the server switch off it can only be saved switched off.
+            editor.draft = { ...keepStockedDraft(null), enabled: state.serverEnabled };
+        }
+        opened = editor.draft;
         editor.status = 'ready';
     }
     function accept({ data, icons }: ResourceResponse<StandingOrdersListing>) {
+        fresh = true;
         Object.assign(state, {
             status: 'ready',
             error: null,
@@ -240,6 +311,10 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         })();
         return reading;
     }
+    function scheduleSettle() {
+        clearTimeout(settle);
+        settle = setTimeout(() => void refresh(true), settleMillis);
+    }
     /** Runs one change of the orders; the answer replaces the whole list. */
     async function mutate(
         action: (key: string) => Promise<ResourceResponse<StandingOrdersListing> | null>,
@@ -253,13 +328,16 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         changed();
         try {
             const result = await action(key);
-            if (disposed || version !== generation) return null;
+            if (disposed) return null;
+            if (version !== generation) {
+                // The view moved on meanwhile; the change still happened, so it is reported and its status read.
+                notify({ kind: 'success', message: success.message, subject: success.subject });
+                if (success.settle && gridKey() === key) scheduleSettle();
+                return null;
+            }
             if (result) accept(result);
             notify({ kind: 'success', message: success.message, subject: success.subject });
-            if (success.settle) {
-                clearTimeout(settle);
-                settle = setTimeout(() => void refresh(true), settleMillis);
-            }
+            if (success.settle) scheduleSettle();
             return { ok: true as const };
         } catch (caught) {
             const status = failed(caught, version);
@@ -290,6 +368,8 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             const sameNetwork =
                 route.view === 'standing-orders' && next.view === 'standing-orders' && route.gridKey === next.gridKey;
             route = next;
+            fresh = false;
+            opened = null;
             state.pending = false;
             if (!sameNetwork) {
                 clearTimeout(settle);
@@ -306,7 +386,8 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
                           invalid: null,
                           errors: {},
                           formError: null,
-                          saving: false
+                          saving: false,
+                          dirty: false
                       }
                     : null;
             if (!state.editor) {
@@ -348,6 +429,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
                 state.resources = { ...state.resources, [resource.itemKey]: resource };
             }
             editor.draft = applyChange(editor.draft, change);
+            editor.dirty = JSON.stringify(editor.draft) !== JSON.stringify(opened);
             editor.errors = {};
             editor.formError = null;
             changed();
@@ -358,6 +440,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             if (!editor || !key || editor.status !== 'ready' || editor.saving || state.pending || !state.canEdit)
                 return;
             const order = editor.order;
+            if (order === null && !state.serverEnabled) return;
             const refuse = (errors: FieldErrors) => {
                 editor.errors = errors;
                 editor.formError = null;
@@ -387,6 +470,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             editor.formError = null;
             editor.saving = true;
             const name = editor.draft.name.trim();
+            const known = new Set(state.orders.map((entry) => entry.orderKey));
             const outcome = await mutate(send, { message: 'standingOrderSaved', subject: name, settle: true });
             if (state.editor !== editor) return;
             editor.saving = false;
@@ -405,6 +489,14 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             else editor.formError = placed?.message ?? standingOrderErrorKey(outcome.status);
             changed();
             if (staleList.includes(outcome.status)) void refresh();
+            else if (order === null && unconfirmed.includes(outcome.status)) {
+                // The create may have committed; a retry must not add a second order unknowingly.
+                await refresh();
+                if (state.editor === editor && state.orders.some((entry) => !known.has(entry.orderKey))) {
+                    editor.formError = 'standingOrderCreateUnconfirmed';
+                    changed();
+                }
+            }
         },
         dispose() {
             disposed = true;

@@ -28,7 +28,11 @@ const definition = (overrides = {}) => ({
 });
 const runtime = (status, extra = {}) => ({
     status,
-    message: null,
+    reason: null,
+    resource: null,
+    path: null,
+    submitError: null,
+    missing: [],
     changedAt: 0,
     lastSubmittedAmount: 0,
     nextCheckAt: 0,
@@ -52,7 +56,7 @@ async function open(t, orders, state = {}, route = '') {
 }
 const lastChange = (options) => options.requests.filter((request) => request.method !== 'GET').at(-1);
 
-test('the list shows every order with its target, a readable status and the engine message', async (t) => {
+test('the list shows every order with its target, a readable status and why it has it', async (t) => {
     const { page } = await open(t, [
         listed('a', { name: 'Fresh order' }),
         listed(
@@ -63,21 +67,33 @@ test('the list shows every order with its target, a readable status and the engi
         listed(
             'c',
             { name: 'Short order' },
-            runtime('BLOCKED_MISSING', { message: 'Missing 12 Redstone', nextCheckAt: 4102444800000 })
+            runtime('BLOCKED_MISSING', {
+                reason: 'MISSING_INGREDIENTS',
+                missing: [{ resource: 'redstone', displayName: 'Redstone', amount: 12 }],
+                nextCheckAt: 4102444800000
+            })
         ),
-        listed('d', { name: 'Off order', enabled: false }, runtime('DISABLED'))
+        listed('d', { name: 'Off order', enabled: false }, runtime('DISABLED')),
+        listed(
+            'e',
+            { name: 'Failed order' },
+            runtime('SUBMIT_FAILED', { reason: 'SUBMIT_REJECTED', submitError: 'No suitable CPU found.' })
+        )
     ]);
     const list = page.getByRole('list', { name: 'Standing orders list' });
     await list.waitFor();
     const rows = list.getByRole('listitem');
-    assert.equal(await rows.count(), 4);
+    assert.equal(await list.getByRole('heading').count(), 5);
     const row = (name) => rows.filter({ has: page.getByRole('heading', { name, exact: true }) });
     await row('Fresh order').getByText('Not checked yet').waitFor();
     await row('Fresh order').getByText('Iron Ingot').waitFor();
     await row('Busy order').getByText('Crafting', { exact: true }).waitFor();
     await row('Busy order').getByText('Last order: 8,000', { exact: false }).waitFor();
     await row('Short order').getByText('Missing ingredients').waitFor();
+    await row('Short order').getByText('The network lacks ingredients', { exact: false }).waitFor();
     await row('Short order').getByText('Missing 12 Redstone').waitFor();
+    await row('Failed order').getByText('The crafting system rejected the job.').waitFor();
+    await row('Failed order').getByText('No suitable CPU found.').waitFor();
     await row('Short order').getByText('Next check:', { exact: false }).waitFor();
     await row('Off order').getByText('Disabled', { exact: true }).waitFor();
     assert.equal(await row('Off order').getByRole('checkbox').isChecked(), false);
@@ -118,9 +134,6 @@ test('a refused action explains itself and leaves the list as it was', async (t)
     await page.getByRole('button', { name: /^Run now/ }).click();
     await page.getByRole('status').getByText('This order cannot run now', { exact: false }).waitFor();
     await page.getByRole('heading', { name: 'Keep iron' }).waitFor();
-    options.standingOrderFailure = { status: 'TOO_MANY_REQUESTS', httpStatus: 429 };
-    await page.getByRole('button', { name: /^Run now/ }).click();
-    await page.getByText('Please wait a few seconds', { exact: false }).waitFor();
 });
 
 test('without edit permission the list is read-only, and server or network switches are explained', async (t) => {
@@ -406,7 +419,10 @@ test('the phone layout keeps the list and the editor inside the screen width', a
             listed(
                 'a',
                 { name: 'A very long standing order name that has to wrap instead of overflowing the screen' },
-                runtime('BLOCKED_MISSING', { message: 'Missing 123456789 of a rather long ingredient name' })
+                runtime('BLOCKED_MISSING', {
+                    reason: 'MISSING_INGREDIENTS',
+                    missing: [{ resource: null, displayName: 'A rather long ingredient name', amount: 123456789 }]
+                })
             )
         ],
         resources: { iron }
@@ -573,4 +589,133 @@ test('a failed resource read leaves no stream, says so in the picker and can be 
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
     await serverState(() => options.itemStreams?.length ?? 0, 1);
+});
+
+test('with the server switch off orders can be disabled, edited and deleted, but not created, enabled or run', async (t) => {
+    const { page, options } = await open(
+        t,
+        [listed('a', { name: 'Keep iron' }), listed('b', { name: 'Resting', enabled: false })],
+        { serverEnabled: false }
+    );
+    const row = (name) => page.getByRole('listitem').filter({ has: page.getByRole('heading', { name }) });
+    await row('Keep iron').waitFor();
+    assert.equal(await page.getByRole('link', { name: 'New standing order' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: /^Run now/ }).count(), 0);
+    assert.equal(await row('Resting').getByRole('checkbox').isDisabled(), true, 'an order cannot be switched on');
+    await row('Resting').getByRole('link', { name: /^Edit/ }).waitFor();
+    await row('Resting')
+        .getByRole('button', { name: /^Delete/ })
+        .waitFor();
+    await row('Keep iron').getByRole('checkbox').uncheck();
+    await serverState(() => lastChange(options)?.body?.enabled, false);
+
+    await page.goto(page.url().replace(/standing-orders.*$/, 'standing-orders/new'));
+    await page.getByText('Standing orders are turned off on this server', { exact: false }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Save' }).isDisabled(), true);
+});
+
+test('a locked order shows its crafting options in the read-only summary', async (t) => {
+    const nested = {
+        type: 'all',
+        children: [stockBelow('iron', 5), { type: 'any', children: [stockBelow('iron', 1)] }]
+    };
+    const { page } = await open(
+        t,
+        [
+            listed('a', {
+                name: 'Nested',
+                trigger: nested,
+                action: { ...definition().action, options: { lightMode: true, ignoreMissing: true } }
+            })
+        ],
+        {},
+        '/a'
+    );
+    await page.getByText('Crafting options: Lite mode, Ignore missing ingredients').waitFor();
+});
+
+test('leaving an editor with unsaved changes asks first, while an unchanged editor or a save leaves at once', async (t) => {
+    const { page, options } = await open(t, [listed('a', { name: 'Keep iron' })], {}, '/a');
+    const questions = [];
+    let accept = false;
+    page.removeAllListeners('dialog');
+    page.on('dialog', async (dialog) => {
+        questions.push(dialog.message());
+        if (accept) await dialog.accept();
+        else await dialog.dismiss();
+    });
+    const back = page.getByRole('link', { name: 'Back to standing orders' });
+    await page.getByRole('textbox', { name: 'Name', exact: true }).waitFor();
+    await back.click();
+    await page.getByRole('heading', { name: 'Keep iron' }).waitFor();
+    assert.equal(questions.length, 0, 'nothing to lose, nothing asked');
+
+    await page.getByRole('link', { name: /^Edit/ }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Draft name');
+    await back.click();
+    await serverState(() => questions.length, 1);
+    assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Draft name');
+    accept = true;
+    await back.click();
+    await serverState(() => questions.length, 2);
+    await page.getByRole('heading', { name: 'Keep iron' }).waitFor();
+
+    await page.getByRole('link', { name: /^Edit/ }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Saved name');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('heading', { name: 'Saved name' }).waitFor();
+    assert.equal(questions.length, 2, 'saving does not ask');
+    assert.deepEqual(lastChange(options).body, { name: 'Saved name' });
+});
+
+test('an open resource list leaves no document listener behind when the page is torn down', async (t) => {
+    const context = await fixture(t);
+    const { page, options, base } = context;
+    await page.addInitScript(() => {
+        const live = new Set();
+        window.pointerListeners = live;
+        const add = EventTarget.prototype.addEventListener;
+        const remove = EventTarget.prototype.removeEventListener;
+        EventTarget.prototype.addEventListener = function (type, listener, ...rest) {
+            if (this === document && type === 'pointerdown') live.add(listener);
+            return add.call(this, type, listener, ...rest);
+        };
+        EventTarget.prototype.removeEventListener = function (type, listener, ...rest) {
+            if (this === document && type === 'pointerdown') live.delete(listener);
+            return remove.call(this, type, listener, ...rest);
+        };
+    });
+    options.itemsA = [iron, quartz, plastic];
+    await page.goto(`${base}#/grids/${gridA}/standing-orders/new`);
+    await page.getByRole('button', { name: /^Resource to craft/ }).click();
+    await page.getByRole('searchbox', { name: 'Search resources' }).waitFor();
+    const open = await page.evaluate(() => window.pointerListeners.size);
+    assert.ok(open >= 1, 'the open list listens for presses outside');
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
+    assert.equal(await page.evaluate(() => window.pointerListeners.size), open - 1);
+});
+
+test('a modified click on a link leaves a dirty editor alone without asking', async (t) => {
+    const { page } = await open(t, [listed('a', { name: 'Keep iron' })], {}, '/a');
+    const questions = [];
+    page.removeAllListeners('dialog');
+    page.on('dialog', async (dialog) => {
+        questions.push(dialog.message());
+        await dialog.dismiss();
+    });
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Draft name');
+    const popup = page.context().waitForEvent('page');
+    await page.getByRole('link', { name: 'Back to standing orders' }).click({ modifiers: ['Shift'] });
+    await (await popup).close();
+    assert.equal(questions.length, 0);
+    assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Draft name');
+});
+
+test('an editor whose list read fails shows the error without a loading message', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = [iron];
+    options.standingOrderReadFailure = true;
+    await page.goto(`${base}#/grids/${gridA}/standing-orders/a`);
+    await page.getByText('The server is busy.').first().waitFor();
+    assert.equal(await page.getByText('Loading', { exact: false }).filter({ visible: true }).count(), 0);
 });

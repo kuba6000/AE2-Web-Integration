@@ -8,7 +8,6 @@ import { maxConditions, reasonMessageKey } from '../../app/standing-order-model.
 import { element } from './dom.js';
 import { createResourcePicker, type ResourceChoice } from './resource-picker.js';
 
-type Item = ThemeState['items'][number];
 type Resources = ThemeState['standingOrders']['resources'];
 let nextId = 0;
 
@@ -110,20 +109,14 @@ function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resource
               })
     );
     const details = [craft];
+    const options = [
+        ...(action.options.lightMode ? [t('craftingLightMode')] : []),
+        ...(action.options.ignoreMissing ? [t('ignoreMissing')] : [])
+    ];
+    if (options.length) details.push(element('p', `${t('standingOrderOptions')}: ${options.join(', ')}`));
     if (action.cpu.type === 'specific')
         details.push(element('p', t('standingOrderSummaryCpu', { cpu: action.cpu.key ?? '' })));
     return [triggers, ...details];
-}
-
-const itemIndexes = new WeakMap<readonly Item[], Map<string, Item>>();
-function indexItems(items: readonly Item[]) {
-    let index = itemIndexes.get(items);
-    if (!index) {
-        index = new Map();
-        for (const item of items) if (item.itemKey) index.set(item.itemKey, item);
-        itemIndexes.set(items, index);
-    }
-    return index;
 }
 
 /** The form for creating, editing and repairing one standing order. */
@@ -315,14 +308,37 @@ export function createStandingOrderEditor(application: ThemeApplication) {
     const errorTargets = new Map<string, { target: Field; controls: HTMLElement[] }>();
     let shownErrors = '';
     let editorKey = '';
+    /** Unsaved changes, and the question that guards leaving them; both follow the last render. */
+    let unsaved = false;
+    let leaveQuestion = '';
+    /** An in-app link away from an editor with unsaved changes asks first; saving navigates without a click. */
+    function confirmLeaving(event: MouseEvent) {
+        if (!unsaved || event.defaultPrevented || event.button !== 0) return;
+        // A new tab or window leaves the editor where it is.
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const link = (event.target as Element | null)?.closest?.('a[href^="#"]');
+        if (!link || link.hasAttribute('target') || link.getAttribute('href') === location.hash) return;
+        if (!window.confirm(leaveQuestion)) event.preventDefault();
+    }
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+        if (unsaved) event.preventDefault();
+    }
+    document.addEventListener('click', confirmLeaving, true);
+    window.addEventListener('beforeunload', warnBeforeUnload);
 
+    /** Closing a picker also removes its document listener. */
+    function closePickers() {
+        target.close();
+        for (const row of rows) row.picker.close();
+    }
     function render(state: ThemeState, locale: Translator, iconsOn: boolean): IconTarget[] {
         const orders = state.standingOrders;
         const editor = orders.editor;
         form.hidden = !editor;
+        unsaved = !!editor && editor.status === 'ready' && editor.dirty && !editor.saving;
+        leaveQuestion = locale.common('standingOrderLeaveConfirm');
         if (!editor) {
-            target.close();
-            for (const row of rows) row.picker.close();
+            closePickers();
             editorKey = '';
             return [];
         }
@@ -343,7 +359,7 @@ export function createStandingOrderEditor(application: ThemeApplication) {
         title.textContent = heading;
         const ready = editor.status === 'ready';
         status.textContent = '';
-        if (editor.status === 'loading') status.textContent = t('loading');
+        if (editor.status === 'loading' && orders.status !== 'error') status.textContent = t('loading');
         else if (editor.status === 'missing') status.textContent = t('standingOrderMissing');
         else if (editor.saving) status.textContent = t('standingOrderSaving');
         status.hidden = !status.textContent;
@@ -361,7 +377,7 @@ export function createStandingOrderEditor(application: ThemeApplication) {
             locked.hidden = true;
             return [];
         }
-        const editable = orders.canEdit && !editor.saving;
+        const editable = orders.canEdit && (orders.serverEnabled || editor.order !== null) && !editor.saving;
         const draft = editor.draft;
         const rules = draft.rules;
         const flat = rules.locked === null;
@@ -382,7 +398,7 @@ export function createStandingOrderEditor(application: ThemeApplication) {
             items: state.items,
             itemsReady: state.itemStatus === 'ready',
             itemsError: state.itemStatus === 'error' ? (state.itemError ?? 'error') : null,
-            byKey: indexItems(state.items),
+            byKey: state.itemsByKey,
             known: orders.resources,
             locale,
             language: state.preferences.language
@@ -532,6 +548,8 @@ export function createStandingOrderEditor(application: ThemeApplication) {
             maxBatch.input
         ])
             control.disabled = !editable;
+        // With the server switch off an order can be switched off but not on.
+        enabled.disabled = !editable || (!orders.serverEnabled && !draft.enabled && editor.baseline?.enabled !== true);
         save.disabled = !editable;
         triggerError.hidden = !errors.trigger;
         triggerError.textContent = errors.trigger ? t(errors.trigger) : '';
@@ -549,5 +567,13 @@ export function createStandingOrderEditor(application: ThemeApplication) {
         }
         return iconsOn ? iconTargets : [];
     }
-    return { element: form, render };
+    return {
+        element: form,
+        render,
+        dispose() {
+            closePickers();
+            document.removeEventListener('click', confirmLeaving, true);
+            window.removeEventListener('beforeunload', warnBeforeUnload);
+        }
+    };
 }

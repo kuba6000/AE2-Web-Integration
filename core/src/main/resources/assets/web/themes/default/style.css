@@ -4471,10 +4471,14 @@ button.toast:hover {
     overflow-wrap: anywhere;
 }
 .standing-order-message,
-.standing-order-detail {
+.standing-order-detail,
+.standing-order-missing {
     margin: 0;
     font-size: 12px;
     overflow-wrap: anywhere;
+}
+.standing-order-missing {
+    padding-left: 18px;
 }
 .standing-order-buttons {
     display: flex;

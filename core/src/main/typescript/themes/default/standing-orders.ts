@@ -3,6 +3,7 @@ import type { Translator } from '../../app/i18n.js';
 import type { StandingOrderStatusName } from '../../app/api-types.js';
 import { standingOrdersHref } from '../../app/router.js';
 import { reasonMessageKey } from '../../app/standing-order-model.js';
+import { statusExplanation } from '../../app/standing-orders.js';
 import { element } from './dom.js';
 import { craftingHammer } from './icons/pixel/terminal.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
@@ -14,7 +15,6 @@ type Tone = 'active' | 'waiting' | 'problem' | 'off';
 const tones: Record<StandingOrderStatusName, Tone> = {
     IDLE: 'active',
     CALCULATING: 'active',
-    SUBMIT: 'active',
     CRAFTING: 'active',
     COOLDOWN: 'active',
     CRAFTING_LONG: 'waiting',
@@ -39,7 +39,9 @@ function createRow() {
     const targetName = element('strong');
     target.append(createResourceIcon(), targetName);
     const message = element('p', '', 'standing-order-message');
-    message.lang = 'en';
+    // The crafting system's own words, shown as they came.
+    const submitError = element('p', '', 'standing-order-message');
+    const missing = element('ul', '', 'standing-order-missing');
     const detail = element('p', '', 'hint standing-order-detail');
     const toggleLabel = element('label', '', 'checkbox');
     const toggle = element('input');
@@ -53,8 +55,24 @@ function createRow() {
     remove.type = 'button';
     const actions = element('div', '', 'standing-order-buttons');
     actions.append(toggleLabel, run, edit, remove);
-    li.append(head, target, message, detail, actions);
-    return { li, name, chip, target, targetName, message, detail, toggle, toggleText, toggleLabel, run, edit, remove };
+    li.append(head, target, message, submitError, missing, detail, actions);
+    return {
+        li,
+        name,
+        chip,
+        target,
+        targetName,
+        message,
+        submitError,
+        missing,
+        detail,
+        toggle,
+        toggleText,
+        toggleLabel,
+        run,
+        edit,
+        remove
+    };
 }
 
 /** The network's standing orders: the list with its controls, and the editor that takes its place. */
@@ -120,14 +138,20 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             );
             row.target.dataset.resource = definition.action.resource;
         }
+        const explained = definition && runtime ? statusExplanation(runtime, orders.resources, locale) : null;
         row.message.textContent = '';
         if (!definition && order.invalid)
             row.message.textContent = t('standingOrderUnreadable', {
                 reason: t(reasonMessageKey(order.invalid.reason))
             });
-        else if (runtime?.message) row.message.textContent = runtime.message;
-        row.message.lang = definition ? 'en' : '';
+        else if (explained?.reason) row.message.textContent = explained.reason;
         row.message.hidden = !row.message.textContent;
+        row.submitError.textContent = explained?.submitError ?? '';
+        row.submitError.hidden = !row.submitError.textContent;
+        const shortfalls = explained?.missing ?? [];
+        row.missing.replaceChildren(...shortfalls.map((text) => element('li', text)));
+        row.missing.setAttribute('aria-label', t('standingOrderMissingList'));
+        row.missing.hidden = !shortfalls.length;
         const facts: string[] = [];
         if (runtime) {
             if (runtime.lastSubmittedAmount > 0)
@@ -145,10 +169,11 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
         row.toggleLabel.hidden = !definition || !orders.canEdit;
         // While a change is in flight the box keeps what was clicked; the answer or a refusal then settles it.
         if (!orders.pending) row.toggle.checked = definition?.enabled ?? false;
-        row.toggle.disabled = !editable;
+        // With the server switch off an order can still be switched off, but not on.
+        row.toggle.disabled = !editable || (!orders.serverEnabled && !definition?.enabled);
         row.toggleText.textContent = t('standingOrderToggle');
         row.toggle.setAttribute('aria-label', `${t('standingOrderToggle')}: ${label}`);
-        row.run.hidden = !definition?.enabled || !orders.canEdit;
+        row.run.hidden = !definition?.enabled || !orders.canEdit || !orders.serverEnabled;
         row.run.disabled = !editable;
         row.run.textContent = t('standingOrderRun');
         row.run.setAttribute('aria-label', `${t('standingOrderRun')}: ${label}`);
@@ -203,12 +228,10 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
         notices.replaceChildren();
         if (orders.status !== 'ready') return;
         if (!orders.serverEnabled) notice(t('standingOrdersServerOff'), true);
-        else {
-            if (!orders.gridEnabled) notice(t('standingOrdersGridOff'), true);
-            if (!orders.canEdit) notice(t('standingOrdersReadOnly'), false);
-            else if (orders.orders.length >= orders.maxOrders)
-                notice(t('standingOrdersLimit', { max: orders.maxOrders }), false);
-        }
+        else if (!orders.gridEnabled) notice(t('standingOrdersGridOff'), true);
+        if (!orders.canEdit) notice(t('standingOrdersReadOnly'), false);
+        else if (orders.serverEnabled && orders.orders.length >= orders.maxOrders)
+            notice(t('standingOrdersLimit', { max: orders.maxOrders }), false);
     }
     return {
         render(state: ThemeState, locale: Translator, icons: boolean) {
@@ -238,7 +261,11 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             create.href = standingOrdersHref(route.gridKey, { order: null, itemKey: null });
             create.textContent = t('newStandingOrder');
             create.hidden =
-                editing || orders.status !== 'ready' || !orders.canEdit || orders.orders.length >= orders.maxOrders;
+                editing ||
+                orders.status !== 'ready' ||
+                !orders.canEdit ||
+                !orders.serverEnabled ||
+                orders.orders.length >= orders.maxOrders;
             renderNotices(state, locale);
             const settingsHref = `#/grids/${encodeURIComponent(route.gridKey)}/settings`;
             cadence.hidden = editing || orders.status !== 'ready' || orders.checkIntervalSeconds === null;
@@ -260,6 +287,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             editorIcons.update(editor.render(state, locale, icons), state.itemIcons);
         },
         dispose() {
+            editor.dispose();
             listIcons.dispose();
             editorIcons.dispose();
         }

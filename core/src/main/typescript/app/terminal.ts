@@ -39,6 +39,7 @@ export type TerminalData = {
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    itemsByKey: ReadonlyMap<string, StoredResource>;
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
@@ -172,6 +173,7 @@ export function createTerminal(
         gridStatus: 'loading',
         gridError: null,
         items: [],
+        itemsByKey: new Map(),
         itemSnapshotRevision: 0,
         itemIcons: null,
         iconPack: { available: null, hasAnimations: false, status: 'loading' },
@@ -218,6 +220,7 @@ export function createTerminal(
         apply({ rows, icons }) {
             if (rows) {
                 state.items = rows.all;
+                state.itemsByKey = rows.keyed;
                 state.selected = state.selected?.itemKey ? (rows.keyed.get(state.selected.itemKey) ?? null) : null;
                 if (!state.selected) resourceHistory.clear();
             }
@@ -257,6 +260,7 @@ export function createTerminal(
         serial++;
         itemRequest?.abort();
         state.items = [];
+        state.itemsByKey = new Map();
         state.recent = null;
         state.itemIcons = null;
         state.selected = null;
@@ -298,6 +302,7 @@ export function createTerminal(
             const items = result.data;
             state.itemIcons = result.icons;
             state.items = items;
+            state.itemsByKey = new Map(items.flatMap((item) => (item.itemKey ? [[item.itemKey, item]] : [])));
             state.itemSnapshotRevision++;
             state.recent = result.recent ?? null;
             state.selected = state.selected
@@ -330,6 +335,7 @@ export function createTerminal(
             live.stop();
             resourceHistory.clear();
             state.items = [];
+            state.itemsByKey = new Map();
             state.recent = null;
             state.itemIcons = null;
             state.selected = null;

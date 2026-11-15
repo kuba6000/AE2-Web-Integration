@@ -41,7 +41,12 @@ import type { Notification } from './notifications.js';
 export type { Notification } from './notifications.js';
 
 /** Shared data is borrowed. Themes derive their own arrays instead of mutating application state. */
-export type ReadonlyData<T> = T extends object ? { readonly [K in keyof T]: ReadonlyData<T[K]> } : T;
+export type ReadonlyData<T> =
+    T extends ReadonlyMap<infer K, infer V>
+        ? ReadonlyMap<K, ReadonlyData<V>>
+        : T extends object
+          ? { readonly [K in keyof T]: ReadonlyData<T[K]> }
+          : T;
 export type ThemeState = ReadonlyData<{
     capabilities: ApplicationContext['capabilities'];
     route: Route;
@@ -49,6 +54,8 @@ export type ThemeState = ReadonlyData<{
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    /** `items` with an `itemKey`, by that key; kept current with the items, live deltas included. */
+    itemsByKey: ReadonlyMap<string, StoredResource>;
     /** Advances only when a full item snapshot is accepted, independently of live deltas. */
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;

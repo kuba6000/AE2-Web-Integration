@@ -290,7 +290,6 @@ export type HomePinGroupUpdate = { name?: string; move?: 'earlier' | 'later' };
 export type StandingOrderStatusName =
     | 'IDLE'
     | 'CALCULATING'
-    | 'SUBMIT'
     | 'CRAFTING'
     | 'CRAFTING_LONG'
     | 'COOLDOWN'
@@ -303,10 +302,42 @@ export type StandingOrderStatusName =
     | 'WAITING_FOR_STOCK'
     | 'WAITING_FOR_CPU'
     | 'QUEUED';
-/** Times are epoch milliseconds and zero means none; `message` is an English detail from the engine. */
+export type StandingOrderReason =
+    | 'WAITING_FIRST_READ'
+    | 'READ_FAILED'
+    | 'WAITING_FRESH_READ_AFTER_JOB'
+    | 'WAITING_READ_FOR_NEW_RESOURCES'
+    | 'MISSING_INGREDIENTS'
+    | 'CALCULATION_FAILED'
+    | 'CALCULATION_TIMED_OUT'
+    | 'SUBMIT_REJECTED'
+    | 'SUBMIT_ERROR'
+    | 'UNEXPECTED_ERROR'
+    | 'INVALID_DEFINITION'
+    | 'CAPABILITY_UNAVAILABLE'
+    | 'UNKNOWN_RESOURCE'
+    | 'AMBIGUOUS_RESOURCE'
+    | 'NOT_CRAFTABLE'
+    | 'EMITTER_BACKED'
+    | 'AMOUNT_OVERFLOW'
+    | 'NOTHING_TO_ORDER'
+    | 'NO_IDLE_CPU'
+    | 'SELECTED_CPU_UNAVAILABLE'
+    | 'CALCULATION_SLOTS_FULL';
+/** An ingredient a blocked calculation lacked; `resource` is null when the server cannot name it. */
+export type StandingOrderMissingIngredient = { resource: string | null; displayName: string; amount: number };
+/**
+ * Times are epoch milliseconds and zero means none. `reason` explains the status where the status alone does not;
+ * `resource` (AMBIGUOUS_RESOURCE) and `path` (CAPABILITY_UNAVAILABLE) are its parameters. `submitError` is the
+ * crafting system's own message, not translated. `missing` lists at most five ingredients, largest first.
+ */
 export type StandingOrderRuntime = {
     status: StandingOrderStatusName;
-    message: string | null;
+    reason: StandingOrderReason | null;
+    resource: string | null;
+    path: string | null;
+    submitError: string | null;
+    missing: StandingOrderMissingIngredient[];
     changedAt: number;
     lastSubmittedAmount: number;
     nextCheckAt: number;

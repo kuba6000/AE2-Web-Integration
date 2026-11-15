@@ -44,7 +44,7 @@ const translations: Dictionaries = {
         keepStockedHelp: 'Crafts the resource up to the target whenever its stock falls below the low mark.',
         standingOrdersEmpty: 'This network has no standing orders yet.',
         standingOrdersServerOff:
-            'Standing orders are turned off on this server. Nothing runs and nothing can be changed.',
+            'Standing orders are turned off on this server. Nothing runs, and orders cannot be created, enabled or run. You can still edit, disable or delete them.',
         standingOrdersGridOff:
             'Standing orders are switched off for this network. Orders are kept but do not run. Switch them on in the network settings.',
         standingOrdersReadOnly: 'You can view standing orders but not change them.',
@@ -72,7 +72,6 @@ const translations: Dictionaries = {
         standingOrderStatus_PENDING: 'Not checked yet',
         standingOrderStatus_IDLE: 'Nothing to do',
         standingOrderStatus_CALCULATING: 'Calculating',
-        standingOrderStatus_SUBMIT: 'Submitting',
         standingOrderStatus_CRAFTING: 'Crafting',
         standingOrderStatus_CRAFTING_LONG: 'Crafting for a long time',
         standingOrderStatus_COOLDOWN: 'Cooling down',
@@ -172,12 +171,40 @@ const translations: Dictionaries = {
         standingOrderReason_AMOUNT_NOT_POSITIVE: 'Enter an amount of at least 1.',
         standingOrderReason_IDLE_CPU_COUNT_OUT_OF_RANGE: 'Enter a whole number of CPUs from 1 to 1,024.',
         standingOrderReason_CAPABILITY_UNAVAILABLE: 'This server does not support this crafting option.',
+        standingOrderStatusReason_WAITING_FIRST_READ: 'Waiting for the first stock reading.',
+        standingOrderStatusReason_READ_FAILED: 'The last stock reading failed. Waiting for the next one.',
+        standingOrderStatusReason_WAITING_FRESH_READ_AFTER_JOB:
+            'Waiting for a stock reading taken after the last job finished.',
+        standingOrderStatusReason_WAITING_READ_FOR_NEW_RESOURCES:
+            'Waiting for a stock reading that includes the newly chosen resources.',
+        standingOrderStatusReason_MISSING_INGREDIENTS: 'The network lacks ingredients for this job.',
+        standingOrderStatusReason_CALCULATION_FAILED: 'The crafting calculation failed.',
+        standingOrderStatusReason_CALCULATION_TIMED_OUT: 'The crafting calculation took too long and was stopped.',
+        standingOrderStatusReason_SUBMIT_REJECTED: 'The crafting system rejected the job.',
+        standingOrderStatusReason_SUBMIT_ERROR: 'The job could not be submitted.',
+        standingOrderStatusReason_UNEXPECTED_ERROR: 'An unexpected error occurred. The server log has the details.',
+        standingOrderStatusReason_INVALID_DEFINITION: 'The stored order is not valid.',
+        standingOrderStatusReason_CAPABILITY_UNAVAILABLE: 'This server does not support the crafting option {option}.',
+        standingOrderStatusReason_UNKNOWN_RESOURCE: 'The order refers to a resource the server does not know.',
+        standingOrderStatusReason_AMBIGUOUS_RESOURCE: 'The server cannot tell exactly which resource {resource} is.',
+        standingOrderStatusReason_NOT_CRAFTABLE: 'The network cannot craft this resource.',
+        standingOrderStatusReason_EMITTER_BACKED:
+            'This resource is crafted on demand by a level emitter, which standing orders cannot use.',
+        standingOrderStatusReason_AMOUNT_OVERFLOW: 'The amount to craft is too large.',
+        standingOrderStatusReason_NOTHING_TO_ORDER: 'The stock is already where the order wants it.',
+        standingOrderStatusReason_NO_IDLE_CPU: 'No crafting CPU is free.',
+        standingOrderStatusReason_SELECTED_CPU_UNAVAILABLE: 'The selected CPU is busy or no longer available.',
+        standingOrderStatusReason_CALCULATION_SLOTS_FULL: 'Other orders are calculating. This one waits for its turn.',
+        standingOrderMissingIngredient: 'Missing {amount} {name}',
+        standingOrderMissingList: 'Missing ingredients',
+        standingOrderCreateUnconfirmed:
+            'The server did not confirm the save, but the list now contains a new order. Check the list before saving again.',
+        standingOrderLeaveConfirm: 'Leave the editor? Your unsaved changes will be lost.',
         INVALID_STANDING_ORDER: 'The server refused this standing order.',
         STANDING_ORDERS_DISABLED: 'Standing orders are turned off on this server.',
         STANDING_ORDER_NOT_FOUND: 'This standing order no longer exists. The list has been refreshed.',
         STANDING_ORDER_LIMIT_REACHED: 'This network has reached its standing order limit. Delete an order first.',
         STANDING_ORDER_NOT_RUNNABLE: 'This order cannot run now. It is disabled, unreadable or switched off.',
-        standingOrderRateLimited: 'Please wait a few seconds before changing standing orders again.',
         standingOrderResourceUnknown:
             'The server does not know this resource yet. Wait for the resource list to load and try again.',
         standingOrderNoPermission: 'You are not allowed to change standing orders here.',
@@ -560,6 +587,9 @@ const translations: Dictionaries = {
         SERVER_BUSY: 'The server is busy. Please try again.',
         SERVER_STOPPING: 'The server is stopping.',
         TIMEOUT: 'The request timed out.',
+        CSRF_REJECTED: 'The server refused the request as unsafe. Reload the page and try again.',
+        REQUEST_TOO_LARGE: 'The request is too large for the server.',
+        UNSUPPORTED_MEDIA_TYPE: 'The server could not read the request. Reload the page and try again.',
         INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
@@ -601,7 +631,8 @@ const translations: Dictionaries = {
         keepStockedAction: 'Utrzymuj stan…',
         keepStockedHelp: 'Wytwarza zasób do wartości docelowej, gdy jego ilość spadnie poniżej dolnego progu.',
         standingOrdersEmpty: 'Ta sieć nie ma jeszcze zleceń stałych.',
-        standingOrdersServerOff: 'Zlecenia stałe są wyłączone na tym serwerze. Nic nie działa i nic nie można zmienić.',
+        standingOrdersServerOff:
+            'Zlecenia stałe są wyłączone na tym serwerze. Nic nie działa, a zleceń nie można tworzyć, włączać ani uruchamiać. Nadal można je edytować, wyłączać i usuwać.',
         standingOrdersGridOff:
             'Zlecenia stałe są wyłączone dla tej sieci. Zlecenia są zachowane, ale nie działają. Włącz je w ustawieniach sieci.',
         standingOrdersReadOnly: 'Możesz przeglądać zlecenia stałe, ale nie możesz ich zmieniać.',
@@ -629,7 +660,6 @@ const translations: Dictionaries = {
         standingOrderStatus_PENDING: 'Jeszcze nie sprawdzone',
         standingOrderStatus_IDLE: 'Nic do zrobienia',
         standingOrderStatus_CALCULATING: 'Obliczanie',
-        standingOrderStatus_SUBMIT: 'Zlecanie',
         standingOrderStatus_CRAFTING: 'Wytwarzanie',
         standingOrderStatus_CRAFTING_LONG: 'Wytwarzanie trwa długo',
         standingOrderStatus_COOLDOWN: 'Przerwa po zleceniu',
@@ -735,13 +765,42 @@ const translations: Dictionaries = {
         standingOrderReason_AMOUNT_NOT_POSITIVE: 'Podaj ilość co najmniej 1.',
         standingOrderReason_IDLE_CPU_COUNT_OUT_OF_RANGE: 'Podaj całkowitą liczbę CPU od 1 do 1024.',
         standingOrderReason_CAPABILITY_UNAVAILABLE: 'Ten serwer nie obsługuje tej opcji wytwarzania.',
+        standingOrderStatusReason_WAITING_FIRST_READ: 'Czeka na pierwszy odczyt zasobów.',
+        standingOrderStatusReason_READ_FAILED: 'Ostatni odczyt zasobów się nie udał. Czeka na następny.',
+        standingOrderStatusReason_WAITING_FRESH_READ_AFTER_JOB:
+            'Czeka na odczyt zasobów wykonany po zakończeniu ostatniego zadania.',
+        standingOrderStatusReason_WAITING_READ_FOR_NEW_RESOURCES:
+            'Czeka na odczyt zasobów obejmujący nowo wybrane zasoby.',
+        standingOrderStatusReason_MISSING_INGREDIENTS: 'W sieci brakuje składników do tego zadania.',
+        standingOrderStatusReason_CALCULATION_FAILED: 'Obliczenie wytwarzania się nie powiodło.',
+        standingOrderStatusReason_CALCULATION_TIMED_OUT:
+            'Obliczenie wytwarzania trwało zbyt długo i zostało przerwane.',
+        standingOrderStatusReason_SUBMIT_REJECTED: 'System wytwarzania odrzucił zadanie.',
+        standingOrderStatusReason_SUBMIT_ERROR: 'Nie udało się zlecić zadania.',
+        standingOrderStatusReason_UNEXPECTED_ERROR: 'Wystąpił nieoczekiwany błąd. Szczegóły są w logu serwera.',
+        standingOrderStatusReason_INVALID_DEFINITION: 'Zapisane zlecenie jest nieprawidłowe.',
+        standingOrderStatusReason_CAPABILITY_UNAVAILABLE: 'Ten serwer nie obsługuje opcji wytwarzania {option}.',
+        standingOrderStatusReason_UNKNOWN_RESOURCE: 'Zlecenie wskazuje zasób, którego serwer nie zna.',
+        standingOrderStatusReason_AMBIGUOUS_RESOURCE: 'Serwer nie potrafi jednoznacznie rozpoznać zasobu {resource}.',
+        standingOrderStatusReason_NOT_CRAFTABLE: 'Sieć nie potrafi wytworzyć tego zasobu.',
+        standingOrderStatusReason_EMITTER_BACKED:
+            'Ten zasób jest wytwarzany na żądanie przez emiter poziomu, którego zlecenia stałe nie mogą używać.',
+        standingOrderStatusReason_AMOUNT_OVERFLOW: 'Ilość do wytworzenia jest zbyt duża.',
+        standingOrderStatusReason_NOTHING_TO_ORDER: 'Zasoby są już na poziomie wymaganym przez zlecenie.',
+        standingOrderStatusReason_NO_IDLE_CPU: 'Żaden CPU wytwarzania nie jest wolny.',
+        standingOrderStatusReason_SELECTED_CPU_UNAVAILABLE: 'Wybrany CPU jest zajęty lub już niedostępny.',
+        standingOrderStatusReason_CALCULATION_SLOTS_FULL: 'Inne zlecenia są obliczane. To czeka na swoją kolej.',
+        standingOrderMissingIngredient: 'Brakuje: {name} × {amount}',
+        standingOrderMissingList: 'Brakujące składniki',
+        standingOrderCreateUnconfirmed:
+            'Serwer nie potwierdził zapisu, ale na liście jest teraz nowe zlecenie. Sprawdź listę przed ponownym zapisem.',
+        standingOrderLeaveConfirm: 'Opuścić edytor? Niezapisane zmiany zostaną utracone.',
         INVALID_STANDING_ORDER: 'Serwer odrzucił to zlecenie stałe.',
         STANDING_ORDERS_DISABLED: 'Zlecenia stałe są wyłączone na tym serwerze.',
         STANDING_ORDER_NOT_FOUND: 'To zlecenie stałe już nie istnieje. Lista została odświeżona.',
         STANDING_ORDER_LIMIT_REACHED: 'Ta sieć osiągnęła limit zleceń stałych. Najpierw usuń któreś zlecenie.',
         STANDING_ORDER_NOT_RUNNABLE:
             'To zlecenie nie może teraz działać. Jest wyłączone, nieczytelne lub wyłączone w sieci.',
-        standingOrderRateLimited: 'Poczekaj kilka sekund, zanim znów zmienisz zlecenia stałe.',
         standingOrderResourceUnknown:
             'Serwer nie zna jeszcze tego zasobu. Poczekaj na wczytanie listy zasobów i spróbuj ponownie.',
         standingOrderNoPermission: 'Nie możesz tu zmieniać zleceń stałych.',
@@ -1135,6 +1194,9 @@ const translations: Dictionaries = {
         SERVER_BUSY: 'Serwer jest zajęty. Spróbuj ponownie.',
         SERVER_STOPPING: 'Serwer jest zatrzymywany.',
         TIMEOUT: 'Upłynął czas oczekiwania.',
+        CSRF_REJECTED: 'Serwer odrzucił żądanie jako niebezpieczne. Odśwież stronę i spróbuj ponownie.',
+        REQUEST_TOO_LARGE: 'Żądanie jest zbyt duże dla serwera.',
+        UNSUPPORTED_MEDIA_TYPE: 'Serwer nie mógł odczytać żądania. Odśwież stronę i spróbuj ponownie.',
         INVALID_RESPONSE: 'Serwer zwrócił nieczytelną odpowiedź.'
     }
 };

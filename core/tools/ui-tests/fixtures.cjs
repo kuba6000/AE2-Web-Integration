@@ -182,7 +182,8 @@ function listedDefinition(definition) {
     };
 }
 
-// Simulates the standing order endpoints. `options.standingOrderFailure` answers the next change with that error.
+// Simulates the standing order endpoints. `options.standingOrderFailure` answers the next change with that error;
+// `options.standingOrderReadFailure` fails every read.
 function standingOrdersEndpoint(options, request, resource, response) {
     const state = options.standingOrders;
     const key = resource.split('/')[5];
@@ -191,6 +192,7 @@ function standingOrdersEndpoint(options, request, resource, response) {
         response.statusCode = httpStatus;
         response.end(JSON.stringify({ status, data }));
     };
+    if (request.method === 'GET' && options.standingOrderReadFailure) return reply('SERVER_BUSY', 503);
     if (request.method !== 'GET' && options.standingOrderFailure) {
         const { status, httpStatus, data } = options.standingOrderFailure;
         options.standingOrderFailure = null;
