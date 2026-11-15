@@ -59,8 +59,9 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
  * Runs the stored standing orders on the server thread: evaluates each network's orders whenever a complete stock
  * read of it arrives, calculates and submits crafting jobs and follows them until they leave their CPU.
  * <p>
- * A tick costs only in-memory work: it applies posted commands, polls running calculations, fires due timers and
- * evaluates queued orders. The native state of a network (availability, the settings switches, the stock lease) is
+ * Polling running calculations only checks readiness; completed calculations and queued orders share an evaluation
+ * budget, checked between orders. A single native operation can exceed it. The native state of a network
+ * (availability, the settings switches, the stock lease) is
  * read on demand: when a stock read arrives, when a command concerns the network, before an order is evaluated, and
  * by a sweep every 5 s that notices changes nothing else would. A network that is only briefly unavailable blocks
  * starting and submitting while it is away and loses nothing; everything it had read or calculated is dropped only
@@ -280,7 +281,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         StandingOrderDefinition previous = order.definition;
         if (entry instanceof StandingOrderStore.Valid valid) {
             order.definition = valid.definition();
-            order.invalid = null;
             order.triggerResources.clear();
             GridState.collect(
                 valid.definition()
@@ -289,7 +289,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         } else {
             order.definition = null;
             order.triggerResources.clear();
-            order.invalid = ((StandingOrderStore.Invalid) entry).failure();
         }
         if (previous == null || order.definition == null
             || !previous.action()
@@ -452,48 +451,44 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         for (int index = calculating.size() - 1; index >= 0; index--) {
             OrderState order = calculating.get(index);
             Future<IAECraftingJob> future = order.calculation;
-            if (future == null) continue;
-            GridState grid = grids.get(order.grid);
-            if (!future.isDone()) {
-                if (now - order.calculationStartedAt < limit) continue;
-                LOG.warn(
-                    "Calculation of standing order {} exceeded {} minutes",
-                    order.key,
-                    config.maxCalculationMinutes);
-                dropCalculation(order);
-                fail(
-                    order,
-                    StandingOrderStatus.SUBMIT_FAILED,
-                    Cause.of(StandingOrderReason.CALCULATION_TIMED_OUT),
-                    now);
-                publish(order, grid);
-                continue;
-            }
-            releaseCalculation(order, grid);
-            try {
-                IAECraftingJob job = future.get();
-                if (job.web$isSimulation() && !order.simulationAllowed) {
-                    fail(order, StandingOrderStatus.BLOCKED_MISSING, Cause.missing(missingIngredients(job, grid)), now);
-                } else {
-                    // The plan is checked again and submitted by the evaluation queued first.
-                    order.job = job;
-                    enqueueFirst(order);
-                }
-            } catch (ExecutionException | RuntimeException failure) {
-                LOG.warn("Calculation of standing order {} failed", order.key, failure);
-                fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread()
-                    .interrupt();
-                fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
-            }
-            publish(order, grid);
+            if (future != null && (future.isDone() || now - order.calculationStartedAt >= limit)) enqueueFirst(order);
         }
     }
 
+    /** Handles a ready calculation inside the same budget as its order's guards and submission. */
+    private boolean completeCalculation(OrderState order, GridState grid, long now) {
+        Future<IAECraftingJob> future = order.calculation;
+        if (future == null) return true;
+        if (!future.isDone()) {
+            if (now - order.calculationStartedAt < MINUTES.toMillis(config.maxCalculationMinutes)) return true;
+            LOG.warn("Calculation of standing order {} exceeded {} minutes", order.key, config.maxCalculationMinutes);
+            dropCalculation(order);
+            fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_TIMED_OUT), now);
+            return false;
+        }
+        releaseCalculation(order, grid);
+        try {
+            IAECraftingJob job = future.get();
+            if (job.web$isSimulation() && !order.simulationAllowed) {
+                fail(order, StandingOrderStatus.BLOCKED_MISSING, Cause.missing(missingIngredients(job, grid)), now);
+                return false;
+            }
+            order.job = job;
+            return true;
+        } catch (ExecutionException | RuntimeException failure) {
+            LOG.warn("Calculation of standing order {} failed", order.key, failure);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread()
+                .interrupt();
+        }
+        fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
+        return false;
+    }
+
     /**
-     * The largest shortfalls of a calculated job, as the crafting plan endpoint describes them. Read from the job
-     * itself, so it costs no stock read; it runs once per blocked calculation, never per tick.
+     * The largest shortfalls, using the same native summary as the crafting plan endpoint. Legacy summaries simulate
+     * inventory extraction for each plan entry. This runs once per blocked calculation; it does not schedule a stock
+     * sample, but one large summary can exceed the evaluation budget.
      */
     private static List<StandingOrderSnapshot.MissingIngredient> missingIngredients(IAECraftingJob job,
         @Nullable GridState grid) {
@@ -548,7 +543,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         if (order.removed) return;
         GridState grid = grids.get(order.grid);
         try {
-            evaluateChecked(order, grid, now);
+            if (completeCalculation(order, grid, now)) evaluateChecked(order, grid, now);
         } catch (RuntimeException failure) {
             LOG.warn("Standing order {} failed unexpectedly", order.key, failure);
             cancelCalculation(order, now);
@@ -1137,7 +1132,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private final StableKey grid;
         private int ordinal;
         private @Nullable StandingOrderDefinition definition;
-        private @Nullable InvalidStandingOrderException invalid;
         private final Set<StableKey> triggerResources = new HashSet<>();
         private StandingOrderStatus status = StandingOrderStatus.IDLE;
         private @Nullable Cause cause;

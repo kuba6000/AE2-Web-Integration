@@ -1,15 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -18,14 +15,11 @@ import pl.kuba6000.ae2webintegration.core.standingorders.Condition;
 import pl.kuba6000.ae2webintegration.core.standingorders.CpuTarget;
 import pl.kuba6000.ae2webintegration.core.standingorders.CraftAction;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderCodec;
+import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException.Reason;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
 
-/**
- * Converts between a definition and its API form. A request is turned into the codec's stored document and decoded by
- * the codec, so a submitted definition is judged by exactly the rules and reports the same reasons and paths as a
- * stored one.
- */
+/** Maps the typed API representation to the domain; domain limits are shared with persisted definitions. */
 final class StandingOrderMapping {
 
     private StandingOrderMapping() {}
@@ -35,18 +29,14 @@ final class StandingOrderMapping {
      */
     static @NotNull StandingOrderDefinition decode(@NotNull StandingOrderJson.Definition body)
         throws InvalidStandingOrderException {
-        Map<StableKey, Integer> slots = new LinkedHashMap<>();
-        JsonObject document = new JsonObject();
-        document.addProperty("name", body.name());
-        document.addProperty("enabled", body.enabled());
-        document.addProperty("cooldownSeconds", body.cooldownSeconds());
-        document.add("trigger", document(body.trigger(), slots));
-        document.add("action", document(body.action(), slots));
-        return StandingOrderCodec.decode(
-            new StandingOrderCodec.Encoded(
-                StandingOrderCodec.VERSION,
-                document.toString(),
-                new ArrayList<>(slots.keySet())));
+        StandingOrderDefinition definition = new StandingOrderDefinition(
+            body.name(),
+            body.enabled(),
+            condition(body.trigger(), "trigger"),
+            action(body.action()),
+            body.cooldownSeconds());
+        StandingOrderValidator.validate(definition);
+        return definition;
     }
 
     /**
@@ -88,63 +78,101 @@ final class StandingOrderMapping {
             json(definition.action()));
     }
 
-    private static int slot(Map<StableKey, Integer> slots, StableKey resource) {
-        Integer existing = slots.get(resource);
-        if (existing != null) return existing;
-        int created = slots.size();
-        slots.put(resource, created);
-        return created;
+    private static Condition condition(StandingOrderJson.Condition input, String path)
+        throws InvalidStandingOrderException {
+        Condition result = switch (input.type()) {
+            case "stockBelow" -> new Condition.StockBelow(
+                required(input.resource(), path + ".resource"),
+                required(input.amount(), path + ".amount"));
+            case "stockAtLeast" -> new Condition.StockAtLeast(
+                required(input.resource(), path + ".resource"),
+                required(input.amount(), path + ".amount"));
+            case "idleCpusAtLeast" -> new Condition.IdleCpusAtLeast(required(input.count(), path + ".count"));
+            case "all" -> new Condition.All(conditions(required(input.children(), path + ".children"), path));
+            case "any" -> new Condition.Any(conditions(required(input.children(), path + ".children"), path));
+            case "not" -> new Condition.Not(condition(required(input.child(), path + ".child"), path + ".child"));
+            default -> throw new InvalidStandingOrderException(Reason.UNKNOWN_KIND, path + ".type");
+        };
+        boolean stock = result instanceof Condition.StockBelow || result instanceof Condition.StockAtLeast;
+        unexpected(input.resource(), stock, path + ".resource");
+        unexpected(input.amount(), stock, path + ".amount");
+        unexpected(input.count(), result instanceof Condition.IdleCpusAtLeast, path + ".count");
+        unexpected(
+            input.children(),
+            result instanceof Condition.All || result instanceof Condition.Any,
+            path + ".children");
+        unexpected(input.child(), result instanceof Condition.Not, path + ".child");
+        return result;
     }
 
-    private static JsonObject document(StandingOrderJson.Condition condition, Map<StableKey, Integer> slots) {
-        JsonObject result = new JsonObject();
-        result.addProperty("type", condition.type());
-        if (condition.resource() != null) result.addProperty("resource", slot(slots, condition.resource()));
-        if (condition.amount() != null) result.addProperty("amount", condition.amount());
-        if (condition.count() != null) result.addProperty("count", condition.count());
-        if (condition.children() != null) {
-            JsonArray children = new JsonArray();
-            for (StandingOrderJson.Condition child : condition.children()) children.add(document(child, slots));
-            result.add("children", children);
+    private static List<Condition> conditions(List<StandingOrderJson.Condition> children, String path)
+        throws InvalidStandingOrderException {
+        List<Condition> result = new ArrayList<>(children.size());
+        for (int index = 0; index < children.size(); index++) {
+            result.add(condition(children.get(index), path + ".children[" + index + "]"));
         }
-        if (condition.child() != null) result.add("child", document(condition.child(), slots));
         return result;
     }
 
-    private static JsonObject document(StandingOrderJson.Action action, Map<StableKey, Integer> slots) {
-        JsonObject result = new JsonObject();
-        result.addProperty("resource", slot(slots, action.resource()));
-        StandingOrderJson.Amount amount = action.amount();
-        JsonObject amountDocument = new JsonObject();
-        amountDocument.addProperty("type", amount.type());
-        if (amount.batch() != null) amountDocument.addProperty("batch", amount.batch());
-        if (amount.target() != null) amountDocument.addProperty("target", amount.target());
-        if (amount.maxBatch() != null) amountDocument.addProperty("maxBatch", amount.maxBatch());
-        result.add("amount", amountDocument);
-        JsonObject options = new JsonObject();
-        options.addProperty(
-            "lightMode",
-            action.options()
-                .lightMode());
-        options.addProperty(
-            "ignoreMissing",
-            action.options()
+    private static CraftAction action(StandingOrderJson.Action input) throws InvalidStandingOrderException {
+        AmountPolicy amount = amount(input.amount());
+        CraftingOptions options = new CraftingOptions(
+            input.options()
+                .lightMode(),
+            input.options()
                 .ignoreMissing());
-        result.add("options", options);
-        JsonObject cpu = new JsonObject();
-        cpu.addProperty(
-            "type",
-            action.cpu()
-                .type());
-        if (action.cpu()
-            .key() != null)
-            cpu.addProperty(
-                "key",
-                action.cpu()
-                    .key()
-                    .toString());
-        result.add("cpu", cpu);
+        StandingOrderJson.Cpu cpu = input.cpu();
+        CpuTarget target = switch (cpu.type()) {
+            case "any" -> CpuTarget.any();
+            case "specific" -> CpuTarget.specific(required(cpu.key(), "action.cpu.key"));
+            default -> throw new InvalidStandingOrderException(Reason.UNKNOWN_KIND, "action.cpu.type");
+        };
+        unexpected(cpu.key(), target.cpu() != null, "action.cpu.key");
+        return new CraftAction(input.resource(), amount, options, target);
+    }
+
+    private static AmountPolicy amount(StandingOrderJson.Amount input) throws InvalidStandingOrderException {
+        AmountPolicy result = switch (input.type()) {
+            case "fixed" -> new AmountPolicy.Fixed(required(input.batch(), "action.amount.batch"));
+            case "fillTo" -> new AmountPolicy.FillTo(
+                required(input.target(), "action.amount.target"),
+                required(input.maxBatch(), "action.amount.maxBatch"));
+            default -> throw new InvalidStandingOrderException(Reason.UNKNOWN_KIND, "action.amount.type");
+        };
+        unexpected(input.batch(), result instanceof AmountPolicy.Fixed, "action.amount.batch");
+        unexpected(input.target(), result instanceof AmountPolicy.FillTo, "action.amount.target");
+        unexpected(input.maxBatch(), result instanceof AmountPolicy.FillTo, "action.amount.maxBatch");
         return result;
+    }
+
+    private static <T> @NotNull T required(@Nullable T value, String path) throws InvalidStandingOrderException {
+        if (value == null) throw missing(path);
+        return value;
+    }
+
+    private static void unexpected(@Nullable Object value, boolean allowed, String path)
+        throws InvalidStandingOrderException {
+        if (value != null && !allowed) throw new InvalidStandingOrderException(Reason.UNKNOWN_FIELD, path);
+    }
+
+    /** Distinct resources needed to describe this definition, without constructing its persisted document. */
+    static Set<StableKey> resources(StandingOrderDefinition definition) {
+        Set<StableKey> resources = new LinkedHashSet<>();
+        resources.add(
+            definition.action()
+                .resource());
+        collectResources(definition.trigger(), resources);
+        return resources;
+    }
+
+    private static void collectResources(Condition condition, Set<StableKey> resources) {
+        if (condition instanceof Condition.StockBelow below) resources.add(below.resource());
+        else if (condition instanceof Condition.StockAtLeast atLeast) resources.add(atLeast.resource());
+        else if (condition instanceof Condition.All all) {
+            for (Condition child : all.children()) collectResources(child, resources);
+        } else if (condition instanceof Condition.Any any) {
+            for (Condition child : any.children()) collectResources(child, resources);
+        } else if (condition instanceof Condition.Not not) collectResources(not.child(), resources);
     }
 
     private static StandingOrderJson.Condition json(Condition condition) {

@@ -59,6 +59,25 @@ async function app(t, overrides = {}, preferences = { autoRefresh: false }) {
 const listRoute = { view: 'standing-orders', gridKey: 'a', editor: null };
 const editorRoute = { view: 'standing-orders', gridKey: 'a', editor: { order: null, itemKey: null } };
 
+test('manual refresh updates the editor CPU choices without resetting its draft', async (t) => {
+    let cpus = { old: { name: 'Old CPU', acceptsPlayerJobs: true } };
+    const terminal = await app(t, { cpus: async () => ({ data: cpus, icons: null }) });
+    terminal.route(editorRoute);
+    await terminal.refresh();
+    terminal.standingOrders.edit({ type: 'name', value: 'Unsaved order' });
+    assert.deepEqual(
+        terminal.state.standingOrders.cpus.map((cpu) => cpu.key),
+        ['old']
+    );
+    cpus = { replacement: { name: 'Replacement CPU', acceptsPlayerJobs: true } };
+    await terminal.refresh();
+    assert.deepEqual(
+        terminal.state.standingOrders.cpus.map((cpu) => cpu.key),
+        ['replacement']
+    );
+    assert.equal(terminal.state.standingOrders.editor.draft.name, 'Unsaved order');
+});
+
 test('a change in flight still delivers its answer when the icon setting changes meanwhile', async (t) => {
     let release;
     const terminal = await app(t, {

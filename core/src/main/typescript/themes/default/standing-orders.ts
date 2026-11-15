@@ -96,7 +96,8 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     const cadenceLink = element('a');
     const empty = element('p', '', 'hint');
     const list = element('ul', '', 'standing-order-list inset-frame');
-    const editor = createStandingOrderEditor(application);
+    let editorMetadata: ThemeState['itemIcons'] = null;
+    const editor = createStandingOrderEditor(application, () => editorIcons.update(editor.targets(), editorMetadata));
     scroll.append(status, notices, cadence, empty, list, editor.element);
     view.append(heading, body);
     root.append(view);
@@ -235,6 +236,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     }
     return {
         render(state: ThemeState, locale: Translator, icons: boolean) {
+            editorMetadata = state.itemIcons;
             const { route, standingOrders: orders } = state;
             view.hidden = route.view !== 'standing-orders';
             if (route.view !== 'standing-orders') {

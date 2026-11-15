@@ -1354,6 +1354,44 @@ class StandingOrderEngineTest extends GridTestScope {
         for (StableKey order : posted) assertNotNull(engine.snapshot(order));
     }
 
+    @Test
+    void completedCalculationsShareTheEvaluationBudgetAcrossTicks() {
+        long[] nanos = { 0 };
+        clock = () -> nanos[0];
+        engine.close();
+        engine = newEngine();
+        settings.maxCalculationsInFlightPerGrid = 3;
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        List<StableKey> posted = new ArrayList<>();
+        for (int index = 0; index < 3; index++) {
+            posted.add(post("Order " + index, below("so-plastic", 1000), fixed("so-plastic", 64)));
+        }
+        tick(0);
+        tick(1000);
+        assertEquals(3, grid.calculations.size());
+        for (OrderGrid.Calculation calculation : grid.calculations) {
+            FakeJob job = new FakeJob(true);
+            job.onSimulation = () -> nanos[0] += 2_000_000;
+            calculation.future.complete(job);
+        }
+        for (int completed = 1; completed <= 3; completed++) {
+            tick(0);
+            assertEquals(
+                completed,
+                posted.stream()
+                    .filter(order -> status(order) == BLOCKED_MISSING)
+                    .count());
+            assertEquals(
+                3 - completed,
+                posted.stream()
+                    .filter(order -> status(order) == CALCULATING)
+                    .count());
+        }
+        assertTrue(grid.submissions.isEmpty());
+    }
+
     // ----- Review fixes -----
 
     @Test
@@ -1720,6 +1758,7 @@ class StandingOrderEngineTest extends GridTestScope {
         private final List<ICraftingPlanSummaryEntry> entries;
         private int summaries;
         private boolean summaryFails;
+        private Runnable onSimulation = () -> {};
 
         private FakeJob(boolean simulation, ICraftingPlanSummaryEntry... entries) {
             this.simulation = simulation;
@@ -1728,6 +1767,7 @@ class StandingOrderEngineTest extends GridTestScope {
 
         @Override
         public boolean web$isSimulation() {
+            onSimulation.run();
             return simulation;
         }
 

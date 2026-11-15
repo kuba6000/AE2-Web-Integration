@@ -265,7 +265,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
                     () => {}
                 )
             );
-        if (state.editor && !cpusRead)
+        if (state.editor && (!automatic || !cpusRead))
             tasks.push(
                 api.cpus(key, signal).then(
                     ({ data }) => {

@@ -30,7 +30,7 @@ export type ResourceChoice = {
  */
 export function createResourcePicker(
     choose: (item: Item) => void,
-    { craftableOnly, retry }: { craftableOnly: boolean; retry: () => void }
+    { craftableOnly, retry, changed }: { craftableOnly: boolean; retry: () => void; changed: () => void }
 ) {
     const root = element('div', '', 'resource-picker');
     const choice = element('button', '', 'resource-choice');
@@ -69,6 +69,7 @@ export function createResourcePicker(
         panel.hidden = true;
         document.removeEventListener('pointerdown', outside, true);
         choice.setAttribute('aria-expanded', 'false');
+        changed();
         if (restoreFocus) choice.focus();
     }
     function renderResults() {
@@ -123,9 +124,13 @@ export function createResourcePicker(
         choice.setAttribute('aria-expanded', 'true');
         search.value = '';
         renderResults();
+        changed();
         search.focus();
     });
-    search.addEventListener('input', renderResults);
+    search.addEventListener('input', () => {
+        renderResults();
+        changed();
+    });
     // Enter confirms the search; it must never reach the editor form's submit.
     search.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') event.preventDefault();

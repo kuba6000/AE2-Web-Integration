@@ -120,7 +120,7 @@ function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resource
 }
 
 /** The form for creating, editing and repairing one standing order. */
-export function createStandingOrderEditor(application: ThemeApplication) {
+export function createStandingOrderEditor(application: ThemeApplication, iconsChanged: () => void) {
     const form = element('form', '', 'standing-order-editor');
     form.noValidate = true;
     form.hidden = true;
@@ -185,7 +185,7 @@ export function createStandingOrderEditor(application: ThemeApplication) {
         row.remove.type = 'button';
         const picker = createResourcePicker(
             (item) => edit({ type: 'conditionResource', index: row.index, resource: { itemKey: item.itemKey! } }, item),
-            { craftableOnly: false, retry: () => void application.refresh() }
+            { craftableOnly: false, retry: () => void application.refresh(), changed: iconsChanged }
         );
         const resourceField = field(picker.choice, 'standing-order-condition-resource');
         resourceField.wrap.append(resourceField.text, picker.element, resourceField.error);
@@ -208,7 +208,7 @@ export function createStandingOrderEditor(application: ThemeApplication) {
     const craftLegend = element('legend');
     const target = createResourcePicker(
         (item) => edit({ type: 'target', resource: { itemKey: item.itemKey! } }, item),
-        { craftableOnly: true, retry: () => void application.refresh() }
+        { craftableOnly: true, retry: () => void application.refresh(), changed: iconsChanged }
     );
     const targetField = field(target.choice);
     targetField.wrap.append(targetField.text, target.element, targetField.error);
@@ -331,7 +331,10 @@ export function createStandingOrderEditor(application: ThemeApplication) {
         target.close();
         for (const row of rows) row.picker.close();
     }
+    let visiblePickers: ReturnType<typeof createResourcePicker>[] = [];
+    const targets = (): IconTarget[] => visiblePickers.flatMap((picker) => picker.targets());
     function render(state: ThemeState, locale: Translator, iconsOn: boolean): IconTarget[] {
+        visiblePickers = [];
         const orders = state.standingOrders;
         const editor = orders.editor;
         form.hidden = !editor;
@@ -410,7 +413,6 @@ export function createStandingOrderEditor(application: ThemeApplication) {
         whenSet.hidden = !flat;
         craftSet.hidden = !flat;
         locked.hidden = flat;
-        const iconTargets: IconTarget[] = [];
         if (rules.locked === null) {
             whenLegend.textContent = t('standingOrderWhen');
             craftLegend.textContent = t('standingOrderThenCraft');
@@ -462,13 +464,13 @@ export function createStandingOrderEditor(application: ThemeApplication) {
                     controls: [row.picker.choice]
                 });
                 errorTargets.set(`condition.${index}.value`, { target: row.valueField, controls: [row.value] });
-                if (!idle) iconTargets.push(...row.picker.targets());
+                if (!idle && iconsOn) visiblePickers.push(row.picker);
             });
 
             targetField.text.textContent = t('standingOrderTarget');
             target.render(resourceChoice, rules.resource, !!errors['action.resource'], t('standingOrderTarget'));
             target.choice.disabled = !editable;
-            iconTargets.push(...target.targets());
+            if (iconsOn) visiblePickers.push(target);
             errorTargets.set('action.resource', { target: targetField, controls: [target.choice] });
             amountTypeField.text.textContent = t('standingOrderAmountKind');
             amountType.options[0].textContent = t('standingOrderAmountFillTo');
@@ -565,11 +567,12 @@ export function createStandingOrderEditor(application: ThemeApplication) {
             if (firstTarget) firstTarget.focus();
             else if (first === 'trigger') add.focus();
         }
-        return iconsOn ? iconTargets : [];
+        return targets();
     }
     return {
         element: form,
         render,
+        targets,
         dispose() {
             closePickers();
             document.removeEventListener('click', confirmLeaving, true);

@@ -29,7 +29,6 @@ import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderCodec;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
@@ -183,8 +182,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
         Map<StableKey, ResourceDescriptor> result = new HashMap<>();
         TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
         if (terminals == null) return result;
-        for (StableKey resource : StandingOrderCodec.encode(definition)
-            .resources()) {
+        for (StableKey resource : StandingOrderMapping.resources(definition)) {
             ResourceDescriptor description = terminals.description(gridKey, resource);
             if (description != null) result.put(resource, description);
         }
