@@ -44,6 +44,12 @@ Pins belong to your web account. Each player can keep their own terminal pins an
 Home can show resources from several networks together. Pinned resources retain access to recorded
 history when they are no longer present in storage.
 
+### Standing orders
+
+Let a network keep resources stocked on its own: a standing order watches stock and orders crafting
+when its conditions hold. Choose **Keep stocked…** in a craftable resource's details, or open
+**Standing orders** for the network. See [Standing orders](#standing-orders).
+
 ### Crafting plan images
 
 After calculating a plan, choose **Export** at the bottom left of the plan in the default theme
@@ -241,6 +247,45 @@ With **Automatic updates** enabled, the terminal and selected CPU view receive l
 The CPU list refreshes periodically. Live viewing does not require resource history tracking or
 increase the frequency of saved storage measurements. After a connection interruption or storage
 topology change, the terminal loads a fresh snapshot automatically.
+
+## Standing orders
+
+A standing order crafts a resource automatically. **Keep stocked** is the simple form: when stock falls
+below a low mark, craft up to a target. An order can also combine several conditions, met all or any:
+**Stock below**, **Stock at least** for any resource of the network, and **Idle CPUs at least**; each
+can be inverted. The amount is either fixed per order or fills up to a target, optionally limited to a
+largest single order. Lite mode and ignoring missing ingredients are offered where the server supports them.
+
+Orders are checked when the network's storage is sampled, at the storage sampling interval from the
+network settings (five minutes by default, 60 seconds at the shortest). Storage history does not have
+to be enabled; without it the same sample is taken and nothing is saved. **Run now** asks for an extra
+check; the server spaces such extra reads at least 30 seconds apart per network.
+
+An order waits while its resource is already the final output of a running crafting job, including
+jobs started by players, and does not order resources provided by a level emitter. After a job
+finishes, the next order needs a storage sample taken afterwards, so one order runs at most about once
+per crafting time plus one sampling interval. An optional cooldown adds a further pause. Calculations
+that lack ingredients or fail are retried with a growing delay, from 30 seconds up to 10 minutes; the
+list shows the status, the reason and the largest missing ingredients.
+
+Jobs are submitted like orders from the web terminal, so only CPUs that accept player jobs are used;
+automation-only CPUs are skipped. The CPU view, crafting history and notifications name the standing
+order as the requester. Running jobs are never cancelled by an order, also not when it is edited,
+disabled or deleted. After a server restart orders resume by themselves and recognise a job that is
+still running.
+
+Standing orders belong to the network, not to their creator: everyone with access to the network can
+view them, and create, edit, run and delete them unless the server restricts this to administrators.
+**Run standing orders on this network** in the network settings switches them off for one network.
+
+Administrators configure `standing_orders` in `config.toml`:
+
+- `enabled` (default `true`): when `false` nothing runs; orders can still be switched off or deleted.
+- `allow_players` (default `true`): when `false` only administrators can change orders; existing ones keep running.
+- `max_orders_per_grid` (default `128`) and `max_calculations_in_flight_per_grid` (default `1`).
+- `max_calculation_minutes` (default `10`): a longer calculation is cancelled and retried later.
+- `long_running_job_minutes` (default `60`): a longer job is marked as long-running, nothing else.
+- `tick_budget_millis` (default `1`): server thread time per tick for evaluating orders.
 
 ## Notification services integration
 
