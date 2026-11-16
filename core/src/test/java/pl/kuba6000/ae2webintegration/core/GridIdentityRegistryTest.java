@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
@@ -19,6 +21,7 @@ import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +42,7 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(SQLITE)
 class GridIdentityRegistryTest {
 
     private final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
@@ -469,6 +473,7 @@ class GridIdentityRegistryTest {
 
     @Test
     @SuppressWarnings("ReadWriteStringCanBeUsed") // These tests also run on Java 8, without Files.writeString.
+    @Tag(GSON)
     void missingSettingsFieldsUseDefaultsWithoutLosingControllerRecognition() throws Exception {
         Path file = directory.resolve("default-settings.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
@@ -488,6 +493,7 @@ class GridIdentityRegistryTest {
 
     @Test
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    @Tag(GSON)
     void currentDimensionEncodingSurvivesSaveAndMatchesHttp() throws Exception {
         Path file = directory.resolve("coordinates.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
@@ -520,6 +526,7 @@ class GridIdentityRegistryTest {
     @ParameterizedTest
     @ValueSource(strings = { "0", "minecraft:overworld" })
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    @Tag(GSON)
     void releasedDimensionFieldPreservesIdentityAndSettingsInArchivedSource(String dimension) throws Exception {
         Path file = directory.resolve("released-identities.json");
         StableKey key = StableKey.parse("DtK3pQIgqQ-xyPjLOqQW9A");

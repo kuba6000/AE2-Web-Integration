@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
@@ -40,6 +43,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore.Vali
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture quantities and seeds.
+@Tag(GSON)
+@Tag(SQLITE)
 class StandingOrderStoreTest extends GridTestScope {
 
     private static final StableKey PLATE = TestGridFixtures.key(9101);

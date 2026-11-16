@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.observation;
 import static pl.kuba6000.ae2webintegration.core.TerminalStreamFixtures.readAnyEvent;
@@ -37,6 +38,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -57,6 +59,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
 
+@Tag(GSON)
 class TerminalStreamsHttpTest extends GridTestScope {
 
     private TestGridFixtures.TestGrid nativeGrid;

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -14,6 +15,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.sun.net.httpserver.HttpsConfigurator;
@@ -23,6 +25,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
+@Tag(GSON)
 class NtfyDestinationTest {
 
     @Test

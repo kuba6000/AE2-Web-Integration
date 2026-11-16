@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.File;
 import java.io.InputStream;
@@ -21,6 +22,7 @@ import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,6 +36,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 
 /** Tests installed ZIP packages through configuration, server lifecycle and authenticated HTTP. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class ThemeDeliveryHttpTest {
 
     @TempDir

@@ -2,6 +2,9 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
@@ -16,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -62,6 +66,7 @@ class CoreEngineTest {
     File configRoot;
 
     @Test
+    @Tag(SQLITE)
     void optionalTelemetryStartupFailureDoesNotCloseWorldServices() {
         CoreEngine.init(new TestPlatform(configRoot, false, true));
         Config.INSTANCE.general.port = 0;
@@ -78,6 +83,8 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(GSON)
+    @Tag(SQLITE)
     void failedIdentityImportAbortsStartupWithoutPublishingServicesAndCanRetry() throws Exception {
         TestPlatform platform = new TestPlatform(configRoot, false);
         CoreEngine.init(platform);
@@ -117,6 +124,7 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void invalidDatabaseAbortsStartupPreservesTheFileAndAllowsAnotherWorld() throws Exception {
         TestPlatform platform = new TestPlatform(configRoot, false);
         CoreEngine.init(platform);
@@ -158,6 +166,8 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(SQLITE)
+    @Tag(NIGHT_CONFIG)
     void reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy() {
         CoreEngine.init(new TestPlatform(configRoot, false));
         try (ConfigTestFixture config = new ConfigTestFixture(configRoot)) {
@@ -194,6 +204,8 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(GSON)
+    @Tag(SQLITE)
     void mixedNetworkShowsUnkeyedResourcesButPersistsOnlySupportedIdentities() throws Exception {
         IAE previous = AE2Controller.AE2Interface;
         CoreEngine.init(new TestPlatform(configRoot, false));
@@ -292,6 +304,7 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void failedSharedObservationDoesNotFallBackToRepeatedNativeReads() {
         IAE previous = AE2Controller.AE2Interface;
         AtomicInteger copies = new AtomicInteger();
@@ -336,6 +349,8 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(GSON)
+    @Tag(SQLITE)
     void storedStandingOrdersAreLoadedAtServerStartAndEvaluatedByTheTickUntilTheServerStops() throws Exception {
         IAE previous = AE2Controller.AE2Interface;
         CoreEngine.init(new TestPlatform(configRoot, false));
@@ -390,6 +405,7 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void standingOrdersThatCannotBeReadAtStartDoNotStopTheOtherWorldServices() throws Exception {
         IAE previous = AE2Controller.AE2Interface;
         TestPlatform platform = new TestPlatform(configRoot, false, true);
@@ -459,6 +475,7 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void shutdownPersistsAnUnobservedIdentityBeforeClearingWorldState() {
         CoreEngine.init(new TestPlatform(configRoot, false));
         Config.INSTANCE.general.port = 0;
@@ -478,6 +495,8 @@ class CoreEngineTest {
     }
 
     @Test
+    @Tag(GSON)
+    @Tag(SQLITE)
     void serverLifecycleOwnsStorageCaptureAndDurableHistory() throws Exception {
         IAE previous = AE2Controller.AE2Interface;
         CoreEngine.init(new TestPlatform(configRoot, false));

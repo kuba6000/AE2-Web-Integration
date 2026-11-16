@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
@@ -10,6 +12,7 @@ import java.io.File;
 import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -25,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
+@Tag(SQLITE)
 class GridSettingsLifecycleTest extends GridTestScope {
 
     private final WebPrincipal owner = TestGridFixtures.principal(OWNER_ID);
@@ -32,6 +36,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
     private StableKey key;
 
     @Test
+    @Tag(GSON)
     void changedBoundsRejectTheWholeAuthorizedPatch() throws Exception {
         ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
         initial.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 900, 300);
@@ -88,6 +93,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
 
     @ParameterizedTest
     @CsvSource({ "remove,true", "stop,true", "stop,false" })
+    @Tag(GSON)
     void unavailableGridAfterAuthorizationReturnsJson(String event, boolean write) {
         JsonObject response = requestAfter(() -> {
             if (event.equals("remove")) GRID_IDENTITIES.controllerRemoved(grid.position());
@@ -100,6 +106,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void authorizedWriteMayFinishAfterPermissionInvalidation() {
         JsonObject response = requestAfter(grid::withoutSources, true);
         assertEquals(
@@ -151,6 +158,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void omittedTrackingSettingPreservesItsValue() {
         PatchGridSettings enable = new PatchGridSettings();
         enable.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
@@ -173,6 +181,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void nullTrackingSettingIsRejectedWithoutChangingSettings() {
         PatchGridSettings request = new PatchGridSettings();
         JsonObject body = new JsonObject();

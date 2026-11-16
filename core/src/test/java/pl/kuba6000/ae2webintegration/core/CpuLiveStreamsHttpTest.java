@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
@@ -22,6 +23,7 @@ import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonArray;
@@ -48,6 +50,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFix
 
 /** Live CPU view through the coordinator, registry and SSE transport, with an explicit server clock. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class CpuLiveStreamsHttpTest extends GridTestScope {
 
     private static final long QUIET_MILLIS = 6000;

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderTestData.NO_CAPABILITIES;
 import static pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderTestData.PLAIN;
 import static pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderTestData.allCapabilities;
@@ -15,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -29,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderExc
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderCodec.Encoded;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture values and the documented limits.
+@Tag(GSON)
 class StandingOrderCodecTest {
 
     /** Slot 0 is the crafted resource key(1), slot 1 is the trigger resource key(2). */

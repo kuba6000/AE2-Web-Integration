@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +26,7 @@ import org.sqlite.JDBC;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
+@Tag(SQLITE)
 class WorldSchemaMigrationTest {
 
     private static final String SCHEMA_TEN_REQUESTERS_WITHOUT_ORDERS = "1:0:PLAYER:11111111-2222-3333-4444-555555555555:Original player"

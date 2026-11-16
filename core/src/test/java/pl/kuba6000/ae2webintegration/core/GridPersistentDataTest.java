@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
@@ -12,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -82,6 +84,7 @@ class GridPersistentDataTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void standingOrdersAreEnabledByDefaultAndTheSwitchPersistsIndependently() throws Exception {
         StableKey key = GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
         assertNotNull(key);

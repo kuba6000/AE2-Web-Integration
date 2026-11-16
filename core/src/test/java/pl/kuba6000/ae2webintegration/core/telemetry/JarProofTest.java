@@ -1,12 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.telemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.google.common.io.BaseEncoding;
 import com.google.gson.JsonObject;
 
+@Tag(GSON)
 class JarProofTest {
 
     @Test

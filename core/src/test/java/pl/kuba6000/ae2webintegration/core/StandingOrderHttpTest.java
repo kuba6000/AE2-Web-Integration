@@ -12,6 +12,8 @@ import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
 import java.io.ByteArrayOutputStream;
@@ -26,7 +28,9 @@ import java.nio.file.Path;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -34,6 +38,7 @@ import java.util.function.Consumer;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -76,6 +81,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
  * validation and rate limits in front of them.
  */
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture quantities and seeds.
+@Tag(GSON)
+@Tag(SQLITE)
 class StandingOrderHttpTest {
 
     private static final String JSON = "Content-Type: application/json\r\n";
@@ -221,6 +228,13 @@ class StandingOrderHttpTest {
         return group.getAsJsonArray("children")
             .get(index)
             .getAsJsonObject();
+    }
+
+    /** JsonObject.keySet() only exists from Gson 2.8.1; the compatibility suites run 2.2.4 and 2.8.0. */
+    private static Set<String> memberNames(JsonObject object) {
+        Set<String> names = new HashSet<>();
+        for (Map.Entry<String, JsonElement> member : object.entrySet()) names.add(member.getKey());
+        return names;
     }
 
     private static JsonElement withoutNulls(JsonElement value) {
@@ -385,10 +399,7 @@ class StandingOrderHttpTest {
         assertTrue(
             order.get("invalid")
                 .isJsonNull());
-        assertEquals(
-            Collections.singleton(key(plate)),
-            listing.getAsJsonObject("resources")
-                .keySet());
+        assertEquals(Collections.singleton(key(plate)), memberNames(listing.getAsJsonObject("resources")));
         JsonObject description = listing.getAsJsonObject("resources")
             .getAsJsonObject(key(plate));
         assertEquals(
@@ -438,8 +449,7 @@ class StandingOrderHttpTest {
                     .get("definition")));
         assertEquals(
             new java.util.HashSet<>(Arrays.asList(key(plate), key(ingot))),
-            listing.getAsJsonObject("resources")
-                .keySet());
+            memberNames(listing.getAsJsonObject("resources")));
         JsonObject changed = platesBelow(definition -> definition.addProperty("name", "Renamed"));
         JsonObject replaced = data(request("PATCH", orders + "/" + orderKey(listing), OWNER, changed.toString()));
         assertEquals(
@@ -449,10 +459,7 @@ class StandingOrderHttpTest {
                     .get(0)
                     .getAsJsonObject()
                     .get("definition")));
-        assertEquals(
-            Collections.singleton(key(plate)),
-            replaced.getAsJsonObject("resources")
-                .keySet());
+        assertEquals(Collections.singleton(key(plate)), memberNames(replaced.getAsJsonObject("resources")));
     }
 
     @Test

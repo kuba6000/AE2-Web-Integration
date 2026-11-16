@@ -1,12 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest.Channel;
 
+@Tag(GSON)
 class ReleaseManifestTest {
 
     @Test

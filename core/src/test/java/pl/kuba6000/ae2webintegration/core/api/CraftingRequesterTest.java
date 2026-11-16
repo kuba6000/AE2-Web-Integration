@@ -5,11 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.util.Collections;
 import java.util.UUID;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -86,6 +88,7 @@ class CraftingRequesterTest {
 
     @ParameterizedTest
     @ValueSource(strings = { "PLAYER", "AUTOMATION", "WEB", "STANDING_ORDER" })
+    @Tag(GSON)
     void everySourceKeepsItsJsonShape(String name) {
         CraftingRequester.Source source = CraftingRequester.Source.valueOf(name);
         CraftingRequester requester = source == CraftingRequester.Source.PLAYER ? CraftingRequester.player(alice)

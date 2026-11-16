@@ -4,6 +4,7 @@ import static java.net.HttpURLConnection.HTTP_OK;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
@@ -25,6 +26,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -903,6 +905,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void retiredGridKeepsChosenRetentionForItsFirstPendingFlow() throws Exception {
         ItemIdentityRequestTest.Resource item = new ItemIdentityRequestTest.Resource("retired-policy", 20, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710043, item);
@@ -945,6 +948,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void eachGridUsesItsFlowCadenceAndReloadKeepsPendingCounters() throws Exception {
         ItemIdentityRequestTest.Resource item = new ItemIdentityRequestTest.Resource("cadence-policy", 20, false);
         ItemIdentityRequestTest.Grid fast = new ItemIdentityRequestTest.Grid(710041, item);

@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
@@ -20,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
@@ -49,6 +52,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
  * of what they cost the network.
  */
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture seeds and times.
+@Tag(GSON)
+@Tag(SQLITE)
 class StandingOrderEditorTest extends GridTestScope {
 
     private static final StableKey PLATE = TestGridFixtures.key(9201);
