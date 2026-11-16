@@ -30,6 +30,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
@@ -479,6 +480,27 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     .of("$T.integer($L, $S, true)", INPUT_VALUES, value, fieldName);
                 case "long", "java.lang.Long" -> CodeBlock
                     .of("$T.integer($L, $S, false)", INPUT_VALUES, value, fieldName);
+                case "java.util.List" -> {
+                    Element element = field.asType() instanceof DeclaredType list && list.getTypeArguments()
+                        .size() == 1 ? processingEnv.getTypeUtils()
+                            .asElement(
+                                list.getTypeArguments()
+                                    .get(0))
+                            : null;
+                    if (!(element instanceof TypeElement elementType) || typeName(element.asType()).startsWith("java.")
+                        || elementType.getKind() == ElementKind.ENUM) {
+                        error(field, "JSON lists must contain object types: " + fieldType);
+                        yield CodeBlock.of("");
+                    }
+                    yield CodeBlock.of(
+                        "$T.array($L, $S).forEach(element -> $N($T.object(element, $S)))",
+                        INPUT_VALUES,
+                        value,
+                        fieldName,
+                        shape(elementType, shape.excludedAnnotation(), shapes),
+                        INPUT_VALUES,
+                        fieldName);
+                }
                 default -> {
                     Element nested = processingEnv.getTypeUtils()
                         .asElement(field.asType());

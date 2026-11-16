@@ -6,7 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 import org.jetbrains.annotations.NotNull;
@@ -14,7 +14,8 @@ import org.jetbrains.annotations.NotNull;
 /** Version-driven upgrades using the world's existing startup transaction. */
 final class DatabaseMigrations {
 
-    private static final List<DatabaseMigration> MIGRATIONS = Collections.singletonList(new HomePinGroupsMigration());
+    private static final List<DatabaseMigration> MIGRATIONS = Arrays
+        .asList(new HomePinGroupsMigration(), new StandingOrdersMigration());
 
     private DatabaseMigrations() {}
 

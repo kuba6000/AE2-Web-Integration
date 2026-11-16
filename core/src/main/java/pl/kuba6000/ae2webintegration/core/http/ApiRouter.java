@@ -24,8 +24,11 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.sun.net.httpserver.HttpExchange;
@@ -46,6 +49,11 @@ public final class ApiRouter implements HttpHandler {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final int MAX_BODY_BYTES = 8 * 1024;
+    // At most 16 nested objects and lists, the body itself included. A valid standing order has at most 8: the body,
+    // then
+    // an object per condition level and a list per group above the deepest level. The rest leaves room for the
+    // validator to name a tree that is too deep instead of the router refusing it unread.
+    private static final int MAX_NESTING = 16;
 
     @Desugar
     private record Route(HttpMethod method, String path, Authentication authentication,
@@ -251,26 +259,41 @@ public final class ApiRouter implements HttpHandler {
 
     /** Bounded objects retain duplicate-key rejection at every nested configuration level. */
     private static JsonObject readObject(JsonReader reader, int depth) throws IOException, InvalidInput {
-        if (depth > 8) throw new InvalidInput(ApiStatus.BAD_PARAM);
+        if (depth >= MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
         JsonObject object = new JsonObject();
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
             if (object.has(name)) throw new InvalidInput(ApiStatus.BAD_PARAM);
-            switch (reader.peek()) {
-                case BEGIN_OBJECT -> object.add(name, readObject(reader, depth + 1));
-                case STRING -> object.addProperty(name, reader.nextString());
-                case BOOLEAN -> object.addProperty(name, reader.nextBoolean());
-                case NUMBER -> object.addProperty(name, new BigDecimal(reader.nextString()));
-                case NULL -> {
-                    reader.nextNull();
-                    object.add(name, JsonNull.INSTANCE);
-                }
-                default -> throw new InvalidInput(ApiStatus.BAD_PARAM);
-            }
+            object.add(name, readValue(reader, depth));
         }
         reader.endObject();
         return object;
+    }
+
+    private static JsonArray readArray(JsonReader reader, int depth) throws IOException, InvalidInput {
+        if (depth >= MAX_NESTING) throw new InvalidInput(ApiStatus.BAD_PARAM);
+        JsonArray array = new JsonArray();
+        reader.beginArray();
+        while (reader.hasNext()) array.add(readValue(reader, depth));
+        reader.endArray();
+        return array;
+    }
+
+    /** Containers count toward the nesting bound; the typed binding decides which members may be lists. */
+    private static JsonElement readValue(JsonReader reader, int depth) throws IOException, InvalidInput {
+        return switch (reader.peek()) {
+            case BEGIN_OBJECT -> readObject(reader, depth + 1);
+            case BEGIN_ARRAY -> readArray(reader, depth + 1);
+            case STRING -> new JsonPrimitive(reader.nextString());
+            case BOOLEAN -> new JsonPrimitive(reader.nextBoolean());
+            case NUMBER -> new JsonPrimitive(new BigDecimal(reader.nextString()));
+            case NULL -> {
+                reader.nextNull();
+                yield JsonNull.INSTANCE;
+            }
+            default -> throw new InvalidInput(ApiStatus.BAD_PARAM);
+        };
     }
 
     private static final class InvalidInput extends Exception {

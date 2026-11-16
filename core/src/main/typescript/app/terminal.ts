@@ -1,4 +1,5 @@
 import { createPins, type PinsState } from './pins.js';
+import { createStandingOrders, type StandingOrdersState } from './standing-orders.js';
 import { createServerSettings, type ServerSettingsState } from './server-settings.js';
 import type { Route } from './router.js';
 import type {
@@ -38,6 +39,7 @@ export type TerminalData = {
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    itemsByKey: ReadonlyMap<string, StoredResource>;
     itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
@@ -61,6 +63,7 @@ export type TerminalState = TerminalData & {
     settings: SettingsState;
     serverSettings: ServerSettingsState;
     pins: PinsState;
+    standingOrders: StandingOrdersState;
 };
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
@@ -131,6 +134,15 @@ export function createTerminal(
         () => iconsEnabled && state.iconPack.available === true,
         notifications.publish
     );
+    const standingOrders = createStandingOrders(
+        api,
+        () => {
+            notify();
+            schedule();
+        },
+        () => iconsEnabled && state.iconPack.available === true,
+        notifications.publish
+    );
     const settings = createGridSettings(
         api,
         () => {
@@ -161,6 +173,7 @@ export function createTerminal(
         gridStatus: 'loading',
         gridError: null,
         items: [],
+        itemsByKey: new Map(),
         itemSnapshotRevision: 0,
         itemIcons: null,
         iconPack: { available: null, hasAnimations: false, status: 'loading' },
@@ -178,12 +191,17 @@ export function createTerminal(
         resourceHistory: resourceHistory.state,
         recent: null,
         pins: pins.state,
+        standingOrders: standingOrders.state,
         settings: settings.state,
         serverSettings: serverSettings.state
     };
 
+    /** The standing order editor picks from the terminal's resources, which the server only describes while it is live. */
+    const wantsItems = () =>
+        state.route.view === 'items' || (state.route.view === 'standing-orders' && state.route.editor !== null);
+    const liveItems = () => state.preferences.autoRefresh || state.route.view === 'standing-orders';
     const live = createLiveStream<StoredResource, StoredResourceUpdate, TerminalDelta>({
-        enabled: () => state.preferences.autoRefresh,
+        enabled: liveItems,
         rows: () => state.items,
         icons: () => state.itemIcons,
         section(delta) {
@@ -202,6 +220,7 @@ export function createTerminal(
         apply({ rows, icons }) {
             if (rows) {
                 state.items = rows.all;
+                state.itemsByKey = rows.keyed;
                 state.selected = state.selected?.itemKey ? (rows.keyed.get(state.selected.itemKey) ?? null) : null;
                 if (!state.selected) resourceHistory.clear();
             }
@@ -241,6 +260,7 @@ export function createTerminal(
         serial++;
         itemRequest?.abort();
         state.items = [];
+        state.itemsByKey = new Map();
         state.recent = null;
         state.itemIcons = null;
         state.selected = null;
@@ -252,7 +272,7 @@ export function createTerminal(
     }
     async function loadItems(automatic = false) {
         const key = state.route.gridKey;
-        if (disposed || state.route.view !== 'items' || !key || state.gridStatus !== 'ready') return;
+        if (disposed || !wantsItems() || !key || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === key)) {
             invalidateItems();
             state.itemStatus = 'error';
@@ -276,12 +296,13 @@ export function createTerminal(
                 key,
                 request.signal,
                 iconsEnabled && state.iconPack.available === true,
-                state.preferences.autoRefresh
+                liveItems()
             );
             if (disposed || version !== serial) return;
             const items = result.data;
             state.itemIcons = result.icons;
             state.items = items;
+            state.itemsByKey = new Map(items.flatMap((item) => (item.itemKey ? [[item.itemKey, item]] : [])));
             state.itemSnapshotRevision++;
             state.recent = result.recent ?? null;
             state.selected = state.selected
@@ -295,7 +316,7 @@ export function createTerminal(
                     api.itemEvents(key, subscription, iconsEnabled && state.iconPack.available === true, handlers),
                 () => !disposed && version === serial
             );
-            if (!live.active || !state.preferences.autoRefresh) {
+            if (!live.active || !liveItems()) {
                 state.stream = null;
                 state.itemError = null;
             }
@@ -314,6 +335,7 @@ export function createTerminal(
             live.stop();
             resourceHistory.clear();
             state.items = [];
+            state.itemsByKey = new Map();
             state.recent = null;
             state.itemIcons = null;
             state.selected = null;
@@ -352,6 +374,7 @@ export function createTerminal(
                 history.invalidateIcons();
                 resourceHistory.invalidateIcons();
                 pins.invalidateIcons();
+                standingOrders.invalidateIcons();
             }
             notify();
             if (changed) {
@@ -361,6 +384,7 @@ export function createTerminal(
                 if (state.route.view === 'history') void loadHistory();
                 void resourceHistory.refresh();
                 void pins.refresh();
+                void loadStandingOrders();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -389,6 +413,11 @@ export function createTerminal(
         if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
         else return history.refresh(reloadDetail);
+    }
+    function loadStandingOrders(automatic = false) {
+        if (state.route.view !== 'standing-orders' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) standingOrders.block('GRID_NOT_FOUND');
+        else return standingOrders.refresh(automatic);
     }
     function loadSettings() {
         if (state.route.view !== 'settings') return;
@@ -462,6 +491,7 @@ export function createTerminal(
                 await loadCpus(automatic);
                 await loadHistory(reloadDetail);
                 await loadSettings();
+                await loadStandingOrders(automatic);
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
                 if (!homeRefresh || state.route.view !== 'home') await pins.refresh(automatic);
             } catch (caught) {
@@ -487,6 +517,7 @@ export function createTerminal(
                 cpus.block(state.gridError);
                 history.block(state.gridError);
                 settings.block(state.gridError);
+                standingOrders.block(state.gridError);
                 if (state.route.view !== 'home' || status === 'UNAUTHORIZED') pins.block(state.gridError);
                 notify();
             } finally {
@@ -509,6 +540,7 @@ export function createTerminal(
         settings,
         serverSettings,
         pins,
+        standingOrders,
         resourceHistory,
         exportPlan: createPlanExporter(icons),
         icons,
@@ -521,12 +553,14 @@ export function createTerminal(
             history.invalidateIcons();
             resourceHistory.invalidateIcons();
             pins.invalidateIcons();
+            standingOrders.invalidateIcons();
             void pins.refresh();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
             void loadCrafting();
             if (state.route.view === 'history') void loadHistory();
+            void loadStandingOrders();
             void resourceHistory.refresh();
             notify();
         },
@@ -574,6 +608,7 @@ export function createTerminal(
             cpus.route(route);
             history.route(route);
             settings.route(route);
+            standingOrders.route(route);
             serverSettings.route(route);
             notify();
             if (needsDiscovery) void refresh();
@@ -583,6 +618,7 @@ export function createTerminal(
                 loadCpus();
                 loadHistory();
                 loadSettings();
+                loadStandingOrders();
             }
             void pins.refresh();
             schedule();
@@ -604,7 +640,7 @@ export function createTerminal(
                     void loadItems();
                     void loadCpus();
                 } else {
-                    live.stop();
+                    if (!liveItems()) live.stop();
                     cpus.stopLive();
                 }
                 schedule();
@@ -626,6 +662,7 @@ export function createTerminal(
             settings.dispose();
             serverSettings.dispose();
             pins.dispose();
+            standingOrders.dispose();
             icons.dispose();
             listeners.clear();
         }

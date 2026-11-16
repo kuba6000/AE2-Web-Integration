@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +31,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -45,6 +47,16 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.standingorders.AmountPolicy;
+import pl.kuba6000.ae2webintegration.core.standingorders.Condition;
+import pl.kuba6000.ae2webintegration.core.standingorders.CpuTarget;
+import pl.kuba6000.ae2webintegration.core.standingorders.CraftAction;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderSnapshot;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStatus;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
@@ -330,6 +342,132 @@ class CoreEngineTest {
             }
             assertEquals(1, copies.get());
             assertEquals(0, metadata.get(), "failed observations must not trigger the legacy full-read fallback");
+        } finally {
+            CoreEngine.onServerStopped();
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+
+    @Test
+    @Tag(GSON)
+    @Tag(SQLITE)
+    void storedStandingOrdersAreLoadedAtServerStartAndEvaluatedByTheTickUntilTheServerStops() throws Exception {
+        IAE previous = AE2Controller.AE2Interface;
+        CoreEngine.init(new TestPlatform(configRoot, false));
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        try {
+            CoreEngine.onServerStarted();
+            ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("so-start", 20, false);
+            ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771201, iron);
+            StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+            StableKey ironKey = iron.web$getKey();
+            StandingOrderStore store = CoreEngine.getStandingOrderStore();
+            assertNotNull(store);
+            StandingOrderStore.Valid order = store.create(
+                gridKey,
+                WebPrincipal.admin(),
+                new StandingOrderDefinition(
+                    "Keep iron",
+                    true,
+                    new Condition.StockBelow(ironKey, 5),
+                    new CraftAction(
+                        ironKey,
+                        new AmountPolicy.Fixed(64),
+                        new CraftingOptions(false, false),
+                        CpuTarget.any()),
+                    0),
+                Collections.singletonMap(
+                    ironKey,
+                    new ResourceDescriptor("example", "so-start", 0, 0, "so-start", ResourceType.ITEM, ironKey, null)));
+            CoreEngine.onServerStopping();
+            CoreEngine.onServerStopped();
+            assertNull(CoreEngine.getStandingOrders());
+            assertNull(CoreEngine.getStandingOrderStore());
+
+            CoreEngine.onServerStarted();
+            StandingOrderEngine engine = CoreEngine.getStandingOrders();
+            assertNotNull(engine);
+            assertEquals(gridKey, TestGridFixtures.resolvedKey(grid));
+            AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+            assertNull(engine.snapshot(order.key()));
+            CoreEngine.onServerTick();
+            StandingOrderSnapshot snapshot = engine.snapshot(order.key());
+            assertNotNull(snapshot, "The stored order is posted at start and evaluated by the first tick");
+            assertEquals(StandingOrderStatus.WAITING_FOR_STOCK, snapshot.status());
+            CoreEngine.onServerStopping();
+            assertNull(CoreEngine.getStandingOrders());
+            assertNull(engine.snapshot(order.key()), "Stopping clears all engine state");
+        } finally {
+            CoreEngine.onServerStopped();
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+
+    @Test
+    @Tag(SQLITE)
+    void standingOrdersThatCannotBeReadAtStartDoNotStopTheOtherWorldServices() throws Exception {
+        IAE previous = AE2Controller.AE2Interface;
+        TestPlatform platform = new TestPlatform(configRoot, false, true);
+        CoreEngine.init(platform);
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        try {
+            CoreEngine.onServerStarted();
+            ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("so-broken", 20, false);
+            ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771202, iron);
+            StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+            StableKey ironKey = iron.web$getKey();
+            CoreEngine.getStandingOrderStore()
+                .create(
+                    gridKey,
+                    WebPrincipal.admin(),
+                    new StandingOrderDefinition(
+                        "Keep iron",
+                        true,
+                        new Condition.StockBelow(ironKey, 5),
+                        new CraftAction(
+                            ironKey,
+                            new AmountPolicy.Fixed(64),
+                            new CraftingOptions(false, false),
+                            CpuTarget.any()),
+                        0),
+                    Collections.singletonMap(
+                        ironKey,
+                        new ResourceDescriptor(
+                            "example",
+                            "so-broken",
+                            0,
+                            0,
+                            "so-broken",
+                            ResourceType.ITEM,
+                            ironKey,
+                            null)));
+            CoreEngine.onServerStopping();
+            CoreEngine.onServerStopped();
+            Path databaseFile = new File(platform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath();
+            try (WorldDatabase world = new WorldDatabase(databaseFile, Config.INSTANCE.resourceHistory)) {
+                world.open();
+                world.write(db -> {
+                    try (java.sql.Statement sql = db.createStatement()) {
+                        // A key that is no key makes reading the orders fail, while the schema itself stays intact.
+                        sql.execute("PRAGMA defer_foreign_keys = ON");
+                        sql.execute("UPDATE standing_orders SET order_key = 'not a key'");
+                        sql.execute("UPDATE standing_order_resources SET order_key = 'not a key'");
+                    }
+                    return null;
+                });
+            }
+
+            CoreEngine.onServerStarted();
+            assertNotNull(CoreEngine.getStorageTracking(), "History, pins and terminals still start");
+            assertNotNull(CoreEngine.getResourcePins());
+            assertNotNull(CoreEngine.getTerminalRegistry());
+            assertNotNull(CoreEngine.getCraftingHistory());
+            assertNotNull(CoreEngine.getStandingOrders(), "The engine runs, with no orders");
+            assertNotNull(CoreEngine.getStandingOrderEditor());
+            AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+            assertDoesNotThrow(CoreEngine::onServerTick);
         } finally {
             CoreEngine.onServerStopped();
             AE2Controller.AE2Interface = previous;

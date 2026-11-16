@@ -184,6 +184,7 @@ class CraftingHistoryStoreTest {
 
     private static Stream<Arguments> rejectedRequesterLists() {
         UUID player = UUID.randomUUID();
+        StableKey order = StableKey.random();
         return Stream.of(
             Arguments.of(
                 "the same player twice under different names",
@@ -194,14 +195,10 @@ class CraftingHistoryStoreTest {
                 .of("automation twice", Arrays.asList(CraftingRequester.automation(), CraftingRequester.automation())),
             Arguments.of("web twice", Arrays.asList(CraftingRequester.web(), CraftingRequester.web())),
             Arguments.of(
-                "player source without a player",
-                Collections.singletonList(new CraftingRequester(CraftingRequester.Source.PLAYER, null))),
-            Arguments.of(
-                "web source carrying a player",
-                Collections.singletonList(
-                    new CraftingRequester(
-                        CraftingRequester.Source.WEB,
-                        new PlayerIdentity(UUID.randomUUID(), "Alex")))));
+                "the same standing order twice under different names",
+                Arrays.asList(
+                    CraftingRequester.standingOrder(order, "Keep plastic"),
+                    CraftingRequester.standingOrder(order, "Renamed"))));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -227,6 +224,84 @@ class CraftingHistoryStoreTest {
                     .entries()
                     .isEmpty());
             assertTrue(store.append(grid, base) > 0);
+        }
+    }
+
+    @Test
+    void standingOrderRequestersKeepKeyAndNameAcrossReopenAndHistoryPages() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey plastic = StableKey.random();
+        StableKey circuits = StableKey.random();
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.standingOrder(plastic, "Keep plastic"),
+                CraftingRequester.web(),
+                CraftingRequester.standingOrder(circuits, "Keep circuits")));
+        long id;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            id = new SqliteCraftingHistoryStore(database).append(grid, job);
+        }
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            CompletedCrafting read = store.read(grid, id);
+            assertNotNull(read);
+            assertEquals(job.requesters(), read.requesters());
+            assertEquals(
+                job.requesters(),
+                store.list(grid, null, 10)
+                    .entries()
+                    .get(0)
+                    .requesters());
+            CraftingRequester order = read.requesters()
+                .get(2);
+            assertEquals(CraftingRequester.Source.STANDING_ORDER, order.source());
+            assertEquals(circuits, order.orderKey());
+            assertEquals("Keep circuits", order.orderName());
+            assertNull(order.player());
+        }
+    }
+
+    @Test
+    void historyOfAStandingOrderWithAnOddButStorableNameStillLoads() throws Exception {
+        StableKey grid = StableKey.random();
+        String longest = String.join("", Collections.nCopies(CraftingRequester.MAX_ORDER_NAME_LENGTH, "é"));
+        CompletedCrafting base = simpleJob(System.currentTimeMillis(), 1);
+        // Names an earlier version of the definition rules may have accepted: untrimmed, with control characters.
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            base.resources(),
+            base.providers(),
+            Arrays.asList(
+                CraftingRequester.standingOrder(StableKey.random(), "  padded\tname\n"),
+                CraftingRequester.standingOrder(StableKey.random(), longest)));
+        long id;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            id = new SqliteCraftingHistoryStore(database).append(grid, job);
+        }
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            assertEquals(
+                job.requesters(),
+                store.read(grid, id)
+                    .requesters());
+            assertEquals(
+                job.requesters(),
+                store.list(grid, null, 10)
+                    .entries()
+                    .get(0)
+                    .requesters());
         }
     }
 

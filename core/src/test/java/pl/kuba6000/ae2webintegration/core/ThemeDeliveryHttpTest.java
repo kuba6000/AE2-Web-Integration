@@ -123,6 +123,20 @@ class ThemeDeliveryHttpTest {
     }
 
     @Test
+    void installedThemeCanDeclareStandingOrdersView() throws Exception {
+        install("orders.zip", manifest("orders").replace("\"items\"", "\"standing-orders\""), Collections.emptyMap());
+        port = HttpServerTestFixture.startWorld(config);
+        JsonObject theme = catalog().getAsJsonArray("themes")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "standing-orders",
+            theme.getAsJsonArray("views")
+                .get(1)
+                .getAsString());
+    }
+
+    @Test
     void installedZipExposesManifestDefaultAndAuthenticatedAssetsWithoutExtraction() throws Exception {
         Path archive = install(
             "list.zip",

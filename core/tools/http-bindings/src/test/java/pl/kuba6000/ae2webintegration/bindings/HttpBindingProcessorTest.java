@@ -192,6 +192,69 @@ class HttpBindingProcessorTest {
     }
 
     @Test
+    void generatedBodyBindingValidatesListsOfRecursiveObjectsAtEveryLevel() throws Exception {
+        assertCompiles(
+            "  @Body Node root;\n"
+                + "  public static final class Node { @NotNull String type; @OptionalInput List<Node> children; @OptionalInput Node child; }\n"
+                + "  public int children() { return root.children == null ? -1 : root.children.size(); }");
+        try (URLClassLoader loader = new URLClassLoader(
+            new URL[] { directory.toUri()
+                .toURL() },
+            getClass().getClassLoader())) {
+            Class<?> endpoint = loader.loadClass("fixture.Example");
+            Object request = endpoint.getConstructor()
+                .newInstance();
+            Method bind = endpoint.getMethod("bind", InputValues.class);
+            bind.invoke(request, inputs("{\"type\":\"all\",\"children\":[]}"));
+            assertEquals(
+                0,
+                endpoint.getMethod("children")
+                    .invoke(request));
+            bind.invoke(
+                request,
+                inputs(
+                    "{\"type\":\"all\",\"children\":[{\"type\":\"any\",\"children\":[{\"type\":\"leaf\"}]},"
+                        + "{\"type\":\"not\",\"child\":{\"type\":\"leaf\"}}]}"));
+            assertEquals(
+                2,
+                endpoint.getMethod("children")
+                    .invoke(request));
+            for (String invalid : Arrays.asList(
+                "{\"type\":\"all\",\"children\":null}",
+                "{\"type\":\"all\",\"children\":{}}",
+                "{\"type\":\"all\",\"children\":\"leaf\"}",
+                "{\"type\":\"all\",\"children\":[1]}",
+                "{\"type\":\"all\",\"children\":[[]]}",
+                "{\"type\":\"all\",\"children\":[{}]}",
+                "{\"type\":\"all\",\"children\":[{\"type\":\"leaf\",\"other\":1}]}",
+                "{\"type\":\"all\",\"children\":[{\"type\":\"any\",\"children\":[{\"type\":5}]}]}")) {
+                InvocationTargetException failure = assertThrows(
+                    InvocationTargetException.class,
+                    () -> bind.invoke(request, inputs(invalid)),
+                    invalid);
+                assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+            }
+        }
+    }
+
+    @Test
+    void rejectsListsOfScalarsAndEnumsAtCompilation() throws Exception {
+        for (String member : Arrays
+            .asList("List<String> names;", "List<Long> counts;", "List<Mode> modes;\n  public enum Mode { A }")) {
+            Compilation result = compile("  @Body Input input;\n  public static final class Input { " + member + " }");
+            assertFalse(result.success(), member);
+            assertTrue(
+                result.diagnostics()
+                    .getDiagnostics()
+                    .stream()
+                    .anyMatch(
+                        diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
+                            .contains("JSON lists must contain object types")),
+                member);
+        }
+    }
+
+    @Test
     void projectedBodyShapesExcludeMarkedFieldsRecursivelyWithoutChangingOrdinaryShapes() throws Exception {
         assertCompiles("""
               @Body Input input;

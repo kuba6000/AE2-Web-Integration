@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
@@ -12,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -78,6 +80,50 @@ class GridPersistentDataTest extends GridTestScope {
         assertEquals(cleared, read.apply(reloaded.getSettings()));
         assertTrue(
             reloaded.getSettings()
+                .isDefault());
+    }
+
+    @Test
+    @Tag(SQLITE)
+    void standingOrdersAreEnabledByDefaultAndTheSwitchPersistsIndependently() throws Exception {
+        StableKey key = GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        assertNotNull(key);
+        GridPersistentData data = GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData settings = data.getSettings();
+        assertTrue(settings.isStandingOrdersEnabled());
+        assertTrue(settings.isDefault());
+        assertTrue(
+            settings.copy()
+                .isStandingOrdersEnabled());
+        settings.setStandingOrdersEnabled(false);
+        assertFalse(settings.isDefault());
+        assertFalse(
+            settings.copy()
+                .isStandingOrdersEnabled());
+        assertFalse(settings.isTracked());
+        GRID_IDENTITIES.saveIfDirty();
+        File file = new File(gridSave, "ae2webintegration/grid-identities.json");
+        GridIdentityRegistry restarted = worlds.registry(file);
+        GridPersistentData loaded = restarted.getPersistentData(key);
+        assertNotNull(loaded);
+        assertFalse(
+            loaded.getSettings()
+                .isStandingOrdersEnabled());
+        assertFalse(
+            loaded.getSettings()
+                .isDefault());
+        loaded.getSettings()
+            .setStandingOrdersEnabled(true);
+        restarted.saveIfDirty();
+        GridPersistentData cleared = worlds.registry(file)
+            .getPersistentData(key);
+        assertNotNull(cleared);
+        assertTrue(
+            cleared.getSettings()
+                .isStandingOrdersEnabled());
+        assertTrue(
+            cleared.getSettings()
                 .isDefault());
     }
 

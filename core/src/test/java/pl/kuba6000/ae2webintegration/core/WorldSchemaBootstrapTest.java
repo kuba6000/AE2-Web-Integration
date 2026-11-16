@@ -42,7 +42,7 @@ class WorldSchemaBootstrapTest {
                 try (Statement sql = db.createStatement();
                     ResultSet rows = sql.executeQuery("SELECT version FROM world_schema")) {
                     assertTrue(rows.next());
-                    assertEquals(10, rows.getLong(1));
+                    assertEquals(11, rows.getLong(1));
                     assertFalse(rows.next());
                 }
                 return null;

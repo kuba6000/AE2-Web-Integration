@@ -4,7 +4,9 @@
  */
 export type PlayerIdentity = { uuid: string; name: string };
 export type CraftingRequester =
-    { source: 'PLAYER'; player: PlayerIdentity } | { source: 'AUTOMATION' | 'WEB'; player: null };
+    | { source: 'PLAYER'; player: PlayerIdentity }
+    | { source: 'AUTOMATION' | 'WEB'; player: null }
+    | { source: 'STANDING_ORDER'; player: null; orderKey: string; orderName: string };
 export type ApplicationContext = {
     capabilities: {
         craftingLightMode?: boolean;
@@ -116,6 +118,7 @@ export type GridSettings = {
     trackMachineCrafting: boolean;
     isStorageTracked: boolean;
     isFlowTracked: boolean;
+    standingOrdersEnabled: boolean;
     stockSampleIntervalSeconds: number;
     flowFlushIntervalSeconds: number;
     historyRetentionDays: number;
@@ -283,3 +286,119 @@ export type ResourcePinUpdate = {
 };
 export type HomePinGroup = { groupKey: string; name: string; ordinal: number };
 export type HomePinGroupUpdate = { name?: string; move?: 'earlier' | 'later' };
+
+export type StandingOrderStatusName =
+    | 'IDLE'
+    | 'CALCULATING'
+    | 'CRAFTING'
+    | 'CRAFTING_LONG'
+    | 'COOLDOWN'
+    | 'BLOCKED_MISSING'
+    | 'SUBMIT_FAILED'
+    | 'UNAVAILABLE'
+    | 'DISABLED'
+    | 'SWITCHED_OFF'
+    | 'GRID_UNAVAILABLE'
+    | 'WAITING_FOR_STOCK'
+    | 'WAITING_FOR_CPU'
+    | 'QUEUED';
+export type StandingOrderReason =
+    | 'WAITING_FIRST_READ'
+    | 'READ_FAILED'
+    | 'WAITING_FRESH_READ_AFTER_JOB'
+    | 'WAITING_READ_FOR_NEW_RESOURCES'
+    | 'MISSING_INGREDIENTS'
+    | 'CALCULATION_FAILED'
+    | 'CALCULATION_TIMED_OUT'
+    | 'SUBMIT_REJECTED'
+    | 'SUBMIT_ERROR'
+    | 'UNEXPECTED_ERROR'
+    | 'INVALID_DEFINITION'
+    | 'CAPABILITY_UNAVAILABLE'
+    | 'UNKNOWN_RESOURCE'
+    | 'AMBIGUOUS_RESOURCE'
+    | 'NOT_CRAFTABLE'
+    | 'EMITTER_BACKED'
+    | 'AMOUNT_OVERFLOW'
+    | 'NOTHING_TO_ORDER'
+    | 'NO_IDLE_CPU'
+    | 'SELECTED_CPU_UNAVAILABLE'
+    | 'CALCULATION_SLOTS_FULL';
+/** An ingredient a blocked calculation lacked; `resource` is null when the server cannot name it. */
+export type StandingOrderMissingIngredient = { resource: string | null; displayName: string; amount: number };
+/**
+ * Times are epoch milliseconds and zero means none. `reason` explains the status where the status alone does not;
+ * `resource` (AMBIGUOUS_RESOURCE) and `path` (CAPABILITY_UNAVAILABLE) are its parameters. `submitError` is the
+ * crafting system's own message, not translated. `missing` lists at most five ingredients, largest first.
+ */
+export type StandingOrderRuntime = {
+    status: StandingOrderStatusName;
+    reason: StandingOrderReason | null;
+    resource: string | null;
+    path: string | null;
+    submitError: string | null;
+    missing: StandingOrderMissingIngredient[];
+    changedAt: number;
+    lastSubmittedAmount: number;
+    nextCheckAt: number;
+    craftingSince: number;
+};
+/** Members of a listed condition that do not apply to its `type` are null; request bodies omit them instead. */
+export type StandingOrderCondition = {
+    type: 'stockBelow' | 'stockAtLeast' | 'idleCpusAtLeast' | 'all' | 'any' | 'not';
+    resource: string | null;
+    amount: number | null;
+    count: number | null;
+    children: StandingOrderCondition[] | null;
+    child: StandingOrderCondition | null;
+};
+export type StandingOrderAction = {
+    resource: string;
+    amount: { type: 'fixed' | 'fillTo'; batch: number | null; target: number | null; maxBatch: number | null };
+    options: { lightMode: boolean; ignoreMissing: boolean };
+    cpu: { type: 'any' | 'specific'; key: string | null };
+};
+export type StandingOrderDefinition = {
+    name: string;
+    enabled: boolean;
+    cooldownSeconds: number;
+    trigger: StandingOrderCondition;
+    action: StandingOrderAction;
+};
+export type StandingOrderConditionInput =
+    | { type: 'stockBelow' | 'stockAtLeast'; resource: string; amount: number }
+    | { type: 'idleCpusAtLeast'; count: number }
+    | { type: 'all' | 'any'; children: StandingOrderConditionInput[] }
+    | { type: 'not'; child: StandingOrderConditionInput };
+export type StandingOrderActionInput = {
+    resource: string;
+    amount: { type: 'fixed'; batch: number } | { type: 'fillTo'; target: number; maxBatch: number };
+    options: { lightMode: boolean; ignoreMissing: boolean };
+    cpu: { type: 'any' } | { type: 'specific'; key: string };
+};
+export type StandingOrderDefinitionInput = {
+    name: string;
+    enabled: boolean;
+    cooldownSeconds: number;
+    trigger: StandingOrderConditionInput;
+    action: StandingOrderActionInput;
+};
+/** A partial edit: omitted members keep their stored value and a present trigger or action replaces that whole part. */
+export type StandingOrderChanges = Partial<StandingOrderDefinitionInput>;
+/** Why a definition was refused; `path` locates the offending member of the submitted document. */
+export type StandingOrderRejection = { reason: string; path: string };
+/** Exactly one of `definition` and `invalid` is set. */
+export type StandingOrder = {
+    orderKey: string;
+    definition: StandingOrderDefinition | null;
+    invalid: StandingOrderRejection | null;
+    status: StandingOrderRuntime | null;
+};
+export type StandingOrdersListing = {
+    serverEnabled: boolean;
+    gridEnabled: boolean;
+    canEdit: boolean;
+    maxOrders: number;
+    orders: StandingOrder[];
+    resources: Record<string, ResourceDescription>;
+};

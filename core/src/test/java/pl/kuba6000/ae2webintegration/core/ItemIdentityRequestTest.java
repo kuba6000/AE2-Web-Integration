@@ -749,6 +749,10 @@ class ItemIdentityRequestTest extends GridTestScope {
                         .equals(key));
         }
 
+        public boolean web$canEmitFor(IAEKey key) {
+            throw new AssertionError();
+        }
+
         public int web$getCPUCount() {
             return 1;
         }

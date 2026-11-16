@@ -1,7 +1,7 @@
 import { thumbtackIcon } from './icons/hackernoon/thumbtack.js';
 import type { ThemeApplication, ThemeState, ThemeLifetime, ThemeSettings } from '../../app/theme-api.js';
 import { createPinActions } from './pin-actions.js';
-import { trackingHref } from '../../app/router.js';
+import { standingOrdersHref, trackingHref } from '../../app/router.js';
 import { recentTrackingLines } from './recent-tracking.js';
 import type { Translator } from '../../app/i18n.js';
 import { filterResources, registryId, selectResources, sortResources } from '../../app/resource-helpers.js';
@@ -109,6 +109,8 @@ export function createResourceTerminal(
     };
     const pinDetails = createPinActions(application);
     controls.details.after(pinDetails.element);
+    const keepStocked = element('a', '', 'button-link keep-stocked-link');
+    pinDetails.element.after(keepStocked);
     const pinRows = new Map<string, ReturnType<typeof createItemRow>>();
     const pinSlots = createSlotGrid(controls.pinned, controls.itemScroll, controls.terminal, false, thumbtackIcon);
     const iconCanvas = createTerminalIconCanvas(controls.itemScroll);
@@ -625,6 +627,11 @@ export function createResourceTerminal(
         historyView.render(state, locale);
         pinDetails.render(state, locale, state.route.gridKey, item?.itemKey ?? null);
         controls.order.hidden = !item?.craftable || !item.itemKey;
+        keepStocked.hidden = controls.order.hidden;
+        if (item?.craftable && item.itemKey && state.route.gridKey) {
+            keepStocked.href = standingOrdersHref(state.route.gridKey, { order: null, itemKey: item.itemKey });
+            keepStocked.textContent = locale.common('keepStockedAction');
+        }
         if (!item) {
             detailsInput = undefined;
             details.replaceChildren(element('p', locale.common('selectItem')));

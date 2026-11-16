@@ -83,8 +83,7 @@ public class AE2JobTracker {
             List<CraftingRequester> updated = new ArrayList<>(requesters);
             for (int i = 0; i < updated.size(); i++) {
                 CraftingRequester existing = updated.get(i);
-                if (existing.source() == requester.source()
-                    && (existing.player() == null || existing.player().uuid.equals(requester.player().uuid))) {
+                if (existing.isSameRequester(requester)) {
                     updated.set(i, requester);
                     requesters = Collections.unmodifiableList(updated);
                     return;

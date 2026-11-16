@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
@@ -320,6 +321,105 @@ class ConfigFileTest {
             contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")
                 .getBytes(UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
+    }
+
+    @Test
+    void standingOrderDefaultsAreWrittenWithDescriptions() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
+
+        assertEquals(true, document.get("standing_orders.enabled"));
+        assertEquals(true, document.get("standing_orders.allow_players"));
+        assertEquals(1, (Integer) document.get("standing_orders.max_calculations_in_flight_per_grid"));
+        assertEquals(128, (Integer) document.get("standing_orders.max_orders_per_grid"));
+        assertEquals(1, (Integer) document.get("standing_orders.tick_budget_millis"));
+        assertEquals(60, (Integer) document.get("standing_orders.long_running_job_minutes"));
+        assertEquals(10, (Integer) document.get("standing_orders.max_calculation_minutes"));
+        for (String key : new String[] { "enabled", "allow_players", "max_calculations_in_flight_per_grid",
+            "max_orders_per_grid", "tick_budget_millis", "long_running_job_minutes", "max_calculation_minutes" }) {
+            String comment = document.getComment("standing_orders." + key);
+            assertTrue(
+                comment != null && !comment.trim()
+                    .isEmpty(),
+                key);
+        }
+        assertEquals(1, Config.INSTANCE.standingOrders.tickBudgetMillis);
+        assertEquals(60, Config.INSTANCE.standingOrders.longRunningJobMinutes);
+        assertEquals(10, Config.INSTANCE.standingOrders.maxCalculationMinutes);
+    }
+
+    @Test
+    void standingOrderSettingsRoundTripThroughReload() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
+        document.set("standing_orders.enabled", false);
+        document.set("standing_orders.allow_players", false);
+        document.set("standing_orders.max_calculations_in_flight_per_grid", 3);
+        document.set("standing_orders.max_orders_per_grid", 16);
+        document.set("standing_orders.tick_budget_millis", 5);
+        document.set("standing_orders.long_running_job_minutes", 10);
+        document.set("standing_orders.max_calculation_minutes", 30);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(UTF_8));
+
+        Config.reload();
+
+        ConfigSettings.StandingOrders loaded = Config.INSTANCE.standingOrders;
+        assertFalse(loaded.enabled);
+        assertFalse(loaded.allowPlayers);
+        assertEquals(3, loaded.maxCalculationsInFlightPerGrid);
+        assertEquals(16, loaded.maxOrdersPerGrid);
+        assertEquals(5, loaded.tickBudgetMillis);
+        assertEquals(10, loaded.longRunningJobMinutes);
+        assertEquals(30, loaded.maxCalculationMinutes);
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
+        assertEquals(false, restored.get("standing_orders.enabled"));
+        assertEquals(16, (Integer) restored.get("standing_orders.max_orders_per_grid"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "max_calculations_in_flight_per_grid,0", "max_calculations_in_flight_per_grid,-1",
+        "max_orders_per_grid,0", "max_orders_per_grid,-1", "tick_budget_millis,0", "tick_budget_millis,51",
+        "long_running_job_minutes,0", "long_running_job_minutes,-5", "max_calculation_minutes,0",
+        "max_calculation_minutes,-1", "max_calculation_minutes,1441" })
+    void invalidStandingOrderLimitsAreRejectedWithoutReplacingActiveConfig(String key, int value) throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
+        ConfigSettings active = Config.INSTANCE;
+        document.set("standing_orders." + key, value);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(UTF_8));
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, Config::reload);
+
+        assertTrue(
+            failure.getMessage()
+                .contains("standing_orders." + key),
+            failure.getMessage());
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
+    void tickBudgetMayEqualOneServerTick() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), UTF_8));
+        document.set("standing_orders.tick_budget_millis", 50);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(UTF_8));
+
+        Config.reload();
+
+        assertEquals(50, Config.INSTANCE.standingOrders.tickBudgetMillis);
     }
 
     @Test

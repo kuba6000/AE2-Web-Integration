@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -68,6 +69,12 @@ public final class InputValues {
         if (value == null || !value.isJsonObject())
             throw new IllegalArgumentException("Missing or invalid JSON object: " + name);
         return value.getAsJsonObject();
+    }
+
+    public static JsonArray array(@Nullable JsonElement value, String name) {
+        if (value == null || !value.isJsonArray())
+            throw new IllegalArgumentException("Missing or invalid JSON array: " + name);
+        return value.getAsJsonArray();
     }
 
     private static JsonPrimitive scalar(@Nullable JsonElement value, String name) {

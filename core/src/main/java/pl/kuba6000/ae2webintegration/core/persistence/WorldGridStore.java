@@ -106,6 +106,7 @@ public final class WorldGridStore {
                     value.setName(rows.getString("name"));
                     value.setTracked(rows.getBoolean("crafting_tracked"));
                     value.setTrackMachineCrafting(rows.getBoolean("machine_crafting_tracked"));
+                    value.setStandingOrdersEnabled(rows.getBoolean("standing_orders_enabled"));
                     value.setStorageTracked(rows.getBoolean("stock_tracked"));
                     value.setFlowTracked(rows.getBoolean("flow_tracked"));
                     value.setStockSampleIntervalSeconds(rows.getInt("stock_seconds"));
@@ -196,9 +197,9 @@ public final class WorldGridStore {
             INSERT INTO grids (
                 grid_key, row_count, deleted_until, first_observed, retention_days,
                 name, crafting_tracked, stock_tracked, flow_tracked, stock_seconds, flow_seconds,
-                machine_crafting_tracked, crafting_retention_days
+                machine_crafting_tracked, crafting_retention_days, standing_orders_enabled
             )
-            VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(grid_key) DO NOTHING
             """)) {
             update.setString(1, key.toString());
@@ -213,13 +214,15 @@ public final class WorldGridStore {
             update.setInt(10, settings.getFlowFlushIntervalSeconds());
             update.setBoolean(11, settings.isTrackMachineCrafting());
             update.setInt(12, settings.getCraftingHistoryRetentionDays());
+            update.setBoolean(13, settings.isStandingOrdersEnabled());
             update.executeUpdate();
         }
         try (PreparedStatement update = db.prepareStatement(
             """
                 UPDATE grids
                 SET name = ?, crafting_tracked = ?, stock_tracked = ?, flow_tracked = ?,
-                    stock_seconds = ?, flow_seconds = ?, retention_days = ?, machine_crafting_tracked = ?, crafting_retention_days = ?
+                    stock_seconds = ?, flow_seconds = ?, retention_days = ?, machine_crafting_tracked = ?, crafting_retention_days = ?,
+                    standing_orders_enabled = ?
                 WHERE grid_key = ?
                 """)) {
             update.setString(1, settings.getName());
@@ -231,7 +234,8 @@ public final class WorldGridStore {
             update.setInt(7, settings.getHistoryRetentionDays());
             update.setBoolean(8, settings.isTrackMachineCrafting());
             update.setInt(9, settings.getCraftingHistoryRetentionDays());
-            update.setString(10, key.toString());
+            update.setBoolean(10, settings.isStandingOrdersEnabled());
+            update.setString(11, key.toString());
             update.executeUpdate();
         }
         try (PreparedStatement query = db.prepareStatement("SELECT id FROM grids WHERE grid_key = ?")) {

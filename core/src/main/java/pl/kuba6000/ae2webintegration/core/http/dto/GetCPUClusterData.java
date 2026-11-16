@@ -69,7 +69,10 @@ public class GetCPUClusterData {
      * @example 10000
      */
     public final long timeElapsed;
-    /** Player, automation and web requesters of the tracked job, in submission order; empty when unavailable. */
+    /**
+     * Player, automation, web and standing order requesters of the tracked job, in submission order; empty when
+     * unavailable.
+     */
     public final @NotNull List<CraftingRequester> requesters;
     /** Native requester name for a busy CPU without tracked requesters; null when unavailable. */
     public final @Nullable String nativeRequesterName;

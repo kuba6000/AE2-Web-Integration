@@ -41,6 +41,7 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
@@ -227,8 +228,8 @@ class DiscordNotificationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "true, 0", "true, 1", "true, 2", "true, 3", "true, 4", "false, 0", "false, 1", "false, 2", "false, 3",
-        "false, 4" })
+    @CsvSource({ "true, 0", "true, 1", "true, 2", "true, 3", "true, 4", "true, 5", "false, 0", "false, 1", "false, 2",
+        "false, 3", "false, 4", "false, 5" })
     void bothDestinationsPresentTheKnownRequestersWithoutGuessingUnknownOnes(boolean discord, int count)
         throws Exception {
         Config.INSTANCE.discord.craftingStyle = CraftingStyle.SIMPLE;
@@ -239,6 +240,7 @@ class DiscordNotificationTest {
         if (count >= 2) requesters.add(CraftingRequester.player(new PlayerIdentity(new UUID(0, 2), "Bob")));
         if (count >= 3) requesters.add(CraftingRequester.automation());
         if (count >= 4) requesters.add(CraftingRequester.web());
+        if (count >= 5) requesters.add(CraftingRequester.standingOrder(StableKey.random(), "Keep plastic"));
         CraftingMessage base = crafting("Powered Rail", false);
         CraftingMessage message = new CraftingMessage(
             base.gridName(),
@@ -266,6 +268,7 @@ class DiscordNotificationTest {
         assertFalse(text.contains("Admin"), text);
         assertEquals(count >= 3, text.contains("Automation"), text);
         assertEquals(count >= 4, text.contains("Web"), text);
+        assertEquals(count >= 5, text.contains("Standing order: Keep plastic"), text);
     }
 
     @Test

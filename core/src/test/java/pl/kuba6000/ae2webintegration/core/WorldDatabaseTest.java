@@ -330,7 +330,7 @@ class WorldDatabaseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 1, 2, 3, 4, 5, 6, 7, 8, 999 })
+    @ValueSource(ints = { 1, 2, 3, 4, 5, 6, 7, 8, 12, 999 })
     void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
@@ -359,7 +359,7 @@ class WorldDatabaseTest {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 10");
+            statement.executeUpdate("UPDATE world_schema SET version = 11");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
@@ -436,6 +436,9 @@ class WorldDatabaseTest {
             assertFalse(
                 data.getSettings()
                     .isTrackMachineCrafting());
+            assertTrue(
+                data.getSettings()
+                    .isStandingOrdersEnabled());
             assertTrue(
                 data.getSettings()
                     .isTracked());

@@ -1,6 +1,7 @@
 import type { ThemeState, ThemeApplication } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { element } from './dom.js';
+import { requesterLabel } from '../../app/requesters.js';
 import type { CpuOutcome } from '../../app/cpus.js';
 import type { CpuSelectionMode } from '../../app/api-types.js';
 import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js';
@@ -14,13 +15,7 @@ export function cpuRequesterText(
     if (!cpu.isBusy) return '';
     const t = locale.common;
     const names = cpu.requesters.length
-        ? cpu.requesters
-              .map((requester) =>
-                  requester.source === 'PLAYER'
-                      ? requester.player.name
-                      : t(requester.source === 'WEB' ? 'craftingRequesterWeb' : 'craftingRequesterAutomation')
-              )
-              .join(', ')
+        ? cpu.requesters.map((requester) => requesterLabel(requester, t)).join(', ')
         : cpu.nativeRequesterName === 'AE2CONTROLLER'
           ? t('craftingRequesterWeb')
           : cpu.nativeRequesterName;

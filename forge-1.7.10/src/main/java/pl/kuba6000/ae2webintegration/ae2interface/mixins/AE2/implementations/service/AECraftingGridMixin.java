@@ -34,6 +34,11 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
+    default boolean web$canEmitFor(IAEKey key) {
+        return ((ICraftingGrid) (Object) this).canEmitFor((IAEStack<?>) (Object) key);
+    }
+
+    @Override
     default int web$getCPUCount() {
         return ((ICraftingGrid) (Object) this).getCpus()
             .size();

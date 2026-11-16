@@ -26,7 +26,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
  * @param timeStarted    crafting start in Unix epoch milliseconds
  * @param timeDone       crafting completion or cancellation in Unix epoch milliseconds
  * @param wasCancelled   whether the crafting work was cancelled
- * @param requesters     player, automation and web requesters, in submission order; empty when unavailable
+ * @param requesters     player, automation, web and standing order requesters, in submission order; empty when
+ *                       unavailable
  * @param items          per-resource crafting measurements
  * @param interfaceShare processing measurements grouped by pattern provider name
  * @example timeStarted 1700000000000

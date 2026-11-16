@@ -1,4 +1,5 @@
 import { registryId } from '../../app/resource-helpers.js';
+import { requesterLabel } from '../../app/requesters.js';
 import type { HistoryEntry } from '../../app/api-types.js';
 import type { ThemeState as TerminalState, ThemeApplication as Terminal, ThemeSettings } from '../../app/theme-api.js';
 import type { Translator as Locale } from '../../app/i18n.js';
@@ -243,20 +244,7 @@ export function createHistoryView(
                 const pair = element('div');
                 pair.append(
                     element('dt', t('craftingRequestersLabel')),
-                    element(
-                        'dd',
-                        snapshot.requesters
-                            .map((requester) =>
-                                requester.source === 'PLAYER'
-                                    ? requester.player.name
-                                    : t(
-                                          requester.source === 'WEB'
-                                              ? 'craftingRequesterWeb'
-                                              : 'craftingRequesterAutomation'
-                                      )
-                            )
-                            .join(', ')
-                    )
+                    element('dd', snapshot.requesters.map((requester) => requesterLabel(requester, t)).join(', '))
                 );
                 stats.append(pair);
             }

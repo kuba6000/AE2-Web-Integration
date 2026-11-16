@@ -1,7 +1,7 @@
 import type { ApiError } from '../../app/api.js';
 import type { ThemeApplication, ThemeContext, ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
-import { cpuHref, historyHref } from '../../app/router.js';
+import { cpuHref, historyHref, standingOrdersHref } from '../../app/router.js';
 import { networkLabel } from './network.js';
 import { craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
@@ -42,6 +42,7 @@ export function createHeader(
                 <a id="terminal-link" data-view="items" data-text="terminal" hidden></a>
                 <a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a>
                 <a id="history-link" data-view="history" data-text="history" hidden></a>
+                <a id="standing-orders-link" data-view="standing-orders" data-text="standingOrders" hidden></a>
                 <a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a>
                 <a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a>
                 <a href="#/about" data-view="about" data-text="about"></a>
@@ -63,6 +64,7 @@ export function createHeader(
         terminalLink: panel.querySelector<HTMLAnchorElement>('#terminal-link')!,
         cpuLink: panel.querySelector<HTMLAnchorElement>('#cpu-link')!,
         historyLink: panel.querySelector<HTMLAnchorElement>('#history-link')!,
+        standingOrdersLink: panel.querySelector<HTMLAnchorElement>('#standing-orders-link')!,
         settingsLink: panel.querySelector<HTMLAnchorElement>('#settings-link')!,
         updated: panel.querySelector<HTMLSpanElement>('#updated')!
     };
@@ -138,6 +140,8 @@ export function createHeader(
         controls.cpuLink.href = cpuHref(navigationGridKey);
         controls.historyLink.hidden = !navigationGridKey;
         controls.historyLink.href = historyHref(navigationGridKey);
+        controls.standingOrdersLink.hidden = !navigationGridKey;
+        controls.standingOrdersLink.href = standingOrdersHref(navigationGridKey);
         controls.settingsLink.hidden = !navigationGridKey;
         controls.settingsLink.href = `#/grids/${encodeURIComponent(String(navigationGridKey))}/settings`;
     }
@@ -151,12 +155,14 @@ export function createHeader(
             cpuMutations.length > 0 ||
             (craftingVisible && !!state.crafting.mutation) ||
             (state.route.view === 'settings' && state.settings.saving) ||
+            (state.route.view === 'standing-orders' && state.standingOrders.pending) ||
             (state.route.view === 'server-settings' && state.serverSettings.saving);
         const viewLoading =
             (state.route.view === 'cpus' && (state.cpus.reading || state.cpus.status === 'loading')) ||
             (craftingVisible && ['loading', 'calculating'].includes(state.crafting.status)) ||
             (state.route.view === 'history' && (state.history.reading || state.history.status === 'loading')) ||
             (state.route.view === 'settings' && state.settings.status === 'loading') ||
+            (state.route.view === 'standing-orders' && state.standingOrders.status === 'loading') ||
             (state.route.view === 'server-settings' && state.serverSettings.status === 'loading');
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;

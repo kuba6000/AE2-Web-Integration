@@ -36,14 +36,16 @@ uncertain-action guards or form validation; render those from the corresponding 
 
 `application.state` and the value delivered immediately by `application.subscribe(listener)` have the
 same `ThemeState` contract. It includes route, grids, raw resources, selection, preferences,
-capabilities, icon-pack status, refresh status, last update time, crafting, CPUs, home, history and
-network settings. State is borrowed readonly data, not a separately cloned snapshot. Derive new
+capabilities, icon-pack status, refresh status, last update time, crafting, CPUs, home, history,
+standing orders and network settings. State is borrowed readonly data, not a separately cloned snapshot. Derive new
 arrays when presenting it. `subscribe` returns an early-unsubscribe function; host cleanup also removes
 the subscription.
 
 `itemSnapshotRevision` changes when a full terminal snapshot is accepted; SSE deltas leave it unchanged.
 Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
 the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
+`itemsByKey` holds the same resources that have an `itemKey`, by that key, and is kept current with
+`items`, so a lookup does not need a map of its own.
 
 While the selected CPU follows live updates, `cpus.stream` reports the connection and is null otherwise.
 Its `detail` changes on every update, and a busy CPU's elapsed time, time spent crafting, time shares and
@@ -102,6 +104,10 @@ an explicit reload before another save. Render these states visibly; do not retr
 | `pins.addGroup(name)`, `pins.updateGroup(groupKey, update)`                | Create, rename or reorder a Home group                     |
 | `pins.removeGroup(groupKey)`                                             | Move its pins to Ungrouped and remove the group            |
 | `pins.refresh()`                                                         | Refresh the account's pins and Home groups                 |
+| `standingOrders.setEnabled(orderKey, enabled)`, `run(orderKey)`            | Switch an order on or off; ask for an immediate check      |
+| `standingOrders.remove(orderKey)`                                          | Delete an order                                            |
+| `standingOrders.edit(change, resource?)`, `save()`                         | Change the open editor's draft and save it                 |
+| `standingOrders.refresh()`                                                 | Read the network's orders and their status again           |
 
 Actions retain the shared validation, capability checks, pending state and API error handling.
 Render the appropriate state error fields and pending indicators. Automatic polling must not disable
@@ -111,6 +117,35 @@ Navigation uses the application's existing hash routes, for example `#/`,
 `#/grids/<encoded-key>/items` and `#/web-settings`. `Route` and `ThemeView` expose the supported route
 union. URL-encode keys. A theme's declared views affect its navigation; they do not disable server
 authorization or eliminate all background data requests.
+
+### Standing orders
+
+The `standing-orders` view (`#/grids/<encoded-key>/standing-orders`) lists a network's standing orders.
+`#/grids/<key>/standing-orders/new` opens the editor for a new order, `.../new/<itemKey>` prefills the
+"Keep stocked" template for that resource and `.../<orderKey>` edits or repairs an order; `Route` carries
+the open editor as `route.editor`.
+
+`state.standingOrders` holds `orders`, each with a `definition` (or `invalid`, when the stored order cannot
+be read), the engine's latest `status` (null until the order was first evaluated), and the `resources` the
+orders refer to. `serverEnabled`, `gridEnabled` and `canEdit` say whether orders run at all, whether they
+run on this network and whether the current account may change them; hide or disable the controls when
+`canEdit` is false. While `serverEnabled` is false the server refuses creating, running and switching an
+order on, but still accepts edits, switching off and deleting. `checkIntervalSeconds` is the network's
+stock sampling interval, which is how often orders are checked. Status values are described by
+`StandingOrderStatusName`. `status.reason` is a `StandingOrderReason` code explaining the status where the
+status alone does not, with its parameters in `status.resource` and `status.path`; `status.submitError` is
+the crafting system's own message, which is not translated, and `status.missing` lists up to five missing
+ingredients by display name. The common translation key `standingOrderStatusReason_<reason>` describes
+each known code, with the values `resource` (a display name) and `option` (a crafting option name). Status is refreshed with the other views, so it follows the automatic updates preference.
+
+While an editor is open, `state.standingOrders.editor` holds the draft, its field `errors` (message
+keys by field) and a `formError`. Change it only through `standingOrders.edit(change)`; a change that
+chooses a resource also passes that resource's description from `state.items`, which the application
+keeps loaded and live while an editor is open. `editor.draft.rules.locked` is non-null for orders
+whose conditions the flat editor cannot change safely (nested groups, amounts beyond JavaScript's exact
+integers); show `editor.definition` read-only for those and leave their rules alone. `editor.dirty` says
+whether the draft differs from what the editor opened with, for warning before leaving it. Field errors and
+`formError` are common translation keys: translate them with `context.i18n.forLanguage(language).common(key)`.
 
 ### Account pins
 
