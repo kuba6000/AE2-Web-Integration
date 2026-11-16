@@ -128,6 +128,13 @@ test {
     useJUnitPlatform()
     // Archive-boundary fixtures encode padded PNG pages concurrently.
     maxHeapSize = '2g'
+    // The JVM default initial heap is a fraction of physical memory, which parallel forks would each commit.
+    minHeapSize = '128m'
+}
+
+// Test classes run in separate JVMs per fork; wall-clock waits and large fixtures then overlap.
+tasks.withType(Test).configureEach {
+    maxParallelForks = Math.min(8, Runtime.runtime.availableProcessors())
 }
 
 sourceSets {
@@ -177,6 +184,15 @@ pluginManager.withPlugin('idea') {
     }
 }
 
+// Compatibility suites select tests by the tags in CompatibilityTags; an empty selection means a tag typo or lost tags.
+def requireSelectedTests = { Test task ->
+    task.afterSuite { descriptor, result ->
+        if (descriptor.parent == null && result.testCount == 0) {
+            throw new GradleException("${task.name} selected no tests; check its JUnit tag against CompatibilityTags.")
+        }
+    }
+}
+
 // Exercise the real HTTP boundary with the Gson versions supplied by legacy Minecraft.
 ['224': '2.2.4', '280': '2.8.0'].each { suffix, gsonVersion ->
     def legacyRuntime = configurations.create("gson${suffix}TestRuntime") {
@@ -189,43 +205,9 @@ pluginManager.withPlugin('idea') {
         description = "Test HTTP requests and responses with Gson ${gsonVersion}."
         testClassesDirs = sourceSets.test.output.classesDirs
         classpath = sourceSets.test.output + sourceSets.main.output + legacyRuntime
-        useJUnitPlatform()
-        filter {
-            includeTestsMatching '*ApiRoutingHttpTest'
-            includeTestsMatching '*ServerLifecycleHttpTest'
-            includeTestsMatching '*ServerSettingsHttpTest'
-            includeTestsMatching '*GSONUtilsTest'
-            includeTestsMatching '*StableKeyGsonTest'
-            includeTestsMatching '*AuthSessionTest'
-            includeTestsMatching '*SessionStoreTest'
-            includeTestsMatching '*CoreDataTest'
-            includeTestsMatching '*IconDeliveryHttpTest'
-            includeTestsMatching '*RequestCompletionTest'
-            includeTestsMatching '*IconPackTest'
-            includeTestsMatching '*IconPackAnimationTest'
-            includeTestsMatching '*OutputSnapshotTest'
-            includeTestsMatching '*TrackingStatisticsResponseTest'
-            includeTestsMatching '*ItemIdentityRequestTest'
-            includeTestsMatching '*GridIdentityRegistryTest'
-            includeTestsMatching '*GridSettingsLifecycleTest'
-            includeTestsMatching '*WorldDatabaseTest'
-            includeTestsMatching '*ResourcePinStoreTest'
-            includeTestsMatching '*DimensionalCoordsTest'
-            includeTestsMatching '*GridAccessSourceTest'
-            includeTestsMatching '*CraftingPlanRequestLifecycleTest'
-            includeTestsMatching '*AE2JobTrackerLifecycleTest'
-            includeTestsMatching '*CraftingOptionsHttpTest'
-            includeTestsMatching '*CpuPauseHttpTest'
-            includeTestsMatching '*UpdateSkipHttpTest'
-            includeTestsMatching '*SqliteStorageHistoryStoreTest'
-            includeTestsMatching '*TerminalStreamsHttpTest'
-            includeTestsMatching '*CpuLiveStreamsHttpTest'
-            includeTestsMatching '*LiveTerminalHttpTest'
-            includeTestsMatching '*StorageTrackingServiceTest'
-            includeTestsMatching '*CoreEngineTest'
-            includeTestsMatching '*TelemetryTest'
-            includeTestsMatching '*JarProofTest'
-        }
+        // Only tests whose assertions depend on JSON written or parsed by Gson; login and listener lifecycle are covered by the default run.
+        useJUnitPlatform { includeTags 'gson' }
+        requireSelectedTests(it)
         shouldRunAfter tasks.named('test')
     }
     tasks.named('check') { dependsOn compatibilityTest }
@@ -242,17 +224,9 @@ tasks.register('testNightConfig383', Test) {
     description = 'Test configuration and HTTP reload with the NightConfig supplied by NeoForge.'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.output + sourceSets.main.output + modernNightConfigRuntime
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching '*ConfigFileTest'
-        includeTestsMatching '*ConfigDirectoryTest'
-        includeTestsMatching '*CommandProcessorTest'
-        includeTestsMatching '*CommandBootstrapTest'
-        includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
-        includeTestsMatching '*ServerLifecycleHttpTest'
-        includeTestsMatching '*ServerSettingsHttpTest'
-        includeTestsMatching '*IconDeliveryHttpTest'
-    }
+    // Only tests whose behaviour depends on parsing or writing the TOML configuration.
+    useJUnitPlatform { includeTags 'nightconfig' }
+    requireSelectedTests(it)
     shouldRunAfter tasks.named('test')
 }
 tasks.named('check') { dependsOn tasks.named('testNightConfig383') }
@@ -268,29 +242,9 @@ tasks.register('testSqlite336', Test) {
     description = 'Test world persistence and its HTTP/lifecycle consumers with SQLite JDBC 3.36.0.3.'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.output + sourceSets.main.output + sqlite336Runtime
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching '*WorldDatabase*Test'
-        includeTestsMatching '*WorldSchemaBootstrapTest'
-        includeTestsMatching '*WorldSchemaMigrationTest'
-        includeTestsMatching '*GridIdentityRegistryTest'
-        includeTestsMatching '*GridSettingsLifecycleTest'
-        includeTestsMatching '*ResourcePinStoreTest'
-        includeTestsMatching '*ResourcePinGroupsTest'
-        includeTestsMatching '*HistoryMeasurementTest'
-        includeTestsMatching '*LiveDataPolicyTest'
-        includeTestsMatching '*SqliteStorageHistory*Test'
-        includeTestsMatching '*StorageTracking*Test'
-        includeTestsMatching '*StorageCaptureTest'
-        includeTestsMatching '*CraftingHistoryStoreTest'
-        includeTestsMatching '*AE2JobTrackerLifecycleTest'
-        includeTestsMatching '*CoreEngine*Test'
-        includeTestsMatching '*ApiRoutingHttpTest'
-        includeTestsMatching '*ServerLifecycleHttpTest'
-        includeTestsMatching '*TrackingStatisticsResponseTest'
-        includeTestsMatching '*TerminalStreamsHttpTest'
-        includeTestsMatching '*LiveTerminalHttpTest'
-    }
+    // Only tests that read or write the world database; transport and listener lifecycle tests do not depend on the driver.
+    useJUnitPlatform { includeTags 'sqlite' }
+    requireSelectedTests(it)
     shouldRunAfter tasks.named('test')
 }
 tasks.named('check') { dependsOn tasks.named('testSqlite336') }

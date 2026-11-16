@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_CONFLICT;
@@ -28,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -68,6 +71,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryServi
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(SQLITE)
 class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     private StableKey gridKey;
@@ -89,6 +93,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void mergedRequestersUseUuidAndPublishDetachedNamesInSubmissionOrder() {
         EqualCpu cpu = new EqualCpu();
         PlayerIdentity alice = new PlayerIdentity(UUID.randomUUID(), "Alex");
@@ -332,6 +337,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void mergeRetiresLosingPlansAndHistoryWithoutDiscardingTheWinningPlan() throws Exception {
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
         GridAccess.list(TestGridFixtures.ae(grid, other));
@@ -387,6 +393,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     }
 
     @Test
+    @Tag(GSON)
     void rebuiltControllerDoesNotExposePreviousHistoryOrPlansToItsNewOwner() {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());
@@ -462,6 +469,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
+    @Tag(GSON)
     void completedHistorySurvivesRestartWithoutNativeResourceReads(boolean unsupportedIdentity) throws Exception {
         EqualCpu cpu = new EqualCpu();
         OutputSnapshotTest.Resource output = new OutputSnapshotTest.Resource();
@@ -704,6 +712,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
+    @Tag(GSON)
     void historyRetainsEachResourcesProviderGroupsAcrossDeliveriesAndJobTermination(boolean cancelled) {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false, CraftingRequester.automation());

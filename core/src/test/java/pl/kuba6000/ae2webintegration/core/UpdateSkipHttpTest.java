@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.File;
 import java.io.InputStream;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -35,6 +37,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
+@Tag(GSON)
 class UpdateSkipHttpTest {
 
     @TempDir

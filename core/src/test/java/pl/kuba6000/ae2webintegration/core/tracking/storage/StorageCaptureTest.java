@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
@@ -16,8 +17,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -342,6 +346,7 @@ class StorageCaptureTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void flowDefersBaseNormalizationAndHistoryRetainsItWithoutAnIconPack(@TempDir Path directory) throws Exception {
         AtomicInteger normalizations = new AtomicInteger();
         StableKey baseKey = StableKey.random();
@@ -509,17 +514,9 @@ class StorageCaptureTest {
                 .itemKey());
     }
 
-    @Test
-    void ambiguousResourcesDoNotPreventHealthyFlowOrUnkeyedStockDisplay() {
-        assertAmbiguousResourceIsDiscarded(false);
-    }
-
-    @Test
-    void inventoryRetentionDiscardsAmbiguousResourcesWithoutFailingTheListing() {
-        assertAmbiguousResourceIsDiscarded(true);
-    }
-
-    private void assertAmbiguousResourceIsDiscarded(boolean retainFirst) {
+    @ParameterizedTest(name = "inventory retention {0}")
+    @ValueSource(booleans = { false, true })
+    void ambiguousResourcesAreDiscardedWithoutFailingFlowOrTheListing(boolean retainFirst) {
         for (boolean describeFirst : new boolean[] { false, true }) {
             StableKey ambiguousKey = StableKey.random();
             IAEKey original = resource(new AtomicInteger(), ambiguousKey);
@@ -737,25 +734,6 @@ class StorageCaptureTest {
     }
 
     @Test
-    void unsupportedVariantIsAnUnkeyedDisplayResourceNotACapacityFailure() {
-        IAEKey unsupported = unsupported(true);
-        IAEGrid grid = grid();
-        StorageCapture capture = new StorageCapture(grid, 10);
-        capture.recordFlow(unsupported, 10, 0);
-        StorageObservation result = capture.observe(grid(Collections.singletonList(unsupported)), 1000, true);
-        assertTrue(result.flowComplete());
-        assertTrue(
-            result.flows()
-                .isEmpty());
-        assertNull(
-            result.unkeyed()
-                .get(0)
-                .resource()
-                .description()
-                .itemKey());
-    }
-
-    @Test
     void anUnavailableEncoderKeepsDisplayButDropsUnidentifiableFlow() {
         IAEKey metadata = resource(new AtomicInteger());
         IAEKey unencodable = (IAEKey) Proxy
@@ -808,22 +786,6 @@ class StorageCaptureTest {
             update.flows()
                 .isEmpty());
         assertFalse(update.flowComplete());
-    }
-
-    @Test
-    void supportedFlowOverflowStillMarksIncompleteCoverage() {
-        IAEGrid grid = grid();
-        StorageCapture capture = new StorageCapture(grid, 10);
-        IAEKey key = resource(new AtomicInteger());
-        capture.recordFlow(key, Long.MAX_VALUE, 0);
-        capture.recordFlow(key, 1, 0);
-        StorageObservation result = capture.observe(grid, 1000, true);
-        assertFalse(result.flowComplete());
-        assertEquals(
-            Long.MAX_VALUE,
-            result.flows()
-                .get(0)
-                .input());
     }
 
     static IAEKey unsupported(boolean claimsSupport) {

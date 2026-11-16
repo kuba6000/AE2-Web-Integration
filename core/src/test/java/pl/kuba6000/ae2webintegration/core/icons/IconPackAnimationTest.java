@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.icons;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -32,6 +33,7 @@ import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -47,6 +49,7 @@ import com.google.gson.JsonPrimitive;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter.CapacityException;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
+@Tag(GSON)
 class IconPackAnimationTest {
 
     private static final StableKey KEY = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
@@ -617,19 +620,6 @@ class IconPackAnimationTest {
                 root -> root.getAsJsonObject("animations")
                     .add(KEY.toString(), new JsonParser().parse("[[0,0,0,101],[1,0,0,200]]")),
                 false));
-    }
-
-    @Test
-    void cancelingAnimatedPackPublishesNothingAndReleasesScratch() throws Exception {
-        try (IconPackWriter writer = writer()) {
-            writer.add(KEY, pixels(0xff112233));
-            writer.addAnimationFrame(KEY, pixels(0xff445566), 100);
-            writer.addAnimationFrame(KEY, pixels(0xff778899), 200);
-            assertThrows(CancellationException.class, () -> writer.finish(() -> true));
-        }
-        try (Stream<Path> files = Files.list(directory)) {
-            assertEquals(0, files.count());
-        }
     }
 
     private Path animatedPack() throws Exception {

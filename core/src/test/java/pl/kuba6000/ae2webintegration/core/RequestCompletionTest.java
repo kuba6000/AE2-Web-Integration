@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.util.AbstractCollection;
 import java.util.ArrayList;
@@ -19,11 +20,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -35,6 +42,7 @@ import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Logout;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class RequestCompletionTest {
 
     @ParameterizedTest
@@ -176,19 +184,6 @@ class RequestCompletionTest {
         }
     }
 
-    @ParameterizedTest
-    @CsvSource({ "TIMEOUT", "SERVER_STOPPING", "SERVER_BUSY" })
-    void infrastructureFailureRejectsALateDetachedPayload(ApiStatus status) {
-        TestRequest request = new TestRequest();
-        request.failIfPending(status);
-        request.respondDetachedBody(new UnserializableData());
-        assertEquals(
-            status.name(),
-            new Gson().fromJson(request.getJSON(), JsonObject.class)
-                .get("status")
-                .getAsString());
-    }
-
     @Test
     void detachedCompletionWinsAgainstALaterFailure() {
         TestRequest request = new TestRequest();
@@ -247,20 +242,6 @@ class RequestCompletionTest {
         }
     }
 
-    @Test
-    void successCapturesThePayloadBeforeReturningToItsCaller() {
-        TestRequest request = new TestRequest();
-        List<String> data = new ArrayList<>(Collections.singletonList("before"));
-        request.respond(data);
-        data.clear();
-        JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);
-        assertEquals(
-            "before",
-            response.getAsJsonArray("data")
-                .get(0)
-                .getAsString());
-    }
-
     private static final class UnserializableData extends AbstractCollection<String> implements IResponseBody {
 
         @Override
@@ -287,18 +268,6 @@ class RequestCompletionTest {
     }
 
     @Test
-    void completedRequestDoesNotReadALatePayload() {
-        TestRequest request = new TestRequest();
-        request.failIfPending(ApiStatus.SERVER_BUSY);
-        assertDoesNotThrow(() -> request.respond(new UnserializableData()));
-        assertEquals(
-            "SERVER_BUSY",
-            new Gson().fromJson(request.getJSON(), JsonObject.class)
-                .get("status")
-                .getAsString());
-    }
-
-    @Test
     void readingAPendingResponseDoesNotPreventLaterCompletion() {
         TestRequest request = new TestRequest();
         assertEquals(
@@ -314,35 +283,67 @@ class RequestCompletionTest {
                 .getAsString());
     }
 
-    @Test
-    void denialCapturesItsPayloadBeforeReturning() {
+    private static Stream<Arguments> completionsWithAMutableCallerPayload() {
+        return Stream.of(
+            Arguments.of("success", (BiConsumer<TestRequest, Object>) TestRequest::respond, "before", "OK"),
+            Arguments.of("denial", (BiConsumer<TestRequest, Object>) TestRequest::reject, "invalid", "BAD_PARAM"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("completionsWithAMutableCallerPayload")
+    void completionCapturesThePayloadBeforeReturningToItsCaller(String kind, BiConsumer<TestRequest, Object> completion,
+        String payload, String expectedStatus) {
         TestRequest request = new TestRequest();
-        List<String> data = new ArrayList<>(Collections.singletonList("invalid"));
-        request.reject(data);
+        List<String> data = new ArrayList<>(Collections.singletonList(payload));
+        completion.accept(request, data);
         data.clear();
         JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);
         assertEquals(
-            "BAD_PARAM",
+            expectedStatus,
             response.get("status")
                 .getAsString());
         assertEquals(
-            "invalid",
+            payload,
             response.getAsJsonArray("data")
                 .get(0)
                 .getAsString());
     }
 
-    @Test
-    void infrastructureFailureCannotBeOverwrittenByALateHandlerCompletion() {
+    private static Stream<Arguments> lateCompletionsAfterAnInfrastructureFailure() {
+        return Stream.of(
+            Arguments.of(
+                "timeout, detached payload",
+                ApiStatus.TIMEOUT,
+                (Consumer<TestRequest>) request -> request.respondDetachedBody(new UnserializableData())),
+            Arguments.of(
+                "server stopping, detached payload",
+                ApiStatus.SERVER_STOPPING,
+                (Consumer<TestRequest>) request -> request.respondDetachedBody(new UnserializableData())),
+            Arguments.of(
+                "server busy, detached payload",
+                ApiStatus.SERVER_BUSY,
+                (Consumer<TestRequest>) request -> request.respondDetachedBody(new UnserializableData())),
+            Arguments.of(
+                "server busy, handler completion",
+                ApiStatus.SERVER_BUSY,
+                (Consumer<TestRequest>) TestRequest::done),
+            Arguments.of(
+                "server busy, unserializable response",
+                ApiStatus.SERVER_BUSY,
+                (Consumer<TestRequest>) request -> request.respond(new UnserializableData())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("lateCompletionsAfterAnInfrastructureFailure")
+    void infrastructureFailureCannotBeReplacedByALateCompletion(String kind, ApiStatus status,
+        Consumer<TestRequest> lateCompletion) {
         TestRequest request = new TestRequest();
-
-        request.failIfPending(ApiStatus.SERVER_BUSY);
-        request.done();
-
-        JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);
+        request.failIfPending(status);
+        assertDoesNotThrow(() -> lateCompletion.accept(request));
         assertEquals(
-            "SERVER_BUSY",
-            response.get("status")
+            status.name(),
+            new Gson().fromJson(request.getJSON(), JsonObject.class)
+                .get("status")
                 .getAsString());
     }
 

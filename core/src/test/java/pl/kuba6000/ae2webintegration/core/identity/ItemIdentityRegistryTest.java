@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -214,12 +216,13 @@ class ItemIdentityRegistryTest {
         assertEquals(1, normalizations.get());
     }
 
-    @Test
-    void unsupportedBaseIsMemoizedUntilWorldCleanup() {
+    @ParameterizedTest(name = "native normalization throws = {0}")
+    @ValueSource(booleans = { false, true })
+    void unavailableBaseIsOptionalAndMemoizedUntilWorldCleanup(boolean throwsInsteadOfReturningNull) {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         AtomicInteger attempts = new AtomicInteger();
-        Resource resource = new Resource("unsupported", false) {
+        Resource resource = new Resource("unavailable-base", false) {
 
             @Override
             public @NotNull IAEKey web$copyIdentity() {
@@ -229,40 +232,8 @@ class ItemIdentityRegistryTest {
             @Override
             public StableKey web$getBaseKey() {
                 attempts.incrementAndGet();
+                if (throwsInsteadOfReturningNull) throw new IllegalStateException("Native capability cannot normalize");
                 return null;
-            }
-        };
-        StableKey key = registry.remember(grid, resource);
-        assertNotNull(key);
-        ResourceDescriptor description = assertDoesNotThrow(() -> registry.describe(key));
-        assertNotNull(description);
-        assertNull(description.baseKey());
-        assertEquals(key, description.itemKey());
-        assertEquals(resource.name, description.displayName());
-        assertEquals(7, description.damage());
-        assertSame(description, registry.describe(key));
-        assertNull(registry.resolveBaseKey(key));
-        assertEquals(1, attempts.get());
-        registry.clear();
-        registry.remember(grid, resource);
-        assertNull(registry.resolveBaseKey(key));
-        assertEquals(2, attempts.get());
-    }
-
-    @Test
-    void nativeNormalizationFailureIsOptionalAndMemoized() {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        IAEGrid grid = grid();
-        AtomicInteger attempts = new AtomicInteger();
-        Resource resource = new Resource("broken-normalizer", false) {
-
-            public @NotNull IAEKey web$copyIdentity() {
-                return this;
-            }
-
-            public StableKey web$getBaseKey() {
-                attempts.incrementAndGet();
-                throw new IllegalStateException("Native capability cannot normalize");
             }
         };
         StableKey key = registry.remember(grid, resource);
@@ -277,6 +248,10 @@ class ItemIdentityRegistryTest {
         assertNull(registry.resolveBaseKey(key));
         assertSame(resource, registry.resolve(key));
         assertEquals(1, attempts.get());
+        registry.clear();
+        registry.remember(grid, resource);
+        assertNull(registry.resolveBaseKey(key));
+        assertEquals(2, attempts.get());
     }
 
     @Test

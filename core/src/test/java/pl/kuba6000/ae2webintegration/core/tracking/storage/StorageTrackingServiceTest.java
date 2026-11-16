@@ -82,14 +82,14 @@ class StorageTrackingServiceTest {
                         .map(StorageHistoryPoint::kind)
                         .collect(Collectors.toList()));
             }
-            assertTrue(service.submit(grid, 1, observation(item, 4000, 5), true, false, 0L));
+            assertTrue(service.submit(grid, 1, observation(item, 4000, 9), true, false, 0L));
             drain(service);
             StorageHistory recovered = service.history(grid, item, 4000, 100);
             assertTrue(recovered.complete());
             assertTrue(
                 recovered.points()
                     .stream()
-                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 5));
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 9));
             assertTrue(
                 recovered.points()
                     .stream()
@@ -403,39 +403,6 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 2)) {
             service.open(grid, 1);
             assertFalse(service.submit(grid, 1, observation, true, true, 0L));
-        }
-    }
-
-    @Test
-    void coverageLossMarksHistoryIncompleteUntilAFullObservation() throws Exception {
-        StableKey grid = StableKey.random();
-        StableKey item = StableKey.random();
-        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
-            service.open(grid, 1);
-            service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L);
-            drain(service);
-            service.invalidate(grid, 1);
-            assertTrue(
-                service.submit(
-                    grid,
-                    1,
-                    StorageObservationFixtures
-                        .observation(1500, false, true, Collections.emptyList(), Collections.emptyList()),
-                    true,
-                    false,
-                    0L));
-            drain(service);
-            assertFalse(
-                service.history(grid, item, 1500, 100)
-                    .complete());
-            service.submit(grid, 1, observation(item, 2000, 9), true, false, 0L);
-            drain(service);
-            StorageHistory recovered = service.history(grid, item, 2000, 100);
-            assertTrue(recovered.complete());
-            assertTrue(
-                recovered.points()
-                    .stream()
-                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 9));
         }
     }
 

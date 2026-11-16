@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.File;
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class CoreDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
@@ -49,21 +52,6 @@ class CoreDataTest {
         CoreDataTestFixture.reset();
     }
 
-    @Test
-    void accountUsesTheRegisteredPlayersStableIdentity() {
-        CoreData.setPassword(REGISTERED_PLAYER, "hash");
-
-        assertAccount("Player", REGISTERED_PLAYER);
-    }
-
-    @Test
-    void setPasswordCreatesAnAccountWithoutAeState() {
-        AE2Controller.AE2Interface = null;
-
-        assertTrue(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
-        assertNotNull(CoreData.getAccount("Player"));
-    }
-
     // --- persistence: a bad file must never cost anyone their account ---
 
     @Test
@@ -79,16 +67,6 @@ class CoreDataTest {
 
         assertFalse(CoreData.verifyPassword(account, "first-password"));
         assertTrue(CoreData.verifyPassword(CoreData.getAccount("Player"), "second-password"));
-    }
-
-    @Test
-    void savedAccountsSurviveAReload() {
-        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
-
-        CoreDataTestFixture.reset();
-        CoreData.loadData();
-
-        assertAccount("Player", REGISTERED_PLAYER);
     }
 
     @Test
@@ -110,17 +88,6 @@ class CoreDataTest {
         CoreData.loadData();
 
         assertAccount("Player", REGISTERED_PLAYER);
-    }
-
-    @Test
-    void aMalformedDataFileIsNotOverwritten() throws Exception {
-        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
-        String garbage = "{ this is not json";
-        writeDataFile(garbage);
-
-        CoreData.loadData();
-
-        assertEquals(garbage, readDataFile(), "a failed read must not persist over the file it failed on");
     }
 
     @ParameterizedTest

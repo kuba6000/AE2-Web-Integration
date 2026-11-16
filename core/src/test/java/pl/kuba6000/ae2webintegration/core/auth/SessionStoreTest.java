@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.auth;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +22,7 @@ import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 
+@Tag(GSON)
 class SessionStoreTest {
 
     @TempDir

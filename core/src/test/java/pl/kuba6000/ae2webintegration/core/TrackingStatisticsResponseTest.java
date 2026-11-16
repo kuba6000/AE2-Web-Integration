@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
@@ -13,6 +14,7 @@ import java.util.Collections;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -36,6 +38,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class TrackingStatisticsResponseTest extends GridTestScope {
 
     private static final StableKey GRID = TestGridFixtures.key(990_581L);

@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.reflect.Type;
@@ -11,6 +12,7 @@ import java.util.Collections;
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
@@ -21,6 +23,7 @@ import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
+@Tag(GSON)
 class StableKeyGsonTest {
 
     private static final String TOKEN = "AAAAAAAAAAAAAAAAAAAAAA";

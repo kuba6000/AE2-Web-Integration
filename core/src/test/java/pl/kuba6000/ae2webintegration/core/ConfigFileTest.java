@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
 import static pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Discord.CraftingStyle.IMAGE_CARD;
 
 import java.io.UncheckedIOException;
@@ -11,6 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 
+@Tag(NIGHT_CONFIG)
 class ConfigFileTest {
 
     @Test

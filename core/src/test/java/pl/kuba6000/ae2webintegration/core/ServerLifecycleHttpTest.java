@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.BufferedReader;
@@ -62,6 +63,7 @@ import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -396,6 +398,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @Tag(NIGHT_CONFIG)
     void credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword() throws Exception {
         startApi();
         String token = login();
@@ -654,20 +657,6 @@ class ServerLifecycleHttpTest {
         Response confirmation = get("/" + location, null);
         assertEquals(HTTP_OK, confirmation.status());
         assertEquals(pageResource("/assets/login.html"), confirmation.body());
-    }
-
-    @Test
-    void defaultUiRequiresAuthenticationAndIgnoresObsoleteSelectors() throws Exception {
-        startApi();
-        String token = login();
-        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
-            Response loginPage = get(path, null);
-            assertEquals(HTTP_OK, loginPage.status());
-            assertEquals(pageResource("/assets/login.html"), loginPage.body());
-            Response page = get(path, token);
-            assertEquals(HTTP_OK, page.status());
-            assertEquals(pageResource("/assets/web/index.html"), page.body());
-        }
     }
 
     @Test
@@ -934,10 +923,10 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
+    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisionsAndIgnoreObsoleteSelectors() throws Exception {
         startApi();
         String token = login();
-        for (String path : new String[] { "/", "/index.html" }) {
+        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
             HttpURLConnection anonymous = connection(path, null);
             assertEquals(pageResource("/assets/login.html"), read(anonymous).body());
             assertEquals("no-store", anonymous.getHeaderField("Cache-Control"));
@@ -1038,6 +1027,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @Tag(NIGHT_CONFIG)
     void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
         startApi();
         String token = login();
@@ -1325,22 +1315,6 @@ class ServerLifecycleHttpTest {
 
         assertEquals(HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", responseStatus(exchange));
-        assertEquals(32, AE2Controller.requests.size());
-    }
-
-    @Test
-    void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
-        worlds.initialize(new File(tempDirectory, "test-save"));
-        startHttpServer();
-        String token = login();
-        fillServerThreadQueue();
-
-        Response response = get("/api/grids", token);
-
-        assertEquals(HTTP_UNAVAILABLE, response.status());
-        assertTrue(
-            response.body()
-                .contains("\"status\":\"SERVER_BUSY\""));
         assertEquals(32, AE2Controller.requests.size());
     }
 
@@ -1933,6 +1907,7 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(busy.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
+        assertEquals(32, AE2Controller.requests.size(), "the refused request must not be enqueued");
         CoreEngine.onServerTick();
         GRID_IDENTITIES.clear();
         Response failed = performSyncedRequest(() -> get("/api/grids", token));

@@ -1,16 +1,22 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
@@ -28,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandBootstrap} command tree definition. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(NIGHT_CONFIG)
 class CommandBootstrapTest {
 
     private ConfigTestFixture config;
@@ -104,34 +111,30 @@ class CommandBootstrapTest {
         }
     }
 
-    @Test
-    void testAuthHandlerWithoutArgs() {
-        RecordingBuilder builder = new RecordingBuilder();
-        CommandBootstrap.init(builder);
-
-        RecordingContext ctx = new RecordingContext();
-        ctx.args = new String[0];
-        ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
-
-        builder.authHandler.accept(ctx);
-
-        // Should show usage when no token arg provided
-        assertNotNull(ctx.lastError, "should have sent error for missing args");
+    private static Stream<Arguments> unusableAuthInvocations() {
+        return Stream.of(
+            // Should show usage when no token arg provided.
+            Arguments.of(
+                "a player without a token argument",
+                new String[0],
+                new PlayerIdentity(UUID.randomUUID(), "Player")),
+            // Console = no player identity, so the command must reject non-player usage.
+            Arguments.of("a console sender", new String[] { "auth", "token" }, null));
     }
 
-    @Test
-    void testAuthHandlerConsoleSender() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unusableAuthInvocations")
+    void anUnusableAuthInvocationIsAnsweredWithAnError(String description, String[] args, PlayerIdentity player) {
         RecordingBuilder builder = new RecordingBuilder();
         CommandBootstrap.init(builder);
 
         RecordingContext ctx = new RecordingContext();
-        ctx.args = new String[] { "auth", "token" };
-        ctx.playerIdentity = null; // Console = no player identity
+        ctx.args = args;
+        ctx.playerIdentity = player;
 
         builder.authHandler.accept(ctx);
 
-        // Should reject non-player usage
-        assertNotNull(ctx.lastError, "should have sent error for console sender");
+        assertNotNull(ctx.lastError, "should have sent an error");
     }
 
     @Test

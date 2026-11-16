@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
@@ -18,13 +19,17 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.Gson;
@@ -48,6 +53,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
+@Tag(GSON)
 class CraftingOptionsHttpTest extends GridTestScope {
 
     private HttpServer server;
@@ -165,14 +171,6 @@ class CraftingOptionsHttpTest extends GridTestScope {
         assertFalse(
             createAndPoll(",\"autoStart\":false").get("autoStart")
                 .getAsBoolean());
-        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
-            request(
-                "POST",
-                base,
-                "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"autoStart\":" + invalid + "}",
-                400,
-                "BAD_PARAM");
-        }
         assertEquals(0, grid.submissions);
     }
 
@@ -198,25 +196,39 @@ class CraftingOptionsHttpTest extends GridTestScope {
                 .getAsBoolean());
     }
 
-    @Test
-    void unsupportedLightModeIsRejectedWhileExplicitlyOffRemainsUsable() throws Exception {
-        request("POST", base, "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"lightMode\":true}", 400, "BAD_PARAM");
-        assertFalse(
-            createAndPoll(",\"lightMode\":false").get("isSimulating")
-                .getAsBoolean());
-    }
-
-    @Test
-    void unsupportedIgnoreMissingIsRejectedWhileExplicitlyOffRemainsUsable() throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "lightMode", "ignoreMissing" })
+    void anUnsupportedOptionIsRejectedWhileExplicitlyOffRemainsUsable(String option) throws Exception {
         request(
             "POST",
             base,
-            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"ignoreMissing\":true}",
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"" + option + "\":true}",
             400,
             "BAD_PARAM");
         assertFalse(
-            createAndPoll(",\"ignoreMissing\":false").get("isSimulating")
+            createAndPoll(",\"" + option + "\":false").get("isSimulating")
                 .getAsBoolean());
+    }
+
+    private static Stream<Arguments> invalidBooleanOptions() {
+        return Stream.of("lightMode", "ignoreMissing", "autoStart")
+            .flatMap(
+                option -> Stream.of("null", "1", "\"true\"", "{}")
+                    .map(invalid -> Arguments.of(option, invalid)));
+    }
+
+    @ParameterizedTest(name = "{0} = {1}")
+    @MethodSource("invalidBooleanOptions")
+    void aSuppliedBooleanOptionMustBeABoolean(String option, String invalid) throws Exception {
+        supportsLightMode = option.equals("lightMode");
+        supportsIgnoreMissing = option.equals("ignoreMissing");
+        request(
+            "POST",
+            base,
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"" + option + "\":" + invalid + "}",
+            400,
+            "BAD_PARAM");
+        assertEquals(0, grid.submissions);
     }
 
     @Test
@@ -272,7 +284,7 @@ class CraftingOptionsHttpTest extends GridTestScope {
     }
 
     @Test
-    void ignoreMissingDoesNotEnableAnUnsupportedLightCalculatorAndRequiresBooleanInput() throws Exception {
+    void ignoreMissingDoesNotEnableAnUnsupportedLightCalculator() throws Exception {
         supportsIgnoreMissing = true;
         assertFalse(
             createAndPoll(",\"ignoreMissing\":true").get("isSimulating")
@@ -283,14 +295,6 @@ class CraftingOptionsHttpTest extends GridTestScope {
             "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"lightMode\":true,\"ignoreMissing\":true}",
             400,
             "BAD_PARAM");
-        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
-            request(
-                "POST",
-                base,
-                "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"ignoreMissing\":" + invalid + "}",
-                400,
-                "BAD_PARAM");
-        }
     }
 
     @Test
@@ -308,19 +312,6 @@ class CraftingOptionsHttpTest extends GridTestScope {
                 .getAsInt();
         request("POST", planPath + "/submit", "{}", 409, "FAIL");
         request("GET", planPath, null, 200, "OK");
-    }
-
-    @Test
-    void lightModeRequiresABooleanWhenSupplied() throws Exception {
-        supportsLightMode = true;
-        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
-            request(
-                "POST",
-                base,
-                "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"lightMode\":" + invalid + "}",
-                400,
-                "BAD_PARAM");
-        }
     }
 
     private JsonObject createAndPoll(String options) throws Exception {

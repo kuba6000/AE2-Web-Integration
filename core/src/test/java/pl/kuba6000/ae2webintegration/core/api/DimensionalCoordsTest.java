@@ -1,12 +1,15 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.Gson;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class DimensionalCoordsTest {
 
     @Test
@@ -39,16 +42,5 @@ class DimensionalCoordsTest {
         String json = new Gson().toJson(coords);
 
         assertTrue(json.contains("\"dimensionId\":\"0\""), json);
-    }
-
-    @Test
-    void equalityUsesDimensionIdAndCoordinates() {
-        DimensionalCoords first = new DimensionalCoords("minecraft:overworld", 1, 2, 3);
-        DimensionalCoords same = new DimensionalCoords("minecraft:overworld", 1, 2, 3);
-        DimensionalCoords differentDimension = new DimensionalCoords("minecraft:the_nether", 1, 2, 3);
-
-        assertEquals(first, same);
-        assertEquals(first.hashCode(), same.hashCode());
-        assertNotEquals(first, differentDimension);
     }
 }

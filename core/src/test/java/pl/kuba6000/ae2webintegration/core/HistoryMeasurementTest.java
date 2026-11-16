@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
 
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -22,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 
+@Tag(SQLITE)
 class HistoryMeasurementTest extends GridTestScope {
 
     @Test
