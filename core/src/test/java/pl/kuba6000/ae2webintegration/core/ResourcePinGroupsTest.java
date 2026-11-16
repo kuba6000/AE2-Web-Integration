@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -22,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Direction;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
+@Tag(SQLITE)
 class ResourcePinGroupsTest extends GridTestScope {
 
     @Test

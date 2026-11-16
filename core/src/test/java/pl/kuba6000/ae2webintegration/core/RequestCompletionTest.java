@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.util.AbstractCollection;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -40,6 +42,7 @@ import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Logout;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(GSON)
 class RequestCompletionTest {
 
     @ParameterizedTest

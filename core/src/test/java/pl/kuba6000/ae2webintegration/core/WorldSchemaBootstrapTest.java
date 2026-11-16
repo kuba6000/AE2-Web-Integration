@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,6 +21,7 @@ import org.sqlite.JDBC;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
+@Tag(SQLITE)
 class WorldSchemaBootstrapTest {
 
     @TempDir

@@ -1,13 +1,16 @@
 package pl.kuba6000.ae2webintegration.core.notification;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordPayload;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyPayload;
 
+@Tag(GSON)
 class NotificationPayloadTest {
 
     @Test

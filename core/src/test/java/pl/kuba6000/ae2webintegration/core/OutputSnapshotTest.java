@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
@@ -19,6 +20,7 @@ import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,6 +53,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
+@Tag(GSON)
 class OutputSnapshotTest extends GridTestScope {
 
     @BeforeEach

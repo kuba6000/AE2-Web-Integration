@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,6 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,6 +30,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
+@Tag(SQLITE)
 class SqliteStorageHistoryConcurrencyTest {
 
     @TempDir

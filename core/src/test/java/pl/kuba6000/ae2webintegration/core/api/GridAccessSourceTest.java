@@ -1,10 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.util.UUID;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.Gson;
@@ -13,6 +15,7 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture coordinates.
+@Tag(GSON)
 class GridAccessSourceTest {
 
     private final UUID anna = UUID.fromString("00000000-0000-0000-0000-000000000001");

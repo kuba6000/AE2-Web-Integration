@@ -12,6 +12,8 @@ import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeoutException;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -61,6 +64,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHist
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
+@Tag(GSON)
 class ApiRoutingHttpTest extends GridTestScope {
 
     private HttpServer server;
@@ -121,6 +125,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void settingsExposeActiveServerBoundsAndRejectWholeInvalidUpdates() throws Exception {
         ConfigSettings previous = Config.INSTANCE;
         try {
@@ -558,6 +563,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void craftingRetentionIsIndependentDurableAndValidatesBeforeMutation() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);
@@ -627,6 +633,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void machineCraftingSettingIsOptionalValidatedAndDurableWithoutMasterTracking() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);
@@ -691,6 +698,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void storageHistorySettingIsIndependentAndPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);
@@ -730,6 +738,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void flowAndStockSettingsPersistIndependentlyAndInvalidIntervalsDoNotPartiallyApply() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);
@@ -862,6 +871,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    @Tag(SQLITE)
     void failedNameSaveReturnsErrorAndRetryAfterRestartPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);

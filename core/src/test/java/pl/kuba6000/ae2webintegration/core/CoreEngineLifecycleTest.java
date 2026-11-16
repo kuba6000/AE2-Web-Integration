@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.File;
@@ -15,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
@@ -37,6 +39,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
+@Tag(SQLITE)
 class CoreEngineLifecycleTest extends GridTestScope {
 
     @Test

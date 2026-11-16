@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.SQLITE;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind.FLOW_OBSERVATION;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,6 +42,7 @@ class StorageTrackingRecoveryTest {
     Path directory;
 
     @Test
+    @Tag(SQLITE)
     void sameGenerationStockRecoveryRestoresKnownAmountsAndFencesAnUncertainNewResource() throws Exception {
         StableKey grid = StableKey.random();
         StableKey unchanged = StableKey.random();
@@ -78,6 +81,7 @@ class StorageTrackingRecoveryTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void flowOnlyRecoveryNeverReplaysUncertainTrafficAndKeepsTheNextStockBaselinePending() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
@@ -235,6 +239,7 @@ class StorageTrackingRecoveryTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void recoveryRestatesAKnownZeroEvenWhenItsRecipeDisappearsAfterAnUncertainPositiveWrite() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
@@ -257,6 +262,7 @@ class StorageTrackingRecoveryTest {
     }
 
     @Test
+    @Tag(SQLITE)
     void recoveringTheDatabaseDoesNotCertifyIncompleteNativeStockOrFlow() throws Exception {
         StableKey grid = StableKey.random();
         StableKey healthy = StableKey.random();

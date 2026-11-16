@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
 import static pl.kuba6000.ae2webintegration.core.CoreEngine.GRID_IDENTITIES;
 
 import java.io.BufferedReader;
@@ -62,6 +63,7 @@ import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -396,6 +398,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @Tag(NIGHT_CONFIG)
     void credentialChangesRevokeLiveSessionsAndCannotBeUndoneByRestoringThePassword() throws Exception {
         startApi();
         String token = login();
@@ -1024,6 +1027,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @Tag(NIGHT_CONFIG)
     void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
         startApi();
         String token = login();

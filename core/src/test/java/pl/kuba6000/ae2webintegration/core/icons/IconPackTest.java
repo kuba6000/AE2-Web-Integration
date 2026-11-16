@@ -4,6 +4,7 @@ import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -36,6 +37,7 @@ import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -49,6 +51,7 @@ import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
+@Tag(GSON)
 class IconPackTest {
 
     @TempDir

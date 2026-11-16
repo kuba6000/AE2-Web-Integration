@@ -5,6 +5,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -35,6 +36,7 @@ import javax.net.ssl.TrustManagerFactory;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -49,6 +51,7 @@ import com.sun.net.httpserver.HttpsServer;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 
+@Tag(GSON)
 class TelemetryTest {
 
     @TempDir

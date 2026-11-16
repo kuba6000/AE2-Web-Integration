@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.TestGridFixtures.OWNER_ID;
 import static pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState.CONTROLLER_ONLINE;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
@@ -24,6 +25,7 @@ import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -51,6 +53,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
+@Tag(GSON)
 class CraftingOptionsHttpTest extends GridTestScope {
 
     private HttpServer server;

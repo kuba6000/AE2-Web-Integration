@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.GSON;
 import static pl.kuba6000.ae2webintegration.core.utils.GSONUtils.GSON_BUILDER;
 
 import java.lang.annotation.ElementType;
@@ -18,6 +19,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.json.JsonProjection;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
+@Tag(GSON)
 class GSONUtilsTest {
 
     @Retention(RetentionPolicy.RUNTIME)

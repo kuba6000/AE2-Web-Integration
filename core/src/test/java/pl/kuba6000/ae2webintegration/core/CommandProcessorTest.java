@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.CompatibilityTags.NIGHT_CONFIG;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
@@ -30,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandProcessor} static methods. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
+@Tag(NIGHT_CONFIG)
 class CommandProcessorTest {
 
     private static final UUID TEST_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
