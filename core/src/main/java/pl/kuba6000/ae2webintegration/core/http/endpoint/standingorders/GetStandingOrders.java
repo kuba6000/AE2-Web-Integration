@@ -23,7 +23,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
+ * @response 503 {@link ErrorResponse} STANDING_ORDERS_UNAVAILABLE or SERVER_STOPPING: orders could not be loaded or the
+ *           server is stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -32,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
- * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ * @responseExample 503 {"status":"STANDING_ORDERS_UNAVAILABLE","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/standing-orders")
 public final class GetStandingOrders extends StandingOrderRequest {

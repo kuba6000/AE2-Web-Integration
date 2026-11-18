@@ -123,7 +123,6 @@ function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resource
 export function createStandingOrderEditor(application: ThemeApplication, iconsChanged: () => void) {
     const form = element('form', '', 'standing-order-editor');
     form.noValidate = true;
-    form.hidden = true;
     const edit = application.standingOrders.edit;
 
     const heading = element('div', '', 'standing-order-editor-heading');
@@ -307,7 +306,6 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
 
     const errorTargets = new Map<string, { target: Field; controls: HTMLElement[] }>();
     let shownErrors = '';
-    let editorKey = '';
     /** Unsaved changes, and the question that guards leaving them; both follow the last render. */
     let unsaved = false;
     let leaveQuestion = '';
@@ -327,31 +325,24 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     window.addEventListener('beforeunload', warnBeforeUnload);
 
     /** Closing a picker also removes its document listener. */
-    function closePickers() {
-        target.close();
-        for (const row of rows) row.picker.close();
+    function resetPickers() {
+        target.reset();
+        for (const row of rows) row.picker.reset();
     }
     let visiblePickers: ReturnType<typeof createResourcePicker>[] = [];
     const targets = (): IconTarget[] => visiblePickers.flatMap((picker) => picker.targets());
-    function render(state: ThemeState, locale: Translator, iconsOn: boolean): IconTarget[] {
+    function render(
+        state: ThemeState,
+        editor: NonNullable<ThemeState['standingOrders']['editor']>,
+        locale: Translator,
+        iconsOn: boolean
+    ): IconTarget[] {
         visiblePickers = [];
         const orders = state.standingOrders;
-        const editor = orders.editor;
-        form.hidden = !editor;
-        unsaved = !!editor && editor.status === 'ready' && editor.dirty && !editor.saving;
+        unsaved = editor.status === 'ready' && editor.dirty && !editor.saving;
         leaveQuestion = locale.common('standingOrderLeaveConfirm');
-        if (!editor) {
-            closePickers();
-            editorKey = '';
-            return [];
-        }
         const { common: t } = locale;
         const gridKey = state.route.gridKey!;
-        const key = `${gridKey}\0${editor.order ?? ''}`;
-        if (key !== editorKey) {
-            editorKey = key;
-            shownErrors = '';
-        }
         const listHref = standingOrdersHref(gridKey);
         back.href = listHref;
         back.textContent = t('standingOrderBack');
@@ -377,6 +368,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         for (const part of [nameField.wrap, enabledLabel, whenSet, craftSet, scheduleSet, actions])
             part.hidden = !ready;
         if (!ready) {
+            resetPickers();
             locked.hidden = true;
             return [];
         }
@@ -399,6 +391,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
 
         const resourceChoice: ResourceChoice = {
             items: state.items,
+            catalogRevision: state.itemCatalogRevision,
             itemsReady: state.itemStatus === 'ready',
             itemsError: state.itemStatus === 'error' ? (state.itemError ?? 'error') : null,
             byKey: state.itemsByKey,
@@ -430,7 +423,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             }
             while (rows.length > rules.conditions.length) {
                 const row = rows.pop()!;
-                row.picker.close();
+                row.picker.reset();
                 row.group.remove();
             }
             rules.conditions.forEach((condition, index) => {
@@ -533,6 +526,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
                 controls: [ignoreMissing.input]
             });
         } else if (editor.definition) {
+            resetPickers();
             lockedTitle.textContent = t('standingOrderRules');
             lockedHelp.textContent = t(
                 rules.locked === 'nested' ? 'standingOrderLockedNested' : 'standingOrderLockedLarge'
@@ -574,7 +568,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         render,
         targets,
         dispose() {
-            closePickers();
+            resetPickers();
             document.removeEventListener('click', confirmLeaving, true);
             window.removeEventListener('beforeunload', warnBeforeUnload);
         }

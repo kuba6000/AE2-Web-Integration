@@ -130,7 +130,11 @@ export type HistorySetting = ResourceHistorySetting | 'craftingHistoryRetentionD
 export type SettingRange = { min: number; max: number; defaultValue: number };
 export type GridSettingsLimits = Record<ResourceHistorySetting, SettingRange> & { historyMaxRowsPerGrid: number };
 export type CraftingHistoryLimits = { historyRetentionDays: SettingRange; historyMaxJobsPerGrid: number };
-export type GridSettingsResponse = GridSettings & { limits: GridSettingsLimits; craftingLimits: CraftingHistoryLimits };
+export type GridSettingsResponse = GridSettings & {
+    canEditStandingOrders: boolean;
+    limits: GridSettingsLimits;
+    craftingLimits: CraftingHistoryLimits;
+};
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;

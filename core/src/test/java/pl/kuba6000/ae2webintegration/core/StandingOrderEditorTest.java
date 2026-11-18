@@ -138,7 +138,7 @@ class StandingOrderEditorTest extends GridTestScope {
 
     private UpdateResult replace(StableKey grid, StableKey order, StandingOrderDefinition definition,
         Map<StableKey, ResourceDescriptor> descriptions) throws Exception {
-        return editor.update(grid, order, current -> definition, ignored -> descriptions, true);
+        return editor.update(WebPrincipal.admin(), grid, order, current -> definition, ignored -> descriptions, true);
     }
 
     private void execute(String... statements) throws IOException {
@@ -181,7 +181,7 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderStore.Valid created = editor
             .create(grid, WebPrincipal.admin(), order("Keep plates", true, PLATE, PLATE), descriptions());
         StableKey[] seen = new StableKey[1];
-        assertEquals(UpdateResult.UPDATED, editor.update(grid, created.key(), current -> {
+        assertEquals(UpdateResult.UPDATED, editor.update(WebPrincipal.admin(), grid, created.key(), current -> {
             seen[0] = current.key();
             return order("Disabled", false, PLATE, PLATE);
         }, ignored -> Collections.emptyMap(), true));
@@ -189,12 +189,15 @@ class StandingOrderEditorTest extends GridTestScope {
         assertFalse(
             ((StandingOrderStore.Valid) store.get(grid, created.key())).definition()
                 .enabled());
-        assertThrows(InvalidStandingOrderException.class, () -> editor.update(grid, created.key(), current -> {
-            throw new InvalidStandingOrderException(InvalidStandingOrderException.Reason.MISSING_FIELD, "name");
-        }, ignored -> Collections.emptyMap(), true));
+        assertThrows(
+            InvalidStandingOrderException.class,
+            () -> editor.update(WebPrincipal.admin(), grid, created.key(), current -> {
+                throw new InvalidStandingOrderException(InvalidStandingOrderException.Reason.MISSING_FIELD, "name");
+            }, ignored -> Collections.emptyMap(), true));
         assertEquals(
             UpdateResult.NOT_FOUND,
             editor.update(
+                WebPrincipal.admin(),
                 grid,
                 TestGridFixtures.key(5),
                 current -> fail("A missing order is never edited"),
@@ -211,17 +214,25 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderDefinition definition = order("Keep plates", true, PLATE, PLATE);
         StandingOrderStore.Valid created = editor.create(grid, WebPrincipal.admin(), definition, descriptions());
         int[] lookups = new int[1];
-        assertEquals(UpdateResult.UPDATED, editor.update(grid, created.key(), current -> definition, derived -> {
-            lookups[0]++;
-            return Collections.emptyMap();
-        }, true));
-        assertEquals(0, lookups[0], "An identical definition is not stored again");
         assertEquals(
             UpdateResult.UPDATED,
-            editor.update(grid, created.key(), current -> order("Renamed", true, PLATE, PLATE), derived -> {
+            editor.update(WebPrincipal.admin(), grid, created.key(), current -> definition, derived -> {
                 lookups[0]++;
                 return Collections.emptyMap();
             }, true));
+        assertEquals(0, lookups[0], "An identical definition is not stored again");
+        assertEquals(
+            UpdateResult.UPDATED,
+            editor.update(
+                WebPrincipal.admin(),
+                grid,
+                created.key(),
+                current -> order("Renamed", true, PLATE, PLATE),
+                derived -> {
+                    lookups[0]++;
+                    return Collections.emptyMap();
+                },
+                true));
         assertEquals(1, lookups[0]);
         assertEquals(
             "Renamed",
@@ -233,14 +244,8 @@ class StandingOrderEditorTest extends GridTestScope {
     void anOrderOfASwitchedOffNetworkIsNotRunnable() throws Exception {
         StandingOrderStore.Valid created = editor
             .create(grid, WebPrincipal.admin(), order("Keep plates", true, PLATE, PLATE), descriptions());
-        settings.enabled = false;
-        assertTrue(engineKnows(created.key()));
-        // The sweep that notices the switch runs at most five seconds after the change.
-        engine.tick(System.currentTimeMillis() + StandingOrderEngine.SWEEP_MILLIS);
-        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, created.key()));
-        settings.enabled = true;
-        engine.tick(System.currentTimeMillis() + 2 * StandingOrderEngine.SWEEP_MILLIS);
-        assertEquals(RunResult.QUEUED, editor.run(grid, created.key()));
+        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, created.key(), false));
+        assertEquals(RunResult.QUEUED, editor.run(grid, created.key(), true));
     }
 
     @Test
@@ -276,7 +281,7 @@ class StandingOrderEditorTest extends GridTestScope {
             UpdateResult.UPDATED,
             replace(grid, created.key(), order("Keep", true, DUST, INGOT), Collections.emptyMap()));
         assertNotNull(editor.create(grid, WebPrincipal.admin(), order("Second", true, INGOT, INGOT), descriptions()));
-        for (int run = 0; run < 3; run++) assertEquals(RunResult.QUEUED, editor.run(grid, created.key()));
+        for (int run = 0; run < 3; run++) assertEquals(RunResult.QUEUED, editor.run(grid, created.key(), true));
     }
 
     @Test
@@ -286,7 +291,13 @@ class StandingOrderEditorTest extends GridTestScope {
         StandingOrderDefinition enabled = order("Keep", true, PLATE, PLATE);
         assertEquals(
             UpdateResult.ENABLING_REFUSED,
-            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), false));
+            editor.update(
+                WebPrincipal.admin(),
+                grid,
+                created.key(),
+                current -> enabled,
+                ignored -> Collections.emptyMap(),
+                false));
         assertFalse(
             ((StandingOrderStore.Valid) store.get(grid, created.key())).definition()
                 .enabled(),
@@ -294,6 +305,7 @@ class StandingOrderEditorTest extends GridTestScope {
         assertEquals(
             UpdateResult.UPDATED,
             editor.update(
+                WebPrincipal.admin(),
                 grid,
                 created.key(),
                 current -> order("Renamed", false, PLATE, PLATE),
@@ -302,10 +314,17 @@ class StandingOrderEditorTest extends GridTestScope {
             "Anything that does not switch an order on stays possible");
         assertEquals(
             UpdateResult.UPDATED,
-            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), true));
+            editor.update(
+                WebPrincipal.admin(),
+                grid,
+                created.key(),
+                current -> enabled,
+                ignored -> Collections.emptyMap(),
+                true));
         assertEquals(
             UpdateResult.UPDATED,
             editor.update(
+                WebPrincipal.admin(),
                 grid,
                 created.key(),
                 current -> order("Still on", true, PLATE, PLATE),
@@ -315,6 +334,7 @@ class StandingOrderEditorTest extends GridTestScope {
         assertEquals(
             UpdateResult.UPDATED,
             editor.update(
+                WebPrincipal.admin(),
                 grid,
                 created.key(),
                 current -> order("Off", false, PLATE, PLATE),
@@ -323,11 +343,18 @@ class StandingOrderEditorTest extends GridTestScope {
         execute("UPDATE standing_orders SET definition = '{\"broken\"' WHERE order_key = '" + created.key() + "'");
         assertEquals(
             UpdateResult.ENABLING_REFUSED,
-            editor.update(grid, created.key(), current -> enabled, ignored -> Collections.emptyMap(), false),
+            editor.update(
+                WebPrincipal.admin(),
+                grid,
+                created.key(),
+                current -> enabled,
+                ignored -> Collections.emptyMap(),
+                false),
             "Nothing is known about an order that cannot be read, so repairing it as enabled switches it on");
         assertEquals(
             UpdateResult.UPDATED,
             editor.update(
+                WebPrincipal.admin(),
                 grid,
                 created.key(),
                 current -> order("Repaired", false, PLATE, PLATE),
@@ -341,13 +368,13 @@ class StandingOrderEditorTest extends GridTestScope {
             .create(grid, WebPrincipal.admin(), order("On", true, PLATE, PLATE), descriptions());
         StandingOrderStore.Valid disabled = editor
             .create(grid, WebPrincipal.admin(), order("Off", false, INGOT, INGOT), descriptions());
-        assertEquals(RunResult.NOT_FOUND, editor.run(grid, TestGridFixtures.key(5)));
-        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, disabled.key()));
+        assertEquals(RunResult.NOT_FOUND, editor.run(grid, TestGridFixtures.key(5), true));
+        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, disabled.key(), true));
         execute("UPDATE standing_orders SET definition = '{\"broken\"' WHERE order_key = '" + enabled.key() + "'");
-        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, enabled.key()));
+        assertEquals(RunResult.NOT_RUNNABLE, editor.run(grid, enabled.key(), true));
         assertEquals(
             RunResult.NOT_FOUND,
-            editor.run(TestGridFixtures.key(6), enabled.key()),
+            editor.run(TestGridFixtures.key(6), enabled.key(), true),
             "Orders belong to their network");
     }
 
@@ -364,7 +391,7 @@ class StandingOrderEditorTest extends GridTestScope {
             // The creation sits inside its store write. Another change must not even start, not merely wait for the
             // world database: a deletion posted before the creation's own post could otherwise be overtaken.
             Future<Boolean> deletion = threads.submit(() -> editor.delete(grid, existing.key()));
-            Future<RunResult> run = threads.submit(() -> editor.run(grid, TestGridFixtures.key(5)));
+            Future<RunResult> run = threads.submit(() -> editor.run(grid, TestGridFixtures.key(5), true));
             assertThrows(TimeoutException.class, () -> deletion.get(300, MILLISECONDS));
             assertThrows(TimeoutException.class, () -> run.get(300, MILLISECONDS));
             assertNotNull(store.get(grid, existing.key()), "The deletion has not run yet");

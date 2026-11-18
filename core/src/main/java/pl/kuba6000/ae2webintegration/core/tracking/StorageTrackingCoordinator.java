@@ -126,6 +126,12 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         stockReadRequests.add(grid);
     }
 
+    /** A native storage reset invalidates previously published quantities even before the next scheduled sample. */
+    public boolean stockTopologyChanged(@NotNull StableKey grid) {
+        Binding binding = bindings.get(grid);
+        return binding != null && binding.capture.terminalEpoch() != binding.terminalEpoch;
+    }
+
     /** Off-thread read of an immutable worker publication; never touches native bindings or schedules work. */
     public @Nullable RecentResourceActivity.Summary recent(@NotNull StableKey key) {
         return recent.snapshot(key);
@@ -426,6 +432,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             long terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
+                notifyInvalidated(binding.key);
                 binding.terminalEpoch = terminalEpoch;
                 recent.invalidate(binding.key, binding.generation, nowMillis);
             }
@@ -439,6 +446,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
+                notifyInvalidated(binding.key);
                 binding.terminalEpoch = terminalEpoch;
                 recent.invalidate(binding.key, binding.generation, nowMillis);
                 binding.capture.invalidate();
@@ -498,7 +506,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         terminals.invalidate(binding.key, binding.generation);
         if (binding.lastFailure == null) LOG.warn("Storage tracking failed for network {}", binding.key, failure);
         binding.lastFailure = failure;
-        notifyFailed(binding.key, failure);
+        notifyInvalidated(binding.key);
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
             : binding.flow ? binding.flowInterval : binding.stockInterval;
         binding.retryAfter = retryAt(nowMillis, started, interval);
@@ -514,13 +522,13 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         }
     }
 
-    private void notifyFailed(StableKey grid, RuntimeException cause) {
+    private void notifyInvalidated(StableKey grid) {
         StockObservationListener listener = stockListener;
         if (listener == null) return;
         try {
-            listener.stockReadFailed(grid, cause);
+            listener.stockInvalidated(grid);
         } catch (RuntimeException failure) {
-            LOG.error("Stock listener failed on a read failure of network {}", grid, failure);
+            LOG.error("Stock listener failed on stock invalidation of network {}", grid, failure);
         }
     }
 
@@ -572,6 +580,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 LOG.warn("Native storage capture could not be detached for network {}", binding.key, failure);
             }
         }
+        // Discovery can retire a booting grid before observe() handles its last native reset.
+        if (binding.capture.terminalEpoch() != binding.terminalEpoch) notifyInvalidated(binding.key);
         binding.capture.close();
         recent.retire(binding.key, binding.generation);
         service.retire(binding.key, binding.generation);

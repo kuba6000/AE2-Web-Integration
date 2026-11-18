@@ -41,6 +41,8 @@ export type TerminalData = {
     items: StoredResource[];
     itemsByKey: ReadonlyMap<string, StoredResource>;
     itemSnapshotRevision: number;
+    /** Advances on a new snapshot or when available choices, names, icons or craftability change. */
+    itemCatalogRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -175,6 +177,7 @@ export function createTerminal(
         items: [],
         itemsByKey: new Map(),
         itemSnapshotRevision: 0,
+        itemCatalogRevision: 0,
         itemIcons: null,
         iconPack: { available: null, hasAnimations: false, status: 'loading' },
         itemStatus: 'idle',
@@ -205,6 +208,12 @@ export function createTerminal(
         rows: () => state.items,
         icons: () => state.itemIcons,
         section(delta) {
+            if (
+                delta.definitions.length ||
+                delta.removed.length ||
+                delta.updates.some((row) => row.craftable !== state.itemsByKey.get(row.itemKey)?.craftable)
+            )
+                state.itemCatalogRevision++;
             if (delta.recent) {
                 state.recent = {
                     ...delta.recent,
@@ -304,6 +313,7 @@ export function createTerminal(
             state.items = items;
             state.itemsByKey = new Map(items.flatMap((item) => (item.itemKey ? [[item.itemKey, item]] : [])));
             state.itemSnapshotRevision++;
+            state.itemCatalogRevision++;
             state.recent = result.recent ?? null;
             state.selected = state.selected
                 ? items.find((item) => item.itemKey && item.itemKey === state.selected?.itemKey) || null

@@ -27,7 +27,6 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException.Reason;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderCodec.Encoded;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
@@ -47,7 +46,7 @@ public final class StandingOrderStore {
         }
     }
 
-    /** A definition refers to a resource that is neither supplied nor already in the catalogue. */
+    /** A definition refers to a resource that is not visible to the account on this grid. */
     public static final class UnknownResource extends IllegalArgumentException {
 
         @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
@@ -133,16 +132,16 @@ public final class StandingOrderStore {
      * Appends a new order after the grid's others.
      *
      * @param descriptions current descriptions of resources the definition may refer to; a referenced resource
-     *                     without one must already be in the catalogue
+     *                     without one must already be known to this grid
      * @throws InvalidStandingOrderException the definition violates the format or a limit
      * @throws OrderLimitReached             the grid already holds the configured maximum
-     * @throws UnknownResource               a referenced resource is neither described nor in the catalogue
+     * @throws UnknownResource               a referenced resource is not known to the account on this grid
      */
     public @NotNull Valid create(@NotNull StableKey grid, @NotNull WebPrincipal creator,
         @NotNull StandingOrderDefinition definition, @NotNull Map<StableKey, ResourceDescriptor> descriptions)
         throws IOException, InvalidStandingOrderException {
         String owner = owner(creator);
-        Encoded encoded = encode(definition, descriptions);
+        StandingOrderCodec.Encoded encoded = encode(definition, descriptions);
         return database.write(db -> {
             Long gridId = gridId(db, grid);
             if (gridId == null) throw new IllegalArgumentException("Unknown grid");
@@ -159,7 +158,7 @@ public final class StandingOrderStore {
             }
             if (count >= maxOrdersPerGrid.getAsInt()) throw new OrderLimitReached();
             StableKey key = StableKey.random();
-            List<Long> resources = reference(db, descriptions, encoded.resources());
+            List<Long> resources = reference(db, owner, gridId, descriptions, encoded.resources());
             try (PreparedStatement insert = db.prepareStatement("""
                 INSERT INTO standing_orders (order_key, grid_id, ordinal, created_by, definition, definition_version)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -182,14 +181,15 @@ public final class StandingOrderStore {
      *
      * @return false when the grid has no such order
      */
-    public boolean replace(@NotNull StableKey grid, @NotNull StableKey order,
+    public boolean replace(@NotNull WebPrincipal principal, @NotNull StableKey grid, @NotNull StableKey order,
         @NotNull StandingOrderDefinition definition, @NotNull Map<StableKey, ResourceDescriptor> descriptions)
         throws IOException, InvalidStandingOrderException {
-        Encoded encoded = encode(definition, descriptions);
+        StandingOrderCodec.Encoded encoded = encode(definition, descriptions);
         return database.write(db -> {
-            if (missing(db, grid, order)) return false;
+            Long gridId = orderGridId(db, grid, order);
+            if (gridId == null) return false;
             Set<Long> previous = new HashSet<>(resourceIds(db, order));
-            List<Long> resources = reference(db, descriptions, encoded.resources());
+            List<Long> resources = reference(db, owner(principal), gridId, descriptions, encoded.resources());
             try (PreparedStatement update = db.prepareStatement(
                 "UPDATE standing_orders SET definition = ?, definition_version = ? WHERE order_key = ?")) {
                 update.setString(1, encoded.json());
@@ -211,7 +211,7 @@ public final class StandingOrderStore {
     /** @return false when the grid has no such order */
     public boolean delete(@NotNull StableKey grid, @NotNull StableKey order) throws IOException {
         return database.write(db -> {
-            if (missing(db, grid, order)) return false;
+            if (orderGridId(db, grid, order) == null) return false;
             Set<Long> previous = new HashSet<>(resourceIds(db, order));
             try (PreparedStatement delete = db.prepareStatement("DELETE FROM standing_orders WHERE order_key = ?")) {
                 delete.setString(1, order.toString());
@@ -229,7 +229,7 @@ public final class StandingOrderStore {
         return player.uuid.toString();
     }
 
-    private static @NotNull Encoded encode(@NotNull StandingOrderDefinition definition,
+    private static @NotNull StandingOrderCodec.Encoded encode(@NotNull StandingOrderDefinition definition,
         @NotNull Map<StableKey, ResourceDescriptor> descriptions) throws InvalidStandingOrderException {
         for (Map.Entry<StableKey, ResourceDescriptor> description : descriptions.entrySet()) {
             if (!description.getKey()
@@ -251,16 +251,16 @@ public final class StandingOrderStore {
         }
     }
 
-    private static boolean missing(@NotNull Connection db, @NotNull StableKey grid, @NotNull StableKey order)
+    private static @Nullable Long orderGridId(@NotNull Connection db, @NotNull StableKey grid, @NotNull StableKey order)
         throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT 1 FROM standing_orders o JOIN grids g ON g.id = o.grid_id
+            SELECT g.id FROM standing_orders o JOIN grids g ON g.id = o.grid_id
             WHERE g.grid_key = ? AND o.order_key = ?
             """)) {
             query.setString(1, grid.toString());
             query.setString(2, order.toString());
             try (ResultSet rows = query.executeQuery()) {
-                return !rows.next();
+                return rows.next() ? rows.getLong(1) : null;
             }
         }
     }
@@ -279,7 +279,7 @@ public final class StandingOrderStore {
     }
 
     /** Stores the supplied descriptions of referenced resources and resolves every slot to its catalogue row. */
-    private static @NotNull List<Long> reference(@NotNull Connection db,
+    private static @NotNull List<Long> reference(@NotNull Connection db, @NotNull String owner, long gridId,
         @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StableKey> resources)
         throws SQLException {
         Map<StableKey, ResourceDescriptor> supplied = new HashMap<>();
@@ -289,14 +289,11 @@ public final class StandingOrderStore {
         }
         if (!supplied.isEmpty()) ResourceCatalogue.upsert(db, supplied, supplied.keySet());
         List<Long> ids = new ArrayList<>();
-        try (PreparedStatement query = db.prepareStatement("SELECT id FROM history_resources WHERE item_key = ?")) {
-            for (StableKey resource : resources) {
-                query.setString(1, resource.toString());
-                try (ResultSet rows = query.executeQuery()) {
-                    if (!rows.next()) throw new UnknownResource(resource);
-                    ids.add(rows.getLong(1));
-                }
-            }
+        for (StableKey resource : resources) {
+            Long id = ResourceCatalogue
+                .admissibleResource(db, owner, gridId, resource, supplied.containsKey(resource), true);
+            if (id == null) throw new UnknownResource(resource);
+            ids.add(id);
         }
         return ids;
     }
@@ -368,7 +365,8 @@ public final class StandingOrderStore {
                                 key,
                                 ordinal,
                                 createdBy,
-                                StandingOrderCodec.decode(new Encoded(rows.getInt(5), rows.getString(4), resources))));
+                                StandingOrderCodec.decode(
+                                    new StandingOrderCodec.Encoded(rows.getInt(5), rows.getString(4), resources))));
                     } catch (InvalidStandingOrderException failure) {
                         entries.add(new Invalid(key, ordinal, createdBy, failure));
                     }

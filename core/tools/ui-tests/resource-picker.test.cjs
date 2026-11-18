@@ -86,20 +86,17 @@ test('opening and searching a resource picker paints the new visible icons witho
             }
         }
     });
-    picker.render(
-        {
-            items,
-            itemsReady: true,
-            itemsError: null,
-            byKey: new Map(),
-            known: {},
-            locale: { common: (key) => key },
-            language: 'en'
-        },
-        null,
-        false,
-        'Resource'
-    );
+    const context = {
+        catalogRevision: 1,
+        items,
+        itemsReady: true,
+        itemsError: null,
+        byKey: new Map(items.map((item) => [item.itemKey, item])),
+        known: {},
+        locale: { common: (key) => key },
+        language: 'en'
+    };
+    picker.render(context, null, false, 'Resource');
     picker.choice.dispatchEvent(new Event('click'));
     const results = () => picker.element.querySelector('ul').children.map((row) => row.children[0]);
     assert.equal(results().length, 2);
@@ -117,6 +114,13 @@ test('opening and searching a resource picker paints the new visible icons witho
         oldResults.every((button) => !registered.has(button)),
         'removed results release icon registrations'
     );
+    picker.render(
+        { ...context, items: items.slice(0, 1), byKey: new Map([[items[0].itemKey, items[0]]]), catalogRevision: 2 },
+        null,
+        false,
+        'Resource'
+    );
+    assert.equal(results().length, 0, 'removed search results disappear while the picker remains open');
     picker.close();
     assert.equal(registered.size, 1, 'closing retains only the selected resource icon');
 });

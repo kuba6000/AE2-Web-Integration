@@ -14,6 +14,6 @@ public interface StockObservationListener {
     /** A complete, successful read of the grid's storage. Quantities are absolute; absent resources are zero. */
     void stockObserved(@NotNull StableKey grid, @NotNull StorageObservation observation);
 
-    /** The grid's storage could not be read; quantities from earlier observations are no longer trustworthy. */
-    void stockReadFailed(@NotNull StableKey grid, @NotNull RuntimeException failure);
+    /** A read failed or the storage topology changed. Discard earlier stock until a complete read succeeds. */
+    void stockInvalidated(@NotNull StableKey grid);
 }

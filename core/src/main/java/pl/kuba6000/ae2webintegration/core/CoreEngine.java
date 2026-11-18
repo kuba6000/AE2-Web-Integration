@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -137,9 +136,6 @@ public class CoreEngine {
             Config.INSTANCE.craftingHistory);
         SqliteCraftingHistoryStore craftings = new SqliteCraftingHistoryStore(database);
         SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database);
-        StandingOrderStore orderStore = new StandingOrderStore(
-            database,
-            () -> Config.INSTANCE.standingOrders.maxOrdersPerGrid);
         try {
             database.open();
             GRID_IDENTITIES.initialize(
@@ -158,7 +154,6 @@ public class CoreEngine {
             if (failure instanceof LinkageError linkageFailure) throw linkageFailure;
             throw new IllegalStateException("Failed to initialize world database: " + databaseFile, failure);
         }
-        Map<StableKey, List<StandingOrderStore.Entry>> storedOrders = loadStandingOrders(orderStore);
         try {
             worldDatabase = database;
             ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -196,18 +191,7 @@ public class CoreEngine {
                 trackingSettings,
                 terminals);
             storageCoordinator = coordinator;
-            StandingOrderEngine orders = new StandingOrderEngine(
-                coordinator,
-                GRID_IDENTITIES,
-                () -> Config.INSTANCE.standingOrders,
-                () -> AE2Controller.AE2Interface.web$getCapabilities(),
-                System::nanoTime);
-            for (Map.Entry<StableKey, List<StandingOrderStore.Entry>> grid : storedOrders.entrySet()) {
-                for (StandingOrderStore.Entry order : grid.getValue()) orders.post(grid.getKey(), order);
-            }
-            standingOrders = orders;
-            standingOrderStore = orderStore;
-            standingOrderEditor = new StandingOrderEditor(orderStore, orders);
+            startStandingOrders(database, coordinator);
             themes.close();
             themes = ThemeCatalog.load(
                 Config.getConfigFile("themes")
@@ -223,18 +207,30 @@ public class CoreEngine {
         }
     }
 
-    /**
-     * Standing orders are an optional feature of the world database: when they cannot be read the engine starts
-     * without orders, so history, pins and terminals keep working. The failure is logged; the orders endpoints read the
-     * same table and report it as a server error until the server is restarted with a readable database.
-     */
-    private static Map<StableKey, List<StandingOrderStore.Entry>> loadStandingOrders(StandingOrderStore store) {
+    /** Publish the world service only after all stored orders were read; other services can start independently. */
+    private static void startStandingOrders(WorldDatabase database, StorageTrackingCoordinator coordinator) {
+        StandingOrderStore orderStore = new StandingOrderStore(
+            database,
+            () -> Config.INSTANCE.standingOrders.maxOrdersPerGrid);
+        Map<StableKey, List<StandingOrderStore.Entry>> storedOrders;
         try {
-            return store.listAll();
+            storedOrders = orderStore.listAll();
         } catch (IOException | RuntimeException failure) {
-            LOG.error("Standing orders could not be read and are not running", failure);
-            return Collections.emptyMap();
+            LOG.error("Standing orders unavailable until the next server start: cannot load saved orders", failure);
+            return;
         }
+        StandingOrderEngine orders = new StandingOrderEngine(
+            coordinator,
+            GRID_IDENTITIES,
+            () -> Config.INSTANCE.standingOrders,
+            () -> AE2Controller.AE2Interface.web$getCapabilities(),
+            System::nanoTime);
+        for (Map.Entry<StableKey, List<StandingOrderStore.Entry>> grid : storedOrders.entrySet()) {
+            for (StandingOrderStore.Entry order : grid.getValue()) orders.post(grid.getKey(), order);
+        }
+        standingOrders = orders;
+        standingOrderStore = orderStore;
+        standingOrderEditor = new StandingOrderEditor(orderStore, orders);
     }
 
     /**

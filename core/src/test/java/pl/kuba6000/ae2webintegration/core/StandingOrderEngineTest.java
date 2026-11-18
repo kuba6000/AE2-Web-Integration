@@ -32,6 +32,8 @@ import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -666,6 +668,70 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
+    void aPlanCannotUseOldStockWhenTheNewSampleCrossesATopologyChange() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.stock("so-plastic", 5000);
+        grid.stockRow(new ItemIdentityRequestTest.Resource("topology-change", 1, false) {
+
+            @Override
+            public long web$amount() {
+                grid.invalidateTopology();
+                return super.web$amount();
+            }
+        });
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(MINUTE);
+        assertTrue(grid.submissions.isEmpty(), "The interrupted stock sample invalidates the previous one");
+        grid.stock("topology-change", 1);
+        tick(50);
+        assertEquals(IDLE, status(order));
+        assertTrue(grid.submissions.isEmpty());
+    }
+
+    @Test
+    void aTopologyChangeBeforeDetachmentRequiresNewStockWhenTheSameGridReturns() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.stock("so-plastic", 5000);
+        grid.invalidateTopology();
+        grid.controllerState(AEControllerState.NO_CONTROLLER);
+        tick(SWEEP);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        tick(SWEEP);
+        tick(1000);
+        assertTrue(grid.submissions.isEmpty(), "The binding must not take its pending invalidation away with it");
+        assertEquals(IDLE, status(order), "The returning network is checked again before its normal stock sample");
+    }
+
+    @Test
+    void aCompletedPlanChecksTopologyEvenWhenNoStockReadIsDue() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.stock("so-plastic", 5000);
+        grid.invalidateTopology();
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(50);
+        assertTrue(grid.submissions.isEmpty(), "A completed plan must not use a superseded stock baseline");
+        tick(50);
+        assertEquals(IDLE, status(order));
+        assertTrue(grid.submissions.isEmpty());
+    }
+
+    @Test
     void aFailedStockReadDropsTheBaselineUntilTheNextCompleteRead() {
         grid.addCpu();
         grid.stock("so-plastic", 5000);
@@ -1126,6 +1192,85 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
+    void aManualRunAcceptedJustAfterTheGridSwitchWasEnabledSkipsTheOldBackoff() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(true));
+        tick(50);
+        assertEquals(BLOCKED_MISSING, status(order));
+
+        GridPersistentData data = GRID_IDENTITIES.getPersistentData(gridKey);
+        assertNotNull(data);
+        GridSettingsData network = data.getSettings();
+        network.setStandingOrdersEnabled(false);
+        tick(SWEEP);
+        assertEquals(SWITCHED_OFF, status(order));
+        network.setStandingOrdersEnabled(true);
+        engine.requestRun(gridKey, order);
+        engine.applyPosted(now + 50);
+        tick(50);
+        tick(1000);
+        assertEquals(CALCULATING, status(order), "An accepted Run must not consult the previous tick's switch");
+        assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void aManualRunWaitsForItsFreshReadEvenWhenAnEditWakesTheGrid() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(true));
+        tick(50);
+        engine.requestRun(gridKey, order);
+        engine.applyPosted(now);
+        tick(50);
+        grid.calculations.get(1).future.complete(new FakeJob(true));
+        tick(50);
+
+        grid.stock("so-plastic", 5000);
+        engine.requestRun(gridKey, order);
+        post("Disabled", below("so-plastic", 1000), fixed("so-plastic", 64), false, 0);
+        engine.applyPosted(now);
+        tick(50);
+        assertEquals(2, grid.calculations.size(), "An unrelated edit must not let a manual run reuse old stock");
+        tick(30_000);
+        assertEquals(IDLE, status(order));
+        assertEquals(2, grid.calculations.size());
+    }
+
+    @Test
+    void deletingTheLastOrderCancelsItsPendingReadEvenWhileHistoryTrackingContinues() {
+        GridPersistentData data = GRID_IDENTITIES.getPersistentData(gridKey);
+        assertNotNull(data);
+        data.getSettings()
+            .setStorageTracked(true);
+        grid.stock("so-plastic", 5000);
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        engine.applyPosted(now);
+        tick(0);
+        engine.requestRun(gridKey, order);
+        engine.applyPosted(now);
+        tick(50);
+        int reads = grid.storageReads;
+        engine.requestRun(gridKey, order);
+        engine.applyPosted(now);
+        tick(50);
+        engine.postDeletion(gridKey, order);
+        engine.applyPosted(now);
+        tick(30_000);
+        assertEquals(reads, grid.storageReads, "Deleting the order also cancels its deferred read");
+        tick(MINUTE);
+        assertEquals(reads + 1, grid.storageReads, "Periodic history samples continue without standing orders");
+    }
+
+    @Test
     void repeatedRunRequestsAreCoalescedAndSpacedInsteadOfRefused() {
         GRID_IDENTITIES.getPersistentData(gridKey)
             .getSettings()
@@ -1206,7 +1351,7 @@ class StandingOrderEngineTest extends GridTestScope {
 
     @Test
     void anOrderEnabledAgainAfterItsJobFinishedWhileItWasOffWaitsForAReadTakenAfterwardsButServesNoCooldown() {
-        // A tracked network keeps its stock feed while the only order is off.
+        // The network continues to track history while the order is off.
         GRID_IDENTITIES.getPersistentData(gridKey)
             .getSettings()
             .setStorageTracked(true);
@@ -1940,6 +2085,12 @@ class StandingOrderEngineTest extends GridTestScope {
 
         private void stockRow(ItemIdentityRequestTest.Resource row) {
             stock.add(row);
+        }
+
+        private void invalidateTopology() {
+            StorageCapture active = web$getStorageCapture();
+            assertNotNull(active);
+            active.invalidateTerminal();
         }
 
         private void craftable(String id) {

@@ -42,7 +42,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
+ * @response 503 {@link ErrorResponse} STANDING_ORDERS_UNAVAILABLE or SERVER_STOPPING: orders could not be loaded or the
+ *           server is stopping.
  * @responseExample 400
  *                  {"status":"INVALID_STANDING_ORDER","data":{"reason":"AMOUNT_NOT_POSITIVE","path":"trigger.amount"}}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
@@ -54,7 +55,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
- * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ * @responseExample 503 {"status":"STANDING_ORDERS_UNAVAILABLE","data":null}
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/standing-orders")
 public final class PostStandingOrder extends StandingOrderRequest {

@@ -319,7 +319,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             flowTracking.checked = state.draft.isFlowTracked;
             flowTracking.disabled = state.saving || state.status !== 'ready';
             standingOrders.checked = state.draft.standingOrdersEnabled;
-            standingOrders.disabled = state.saving || state.status !== 'ready';
+            standingOrders.disabled = state.saving || state.status !== 'ready' || !state.canEditStandingOrders;
             let invalidInterval = false;
             for (const control of intervalControls) {
                 const { field, range, number, unitMillis } = control;

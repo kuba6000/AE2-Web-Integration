@@ -51,6 +51,10 @@ function searchTerms(search: string, language: string): string[] {
 function matchesSearch(resource: SearchableResource, name: string, terms: readonly string[], language: string) {
     const text = `${name} ${registryId(resource)}`.toLocaleLowerCase(language);
     const mod = (resource.registryNamespace ?? '').toLocaleLowerCase(language);
+    return matchesTerms(text, mod, terms);
+}
+
+function matchesTerms(text: string, mod: string, terms: readonly string[]) {
     return terms.every((term) => (term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)));
 }
 
@@ -89,6 +93,41 @@ function sortNamed<T extends SortableResource>(resources: NamedResource<T>[], op
             (a.item.itemKey || '').localeCompare(b.item.itemKey || '')
         );
     });
+}
+
+/** Prepare an alphabetical catalogue once for repeated searches in an open picker. */
+export function resourceSearch<T extends SelectableResource>(
+    items: readonly T[],
+    language: string,
+    craftableOnly: boolean
+) {
+    const collator = new Intl.Collator(language);
+    const rows = prepare(items.filter((item) => item.itemKey && (!craftableOnly || item.craftable)))
+        .map(({ item, name }) => {
+            const id = registryId(item);
+            return {
+                item,
+                name,
+                id,
+                text: `${name} ${id}`.toLocaleLowerCase(language),
+                mod: (item.registryNamespace ?? '').toLocaleLowerCase(language)
+            };
+        })
+        .sort(
+            (a, b) =>
+                collator.compare(a.name, b.name) ||
+                collator.compare(a.id, b.id) ||
+                collator.compare(a.item.itemKey!, b.item.itemKey!)
+        );
+    return (query: string, limit: number) => {
+        const terms = searchTerms(query, language);
+        const found: T[] = [];
+        for (const row of rows) {
+            if (found.length >= limit) break;
+            if (matchesTerms(row.text, row.mod, terms)) found.push(row.item);
+        }
+        return found;
+    };
 }
 
 /** Match all whitespace-separated terms; @terms search the registry namespace. OTHER remains visible. */

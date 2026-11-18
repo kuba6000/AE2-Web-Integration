@@ -464,8 +464,9 @@ class CoreEngineTest {
             assertNotNull(CoreEngine.getResourcePins());
             assertNotNull(CoreEngine.getTerminalRegistry());
             assertNotNull(CoreEngine.getCraftingHistory());
-            assertNotNull(CoreEngine.getStandingOrders(), "The engine runs, with no orders");
-            assertNotNull(CoreEngine.getStandingOrderEditor());
+            assertNull(CoreEngine.getStandingOrders(), "An unreadable catalogue must not look like an empty engine");
+            assertNull(CoreEngine.getStandingOrderEditor());
+            assertNull(CoreEngine.getStandingOrderStore());
             AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
             assertDoesNotThrow(CoreEngine::onServerTick);
         } finally {

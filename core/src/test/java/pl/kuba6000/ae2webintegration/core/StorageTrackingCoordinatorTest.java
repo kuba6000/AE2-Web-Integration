@@ -795,7 +795,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             }
 
             @Override
-            public void stockReadFailed(@NotNull StableKey failed, @NotNull RuntimeException failure) {
+            public void stockInvalidated(@NotNull StableKey failed) {
                 throw new IllegalStateException("listener bug");
             }
         };
@@ -833,7 +833,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 public void stockObserved(@NotNull StableKey observed, @NotNull StorageObservation observation) {}
 
                 @Override
-                public void stockReadFailed(@NotNull StableKey failed, @NotNull RuntimeException failure) {
+                public void stockInvalidated(@NotNull StableKey failed) {
                     throw new IllegalStateException("listener bug");
                 }
             });
@@ -889,7 +889,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         }
 
         @Override
-        public void stockReadFailed(@NotNull StableKey grid, @NotNull RuntimeException failure) {
+        public void stockInvalidated(@NotNull StableKey grid) {
             failedGrids.add(grid);
         }
     }

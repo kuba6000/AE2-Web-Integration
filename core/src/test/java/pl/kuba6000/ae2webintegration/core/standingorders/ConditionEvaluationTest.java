@@ -13,7 +13,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderTestData.Stock;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture amounts.
 class ConditionEvaluationTest {
@@ -24,24 +23,24 @@ class ConditionEvaluationTest {
     void stockBelowIsStrict() {
         Condition below = new Condition.StockBelow(PLATES, 10);
 
-        assertEquals(Truth.TRUE, below.evaluate(new Stock(0).with(PLATES, 9)));
-        assertEquals(Truth.FALSE, below.evaluate(new Stock(0).with(PLATES, 10)));
-        assertEquals(Truth.FALSE, below.evaluate(new Stock(0).with(PLATES, 11)));
+        assertEquals(Truth.TRUE, below.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 9)));
+        assertEquals(Truth.FALSE, below.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 10)));
+        assertEquals(Truth.FALSE, below.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 11)));
     }
 
     @Test
     void stockAtLeastIsInclusive() {
         Condition atLeast = new Condition.StockAtLeast(PLATES, 10);
 
-        assertEquals(Truth.FALSE, atLeast.evaluate(new Stock(0).with(PLATES, 9)));
-        assertEquals(Truth.TRUE, atLeast.evaluate(new Stock(0).with(PLATES, 10)));
-        assertEquals(Truth.TRUE, atLeast.evaluate(new Stock(0).with(PLATES, 11)));
+        assertEquals(Truth.FALSE, atLeast.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 9)));
+        assertEquals(Truth.TRUE, atLeast.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 10)));
+        assertEquals(Truth.TRUE, atLeast.evaluate(new StandingOrderTestData.Stock(0).with(PLATES, 11)));
     }
 
     @Test
     void unknownStockIsDistinctFromZero() {
-        Stock unknown = new Stock(0);
-        Stock zero = new Stock(0).with(PLATES, 0);
+        StandingOrderTestData.Stock unknown = new StandingOrderTestData.Stock(0);
+        StandingOrderTestData.Stock zero = new StandingOrderTestData.Stock(0).with(PLATES, 0);
 
         assertEquals(Truth.UNKNOWN, new Condition.StockBelow(PLATES, 1).evaluate(unknown));
         assertEquals(Truth.TRUE, new Condition.StockBelow(PLATES, 1).evaluate(zero));
@@ -51,7 +50,7 @@ class ConditionEvaluationTest {
 
     @Test
     void stockOfOtherResourcesDoesNotAnswerForThisOne() {
-        Stock other = new Stock(0).with(key(11), 0);
+        StandingOrderTestData.Stock other = new StandingOrderTestData.Stock(0).with(key(11), 0);
 
         assertEquals(Truth.UNKNOWN, new Condition.StockBelow(PLATES, 1).evaluate(other));
     }
@@ -60,14 +59,14 @@ class ConditionEvaluationTest {
     void idleCpusAtLeastComparesEligibleIdleCount() {
         Condition two = new Condition.IdleCpusAtLeast(2);
 
-        assertEquals(Truth.FALSE, two.evaluate(new Stock(1)));
-        assertEquals(Truth.TRUE, two.evaluate(new Stock(2)));
-        assertEquals(Truth.TRUE, two.evaluate(new Stock(3)));
+        assertEquals(Truth.FALSE, two.evaluate(new StandingOrderTestData.Stock(1)));
+        assertEquals(Truth.TRUE, two.evaluate(new StandingOrderTestData.Stock(2)));
+        assertEquals(Truth.TRUE, two.evaluate(new StandingOrderTestData.Stock(3)));
     }
 
     @Test
     void amountsAtTheLongLimitsCompareWithoutOverflow() {
-        Stock full = new Stock(0).with(PLATES, Long.MAX_VALUE);
+        StandingOrderTestData.Stock full = new StandingOrderTestData.Stock(0).with(PLATES, Long.MAX_VALUE);
 
         assertEquals(Truth.TRUE, new Condition.StockAtLeast(PLATES, Long.MAX_VALUE).evaluate(full));
         assertEquals(Truth.FALSE, new Condition.StockBelow(PLATES, Long.MAX_VALUE).evaluate(full));
@@ -109,20 +108,20 @@ class ConditionEvaluationTest {
         assertEquals(
             Truth.TRUE,
             condition.evaluate(
-                new Stock(1).with(plastic, 5)
+                new StandingOrderTestData.Stock(1).with(plastic, 5)
                     .with(ethylene, 10)));
         assertEquals(
             Truth.FALSE,
             condition.evaluate(
-                new Stock(2).with(plastic, 5)
+                new StandingOrderTestData.Stock(2).with(plastic, 5)
                     .with(ethylene, 10)));
         assertEquals(
             Truth.TRUE,
             condition.evaluate(
-                new Stock(2).with(plastic, 5)
+                new StandingOrderTestData.Stock(2).with(plastic, 5)
                     .with(ethylene, 50)));
-        assertEquals(Truth.UNKNOWN, condition.evaluate(new Stock(2).with(plastic, 5)));
-        assertEquals(Truth.FALSE, condition.evaluate(new Stock(2).with(plastic, 10)));
+        assertEquals(Truth.UNKNOWN, condition.evaluate(new StandingOrderTestData.Stock(2).with(plastic, 5)));
+        assertEquals(Truth.FALSE, condition.evaluate(new StandingOrderTestData.Stock(2).with(plastic, 10)));
     }
 
     @Test
@@ -146,8 +145,8 @@ class ConditionEvaluationTest {
         };
     }
 
-    private static Stock world() {
-        return new Stock(0).with(key(1), 5)
+    private static StandingOrderTestData.Stock world() {
+        return new StandingOrderTestData.Stock(0).with(key(1), 5)
             .with(key(2), 0);
     }
 }

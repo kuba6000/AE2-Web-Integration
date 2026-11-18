@@ -28,7 +28,6 @@ import com.google.gson.JsonParser;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException.Reason;
-import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderCodec.Encoded;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Arbitrary fixture values and the documented limits.
 @Tag(GSON)
@@ -42,7 +41,8 @@ class StandingOrderCodecTest {
     private static final List<StableKey> VALID_RESOURCES = Arrays.asList(key(1), key(2));
 
     private static StandingOrderDefinition decode(String json) throws InvalidStandingOrderException {
-        return StandingOrderCodec.decode(new Encoded(StandingOrderCodec.VERSION, json, VALID_RESOURCES));
+        return StandingOrderCodec
+            .decode(new StandingOrderCodec.Encoded(StandingOrderCodec.VERSION, json, VALID_RESOURCES));
     }
 
     private static String valid(String from, String to) {
@@ -121,8 +121,8 @@ class StandingOrderCodecTest {
         StandingOrderDefinition definition = StandingOrderTestData.definition(
             new Condition.All(Arrays.asList(new Condition.StockBelow(key(2), 1), new Condition.IdleCpusAtLeast(1))));
 
-        Encoded first = StandingOrderCodec.encode(definition);
-        Encoded second = StandingOrderCodec.encode(definition);
+        StandingOrderCodec.Encoded first = StandingOrderCodec.encode(definition);
+        StandingOrderCodec.Encoded second = StandingOrderCodec.encode(definition);
 
         assertEquals(first, second);
         assertEquals(StandingOrderCodec.VERSION, first.version());
@@ -141,7 +141,7 @@ class StandingOrderCodecTest {
                         Arrays.asList(new Condition.StockAtLeast(second, 1), new Condition.StockBelow(crafted, 5))),
                     new Condition.Not(new Condition.StockAtLeast(first, 9)))));
 
-        Encoded encoded = StandingOrderCodec.encode(definition);
+        StandingOrderCodec.Encoded encoded = StandingOrderCodec.encode(definition);
 
         assertEquals(Arrays.asList(crafted, first, second), encoded.resources());
     }
@@ -150,7 +150,7 @@ class StandingOrderCodecTest {
     void documentReferencesResourcesBySlotOnly() {
         StandingOrderDefinition definition = StandingOrderTestData.definition(new Condition.StockBelow(key(2), 7));
 
-        Encoded encoded = StandingOrderCodec.encode(definition);
+        StandingOrderCodec.Encoded encoded = StandingOrderCodec.encode(definition);
 
         JsonObject document = new JsonParser().parse(encoded.json())
             .getAsJsonObject();
@@ -180,7 +180,7 @@ class StandingOrderCodecTest {
             new Condition.StockBelow(key(2), 7),
             new CraftAction(key(1), new AmountPolicy.Fixed(1), PLAIN, CpuTarget.specific(cpu)));
 
-        Encoded encoded = StandingOrderCodec.encode(definition);
+        StandingOrderCodec.Encoded encoded = StandingOrderCodec.encode(definition);
 
         assertTrue(
             encoded.json()
@@ -203,7 +203,8 @@ class StandingOrderCodecTest {
     private static InvalidStandingOrderException reject(String json, List<StableKey> resources) {
         return assertThrows(
             InvalidStandingOrderException.class,
-            () -> StandingOrderCodec.decode(new Encoded(StandingOrderCodec.VERSION, json, resources)));
+            () -> StandingOrderCodec
+                .decode(new StandingOrderCodec.Encoded(StandingOrderCodec.VERSION, json, resources)));
     }
 
     static Stream<Arguments> rejectedDocuments() {
@@ -543,7 +544,7 @@ class StandingOrderCodecTest {
         for (int version : new int[] { 0, 2, -1, Integer.MAX_VALUE }) {
             InvalidStandingOrderException failure = assertThrows(
                 InvalidStandingOrderException.class,
-                () -> StandingOrderCodec.decode(new Encoded(version, VALID, VALID_RESOURCES)));
+                () -> StandingOrderCodec.decode(new StandingOrderCodec.Encoded(version, VALID, VALID_RESOURCES)));
 
             assertEquals(Reason.UNSUPPORTED_VERSION, failure.reason());
             assertEquals("", failure.path());

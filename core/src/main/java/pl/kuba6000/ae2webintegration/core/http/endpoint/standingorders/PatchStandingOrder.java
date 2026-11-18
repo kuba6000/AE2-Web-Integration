@@ -47,7 +47,8 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
+ * @response 503 {@link ErrorResponse} STANDING_ORDERS_UNAVAILABLE or SERVER_STOPPING: orders could not be loaded or the
+ *           server is stopping.
  * @responseExample 400 {"status":"INVALID_STANDING_ORDER","data":{"reason":"NAME_LENGTH","path":""}}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"STANDING_ORDERS_DISABLED","data":null}
@@ -57,7 +58,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
- * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ * @responseExample 503 {"status":"STANDING_ORDERS_UNAVAILABLE","data":null}
  */
 @Endpoint(method = HttpMethod.PATCH, path = "/api/grids/{gridKey}/standing-orders/{orderKey}")
 public final class PatchStandingOrder extends StandingOrderRequest {
@@ -75,6 +76,7 @@ public final class PatchStandingOrder extends StandingOrderRequest {
         if (editor == null || refusesChange()) return;
         try {
             switch (editor.update(
+                context.getPrincipal(),
                 gridKey,
                 orderKey,
                 current -> merged(current, input),

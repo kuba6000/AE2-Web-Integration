@@ -10,6 +10,8 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -23,11 +25,11 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * Run standing order now.
  *
  * <p>
- * Asks the server to check the order at its next tick without waiting for its cooldown or backoff, reading the network
- * once more. The usual conditions still apply: nothing is crafted unless the trigger holds, a CPU is free and the order
- * is not already running. Poll the standing order list for the outcome. Running needs network access and, unless the
- * account is an administrator, the server's allow_players setting, and standing orders enabled on the server. The
- * extra read of the network is spaced by the server and never refused.
+ * Queues a check that skips cooldown and retry delays but waits for fresh stock. Requests on the same network share a
+ * read. The check can use a scheduled sample; extra reads are at least 30 seconds apart. It submits only if the network
+ * is available, the trigger still holds, the output is not already being crafted and an eligible CPU is free. Poll the
+ * order list for its status. The order, network switch and server feature must be enabled. Running requires network
+ * access and either administrator rights or the server's allow_players setting.
  *
  * @pathParam gridKey Persistent network identifier.
  * @pathParam orderKey Standing order identifier.
@@ -41,13 +43,14 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  *           such order.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
  * @response 409 {@link ErrorResponse} STANDING_ORDER_NOT_RUNNABLE: the order is disabled, its stored definition
- *           cannot be read, or standing orders are switched off or unavailable for the network.
+ *           cannot be read, or standing orders are switched off for the network.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: unexpected server error.
- * @response 503 {@link ErrorResponse} SERVER_STOPPING: the server is stopping.
+ * @response 503 {@link ErrorResponse} STANDING_ORDERS_UNAVAILABLE or SERVER_STOPPING: orders could not be loaded or the
+ *           server is stopping.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"STANDING_ORDERS_DISABLED","data":null}
@@ -58,7 +61,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
- * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
+ * @responseExample 503 {"status":"STANDING_ORDERS_UNAVAILABLE","data":null}
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/standing-orders/{orderKey}/run")
 public final class RunStandingOrder extends StandingOrderRequest {
@@ -81,7 +84,16 @@ public final class RunStandingOrder extends StandingOrderRequest {
         StandingOrderEditor editor = editor();
         if (editor == null || refusesNewWork()) return;
         try {
-            switch (editor.run(gridKey, orderKey)) {
+            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+            if (data == null) {
+                deny(ApiStatus.GRID_NOT_FOUND);
+                return;
+            }
+            switch (editor.run(
+                gridKey,
+                orderKey,
+                data.getSettings()
+                    .isStandingOrdersEnabled())) {
                 case NOT_FOUND -> deny(ApiStatus.STANDING_ORDER_NOT_FOUND);
                 case NOT_RUNNABLE -> deny(ApiStatus.STANDING_ORDER_NOT_RUNNABLE);
                 case QUEUED -> respond(HTTP_ACCEPTED, new Response(ApiStatus.OK, null));

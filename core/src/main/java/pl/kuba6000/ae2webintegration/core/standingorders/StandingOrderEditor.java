@@ -30,8 +30,7 @@ public final class StandingOrderEditor {
         /** The network has no such order. */
         NOT_FOUND,
         /**
-         * The order is disabled, its stored definition cannot be read, or the engine reports its network switched off
-         * or unavailable, so a check would do nothing.
+         * The order is disabled, its stored definition cannot be read, or the network's switch is off.
          */
         NOT_RUNNABLE
     }
@@ -59,7 +58,7 @@ public final class StandingOrderEditor {
      *
      * @throws InvalidStandingOrderException        the definition violates the format or a limit
      * @throws StandingOrderStore.OrderLimitReached the network already holds the configured maximum
-     * @throws StandingOrderStore.UnknownResource   a referenced resource is neither described nor in the catalogue
+     * @throws StandingOrderStore.UnknownResource   a referenced resource is not known to the account on this grid
      */
     public synchronized @NotNull StandingOrderStore.Valid create(@NotNull StableKey grid, @NotNull WebPrincipal creator,
         @NotNull StandingOrderDefinition definition, @NotNull Map<StableKey, ResourceDescriptor> descriptions)
@@ -86,11 +85,12 @@ public final class StandingOrderEditor {
      * @param mayEnable    whether the edit may switch on an order that is off or cannot be read
      * @return what happened; an edit that changes nothing writes and posts nothing
      * @throws InvalidStandingOrderException      the edit refused, or the definition violates the format or a limit
-     * @throws StandingOrderStore.UnknownResource a referenced resource is neither described nor in the catalogue
+     * @throws StandingOrderStore.UnknownResource a referenced resource is not known to the account on this grid
      */
-    public synchronized @NotNull UpdateResult update(@NotNull StableKey grid, @NotNull StableKey order,
-        @NotNull Edit edit, @NotNull Function<StandingOrderDefinition, Map<StableKey, ResourceDescriptor>> descriptions,
-        boolean mayEnable) throws IOException, InvalidStandingOrderException {
+    public synchronized @NotNull UpdateResult update(@NotNull WebPrincipal principal, @NotNull StableKey grid,
+        @NotNull StableKey order, @NotNull Edit edit,
+        @NotNull Function<StandingOrderDefinition, Map<StableKey, ResourceDescriptor>> descriptions, boolean mayEnable)
+        throws IOException, InvalidStandingOrderException {
         StandingOrderStore.Entry current = store.get(grid, order);
         if (current == null) return UpdateResult.NOT_FOUND;
         StandingOrderDefinition definition = edit.apply(current);
@@ -102,7 +102,8 @@ public final class StandingOrderEditor {
                 .enabled();
         }
         if (definition.enabled() && !wasEnabled && !mayEnable) return UpdateResult.ENABLING_REFUSED;
-        if (!store.replace(grid, order, definition, descriptions.apply(definition))) return UpdateResult.NOT_FOUND;
+        if (!store.replace(principal, grid, order, definition, descriptions.apply(definition)))
+            return UpdateResult.NOT_FOUND;
         engine.post(grid, new StandingOrderStore.Valid(order, current.ordinal(), current.createdBy(), definition));
         return UpdateResult.UPDATED;
     }
@@ -115,14 +116,14 @@ public final class StandingOrderEditor {
     }
 
     /** Asks the engine to check the order now. */
-    public synchronized @NotNull RunResult run(@NotNull StableKey grid, @NotNull StableKey order) throws IOException {
+    public synchronized @NotNull RunResult run(@NotNull StableKey grid, @NotNull StableKey order, boolean gridEnabled)
+        throws IOException {
         StandingOrderStore.Entry current = store.get(grid, order);
         if (current == null) return RunResult.NOT_FOUND;
-        if (!(current instanceof StandingOrderStore.Valid valid) || !valid.definition()
-            .enabled()) return RunResult.NOT_RUNNABLE;
-        StandingOrderSnapshot status = engine.snapshot(order);
-        if (status != null && (status.status() == StandingOrderStatus.SWITCHED_OFF
-            || status.status() == StandingOrderStatus.GRID_UNAVAILABLE)) return RunResult.NOT_RUNNABLE;
+        if (!gridEnabled || !(current instanceof StandingOrderStore.Valid valid)
+            || !valid.definition()
+                .enabled())
+            return RunResult.NOT_RUNNABLE;
         engine.requestRun(grid, order);
         return RunResult.QUEUED;
     }

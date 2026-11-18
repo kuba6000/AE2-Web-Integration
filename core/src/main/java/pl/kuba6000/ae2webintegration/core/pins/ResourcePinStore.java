@@ -342,7 +342,8 @@ public final class ResourcePinStore {
             if (gridId == null) return false;
             if (currentDescription != null) ResourceCatalogue
                 .upsert(db, Collections.singletonMap(item, currentDescription), Collections.singleton(item));
-            Long resourceId = admissibleResource(db, owner, gridId, item, currentDescription != null);
+            Long resourceId = ResourceCatalogue
+                .admissibleResource(db, owner, gridId, item, currentDescription != null, false);
             if (resourceId == null) return false;
             List<Pin> pins = list(db, owner);
             Pin existing = pins.stream()
@@ -383,31 +384,6 @@ public final class ResourcePinStore {
             }
             return true;
         });
-    }
-
-    private static @Nullable Long admissibleResource(@NotNull Connection db, @NotNull String owner, long gridId,
-        @NotNull StableKey item, boolean current) throws SQLException {
-        try (PreparedStatement query = db.prepareStatement("""
-            SELECT r.id
-            FROM history_resources r
-            WHERE r.item_key = ? AND (
-                ? OR EXISTS (SELECT 1 FROM history_stock s JOIN history_measurements m ON m.id = s.measurement_id
-                             WHERE m.grid_id = ? AND s.resource_id = r.id)
-                  OR EXISTS (SELECT 1 FROM history_flow f JOIN history_measurements m ON m.id = f.measurement_id
-                             WHERE m.grid_id = ? AND f.resource_id = r.id)
-                  OR EXISTS (SELECT 1 FROM resource_pins p WHERE p.owner = ? AND p.grid_id = ? AND p.resource_id = r.id)
-            )
-            """)) {
-            query.setString(1, item.toString());
-            query.setBoolean(2, current);
-            query.setLong(3, gridId);
-            query.setLong(4, gridId);
-            query.setString(5, owner);
-            query.setLong(6, gridId);
-            try (ResultSet rows = query.executeQuery()) {
-                return rows.next() ? rows.getLong(1) : null;
-            }
-        }
     }
 
     public boolean update(@NotNull WebPrincipal principal, @NotNull StableKey pinKey, @Nullable Boolean terminal,

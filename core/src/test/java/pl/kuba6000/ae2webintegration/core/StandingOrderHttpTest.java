@@ -795,13 +795,11 @@ class StandingOrderHttpTest {
     void anOrderOfANetworkWithStandingOrdersSwitchedOffIsNotRunnableAndKeepsTheAllowance() throws Exception {
         StandingOrderStore.Valid seeded = seed("Seeded", true, plate.web$getKey());
         String run = orders + "/" + seeded.key() + "/run";
+        tick();
         GridSwitch.set(gridKey, false);
-        tick();
         assertRejected(request("POST", run, OWNER, ""), HTTP_CONFLICT, "STANDING_ORDER_NOT_RUNNABLE", null, null);
-        GridSwitch.set(gridKey, true);
-        // The engine looks at the network again when a change of the order reaches it, or at its next sweep.
-        assertEquals(HTTP_OK, request("PATCH", order(seeded), OWNER, "{\"cooldownSeconds\":5}").status());
         tick();
+        GridSwitch.set(gridKey, true);
         assertEquals(HTTP_ACCEPTED, request("POST", run, OWNER, "").status());
     }
 

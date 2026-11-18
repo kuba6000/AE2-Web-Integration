@@ -760,6 +760,44 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     @Tag(SQLITE)
+    void networkSwitchUsesStandingOrderPermissionAndRejectsTheWholePatch() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        String path = "/api/grids/" + GRID_IDENTITIES.getKey(grid) + "/settings";
+        String owner = "Authorization: Bearer owner\r\nContent-Type: application/json\r\n";
+        String admin = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        boolean previous = Config.INSTANCE.standingOrders.allowPlayers;
+        try {
+            Config.INSTANCE.standingOrders.allowPlayers = false;
+            assertEquals(
+                HTTP_FORBIDDEN,
+                request("PATCH", path, owner, "{\"name\":\"Changed\",\"standingOrdersEnabled\":false}").status());
+            JsonObject current = request("GET", path, owner, "").json()
+                .getAsJsonObject("data");
+            assertFalse(
+                current.get("canEditStandingOrders")
+                    .getAsBoolean());
+            assertEquals(
+                "",
+                current.get("name")
+                    .getAsString());
+            assertTrue(
+                current.get("standingOrdersEnabled")
+                    .getAsBoolean());
+            Reply updated = request("PATCH", path, admin, "{\"standingOrdersEnabled\":false}");
+            assertEquals(HTTP_OK, updated.status());
+            assertTrue(
+                updated.json()
+                    .getAsJsonObject("data")
+                    .get("canEditStandingOrders")
+                    .getAsBoolean());
+            assertEquals(HTTP_OK, request("PATCH", path, owner, "{\"name\":\"Allowed\"}").status());
+        } finally {
+            Config.INSTANCE.standingOrders.allowPlayers = previous;
+        }
+    }
+
+    @Test
+    @Tag(SQLITE)
     void standingOrdersSettingIsOptionalValidatedAndDurable() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = GRID_IDENTITIES.getKey(grid);

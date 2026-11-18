@@ -1,7 +1,7 @@
 import type { ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
-import { registryId, selectResources } from '../../app/resource-helpers.js';
+import { registryId, resourceSearch } from '../../app/resource-helpers.js';
 import type { IconTarget } from '../../app/icons.js';
 import { element } from './dom.js';
 import { createResourceIcon } from './resource-icon.js';
@@ -14,6 +14,7 @@ export type ResourceChoice = {
     /** The network's current resources; only these can be chosen. */
     items: ThemeState['items'];
     itemsReady: boolean;
+    catalogRevision: number;
     /** The message key of a failed read of the resources, which the picker offers to retry. */
     itemsError: string | null;
     /** Resources by identifier, for naming a chosen resource. */
@@ -56,7 +57,7 @@ export function createResourcePicker(
     let context: ResourceChoice | undefined;
     let selected: string | null = null;
     let shownSignature = '';
-    let results: Item[] = [];
+    let searchIndex: ReturnType<typeof resourceSearch<Item>> | undefined;
     let resultRows: { item: Item; button: HTMLButtonElement }[] = [];
     let renderedState = '';
     /** Not focus: a click on a result must not close the panel in browsers that do not focus buttons. */
@@ -69,27 +70,22 @@ export function createResourcePicker(
         panel.hidden = true;
         document.removeEventListener('pointerdown', outside, true);
         choice.setAttribute('aria-expanded', 'false');
+        searchIndex = undefined;
+        resultRows = [];
+        list.replaceChildren();
         changed();
         if (restoreFocus) choice.focus();
     }
+    const resultSignature = (state: ResourceChoice) =>
+        JSON.stringify([state.catalogRevision, state.itemsReady, state.itemsError, state.language]);
     function renderResults() {
         if (!context) return;
         const { items, itemsReady, itemsError, locale, language } = context;
-        renderedState = `${itemsReady} ${itemsError}`;
-        results = itemsReady
-            ? selectResources(
-                  items.filter((item) => item.itemKey),
-                  {
-                      search: search.value,
-                      language,
-                      filter: craftableOnly ? 'craftable' : 'all',
-                      showItems: true,
-                      showFluids: true,
-                      sort: 'name',
-                      sortOrder: 'ascending'
-                  }
-              ).slice(0, maxResults)
-            : [];
+        const signature = resultSignature(context);
+        if (signature !== renderedState) searchIndex = undefined;
+        renderedState = signature;
+        if (itemsReady) searchIndex ??= resourceSearch(items, language, craftableOnly);
+        const results = searchIndex?.(search.value, maxResults) ?? [];
         let message = locale.common('standingOrderResourcesLoading');
         if (itemsError) message = locale.common(itemsError);
         else if (itemsReady) message = results.length ? '' : locale.common('standingOrderNoResources');
@@ -174,8 +170,12 @@ export function createResourcePicker(
             choice.setAttribute('aria-invalid', String(invalid));
             search.setAttribute('aria-label', next.locale.common('standingOrderSearchResources'));
             search.placeholder = next.locale.common('searchHint');
-            // The list is rebuilt when it is opened or searched, and when loading ends or fails.
-            if (!panel.hidden && renderedState !== `${next.itemsReady} ${next.itemsError}`) renderResults();
+            if (!panel.hidden && renderedState !== resultSignature(next)) renderResults();
+        },
+        reset() {
+            context = undefined;
+            selected = null;
+            close(false);
         },
         close: () => close(false)
     };

@@ -97,15 +97,41 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     const empty = element('p', '', 'hint');
     const list = element('ul', '', 'standing-order-list inset-frame');
     let editorMetadata: ThemeState['itemIcons'] = null;
-    const editor = createStandingOrderEditor(application, () => editorIcons.update(editor.targets(), editorMetadata));
-    scroll.append(status, notices, cadence, empty, list, editor.element);
+    let editor: ReturnType<typeof createStandingOrderEditor> | undefined;
+    let editorKey: string | null = null;
+    scroll.append(status, notices, cadence, empty, list);
     view.append(heading, body);
     root.append(view);
     const listIcons = application.icons.observe(list, paintResourceIcon);
-    const editorIcons = application.icons.observe(editor.element, paintResourceIcon);
+    const editorIcons = application.icons.observe(scroll, paintResourceIcon);
     const rows = new Map<string, ReturnType<typeof createRow>>();
     let previous = '';
 
+    function renderEditor(state: ThemeState, locale: Translator, icons: boolean) {
+        const model = state.standingOrders.editor;
+        const key = model ? JSON.stringify([state.route.gridKey, model.order, model.status === 'ready']) : null;
+        if (key !== editorKey) {
+            editor?.dispose();
+            editor?.element.remove();
+            editor = undefined;
+            editorKey = key;
+            if (model) {
+                const form = createStandingOrderEditor(application, () =>
+                    editorIcons.update(form.targets(), editorMetadata)
+                );
+                editor = form;
+                scroll.append(editor.element);
+            }
+        }
+        editorIcons.update(model && editor ? editor.render(state, model, locale, icons) : [], state.itemIcons);
+    }
+    function clearList() {
+        if (rows.size) {
+            rows.clear();
+            list.replaceChildren();
+        }
+        listIcons.update([], null);
+    }
     function notice(text: string, problem: boolean) {
         notices.append(element('p', text, problem ? 'api-error' : 'hint'));
     }
@@ -175,7 +201,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
         row.toggleText.textContent = t('standingOrderToggle');
         row.toggle.setAttribute('aria-label', `${t('standingOrderToggle')}: ${label}`);
         row.run.hidden = !definition?.enabled || !orders.canEdit || !orders.serverEnabled;
-        row.run.disabled = !editable;
+        row.run.disabled = !editable || !orders.gridEnabled;
         row.run.textContent = t('standingOrderRun');
         row.run.setAttribute('aria-label', `${t('standingOrderRun')}: ${label}`);
         row.edit.hidden = !orders.canEdit;
@@ -240,9 +266,8 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             const { route, standingOrders: orders } = state;
             view.hidden = route.view !== 'standing-orders';
             if (route.view !== 'standing-orders') {
-                editor.render(state, locale, false);
-                listIcons.update([], null);
-                editorIcons.update([], null);
+                renderEditor(state, locale, false);
+                clearList();
                 previous = '';
                 return;
             }
@@ -285,11 +310,11 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             empty.textContent = t('standingOrdersEmpty');
             empty.hidden = !listing || orders.orders.length > 0;
             if (listing) renderList(state, locale, icons);
-            else listIcons.update([], null);
-            editorIcons.update(editor.render(state, locale, icons), state.itemIcons);
+            else clearList();
+            renderEditor(state, locale, icons);
         },
         dispose() {
-            editor.dispose();
+            editor?.dispose();
             listIcons.dispose();
             editorIcons.dispose();
         }

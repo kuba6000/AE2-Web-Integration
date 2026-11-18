@@ -5,13 +5,14 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.lang.ref.WeakReference;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -96,9 +97,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     private final Map<StableKey, GridState> grids = new LinkedHashMap<>();
     private final Map<StableKey, OrderState> orders = new HashMap<>();
-    private final ArrayDeque<OrderState> work = new ArrayDeque<>();
+    private final Set<OrderState> work = new LinkedHashSet<>();
+    private final Set<OrderState> ready = new LinkedHashSet<>();
+    private final Set<GridState> changedDefinitions = new LinkedHashSet<>();
     private final PriorityQueue<Timer> timers = new PriorityQueue<>(Comparator.comparingLong(Timer::at));
-    private final List<OrderState> calculating = new ArrayList<>();
+    private final Set<OrderState> calculating = new LinkedHashSet<>();
     private final Map<StableKey, CpuView> cpuViews = new HashMap<>();
     private ConfigSettings.StandingOrders config;
     private long epoch;
@@ -158,13 +161,14 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     public void stockObserved(@NotNull StableKey grid, @NotNull StorageObservation observation) {
         GridState state = grids.get(grid);
         // A network that was not synced yet may be fed already; the first sync drops what turns out to be unfed.
-        if (state == null || !state.fed && state.availability != null) return;
+        if (state == null || !state.hasEnabledOrder || !state.fed && state.availability != null) return;
         Map<StableKey, Long> quantities = new HashMap<>();
         for (StorageObservation.Row row : observation.rows()) {
             if (state.referenced.contains(row.itemKey())) quantities.put(row.itemKey(), row.quantity());
         }
         // A complete read lists every stored and craftable resource, so a referenced one that is absent holds zero.
         for (StableKey resource : state.referenced) quantities.putIfAbsent(resource, 0L);
+        state.stockGeneration++;
         state.baseline = new StockBaseline(observation.observedAt(), quantities);
         state.stockFailed = false;
         state.readWanted = false;
@@ -172,11 +176,12 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     }
 
     @Override
-    public void stockReadFailed(@NotNull StableKey grid, @NotNull RuntimeException failure) {
+    public void stockInvalidated(@NotNull StableKey grid) {
         GridState state = grids.get(grid);
-        if (state == null) return;
+        if (state == null || !state.hasEnabledOrder) return;
         state.baseline = null;
         state.stockFailed = true;
+        state.readWanted = true;
         state.pending = true;
     }
 
@@ -196,7 +201,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
      */
     public void tick(long nowMillis) {
         guarded("settings", () -> config = settings.get());
-        cpuViews.clear();
         tickCapabilities = null;
         epoch++;
         guarded("inbox", () -> drainInbox(nowMillis));
@@ -208,6 +212,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         guarded("calculations", () -> pollCalculations(nowMillis));
         guarded("timers", () -> fireTimers(nowMillis));
         guarded("evaluation", () -> runWork(nowMillis));
+        cpuViews.clear();
     }
 
     /**
@@ -231,14 +236,14 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             dropCalculation(order);
             order.removed = true;
         }
-        for (GridState grid : grids.values()) {
-            if (grid.leased) coordinator.releaseStock(grid.key);
-        }
+        for (GridState grid : grids.values()) coordinator.releaseStock(grid.key);
         coordinator.setStockListener(null);
         inbox.clear();
         grids.clear();
         orders.clear();
         work.clear();
+        ready.clear();
+        changedDefinitions.clear();
         timers.clear();
         calculating.clear();
         cpuViews.clear();
@@ -252,12 +257,23 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             // One bad command must not hold back the ones behind it.
             guarded("command", () -> apply(posted, now));
         }
+        // On startup many definitions arrive together. Rebuild each affected network's demand once,
+        // before the coordinator can deliver its next stock observation.
+        for (GridState grid : changedDefinitions) {
+            grid.refresh();
+            if (!grid.hasEnabledOrder) stopStockFeed(grid);
+            else if (grid.availability == Availability.ACTIVE && grid.baseline != null
+                && !grid.baseline.covers(grid.referenced)) {
+                    coordinator.requestStockRead(grid.key);
+                }
+        }
+        changedDefinitions.clear();
     }
 
     private void apply(Command command, long now) {
         if (command instanceof Define define) define(define.grid(), define.entry(), now);
         else if (command instanceof Delete delete) delete(delete.grid(), delete.order());
-        else runNow(((RunNow) command).grid(), ((RunNow) command).order(), now);
+        else runNow(((RunNow) command).grid(), ((RunNow) command).order());
     }
 
     private void define(StableKey gridKey, StandingOrderStore.Entry entry, long now) {
@@ -302,15 +318,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                 setStatus(order, StandingOrderStatus.IDLE, null, now);
             }
         }
-        grid.orders.sort(
-            Comparator.comparingInt((OrderState o) -> o.ordinal)
-                .thenComparing(o -> o.key.toString()));
-        grid.refresh();
+        changedDefinitions.add(grid);
         grid.pending = true;
-        if (grid.availability == Availability.ACTIVE && grid.baseline != null
-            && !grid.baseline.covers(grid.referenced)) {
-            coordinator.requestStockRead(grid.key);
-        }
         enqueue(order);
     }
 
@@ -331,31 +340,38 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         if (order == null || !order.grid.equals(gridKey)) return;
         dropCalculation(order);
         order.removed = true;
+        ready.remove(order);
+        work.remove(order);
         orders.remove(orderKey);
         snapshots.remove(orderKey);
         timers.removeIf(timer -> timer.order() == order);
         GridState grid = grids.get(gridKey);
         grid.orders.remove(order);
         if (grid.orders.isEmpty()) {
-            if (grid.leased) coordinator.releaseStock(gridKey);
+            coordinator.releaseStock(gridKey);
             grids.remove(gridKey);
+            changedDefinitions.remove(grid);
             cpuViews.remove(gridKey);
         } else {
-            grid.refresh();
+            changedDefinitions.add(grid);
             grid.pending = true;
         }
     }
 
-    private void runNow(StableKey gridKey, StableKey orderKey, long now) {
+    private void runNow(StableKey gridKey, StableKey orderKey) {
         OrderState order = orders.get(orderKey);
         GridState grid = grids.get(gridKey);
         if (order == null || grid == null || !order.grid.equals(gridKey)) return;
         if (order.definition == null || !order.definition.enabled()) return;
-        ensureSynced(grid, now);
-        if (grid.availability != Availability.ACTIVE) return;
+        order.manualRunGeneration = grid.stockGeneration;
         order.backoffUntil = 0;
         order.cooldownUntil = 0;
-        coordinator.requestStockRead(gridKey);
+        // Posted before the tick, Run may follow a switch change that the last sync could not have seen.
+        if (grid.availability == Availability.ACTIVE) coordinator.requestStockRead(gridKey);
+        else {
+            grid.pending = true;
+            grid.readWanted = true;
+        }
     }
 
     /**
@@ -383,12 +399,12 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         else if (!config.enabled || !gridSettings.isStandingOrdersEnabled()) availability = Availability.SWITCHED_OFF;
         else if (live == null || !isUsable(live)) availability = Availability.UNAVAILABLE;
         else availability = Availability.ACTIVE;
-        boolean tracked = gridSettings != null && gridSettings.isStorageTracked();
         if (gridSettings != null) grid.intervalMillis = SECONDS.toMillis(gridSettings.getStockSampleIntervalSeconds());
         boolean replaced = availability == Availability.ACTIVE && grid.everSeen && grid.seen.get() != live;
         boolean switchedOff = availability == Availability.SWITCHED_OFF
             && grid.availability != Availability.SWITCHED_OFF;
-        boolean stale = grid.baseline != null && isStale(grid, grid.baseline, now);
+        boolean stale = grid.baseline != null
+            && (isStale(grid, grid.baseline, now) || coordinator.stockTopologyChanged(grid.key));
         if (replaced || switchedOff || stale) {
             // Whatever was calculated or read belongs to a network state that no longer exists.
             for (OrderState order : grid.orders) cancelCalculation(order, now);
@@ -403,34 +419,42 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         }
         if (availability != grid.availability) wake = true;
         grid.availability = availability;
-        grid.live = availability == Availability.ACTIVE ? live : null;
-        boolean lease = gridSettings != null && availability != Availability.SWITCHED_OFF
-            && grid.hasEnabledOrder
-            && !tracked;
-        if (lease != grid.leased) {
-            grid.leased = lease;
-            if (lease) coordinator.leaseStock(grid.key);
-            else coordinator.releaseStock(grid.key);
-        }
-        // Stock is only trustworthy while something keeps reading it; without a feed it would age unnoticed.
-        boolean fed = gridSettings != null && availability != Availability.SWITCHED_OFF && (tracked || lease);
-        if (!fed) {
+        if (!grid.hasEnabledOrder || gridSettings == null || availability == Availability.SWITCHED_OFF) {
             if (grid.baseline != null) wake = true;
-            grid.baseline = null;
-            grid.readWanted = false;
-        } else if (!grid.fed && (grid.baseline == null || isStale(grid, grid.baseline, now))) {
-            grid.readWanted = true;
-        }
-        grid.fed = fed;
-        if (grid.readWanted && availability == Availability.ACTIVE) {
-            grid.readWanted = false;
-            coordinator.requestStockRead(grid.key);
+            stopStockFeed(grid);
+        } else {
+            maintainStockFeed(grid, gridSettings.isStorageTracked(), now);
         }
         if (wake) {
             for (OrderState order : grid.orders) {
                 if (order.definition != null && order.definition.enabled()) enqueue(order);
             }
         }
+    }
+
+    /** Use scheduled history samples when possible; otherwise lease a feed just for the enabled orders. */
+    private void maintainStockFeed(GridState grid, boolean tracked, long now) {
+        boolean lease = !tracked;
+        if (lease != grid.leased) {
+            grid.leased = lease;
+            if (lease) coordinator.leaseStock(grid.key);
+            else coordinator.releaseStock(grid.key);
+        }
+        if (!grid.fed && (grid.baseline == null || isStale(grid, grid.baseline, now))) grid.readWanted = true;
+        grid.fed = true;
+        if (grid.readWanted && grid.availability == Availability.ACTIVE) {
+            grid.readWanted = false;
+            coordinator.requestStockRead(grid.key);
+        }
+    }
+
+    /** Releases the engine's extra reads even when normal tracking, rather than a lease, supplies its stock. */
+    private void stopStockFeed(GridState grid) {
+        coordinator.releaseStock(grid.key);
+        grid.leased = false;
+        grid.fed = false;
+        grid.baseline = null;
+        grid.readWanted = false;
     }
 
     /** Whether the network's stock feed should have delivered a newer read by now. */
@@ -448,10 +472,13 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
     private void pollCalculations(long now) {
         long limit = MINUTES.toMillis(config.maxCalculationMinutes);
-        for (int index = calculating.size() - 1; index >= 0; index--) {
-            OrderState order = calculating.get(index);
+        for (OrderState order : calculating) {
+            if (ready.contains(order)) continue;
             Future<IAECraftingJob> future = order.calculation;
-            if (future != null && (future.isDone() || now - order.calculationStartedAt >= limit)) enqueueFirst(order);
+            if (future != null && (future.isDone() || now - order.calculationStartedAt >= limit)) {
+                work.remove(order);
+                ready.add(order);
+            }
         }
     }
 
@@ -494,24 +521,34 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         @Nullable GridState grid) {
         IAEGrid live = grid == null ? null : grid.seen.get();
         if (live == null) return Collections.emptyList();
-        List<StandingOrderSnapshot.MissingIngredient> missing = new ArrayList<>();
+        // Keep only five native entries, ordered by shortfall. Equal quantities retain summary order.
+        List<ICraftingPlanSummaryEntry> largest = new ArrayList<>(MAX_MISSING);
         try {
             for (ICraftingPlanSummaryEntry entry : job.web$generateSummary(live)
                 .web$getEntries()) {
                 long amount = entry.web$getMissingAmount();
                 if (amount <= 0) continue;
-                IAEKey what = entry.web$getWhat();
-                missing.add(
-                    new StandingOrderSnapshot.MissingIngredient(what.web$getKey(), what.web$getDisplayName(), amount));
+                int index = 0;
+                while (index < largest.size() && largest.get(index)
+                    .web$getMissingAmount() >= amount) index++;
+                if (index == MAX_MISSING) continue;
+                if (largest.size() == MAX_MISSING) largest.remove(MAX_MISSING - 1);
+                largest.add(index, entry);
             }
+            List<StandingOrderSnapshot.MissingIngredient> missing = new ArrayList<>(largest.size());
+            for (ICraftingPlanSummaryEntry entry : largest) {
+                IAEKey resource = entry.web$getWhat();
+                missing.add(
+                    new StandingOrderSnapshot.MissingIngredient(
+                        resource.web$getKey(),
+                        resource.web$getDisplayName(),
+                        entry.web$getMissingAmount()));
+            }
+            return Collections.unmodifiableList(missing);
         } catch (RuntimeException unreadable) {
             LOG.warn("The missing ingredients of a standing order calculation could not be read", unreadable);
             return Collections.emptyList();
         }
-        missing.sort(
-            Comparator.comparingLong(StandingOrderSnapshot.MissingIngredient::amount)
-                .reversed());
-        return Collections.unmodifiableList(new ArrayList<>(missing.subList(0, Math.min(missing.size(), MAX_MISSING))));
     }
 
     private void fireTimers(long now) {
@@ -529,8 +566,10 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     /** Evaluates queued orders in arrival order until the tick budget is spent; at least one is always handled. */
     private void runWork(long now) {
         long deadline = nanoClock.getAsLong() + MILLISECONDS.toNanos(config.tickBudgetMillis);
-        OrderState order;
-        while ((order = work.poll()) != null) {
+        while (!ready.isEmpty() || !work.isEmpty()) {
+            Iterator<OrderState> queue = (ready.isEmpty() ? work : ready).iterator();
+            OrderState order = queue.next();
+            queue.remove();
             evaluate(order, now);
             if (nanoClock.getAsLong() >= deadline) break;
         }
@@ -539,7 +578,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     // ----- Evaluation (server thread) -----
 
     private void evaluate(OrderState order, long now) {
-        order.queued = false;
         if (order.removed) return;
         GridState grid = grids.get(order.grid);
         try {
@@ -570,7 +608,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             return;
         }
         ensureSynced(grid, now);
-        IAEGrid live = grid.live;
+        IAEGrid live = grid.availability == Availability.ACTIVE ? grid.seen.get() : null;
         if (live == null) {
             if (grid.availability == Availability.SWITCHED_OFF) {
                 cancelCalculation(order, now);
@@ -633,6 +671,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
      */
     private void start(OrderState order, GridState grid, IAEGrid live, StandingOrderDefinition definition,
         @Nullable IAECraftingJob plan, long now) {
+        // Another order's edit or a timer can wake this one before a throttled manual read arrives.
+        if (order.manualRunGeneration == grid.stockGeneration) {
+            setStatus(order, StandingOrderStatus.WAITING_FOR_STOCK, null, now);
+            return;
+        }
         // Gated on the time, not the status: an outage or a disable in between must not end the cooldown early.
         if (now < order.cooldownUntil) {
             setStatus(order, StandingOrderStatus.COOLDOWN, null, now);
@@ -641,16 +684,17 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         }
         if (order.status == StandingOrderStatus.COOLDOWN) setStatus(order, StandingOrderStatus.IDLE, null, now);
         StockBaseline baseline = grid.baseline;
-        if (baseline == null) {
-            waitForStock(
-                order,
-                grid.stockFailed ? StandingOrderReason.READ_FAILED : StandingOrderReason.WAITING_FIRST_READ,
-                now);
+        if (baseline == null && grid.stockFailed) {
+            waitForStock(order, StandingOrderReason.READ_FAILED, now);
             return;
         }
         // A job that just left its CPU may still be missing from older reads, and would be ordered again.
-        if (baseline.observedAt < order.settledAt) {
+        if (order.settledAt != 0 && (baseline == null || baseline.observedAt < order.settledAt)) {
             waitForStock(order, StandingOrderReason.WAITING_FRESH_READ_AFTER_JOB, now);
+            return;
+        }
+        if (baseline == null) {
+            waitForStock(order, StandingOrderReason.WAITING_FIRST_READ, now);
             return;
         }
         CraftAction action = definition.action();
@@ -863,15 +907,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     // ----- Queues -----
 
     private void enqueue(OrderState order) {
-        if (order.queued || order.removed) return;
-        order.queued = true;
-        work.addLast(order);
-    }
-
-    private void enqueueFirst(OrderState order) {
-        if (order.queued) work.remove(order);
-        order.queued = true;
-        work.addFirst(order);
+        if (!order.removed && !ready.contains(order)) work.add(order);
     }
 
     private void schedule(OrderState order, long at) {
@@ -1080,10 +1116,9 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private WeakReference<IAEGrid> seen = new WeakReference<>(null);
         /** Whether a usable native network was seen at all; the first one is not a replacement. */
         private boolean everSeen;
-        /** The native network orders are evaluated against; present exactly while the grid is ACTIVE. */
-        private @Nullable IAEGrid live;
         private @Nullable StockBaseline baseline;
         private boolean stockFailed;
+        private long stockGeneration;
         private long intervalMillis;
         private boolean hasEnabledOrder;
         private boolean leased;
@@ -1102,12 +1137,15 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
 
         /** Recomputes what the orders need after the set of orders or a definition changed. */
         private void refresh() {
+            orders.sort(
+                Comparator.comparingInt((OrderState order) -> order.ordinal)
+                    .thenComparing(order -> order.key.toString()));
             referenced.clear();
             hasEnabledOrder = false;
             for (OrderState order : orders) {
                 StandingOrderDefinition definition = order.definition;
-                if (definition == null) continue;
-                hasEnabledOrder |= definition.enabled();
+                if (definition == null || !definition.enabled()) continue;
+                hasEnabledOrder = true;
                 referenced.add(
                     definition.action()
                         .resource());
@@ -1136,6 +1174,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private StandingOrderStatus status = StandingOrderStatus.IDLE;
         private @Nullable Cause cause;
         private long changedAt;
+        private long manualRunGeneration = -1;
         private long craftingSince;
         /** The order was disabled while its job ran, so the cooldown of that job ended with its activity. */
         private boolean disabledWhileCrafting;
@@ -1154,7 +1193,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private @Nullable IAECraftingJob job;
         private long plannedAmount;
         private boolean simulationAllowed;
-        private boolean queued;
         private boolean removed;
 
         private OrderState(StableKey key, StableKey grid) {

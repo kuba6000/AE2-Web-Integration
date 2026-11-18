@@ -58,6 +58,8 @@ export type ThemeState = ReadonlyData<{
     itemsByKey: ReadonlyMap<string, StoredResource>;
     /** Advances only when a full item snapshot is accepted, independently of live deltas. */
     itemSnapshotRevision: number;
+    /** Advances on a new snapshot or when available choices, names, icons or craftability change. */
+    itemCatalogRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';

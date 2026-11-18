@@ -1,8 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import org.jetbrains.annotations.NotNull;
+
 import com.electronwill.nightconfig.core.conversion.Path;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Defaults and bounds belong alongside their settings.
 public final class ConfigSettings {
@@ -283,8 +286,13 @@ public final class ConfigSettings {
 
         /** Whether players with network access may create and edit standing orders; administrators always may. */
         @Path("allow_players")
-        @Comment("Allow players with access to a network to create, edit and delete its standing orders. Administrators always can; existing standing orders keep running.")
+        @Comment("Allow players with access to a network to manage and run its standing orders, including the network switch. Administrators always can; existing standing orders keep running.")
         public boolean allowPlayers = true;
+
+        /** Called after network access has been checked. */
+        public boolean canEdit(@NotNull WebPrincipal principal) {
+            return allowPlayers || principal.isAdmin();
+        }
 
         /** Crafting calculations that standing orders of one network may have running at once. Must be positive. */
         @Path("max_calculations_in_flight_per_grid")

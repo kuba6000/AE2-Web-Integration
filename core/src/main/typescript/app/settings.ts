@@ -14,6 +14,7 @@ type Edited = Record<keyof GridSettings, boolean>;
 export type SettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: GridSettings | null;
+    canEditStandingOrders: boolean;
     limits: GridSettingsLimits | null;
     craftingLimits: CraftingHistoryLimits | null;
     draft: GridSettings;
@@ -29,6 +30,7 @@ type SaveOperation = {
     desired: Partial<GridSettings>;
     uncertain: boolean;
     result?: GridSettings;
+    canEditStandingOrders?: boolean;
     limits?: GridSettingsLimits;
     craftingLimits?: CraftingHistoryLimits;
     error?: string;
@@ -92,6 +94,7 @@ export function createGridSettings(
     const state: SettingsState = {
         status: 'idle',
         current: null,
+        canEditStandingOrders: false,
         limits: null,
         craftingLimits: null,
         draft: empty(),
@@ -117,6 +120,7 @@ export function createGridSettings(
         Object.assign(state, {
             status: 'error',
             current: null,
+            canEditStandingOrders: false,
             limits: null,
             craftingLimits: null,
             draft: empty(),
@@ -150,6 +154,7 @@ export function createGridSettings(
             Object.assign(state, {
                 status: next.view === 'settings' ? 'loading' : 'idle',
                 current: null,
+                canEditStandingOrders: false,
                 limits: null,
                 craftingLimits: null,
                 draft: draft ? { ...draft.draft } : { ...empty(), ...(previous?.uncertain ? previous.desired : {}) },
@@ -188,9 +193,14 @@ export function createGridSettings(
             request = new AbortController();
             reading = true;
             try {
-                const { limits, craftingLimits, ...data } = await api.settings(route.gridKey, request.signal);
+                const { limits, craftingLimits, canEditStandingOrders, ...data } = await api.settings(
+                    route.gridKey,
+                    request.signal
+                );
                 if (version !== generation) return;
                 state.current = data;
+                state.canEditStandingOrders = canEditStandingOrders;
+                if (!canEditStandingOrders) state.edited.standingOrdersEnabled = false;
                 state.limits = limits;
                 state.craftingLimits = craftingLimits;
                 if (!state.edited.name) state.draft.name = data.name;
@@ -217,6 +227,7 @@ export function createGridSettings(
         },
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]) {
             if (state.status !== 'ready' || state.saving) return;
+            if (field === 'standingOrdersEnabled' && !state.canEditStandingOrders) return;
             state.draft[field] = value;
             state.edited[field] = true;
             state.notice = null;
@@ -265,8 +276,9 @@ export function createGridSettings(
             if (state.draft.isFlowTracked !== state.current.isFlowTracked || uncertain?.isFlowTracked !== undefined)
                 desired.isFlowTracked = state.draft.isFlowTracked;
             if (
-                state.draft.standingOrdersEnabled !== state.current.standingOrdersEnabled ||
-                uncertain?.standingOrdersEnabled !== undefined
+                state.canEditStandingOrders &&
+                (state.draft.standingOrdersEnabled !== state.current.standingOrdersEnabled ||
+                    uncertain?.standingOrdersEnabled !== undefined)
             )
                 desired.standingOrdersEnabled = state.draft.standingOrdersEnabled;
             for (const field of historySettingFields)
@@ -283,8 +295,12 @@ export function createGridSettings(
             state.notice = null;
             changed();
             try {
-                const { limits, craftingLimits, ...result } = await api.saveSettings(key, desired);
+                const { limits, craftingLimits, canEditStandingOrders, ...result } = await api.saveSettings(
+                    key,
+                    desired
+                );
                 operation.result = result;
+                operation.canEditStandingOrders = canEditStandingOrders;
                 operation.limits = limits;
                 operation.craftingLimits = craftingLimits;
                 operation.uncertain = false;
@@ -318,6 +334,7 @@ export function createGridSettings(
                     Object.assign(state, {
                         status: 'ready',
                         current: operation.result,
+                        canEditStandingOrders: operation.canEditStandingOrders === true,
                         limits: operation.limits,
                         craftingLimits: operation.craftingLimits,
                         draft: { ...operation.result },

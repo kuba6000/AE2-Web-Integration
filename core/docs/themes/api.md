@@ -42,7 +42,9 @@ arrays when presenting it. `subscribe` returns an early-unsubscribe function; ho
 the subscription.
 
 `itemSnapshotRevision` changes when a full terminal snapshot is accepted; SSE deltas leave it unchanged.
-Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
+Themes can use it to distinguish a refreshed inventory from incremental updates. `itemCatalogRevision`
+also changes when a delta updates resource choices, descriptions or craftability; quantity-only changes
+leave it unchanged, so a resource picker can reuse its search index. `items` always contains
 the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
 `itemsByKey` holds the same resources that have an `itemKey`, by that key, and is kept current with
 `items`, so a lookup does not need a map of its own.
@@ -56,6 +58,7 @@ Network `settings.current` contains confirmed values and `settings.draft` contai
 `settings.limits` supplies the server's `min`, `max` and `defaultValue` for stock and flow intervals
 and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
 Use those limits for controls and validation; pass only editable fields to `settings.edit`.
+Enable the network-wide standing order switch only when `settings.canEditStandingOrders` is true.
 
 Server configuration is available at `#/server-settings` only for `context.user.isAdmin`.
 Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
@@ -123,7 +126,8 @@ authorization or eliminate all background data requests.
 The `standing-orders` view (`#/grids/<encoded-key>/standing-orders`) lists a network's standing orders.
 `#/grids/<key>/standing-orders/new` opens the editor for a new order, `.../new/<itemKey>` prefills the
 "Keep stocked" template for that resource and `.../<orderKey>` edits or repairs an order; `Route` carries
-the open editor as `route.editor`.
+the open editor as `route.editor`. Run now requests a check against fresh stock; acceptance does not mean
+a job has already started. A disabled network cannot accept a run.
 
 `state.standingOrders` holds `orders`, each with a `definition` (or `invalid`, when the stored order cannot
 be read), the engine's latest `status` (null until the order was first evaluated), and the `resources` the

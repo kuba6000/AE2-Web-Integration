@@ -349,3 +349,52 @@ test('repairing an unreadable order with the server switch off sends a switched-
     assert.equal(sent.length, 1);
     assert.equal(sent[0].enabled, false);
 });
+
+test('opening an order uses the latest saved rules as the baseline for a CPU edit', async (t) => {
+    let target = 100;
+    let saved;
+    const read = () => {
+        const current = order('o1');
+        current.definition.action.amount.target = target;
+        return listing([current]);
+    };
+    const terminal = await app(t, {
+        standingOrders: async () => read(),
+        updateStandingOrder: async (_grid, _key, patch) => {
+            saved = patch;
+            return read();
+        }
+    });
+    const before = global.location;
+    global.location = { hash: '' };
+    t.after(() => {
+        global.location = before;
+    });
+    terminal.route(listRoute);
+    await terminal.refresh();
+    target = 3;
+    terminal.route({ ...listRoute, editor: { order: 'o1', itemKey: null } });
+    await terminal.refresh();
+    terminal.standingOrders.edit({ type: 'cpu', key: 'cpu' });
+    await terminal.standingOrders.save();
+    assert.equal(saved.action.amount.target, 3);
+});
+
+test('confirmed loss of access clears the draft and restoring access opens the current saved order', async (t) => {
+    let denied = false;
+    const terminal = await app(t, {
+        standingOrders: async () => {
+            if (denied) throw Object.assign(new Error(), { status: 'NO_PERMISSIONS' });
+            return listing([order('o1')]);
+        }
+    });
+    terminal.route({ ...listRoute, editor: { order: 'o1', itemKey: null } });
+    await terminal.refresh();
+    terminal.standingOrders.edit({ type: 'name', value: 'private draft' });
+    denied = true;
+    await terminal.refresh();
+    assert.notEqual(terminal.state.standingOrders.editor?.draft.name, 'private draft');
+    denied = false;
+    await terminal.refresh();
+    assert.equal(terminal.state.standingOrders.editor?.draft.name, 'o1');
+});

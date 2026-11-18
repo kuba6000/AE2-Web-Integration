@@ -108,7 +108,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
 
     protected final @Nullable StandingOrderEditor editor() {
         StandingOrderEditor editor = CoreEngine.getStandingOrderEditor();
-        if (editor == null) deny(ApiStatus.SERVER_STOPPING);
+        if (editor == null) deny(ApiStatus.STANDING_ORDERS_UNAVAILABLE);
         return editor;
     }
 
@@ -118,8 +118,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
      * disabled, so that they can be cleaned up.
      */
     protected final boolean refusesChange() {
-        if (!Config.INSTANCE.standingOrders.allowPlayers && !context.getPrincipal()
-            .isAdmin()) {
+        if (!Config.INSTANCE.standingOrders.canEdit(context.getPrincipal())) {
             deny(ApiStatus.NO_PERMISSIONS);
             return true;
         }
@@ -200,7 +199,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
         StandingOrderEngine engine = CoreEngine.getStandingOrders();
         GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
         if (store == null || engine == null) {
-            deny(ApiStatus.SERVER_STOPPING);
+            deny(ApiStatus.STANDING_ORDERS_UNAVAILABLE);
             return;
         }
         if (data == null) {
@@ -231,8 +230,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
             resources.put(resource.getKey(), new OrderResource(resource.getValue(), mappings));
         }
         ConfigSettings.StandingOrders settings = Config.INSTANCE.standingOrders;
-        boolean canEdit = settings.allowPlayers || context.getPrincipal()
-            .isAdmin();
+        boolean canEdit = settings.canEdit(context.getPrincipal());
         respondDetached(
             HTTP_OK,
             new Response(

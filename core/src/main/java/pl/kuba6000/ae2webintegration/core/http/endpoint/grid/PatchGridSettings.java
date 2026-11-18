@@ -11,6 +11,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -34,7 +35,8 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
  * @response 200 {@link Response} Updated network settings.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid request parameters or body.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: authentication required. Includes WWW-Authenticate: Bearer.
- * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network denied. CSRF_REJECTED: cookie or
+ * @response 403 {@link ErrorResponse} NO_PERMISSIONS: access to this network or permission to change the standing order
+ *           switch denied. CSRF_REJECTED: cookie or
  *           configured-local mutations require X-AE2-Request: true.
  * @response 404 {@link ErrorResponse} GRID_NOT_FOUND: network not found.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: unsupported method. Allow lists supported methods.
@@ -104,6 +106,11 @@ public final class PatchGridSettings extends IAsyncRequest {
 
     @Override
     public void handle() {
+        boolean canEditStandingOrders = Config.INSTANCE.standingOrders.canEdit(context.getPrincipal());
+        if (input.standingOrdersEnabled() != null && !canEditStandingOrders) {
+            deny(ApiStatus.NO_PERMISSIONS);
+            return;
+        }
         String name;
         try {
             name = input.name() == null ? null : normalizeName(input.name());
@@ -167,7 +174,11 @@ public final class PatchGridSettings extends IAsyncRequest {
                     || input.flowFlushIntervalSeconds() != null
                     || input.historyRetentionDays() != null
                     || input.craftingHistoryRetentionDays() != null) registry.saveIfDirty();
-                result = GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy());
+                result = GridSettingsView.from(
+                    settings,
+                    canEditStandingOrders,
+                    registry.getDataPolicy(),
+                    registry.getCraftingHistoryPolicy());
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
                 return;

@@ -155,6 +155,37 @@ test('without edit permission the list is read-only, and server or network switc
     await page.getByText('Standing orders are switched off for this network', { exact: false }).waitFor();
     await page.getByRole('link', { name: 'Network settings' }).waitFor();
     await page.getByRole('link', { name: 'New standing order' }).waitFor();
+    const runNow = page.getByRole('button', { name: /Run now/ });
+    assert.equal(await runNow.isEnabled(), false);
+    options.standingOrders.gridEnabled = true;
+    options.standingOrders.orders[0].status = runtime('GRID_UNAVAILABLE');
+    await page.reload();
+    await runNow.waitFor();
+    assert.equal(await runNow.isEnabled(), true);
+});
+
+test('a refused save preserves a readable draft; a denied read clears its fields and the old list', async (t) => {
+    const { page, options } = await open(t, [listed('a', { name: 'Private order' })]);
+    await page.getByRole('link', { name: /^Edit/ }).click();
+    const name = page.getByRole('textbox', { name: 'Name', exact: true });
+    await name.fill('Private draft');
+    options.standingOrderFailure = { status: 'NO_PERMISSIONS', httpStatus: 403 };
+    options.standingOrders.canEdit = false;
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByText('You can view standing orders but not change them.').first().waitFor();
+    assert.equal(await name.isDisabled(), true);
+    assert.equal(await name.inputValue(), 'Private draft');
+
+    await page.route('**/standing-orders{,?*}', (route) =>
+        route.fulfill({ status: 403, json: { status: 'NO_PERMISSIONS', data: null } })
+    );
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByText('You no longer have access to this network.').first().waitFor();
+    assert.equal(await page.getByText('Private order', { exact: true }).count(), 0);
+    assert.equal(
+        await page.locator('input').evaluateAll((inputs) => inputs.some((i) => i.value === 'Private draft')),
+        false
+    );
 });
 
 test('the check cadence follows the network stock interval and points to network settings', async (t) => {
@@ -394,6 +425,11 @@ test('the network settings switch turns standing orders on or off for the networ
     await serverState(() => lastChange(options)?.body?.standingOrdersEnabled, false);
     assert.deepEqual(lastChange(options).body, { standingOrdersEnabled: false });
     assert.equal(options.settings[gridA].standingOrdersEnabled, false);
+    options.settings[gridA].canEditStandingOrders = false;
+    await page.reload();
+    await page.getByRole('button', { name: 'Save settings' }).waitFor();
+    await page.waitForFunction(() => !document.querySelector('#network-name')?.disabled);
+    assert.equal(await box.isEnabled(), false);
 });
 
 test('the Polish interface names the view, statuses and errors', async (t) => {

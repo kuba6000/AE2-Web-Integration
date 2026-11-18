@@ -71,9 +71,9 @@ export type StandingOrdersState = {
 /** A change takes the engine about a tick to evaluate; one follow-up read shows its first status. */
 const settleMillis = 1500;
 const unconfirmed = ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'];
-const lostAccess = ['UNAUTHORIZED', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'];
+const gridGone = ['UNAUTHORIZED', 'GRID_NOT_FOUND'];
 /** Refusals that mean the list on screen is out of date, so it is read again. */
-const staleList = ['STANDING_ORDER_NOT_FOUND', 'STANDING_ORDER_NOT_RUNNABLE'];
+const staleList = ['STANDING_ORDER_NOT_FOUND', 'STANDING_ORDER_NOT_RUNNABLE', 'NO_PERMISSIONS'];
 
 /** The message for a failed standing order request; unknown failures keep their own wire status as the key. */
 export function standingOrderErrorKey(status: string) {
@@ -189,6 +189,23 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         chosen = {};
         cpusRead = false;
     }
+    function resetEditor() {
+        state.editor =
+            route.view === 'standing-orders' && route.editor
+                ? {
+                      order: route.editor.order,
+                      status: 'loading',
+                      draft: keepStockedDraft(null),
+                      baseline: null,
+                      definition: null,
+                      invalid: null,
+                      errors: {},
+                      formError: null,
+                      saving: false,
+                      dirty: false
+                  }
+                : null;
+    }
     function initEditor() {
         const editor = state.editor;
         if (!editor || editor.status !== 'loading' || route.view !== 'standing-orders' || !route.editor) return;
@@ -198,11 +215,11 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             editor.status = 'ready';
             return;
         }
+        if (!fresh) return;
         const wanted = route.editor.order;
         const order = state.orders.find((entry) => entry.orderKey === wanted);
         if (!order) {
-            // Another client may have created it since the cached listing was read.
-            if (fresh) editor.status = 'missing';
+            editor.status = 'missing';
             return;
         }
         editor.invalid = order.invalid;
@@ -243,6 +260,10 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
     function block(error: string | null) {
         cancel();
         clearListing();
+        if (error === 'NO_PERMISSIONS' || (error !== null && gridGone.includes(error))) {
+            resetEditor();
+            opened = null;
+        }
         Object.assign(state, { status: 'error', error, pending: false });
         changed();
     }
@@ -342,7 +363,9 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         } catch (caught) {
             const status = failed(caught, version);
             if (status === null) return null;
-            if (lostAccess.includes(status)) block(status);
+            // A refused change may only revoke writing. Refresh the listing to establish read access.
+            if (status === 'NO_PERMISSIONS') state.canEdit = false;
+            else if (gridGone.includes(status)) block(status);
             return { ok: false as const, status, data: (caught as ApiFailure).data };
         } finally {
             if (version === generation) {
@@ -353,7 +376,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
     }
     async function mutateFromList(action: Parameters<typeof mutate>[0], success: Parameters<typeof mutate>[1]) {
         const outcome = await mutate(action, success);
-        if (outcome && !outcome.ok && !lostAccess.includes(outcome.status)) {
+        if (outcome && !outcome.ok && !gridGone.includes(outcome.status)) {
             notify({ kind: 'error', message: standingOrderErrorKey(outcome.status) });
             if (staleList.includes(outcome.status)) void refresh();
         }
@@ -375,21 +398,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
                 clearTimeout(settle);
                 clearListing();
             }
-            state.editor =
-                next.view === 'standing-orders' && next.editor
-                    ? {
-                          order: next.editor.order,
-                          status: 'loading',
-                          draft: keepStockedDraft(null),
-                          baseline: null,
-                          definition: null,
-                          invalid: null,
-                          errors: {},
-                          formError: null,
-                          saving: false,
-                          dirty: false
-                      }
-                    : null;
+            resetEditor();
             if (!state.editor) {
                 state.cpus = [];
                 cpusRead = false;

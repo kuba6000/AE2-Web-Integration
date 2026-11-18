@@ -259,7 +259,8 @@ largest single order. Lite mode and ignoring missing ingredients are offered whe
 Orders are checked when the network's storage is sampled, at the storage sampling interval from the
 network settings (five minutes by default, 60 seconds at the shortest). Storage history does not have
 to be enabled; without it the same sample is taken and nothing is saved. **Run now** asks for an extra
-check; the server spaces such extra reads at least 30 seconds apart per network.
+check using fresh stock. Requests on the same network share a read; extra reads are at least 30 seconds
+apart, and a scheduled sample can satisfy the request first.
 
 An order waits while its resource is already the final output of a running crafting job, including
 jobs started by players, and does not order resources provided by a level emitter. After a job
@@ -281,7 +282,7 @@ view them, and create, edit, run and delete them unless the server restricts thi
 Administrators configure `standing_orders` in `config.toml`:
 
 - `enabled` (default `true`): when `false` nothing runs; orders can still be switched off or deleted.
-- `allow_players` (default `true`): when `false` only administrators can change orders; existing ones keep running.
+- `allow_players` (default `true`): when `false` only administrators can change or run orders or toggle them for the network; existing orders keep running.
 - `max_orders_per_grid` (default `128`) and `max_calculations_in_flight_per_grid` (default `1`).
 - `max_calculation_minutes` (default `10`): a longer calculation is cancelled and retried later.
 - `long_running_job_minutes` (default `60`): a longer job is marked as long-running, nothing else.
