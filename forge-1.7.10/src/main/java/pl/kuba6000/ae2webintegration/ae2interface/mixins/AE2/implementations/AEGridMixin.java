@@ -40,6 +40,7 @@ import cpw.mods.fml.common.FMLCommonHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.GridDiscovery;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.TerminalPatternProvider;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
@@ -180,6 +181,16 @@ public abstract class AEGridMixin implements IAEGrid, IGridPermissions, IGridPla
     @Override
     public @Nullable PlayerIdentity web$getRepresentativeOwner() {
         return GridDiscovery.representativeOwner((Grid) (Object) this);
+    }
+
+    @Override
+    public @NotNull Iterable<TerminalPatternProvider> web$getPatternProviders() {
+        return TerminalPatternProvider.snapshot((Grid) (Object) this);
+    }
+
+    @Override
+    public long web$getPatternRevision() {
+        return TerminalPatternProvider.revision();
     }
 
     @Override

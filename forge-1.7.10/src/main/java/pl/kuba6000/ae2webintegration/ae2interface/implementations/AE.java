@@ -19,6 +19,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
+import pl.kuba6000.ae2webintegration.core.api.PatternTerminalName;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -36,12 +37,18 @@ public class AE implements IAE {
         capabilities.put(CRAFTING_IGNORE_MISSING, true);
         capabilities.put(CRAFTING_PLAN_STEPS, true);
         capabilities.put(CPU_SELECTION_MODE, true);
+        capabilities.put(ServerCapability.PATTERN_PROVIDERS, true);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
     }
 
     @Override
     public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
         return CAPABILITIES;
+    }
+
+    @Override
+    public @NotNull PatternTerminalName web$getPatternTerminalName() {
+        return PatternTerminalName.INTERFACE_TERMINAL;
     }
 
     public static AE instance = new AE();

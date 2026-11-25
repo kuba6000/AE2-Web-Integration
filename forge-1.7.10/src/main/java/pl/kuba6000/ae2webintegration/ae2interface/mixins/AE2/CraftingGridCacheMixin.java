@@ -33,6 +33,7 @@ import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.TerminalPatternProvider;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -108,6 +109,7 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         method = "updatePatterns",
         at = @At(value = "INVOKE", target = "Ljava/util/Map;clear()V", ordinal = 0, shift = Shift.AFTER))
     void ae2webintegration$updatePatternsStart(CallbackInfo ci) {
+        TerminalPatternProvider.patternsChanged();
         web$mediumToViewable.clear();
         web$currentCraftingProvider = null;
     }
