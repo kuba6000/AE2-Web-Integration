@@ -185,6 +185,9 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     const whenLegend = element('legend');
     const guard = element('fieldset', '', 'standing-order-condition');
     const guardTitle = element('legend');
+    const guardName = element('span');
+    const guardStatus = element('span', '', 'standing-order-guard-status');
+    guardTitle.append(guardName, ' ', guardStatus);
     const guardText = element('p', '', 'hint');
     guard.append(guardTitle, guardText);
     const match = element('select');
@@ -508,7 +511,8 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             errorTargets.set(`${prefix}.multiplier`, { target: fields.multiplier, controls: [fields.input] });
         }
         whenLegend.textContent = t('standingOrderWhen');
-        guardTitle.textContent = t('standingOrderCondition', { index: 0 });
+        guardName.textContent = t('standingOrderCondition', { index: 0 });
+        guardStatus.textContent = t('standingOrderAlwaysActive');
         const output = rules.locked === null ? rules.resource : editor.definition?.action.resource;
         const outputName = output
             ? (resourceChoice.byKey.get(output)?.displayName ?? orders.resources[output]?.displayName)

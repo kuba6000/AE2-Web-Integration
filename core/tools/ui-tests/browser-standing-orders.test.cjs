@@ -764,7 +764,7 @@ test('an editor whose list read fails shows the error without a loading message'
 test('the built-in condition identifies the output and cannot be edited', async (t) => {
     const { page } = await open(t, [listed('a', { name: 'Keep iron' })], {}, '/a');
     await page.getByLabel('Name', { exact: true }).waitFor();
-    const guard = page.getByRole('group', { name: 'Condition 0', exact: true });
+    const guard = page.getByRole('group', { name: 'Condition 0 Always active', exact: true });
     assert.equal(await guard.count(), 1);
     assert.match(await guard.innerText(), /Iron Ingot/);
     assert.equal(await guard.locator('select,input,button').count(), 0);
