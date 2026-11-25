@@ -1698,6 +1698,31 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
+    void blockedCalculationDoesNotSummarizeAnOfflineGrid() {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        assertEquals(CALCULATING, status(order));
+
+        grid.controllerState(AEControllerState.NO_CONTROLLER);
+        FakeJob blocked = new FakeJob(true);
+        grid.calculations.get(0).future.complete(blocked);
+        tick(0);
+        assertEquals(0, blocked.summaries, "Offline grid must not be read for a missing-ingredient summary");
+        assertEquals(GRID_UNAVAILABLE, status(order));
+
+        grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
+        tick(SWEEP);
+        assertEquals(BLOCKED_MISSING, status(order));
+        assertEquals(StandingOrderReason.MISSING_INGREDIENTS, snapshot(order).reason());
+        assertEquals(Collections.emptyList(), snapshot(order).missing());
+        assertEquals(1, grid.calculations.size(), "Backoff still holds once the network returns");
+    }
+
+    @Test
     void aJobOfAnotherResourceIsForgottenWhenAnOrderIsRedirected() {
         OrderGrid.Cpu cpu = grid.addCpu();
         grid.stock("so-plastic", 100);

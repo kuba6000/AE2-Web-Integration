@@ -156,6 +156,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
     };
     let route: Route = { view: 'home', gridKey: null };
     let generation = 0;
+    let readGeneration = 0;
     let request: AbortController | undefined;
     let reading: Promise<void> | undefined;
     let settle: ReturnType<typeof setTimeout> | undefined;
@@ -169,10 +170,14 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
     let opened: OrderDraft | null = null;
     const gridKey = () => (route.view === 'standing-orders' ? route.gridKey : null);
 
-    function cancel() {
-        generation++;
+    function cancelRead() {
+        readGeneration++;
         request?.abort();
         reading = undefined;
+    }
+    function cancel() {
+        generation++;
+        cancelRead();
     }
     function clearListing() {
         Object.assign(state, {
@@ -273,7 +278,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         return error.status || 'NETWORK_ERROR';
     }
     /** Interval and CPUs only decorate the page, so their failures leave the page as it is. */
-    async function details(version: number, signal: AbortSignal, automatic: boolean) {
+    async function details(readVersion: number, signal: AbortSignal, automatic: boolean) {
         const key = gridKey();
         if (!key) return;
         const tasks: Promise<void>[] = [];
@@ -281,7 +286,8 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             tasks.push(
                 api.settings(key, signal).then(
                     (settings) => {
-                        if (version === generation) state.checkIntervalSeconds = settings.stockSampleIntervalSeconds;
+                        if (readVersion === readGeneration)
+                            state.checkIntervalSeconds = settings.stockSampleIntervalSeconds;
                     },
                     () => {}
                 )
@@ -290,7 +296,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             tasks.push(
                 api.cpus(key, signal).then(
                     ({ data }) => {
-                        if (version !== generation) return;
+                        if (readVersion !== readGeneration) return;
                         cpusRead = true;
                         state.cpus = Object.entries(data).map(([cpu, info]) => ({
                             key: cpu,
@@ -303,11 +309,12 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             );
         await Promise.all(tasks);
     }
-    async function refresh(automatic = false) {
+    async function refresh(automatic = false, allowWhileSaving = false) {
         const key = gridKey();
-        if (disposed || !key || state.pending || state.editor?.saving) return;
+        if (disposed || !key || state.pending || (!allowWhileSaving && state.editor?.saving)) return;
         if (reading) return reading;
         const version = generation;
+        const readVersion = readGeneration;
         request = new AbortController();
         const signal = request.signal;
         if (state.status !== 'ready') state.status = 'loading';
@@ -316,15 +323,16 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             try {
                 const [result] = await Promise.all([
                     api.standingOrders(key, signal, iconsEnabled()),
-                    details(version, signal, automatic)
+                    details(readVersion, signal, automatic)
                 ]);
-                if (version !== generation) return;
+                if (readVersion !== readGeneration) return;
                 accept(result);
             } catch (caught) {
+                if (readVersion !== readGeneration) return;
                 const status = failed(caught, version);
                 if (status !== null) block(status);
             } finally {
-                if (version === generation) {
+                if (readVersion === readGeneration) {
                     reading = undefined;
                     changed();
                 }
@@ -407,8 +415,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
         },
         invalidateIcons() {
             // Only the read is outdated; a change in flight still has to deliver its answer.
-            request?.abort();
-            reading = undefined;
+            cancelRead();
             state.icons = null;
         },
         setEnabled: (order: string, enabled: boolean) =>
@@ -482,12 +489,13 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             const known = new Set(state.orders.map((entry) => entry.orderKey));
             const outcome = await mutate(send, { message: 'standingOrderSaved', subject: name, settle: true });
             if (state.editor !== editor) return;
-            editor.saving = false;
             if (!outcome) {
+                editor.saving = false;
                 changed();
                 return;
             }
             if (outcome.ok) {
+                editor.saving = false;
                 location.hash = standingOrdersHref(key);
                 return;
             }
@@ -496,16 +504,25 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             const placed = rejection && placeRejection(rejection, editor.draft);
             if (placed?.field) editor.errors = { [placed.field]: placed.message };
             else editor.formError = placed?.message ?? standingOrderErrorKey(outcome.status);
+            if (order === null && unconfirmed.includes(outcome.status)) {
+                // The create may have committed; keep saving locked until the follow-up read finishes.
+                changed();
+                try {
+                    await refresh(false, true);
+                    if (state.editor === editor && state.orders.some((entry) => !known.has(entry.orderKey))) {
+                        editor.formError = 'standingOrderCreateUnconfirmed';
+                    }
+                } finally {
+                    if (state.editor === editor) {
+                        editor.saving = false;
+                        changed();
+                    }
+                }
+                return;
+            }
+            editor.saving = false;
             changed();
             if (staleList.includes(outcome.status)) void refresh();
-            else if (order === null && unconfirmed.includes(outcome.status)) {
-                // The create may have committed; a retry must not add a second order unknowingly.
-                await refresh();
-                if (state.editor === editor && state.orders.some((entry) => !known.has(entry.orderKey))) {
-                    editor.formError = 'standingOrderCreateUnconfirmed';
-                    changed();
-                }
-            }
         },
         dispose() {
             disposed = true;
