@@ -7,7 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,9 +24,6 @@ import pl.kuba6000.ae2webintegration.core.live.LiveView;
 /** One network's complete provider rows. The hub only receives detached changes from the reader. */
 public final class PatternProviderTopic extends LiveTopic {
 
-    final CountDownLatch baseline = new CountDownLatch(1);
-    int openings;
-    long retryUntil;
     private final Map<StableKey, PatternProvider> rows = new LinkedHashMap<>();
 
     PatternProviderTopic(StableKey grid, long generation) {
@@ -49,17 +45,6 @@ public final class PatternProviderTopic extends LiveTopic {
         rows.putAll(delta.replacements());
         markInitialized();
         publish(changed, Collections.emptySet(), false, Collections.emptySet(), false);
-        baseline.countDown();
-    }
-
-    @Override
-    protected boolean hasOpeningViewers() {
-        return openings > 0;
-    }
-
-    @Override
-    protected boolean retainedWhileIdle(long now) {
-        return hasOpeningViewers() || retryUntil > now;
     }
 
     List<PatternProvider> snapshot() {
@@ -70,7 +55,6 @@ public final class PatternProviderTopic extends LiveTopic {
     protected void invalidate() {
         super.invalidate();
         rows.clear();
-        baseline.countDown();
     }
 
     @Override

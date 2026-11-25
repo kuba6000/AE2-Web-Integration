@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.patterns;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.lang.ref.WeakReference;
@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
-import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,29 +22,25 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 
-/** Observes viewed networks on the game thread; all viewers share one cursor and one tick budget. */
+/** Observes viewed networks on the game thread; all viewers share the same completed observation. */
 public final class PatternProviderCoordinator implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-    private static final long BUDGET_NANOS = MILLISECONDS.toNanos(2);
     private static final long CHECK_MILLIS = SECONDS.toMillis(1);
     private static final long LIGHT_PASS_MILLIS = SECONDS.toMillis(30);
     private final LiveHub hub;
     private final PatternProviderRegistry registry;
     private final Function<StableKey, IAEGrid> resolve;
     private final BooleanSupplier supported;
-    private final LongSupplier nanoClock;
     private final Map<StableKey, Binding> bindings = new HashMap<>();
     private long nextGeneration;
-    private long turn;
 
     public PatternProviderCoordinator(@NotNull LiveHub hub, @NotNull Function<StableKey, IAEGrid> resolve,
-        @NotNull BooleanSupplier supported, @NotNull LongSupplier nanoClock) {
+        @NotNull BooleanSupplier supported) {
         this.hub = hub;
         this.registry = new PatternProviderRegistry(hub);
         this.resolve = resolve;
         this.supported = supported;
-        this.nanoClock = nanoClock;
     }
 
     public @NotNull PatternProviderRegistry registry() {
@@ -57,26 +52,35 @@ public final class PatternProviderCoordinator implements AutoCloseable {
         return supported.getAsBoolean();
     }
 
-    /** Game thread after access checks. Opening does no native enumeration. Null means unsupported or at capacity. */
-    public @Nullable PatternProviderRegistry.Opening prepare(@NotNull StableKey grid, @NotNull IAEGrid nativeGrid,
-        long now) {
-        if (!isSupported()) return null;
+    /** Completes a first read on the server thread before the HTTP snapshot is reserved. */
+    public @Nullable PatternProviderTopic prepare(@NotNull StableKey grid, @NotNull IAEGrid nativeGrid, long now) {
+        if (!isSupported() || !GridFilter.isUsable(nativeGrid)) return null;
         Binding binding = bindings.get(grid);
-        if (binding != null && (binding.grid.get() != nativeGrid || !registry.exists(grid, binding.generation, now))) {
-            retire(binding);
-            bindings.remove(grid);
-            binding = null;
+        LiveTopic.Key key = PatternProviderTopic.keyOf(grid);
+        boolean baseline;
+        synchronized (hub) {
+            hub.expire(now);
+            if (binding == null || binding.grid.get() != nativeGrid || hub.topic(key) != binding.topic) {
+                binding = new Binding(new PatternProviderTopic(grid, ++nextGeneration), nativeGrid);
+                baseline = true;
+            } else baseline = false;
+            PatternProviderTopic topic = binding.topic;
+            hub.activate(key, topic.generation(), now, () -> topic);
+            if (hub.topic(key) != topic) return null;
+            if (baseline) bindings.put(grid, binding);
         }
-        long generation = binding == null ? ++nextGeneration : binding.generation;
-        PatternProviderRegistry.Opening opening = registry.open(grid, generation, now);
-        if (opening != null) {
-            if (binding == null) bindings.put(grid, new Binding(grid, nativeGrid, generation));
-            else if (opening.resuming && binding.scanning) binding.recheckRevision = true;
+        if (baseline || now >= binding.nextCheck) {
+            try {
+                observe(binding, nativeGrid, now, baseline);
+            } catch (RuntimeException failure) {
+                discard(binding);
+                throw failure;
+            }
         }
-        return opening;
+        return binding.topic;
     }
 
-    /** One fair slice per tick, never a separate budget per viewer. No native calls without demand. */
+    /** A refresh checks at most one viewed network per tick, oldest due first. */
     public void tick(long now) {
         if (bindings.isEmpty()) return;
         Set<LiveTopic.Key> viewing = hub.viewed(PatternProviderTopic.class, now);
@@ -84,59 +88,54 @@ public final class PatternProviderCoordinator implements AutoCloseable {
         for (Iterator<Binding> it = bindings.values()
             .iterator(); it.hasNext();) {
             Binding binding = it.next();
-            PatternProviderRegistry.Demand demand = registry.demand(binding.key.grid(), binding.generation, now);
-            if (demand == PatternProviderRegistry.Demand.PAUSED) continue;
-            if (!viewing.contains(binding.key) && demand == PatternProviderRegistry.Demand.NONE) {
-                it.remove();
-                retire(binding);
-            } else if ((binding.scanning || now >= binding.nextCheck)
-                && (due == null || binding.lastTurn < due.lastTurn)) {
-                    due = binding;
-                }
+            if (!viewing.contains(binding.topic.key())) {
+                // A completed topic may still be awaiting reservation by its HTTP worker.
+                if (hub.topic(binding.topic.key()) != binding.topic) it.remove();
+            } else if (now >= binding.nextCheck && (due == null || binding.nextCheck < due.nextCheck)) {
+                due = binding;
+            }
         }
         if (due == null) return;
-        due.lastTurn = ++turn;
+        StableKey gridKey = due.topic.key()
+            .grid();
         try {
             IAEGrid grid = due.grid.get();
-            if (grid != null && resolve.apply(due.key.grid()) == grid && GridFilter.isUsable(grid)) {
-                observe(due, grid, now);
+            if (grid != null && resolve.apply(gridKey) == grid && GridFilter.isUsable(grid)) {
+                observe(due, grid, now, false);
                 return;
             }
         } catch (RuntimeException failure) {
-            LOG.warn("Pattern providers could not be read on network {}", due.key.grid(), failure);
+            LOG.warn("Pattern providers could not be read on network {}", gridKey, failure);
         }
-        bindings.remove(due.key.grid());
-        retire(due);
+        discard(due);
     }
 
-    private void observe(Binding binding, IAEGrid grid, long now) {
-        long deadline = nanoClock.getAsLong() + BUDGET_NANOS;
-        if (binding.recheckRevision) {
-            binding.recheckRevision = false;
-            long revision = grid.web$getPatternRevision();
-            if (binding.revision != revision) {
-                binding.revision = revision;
-                binding.reader.begin(grid);
-            }
-        }
-        if (!binding.scanning) {
-            binding.nextCheck = now + CHECK_MILLIS;
-            long revision = grid.web$getPatternRevision();
-            if (revision == binding.revision && now < binding.nextLightPass) return;
-            binding.revision = revision;
-            binding.reader.begin(grid);
-            binding.scanning = true;
-        }
-        PatternProviderReader.Delta delta = binding.reader.step(deadline, nanoClock);
-        if (delta == null) return;
-        binding.scanning = false;
-        binding.nextLightPass = now + LIGHT_PASS_MILLIS;
-        registry.observed(binding.key.grid(), binding.generation, delta);
+    private void observe(Binding binding, IAEGrid grid, long now, boolean baseline) {
+        binding.nextCheck = now + CHECK_MILLIS;
+        long revision = grid.web$getPatternRevision();
+        if (!baseline && revision == binding.revision && now < binding.nextFullRead) return;
+        long started = System.nanoTime();
+        PatternProviderReader.Delta delta = binding.reader.read(grid);
+        LOG.debug(
+            "Pattern providers {} on grid {}: {} microseconds",
+            baseline ? "first read" : "refresh",
+            binding.topic.key()
+                .grid(),
+            NANOSECONDS.toMicros(System.nanoTime() - started));
+        registry.observed(binding.topic, delta);
+        binding.revision = revision;
+        binding.nextFullRead = now + LIGHT_PASS_MILLIS;
+    }
+
+    private void discard(Binding binding) {
+        bindings.remove(
+            binding.topic.key()
+                .grid());
+        retire(binding);
     }
 
     private void retire(Binding binding) {
-        hub.retire(binding.key, binding.generation);
-        binding.reader.close();
+        hub.retire(binding.topic.key(), binding.topic.generation());
     }
 
     @Override
@@ -147,21 +146,16 @@ public final class PatternProviderCoordinator implements AutoCloseable {
 
     private static final class Binding {
 
-        private final LiveTopic.Key key;
+        private final PatternProviderTopic topic;
         private final WeakReference<IAEGrid> grid;
-        private final long generation;
         private final PatternProviderReader reader = new PatternProviderReader();
         private long revision;
         private long nextCheck;
-        private long nextLightPass;
-        private long lastTurn;
-        private boolean scanning;
-        private boolean recheckRevision;
+        private long nextFullRead;
 
-        private Binding(StableKey gridKey, IAEGrid grid, long generation) {
-            key = PatternProviderTopic.keyOf(gridKey);
+        private Binding(PatternProviderTopic topic, IAEGrid grid) {
+            this.topic = topic;
             this.grid = new WeakReference<>(grid);
-            this.generation = generation;
         }
     }
 }

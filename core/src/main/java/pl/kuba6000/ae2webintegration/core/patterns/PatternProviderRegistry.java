@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.patterns;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -17,7 +16,6 @@ import pl.kuba6000.ae2webintegration.core.live.LiveView;
 /** Detached publications and atomic subscription reservation, guarded by the shared hub monitor. */
 public final class PatternProviderRegistry {
 
-    private static final long RETRY_GRACE_MILLIS = TimeUnit.SECONDS.toMillis(10);
     private final LiveHub hub;
 
     PatternProviderRegistry(LiveHub hub) {
@@ -28,101 +26,17 @@ public final class PatternProviderRegistry {
     public record Bootstrap(@Nullable String subscription, @NotNull LiveView view,
         @NotNull List<PatternProvider> providers) {}
 
-    /** An authorized request waiting for its baseline. Close in finally, including on timeout or cancellation. */
-    public static final class Opening implements AutoCloseable {
-
-        private final LiveHub hub;
-        private final PatternProviderTopic topic;
-        final boolean resuming;
-        private boolean closed;
-
-        private Opening(LiveHub hub, PatternProviderTopic topic) {
-            this.hub = hub;
-            this.topic = topic;
-            this.resuming = topic.retryUntil != 0;
-            topic.retryUntil = 0;
-            topic.openings++;
-        }
-
-        /** HTTP worker only. Never waits with the hub monitor held. */
-        public boolean awaitReady(long timeout, @NotNull TimeUnit unit) throws InterruptedException {
-            if (!topic.baseline.await(timeout, unit)) return false;
-            synchronized (hub) {
-                return !closed && hub.topic(topic.key()) == topic && topic.initialized();
-            }
-        }
-
-        /** Release a request whose initial baseline reached its HTTP deadline. */
-        public void closeForRetry(long now) {
-            synchronized (hub) {
-                if (!closed && topic.openings == 1 && !topic.initialized()) topic.retryUntil = now + RETRY_GRACE_MILLIS;
-                close();
-            }
-        }
-
-        @Override
-        public void close() {
-            synchronized (hub) {
-                if (closed) return;
-                closed = true;
-                topic.openings--;
-            }
-        }
-    }
-
-    @Nullable
-    Opening open(StableKey grid, long generation, long now) {
+    void observed(PatternProviderTopic topic, PatternProviderReader.Delta delta) {
         synchronized (hub) {
-            hub.activate(
-                PatternProviderTopic.keyOf(grid),
-                generation,
-                now,
-                () -> new PatternProviderTopic(grid, generation));
-            PatternProviderTopic topic = topic(grid, generation);
-            return topic == null ? null : new Opening(hub, topic);
+            if (hub.topic(topic.key()) == topic) topic.observed(delta);
         }
-    }
-
-    boolean exists(StableKey grid, long generation, long now) {
-        synchronized (hub) {
-            hub.expire(now);
-            return topic(grid, generation) != null;
-        }
-    }
-
-    enum Demand {
-        OPENING,
-        PAUSED,
-        NONE
-    }
-
-    Demand demand(StableKey grid, long generation, long now) {
-        synchronized (hub) {
-            PatternProviderTopic topic = topic(grid, generation);
-            if (topic == null) return Demand.NONE;
-            if (topic.openings > 0) return Demand.OPENING;
-            return topic.retryUntil > now ? Demand.PAUSED : Demand.NONE;
-        }
-    }
-
-    void observed(StableKey grid, long generation, PatternProviderReader.Delta delta) {
-        synchronized (hub) {
-            PatternProviderTopic topic = topic(grid, generation);
-            if (topic != null) topic.observed(delta);
-        }
-    }
-
-    private @Nullable PatternProviderTopic topic(StableKey grid, long generation) {
-        PatternProviderTopic topic = (PatternProviderTopic) hub.topic(PatternProviderTopic.keyOf(grid));
-        return topic != null && topic.generation() == generation ? topic : null;
     }
 
     /** A live request which exceeds the shared admission limits receives no snapshot. */
-    public @Nullable Bootstrap snapshot(@NotNull Opening opening, @Nullable AuthSession session, boolean live,
-        boolean icons, @Nullable String packId, @Nullable String replace, long now) {
+    public @Nullable Bootstrap snapshot(@NotNull PatternProviderTopic topic, @Nullable AuthSession session,
+        boolean live, boolean icons, @Nullable String packId, @Nullable String replace, long now) {
         synchronized (hub) {
-            PatternProviderTopic topic = opening.topic;
-            if (opening.closed || topic != hub.topic(topic.key()) || !topic.initialized()) return null;
+            if (hub.topic(topic.key()) != topic || !topic.initialized()) return null;
             LiveSubscription sub = live ? hub.reserve(topic.key(), session, icons, packId, replace, now) : null;
             if (live && sub == null) return null;
             return new Bootstrap(sub == null ? null : sub.token(), topic.view(), topic.snapshot());

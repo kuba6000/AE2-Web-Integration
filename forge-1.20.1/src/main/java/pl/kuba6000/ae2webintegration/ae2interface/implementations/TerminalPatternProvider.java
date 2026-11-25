@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import net.minecraft.core.BlockPos;
@@ -38,42 +37,40 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternSlotHandle;
 public final class TerminalPatternProvider implements IPatternProvider {
 
     private static final Set<Class<?>> REPORTED_UNSUPPORTED = new HashSet<>();
-    private final IGrid grid;
     private final IGridNode node;
     private final PatternContainer container;
     private final DimensionalCoords location;
     private final @Nullable String side;
     private final PatternContainerGroup group;
+    private final InternalInventory inventory;
 
-    private TerminalPatternProvider(IGrid grid, IGridNode node, PatternContainer container, DimensionalCoords location,
+    private TerminalPatternProvider(IGridNode node, PatternContainer container, DimensionalCoords location,
         @Nullable Direction side, PatternContainerGroup group) {
-        this.grid = grid;
         this.group = group;
         this.node = node;
         this.container = container;
+        this.inventory = container.getTerminalPatternInventory();
         this.location = location;
         this.side = side == null ? null : side.getName();
     }
 
-    public static @NotNull Iterable<TerminalPatternProvider> snapshot(IGrid grid) {
-        List<IGridNode> nodes = new ArrayList<>();
+    public static @NotNull List<TerminalPatternProvider> snapshot(IGrid grid) {
+        List<TerminalPatternProvider> providers = new ArrayList<>();
         Set<PatternContainer> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Class<?> type : grid.getMachineClasses()) {
             if (!PatternContainer.class.isAssignableFrom(type)) continue;
             for (IGridNode node : grid.getMachineNodes(type)) {
-                if (node.isActive() && seen.add((PatternContainer) node.getOwner())) nodes.add(node);
+                if (!node.isActive()) continue;
+                PatternContainer container = (PatternContainer) node.getOwner();
+                if (!seen.add(container)) continue;
+                TerminalPatternProvider provider = read(node, container);
+                if (provider != null) providers.add(provider);
             }
         }
-        // Resolving a group inspects adjacent machines. Do it as the budgeted cursor reaches each host.
-        return () -> nodes.stream()
-            .map(node -> read(grid, node))
-            .filter(Objects::nonNull)
-            .iterator();
+        return providers;
     }
 
-    private static @Nullable TerminalPatternProvider read(IGrid grid, IGridNode node) {
-        if (!node.isActive() || node.getGrid() != grid) return null;
-        PatternContainer container = (PatternContainer) node.getOwner();
+    private static @Nullable TerminalPatternProvider read(IGridNode node, PatternContainer container) {
         DimensionalCoords location = ((IPatternProviderViewable) node).web$getLocation();
         Direction side = location == null ? null : sideOf(node, container, location);
         if (location == null || container instanceof IPart && side == null) {
@@ -85,7 +82,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
             reportUnsupported(container, "no terminal group");
             return null;
         }
-        return new TerminalPatternProvider(grid, node, container, location, side, group);
+        return new TerminalPatternProvider(node, container, location, side, group);
     }
 
     private static void reportUnsupported(PatternContainer container, String reason) {
@@ -132,7 +129,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public boolean web$isPatternProviderOnline() {
-        return node.isActive() && node.getGrid() == grid;
+        return true; // The native terminal enumerates active nodes only.
     }
 
     @Override
@@ -142,8 +139,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public int web$getPatternSlotCount() {
-        return container.getTerminalPatternInventory()
-            .size();
+        return inventory.size();
     }
 
     @Override
@@ -163,10 +159,6 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public @Nullable IPatternSlotHandle web$getPattern(int slot) {
-        if (!web$isPatternProviderOnline()) return null; // Do not read a slot after its node moved to another grid.
-        InternalInventory inventory = container.getTerminalPatternInventory();
-        // An add-on inventory can shrink between the header and this slot.
-        if (slot >= inventory.size()) return null;
         AEItemKey encoding = AEItemKey.of(inventory.getStackInSlot(slot));
         return encoding == null ? null : new Slot(encoding, node.getLevel());
     }

@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -19,21 +18,14 @@ class PatternProviderReaderTest {
 
     private final PatternProviderReader reader = new PatternProviderReader();
 
-    @AfterEach
-    void closeReader() {
-        reader.close();
-    }
-
     @Test
-    void resumesAtSlotBoundariesAndOnlyDecodesReplacedSlots() {
+    void completeReadsReuseDecodedSlotsAndReportChanges() {
         AtomicInteger decodes = new AtomicInteger();
         IPatternSlotHandle broken = broken(decodes);
         IPatternSlotHandle[] slots = { null, broken, broken };
         IPatternProvider provider = provider(slots);
         IAEGrid grid = grid(provider);
-        reader.begin(grid);
-        assertNull(reader.step(0L, () -> 0L));
-        PatternProviderReader.Delta initial = finishScan();
+        PatternProviderReader.Delta initial = reader.read(grid);
         PatternProvider row = initial.replacements()
             .values()
             .iterator()
@@ -50,17 +42,17 @@ class PatternProviderReaderTest {
                 .kind());
         assertEquals(2, decodes.get());
 
-        reader.begin(grid);
         assertTrue(
-            finishScan().replacements()
+            reader.read(grid)
+                .replacements()
                 .isEmpty());
         assertEquals(2, decodes.get());
 
         slots[1] = null;
-        reader.begin(grid);
         assertEquals(
             PatternProvider.Kind.EMPTY,
-            finishScan().replacements()
+            reader.read(grid)
+                .replacements()
                 .get(
                     row.header()
                         .key())
@@ -75,12 +67,12 @@ class PatternProviderReaderTest {
             "Previous snapshot stays detached");
         assertEquals(2, decodes.get());
 
-        reader.begin(grid());
         assertEquals(
             Collections.singleton(
                 row.header()
                     .key()),
-            finishScan().removed());
+            reader.read(grid())
+                .removed());
     }
 
     @Test
@@ -88,19 +80,19 @@ class PatternProviderReaderTest {
         AtomicInteger decodes = new AtomicInteger();
         IPatternSlotHandle[] slots = { broken(decodes) };
         IAEGrid grid = grid(provider(slots));
-        reader.begin(grid);
         assertEquals(
             1,
-            finishScan().replacements()
+            reader.read(grid)
+                .replacements()
                 .size());
         slots[0] = broken(decodes);
-        reader.begin(grid);
         assertTrue(
-            finishScan().replacements()
+            reader.read(grid)
+                .replacements()
                 .isEmpty());
-        reader.begin(grid);
         assertTrue(
-            finishScan().replacements()
+            reader.read(grid)
+                .replacements()
                 .isEmpty());
         assertEquals(2, decodes.get(), "Retain the replacement encoding even when the output is unchanged");
     }
@@ -109,14 +101,13 @@ class PatternProviderReaderTest {
     void ambiguousProviderAddressesCannotOverwriteEachOther() {
         IPatternProvider first = provider(new IPatternSlotHandle[0]);
         IPatternProvider second = provider(new IPatternSlotHandle[0]);
-        reader.begin(grid(first, second));
-        assertThrows(IllegalStateException.class, () -> finishScan());
-    }
-
-    private PatternProviderReader.Delta finishScan() {
-        PatternProviderReader.Delta delta = reader.step(1L, () -> 0L);
-        assertNotNull(delta, "The remaining rows fit in this slice");
-        return delta;
+        assertThrows(IllegalStateException.class, () -> reader.read(grid(first, second)));
+        assertEquals(
+            1,
+            reader.read(grid(first))
+                .replacements()
+                .size(),
+            "A failed scan cannot publish a partial baseline");
     }
 
     private static IAEGrid grid(IPatternProvider... providers) {

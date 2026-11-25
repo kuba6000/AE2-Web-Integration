@@ -40,33 +40,30 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternSlotHandle;
 public final class TerminalPatternProvider implements IPatternProvider {
 
     private static final int COLUMNS = 9;
-    private final IGrid grid;
+    private final IItemHandler inventory;
     private final IGridNode node;
     private final IInterfaceHost host;
     private final DualityInterface duality;
 
-    private TerminalPatternProvider(IGrid grid, IGridNode node) {
-        this.grid = grid;
+    private TerminalPatternProvider(IGridNode node) {
         this.node = node;
         this.host = (IInterfaceHost) node.getMachine();
         this.duality = host.getInterfaceDuality();
+        this.inventory = duality.getPatterns();
     }
 
-    public static @NotNull Iterable<TerminalPatternProvider> snapshot(IGrid grid) {
-        List<IGridNode> nodes = new ArrayList<>();
-        collect(grid, TileInterface.class, nodes);
-        collect(grid, PartInterface.class, nodes);
-        return () -> nodes.stream()
-            .filter(node -> present(grid, node))
-            .map(node -> new TerminalPatternProvider(grid, node))
-            .iterator();
+    public static @NotNull List<TerminalPatternProvider> snapshot(IGrid grid) {
+        List<TerminalPatternProvider> providers = new ArrayList<>();
+        collect(grid, TileInterface.class, providers);
+        collect(grid, PartInterface.class, providers);
+        return providers;
     }
 
-    private static void collect(IGrid grid, Class<? extends IGridHost> type, List<IGridNode> nodes) {
+    private static void collect(IGrid grid, Class<? extends IGridHost> type, List<TerminalPatternProvider> providers) {
         IMachineSet machines = Loader.isModLoaded("ae2fc") ? FluidCrafting.machines(grid, type)
             : grid.getMachines(type);
         for (IGridNode node : machines) {
-            if (node.isActive()) nodes.add(node);
+            if (node.isActive()) providers.add(new TerminalPatternProvider(node));
         }
     }
 
@@ -76,14 +73,6 @@ public final class TerminalPatternProvider implements IPatternProvider {
         private static IMachineSet machines(IGrid grid, Class<? extends IGridHost> type) {
             return CoreModHooks.getMachines(grid, type);
         }
-    }
-
-    private static boolean present(IGrid grid, IGridNode node) {
-        // UEL may keep getGrid() on a destroyed node, so check live set membership too.
-        return grid.getMachines(
-            node.getMachine()
-                .getClass())
-            .contains(node) && node.isActive();
     }
 
     @Override
@@ -114,7 +103,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public boolean web$isPatternProviderOnline() {
-        return present(grid, node);
+        return true; // The native terminal enumerates active nodes only.
     }
 
     @Override
@@ -126,10 +115,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
     @Override
     public int web$getPatternSlotCount() {
         // The backing inventory has 36 slots even with no expansion cards installed.
-        return Math.min(
-            duality.getPatterns()
-                .getSlots(),
-            COLUMNS * (1 + duality.getInstalledUpgrades(Upgrades.PATTERN_EXPANSION)));
+        return Math.min(inventory.getSlots(), COLUMNS * (1 + duality.getInstalledUpgrades(Upgrades.PATTERN_EXPANSION)));
     }
 
     @Override
@@ -149,9 +135,6 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public @Nullable IPatternSlotHandle web$getPattern(int slot) {
-        if (!web$isPatternProviderOnline()) return null;
-        IItemHandler inventory = duality.getPatterns();
-        if (slot >= inventory.getSlots()) return null;
         ItemStack stack = inventory.getStackInSlot(slot);
         return stack.isEmpty() ? null
             : new Slot(

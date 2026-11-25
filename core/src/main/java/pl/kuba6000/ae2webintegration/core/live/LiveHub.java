@@ -181,7 +181,7 @@ public final class LiveHub {
             .iterator();
         while (idle.hasNext()) {
             LiveTopic topic = idle.next();
-            if (topic.activeUntil <= now && topic.subscribers.isEmpty() && !topic.retainedWhileIdle(now)) idle.remove();
+            if (topic.activeUntil <= now && topic.subscribers.isEmpty()) idle.remove();
         }
     }
 
@@ -198,9 +198,6 @@ public final class LiveHub {
 
     synchronized void reset() {
         for (LiveSubscription subscription : subscriptions.values()) subscription.end("invalidate");
-        for (LiveTopic topic : topics.values()) {
-            if (topic.hasOpeningViewers()) topic.invalidate();
-        }
         topics.clear();
         subscriptions.clear();
     }

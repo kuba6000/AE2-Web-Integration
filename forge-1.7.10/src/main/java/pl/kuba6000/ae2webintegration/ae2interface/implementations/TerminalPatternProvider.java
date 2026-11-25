@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -20,7 +19,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
-import com.google.common.collect.AbstractIterator;
 
 import appeng.api.AEApi;
 import appeng.api.config.Settings;
@@ -28,13 +26,11 @@ import appeng.api.config.YesNo;
 import appeng.api.implementations.ICraftingPatternItem;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
-import appeng.api.networking.IMachineSet;
 import appeng.api.util.DimensionalCoord;
 import appeng.api.util.IInterfaceViewable;
 import appeng.helpers.IInterfaceHost;
 import appeng.parts.AEBasePart;
 import appeng.parts.misc.PartPatternRepeater;
-import appeng.parts.p2p.PartP2PInterface;
 import appeng.util.item.AEItemStack;
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -58,41 +54,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
         return revision;
     }
 
-    /** Both nodes must still be in their original grids. A destroyed GTNH node can retain its old grid reference. */
-    @Desugar
-    private record Link(PartPatternRepeater source, IMachineSet sourceMachines, PartPatternRepeater target,
-        IMachineSet targetMachines) {
-
-        void check() {
-            IGridNode from = source.getGridNode();
-            IGridNode to = target.getGridNode();
-            if (source.getPair() != target || !source.isProvider()
-                || target.isProvider()
-                || from == null
-                || !sourceMachines.contains(from)
-                || !from.isActive()
-                || to == null
-                || !targetMachines.contains(to)
-                || !to.isActive()) {
-                throw new IllegalStateException("Pattern repeater disconnected during terminal scan");
-            }
-        }
-    }
-
-    @Desugar
-    private record Path(IGrid grid, @Nullable Path parent, @Nullable Link link) {
-
-        void check() {
-            for (Path path = this; path != null; path = path.parent) {
-                if (path.link != null) path.link.check();
-            }
-        }
-    }
-
-    @Desugar
-    private record Candidate(Path path, IMachineSet membership, IGridNode node) {}
-
-    private final Candidate candidate;
+    private final IGridNode node;
     private final IInterfaceViewable machine;
     private final DimensionalCoords location;
     private final @Nullable String side;
@@ -102,9 +64,9 @@ public final class TerminalPatternProvider implements IPatternProvider {
     private final int rowSize;
     private final WeakReference<World> world;
 
-    private TerminalPatternProvider(Candidate candidate, IInterfaceViewable machine, DimensionalCoord location,
+    private TerminalPatternProvider(IGridNode node, IInterfaceViewable machine, DimensionalCoord location,
         @Nullable ForgeDirection side, String name, IInventory inventory, int slotCount, int rowSize, World world) {
-        this.candidate = candidate;
+        this.node = node;
         this.machine = machine;
         this.location = new DimensionalCoords(location.getDimension(), location.x, location.y, location.z);
         this.side = side == null ? null
@@ -117,71 +79,52 @@ public final class TerminalPatternProvider implements IPatternProvider {
         this.world = new WeakReference<>(world);
     }
 
-    public static @NotNull Iterable<TerminalPatternProvider> snapshot(@NotNull IGrid origin) {
-        List<Candidate> nodes = new ArrayList<>();
-        List<Path> paths = new ArrayList<>();
+    public static @NotNull List<TerminalPatternProvider> snapshot(@NotNull IGrid origin) {
+        List<TerminalPatternProvider> providers = new ArrayList<>();
         Set<IInterfaceViewable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<IGrid> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        ArrayDeque<Path> pending = new ArrayDeque<>();
+        ArrayDeque<IGrid> pending = new ArrayDeque<>();
+        pending.add(origin);
         visited.add(origin);
-        pending.add(new Path(origin, null, null));
         while (!pending.isEmpty()) {
-            Path path = pending.remove();
-            IGrid grid = path.grid;
-            paths.add(path);
-            for (Class<? extends IInterfaceViewable> type : AEApi.instance()
-                .registries()
-                .interfaceTerminal()
-                .getSupportedClasses()) {
-                IMachineSet membership = grid.getMachines(type);
-                for (IGridNode node : membership) {
-                    if (seen.add((IInterfaceViewable) node.getMachine()))
-                        nodes.add(new Candidate(path, membership, node));
-                }
-            }
-            IMachineSet repeaters = grid.getMachines(PartPatternRepeater.class);
-            for (IGridNode node : repeaters) {
-                PartPatternRepeater repeater = (PartPatternRepeater) node.getMachine();
-                PartPatternRepeater pair = repeater.getPair();
-                if (!repeater.isProvider() || pair == null || !node.isActive() || pair.isProvider()) continue;
-                IGridNode other = pair.getGridNode();
-                if (other == null || !other.isActive()) continue;
-                IGrid reachable = other.getGrid();
-                if (visited.add(reachable)) {
-                    Link link = new Link(repeater, repeaters, pair, reachable.getMachines(PartPatternRepeater.class));
-                    pending.add(new Path(reachable, path, link));
-                }
+            IGrid grid = pending.remove();
+            collectProviders(grid, seen, providers);
+            for (IGridNode node : grid.getMachines(PartPatternRepeater.class)) {
+                IGrid remote = linkedGrid(node);
+                if (remote != null && visited.add(remote)) pending.add(remote);
             }
         }
-        return () -> new AbstractIterator<TerminalPatternProvider>() {
-
-            final Iterator<Candidate> candidates = nodes.iterator();
-            final List<TerminalPatternProvider> tunnels = new ArrayList<>();
-
-            @Override
-            protected TerminalPatternProvider computeNext() {
-                while (candidates.hasNext()) {
-                    Candidate candidate = candidates.next();
-                    candidate.path.check();
-                    if (!candidate.membership.contains(candidate.node)) continue;
-                    TerminalPatternProvider row = describe(candidate);
-                    if (row != null) {
-                        if (row.machine instanceof PartP2PInterface) tunnels.add(row);
-                        return row;
-                    }
-                }
-                // The core publishes only after this final hasNext. Discard old rows if a directed link vanished.
-                for (Path path : paths) {
-                    if (path.link != null) path.link.check();
-                }
-                for (TerminalPatternProvider tunnel : tunnels) tunnel.currentInventory();
-                return endOfData();
-            }
-        };
+        return providers;
     }
 
-    private static @Nullable TerminalPatternProvider describe(Candidate candidate) {
-        IInterfaceViewable machine = (IInterfaceViewable) candidate.node.getMachine();
+    private static void collectProviders(IGrid grid, Set<IInterfaceViewable> seen,
+        List<TerminalPatternProvider> providers) {
+        for (Class<? extends IInterfaceViewable> type : AEApi.instance()
+            .registries()
+            .interfaceTerminal()
+            .getSupportedClasses()) {
+            for (IGridNode node : grid.getMachines(type)) {
+                IInterfaceViewable machine = (IInterfaceViewable) node.getMachine();
+                if (!seen.add(machine)) continue;
+                TerminalPatternProvider provider = describe(node, machine);
+                if (provider != null) providers.add(provider);
+            }
+        }
+    }
+
+    private static @Nullable IGrid linkedGrid(IGridNode node) {
+        PartPatternRepeater repeater = (PartPatternRepeater) node.getMachine();
+        PartPatternRepeater pair = repeater.getPair();
+        if (!node.isActive() || !repeater.isProvider() || pair == null || pair.isProvider()) return null;
+        IGridNode other = pair.getGridNode();
+        if (other == null || !other.isActive()) return null;
+        IGrid remote = other.getGrid();
+        // A destroyed GTNH node can retain its old grid reference.
+        return remote.getMachines(PartPatternRepeater.class)
+            .contains(other) ? remote : null;
+    }
+
+    private static @Nullable TerminalPatternProvider describe(IGridNode node, IInterfaceViewable machine) {
         DimensionalCoord location = machine.getLocation();
         if (location == null) return skip(machine, "missing block position");
         ForgeDirection side = machine instanceof AEBasePart part ? part.getSide() : null;
@@ -195,18 +138,9 @@ public final class TerminalPatternProvider implements IPatternProvider {
             return skip(machine, "invalid pattern slot layout");
         String name = machine.getName();
         if (name == null) return skip(machine, "missing terminal name");
-        World world = candidate.node.getWorld();
+        World world = node.getWorld();
         if (world == null) return skip(machine, "missing world");
-        return new TerminalPatternProvider(
-            candidate,
-            machine,
-            location,
-            side,
-            name,
-            inventory,
-            slotCount,
-            rowSize,
-            world);
+        return new TerminalPatternProvider(node, machine, location, side, name, inventory, slotCount, rowSize, world);
     }
 
     private static @Nullable TerminalPatternProvider skip(IInterfaceViewable machine, String reason) {
@@ -242,7 +176,7 @@ public final class TerminalPatternProvider implements IPatternProvider {
 
     @Override
     public boolean web$isPatternProviderOnline() {
-        return candidate.node.isActive();
+        return node.isActive();
     }
 
     @Override
@@ -273,24 +207,9 @@ public final class TerminalPatternProvider implements IPatternProvider {
         return 0;
     }
 
-    /** An output P2P interface can retarget an entirely different pattern inventory between server ticks. */
-    private @Nullable IInventory currentInventory() {
-        if (!candidate.membership.contains(candidate.node)) {
-            throw new IllegalStateException("Pattern provider removed during terminal scan");
-        }
-        IInventory current = machine.getPatterns();
-        if (machine instanceof PartP2PInterface && current != inventory) {
-            throw new IllegalStateException("Pattern tunnel changed its source during terminal scan");
-        }
-        return current;
-    }
-
     @Override
     public @Nullable IPatternSlotHandle web$getPattern(int slot) {
-        candidate.path.check();
-        IInventory current = currentInventory();
-        if (current == null || slot >= current.getSizeInventory()) return null;
-        ItemStack stack = current.getStackInSlot(slot);
+        ItemStack stack = inventory.getStackInSlot(slot);
         if (stack == null) return null;
         return new Slot(stack.copy(), world);
     }

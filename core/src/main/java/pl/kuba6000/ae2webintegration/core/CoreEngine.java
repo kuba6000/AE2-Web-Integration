@@ -182,8 +182,7 @@ public class CoreEngine {
                 GRID_IDENTITIES::getGrid,
                 () -> AE2Controller.AE2Interface != null && Boolean.TRUE.equals(
                     AE2Controller.AE2Interface.web$getCapabilities()
-                        .get(ServerCapability.PATTERN_PROVIDERS)),
-                System::nanoTime);
+                        .get(ServerCapability.PATTERN_PROVIDERS)));
             liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
             StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
             storageTracking = service;

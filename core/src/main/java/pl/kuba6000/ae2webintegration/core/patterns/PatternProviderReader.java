@@ -2,13 +2,11 @@ package pl.kuba6000.ae2webintegration.core.patterns;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.LongSupplier;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -26,8 +24,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternSlotHandle;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
-/** One server-thread scan cursor per viewed network. Only completed scans publish detached rows. */
-public final class PatternProviderReader implements AutoCloseable {
+/** Reads a viewed network on the server thread. Only successful reads replace the cached encodings. */
+public final class PatternProviderReader {
 
     private static final PatternProvider.Slot EMPTY = new PatternProvider.Slot(
         PatternProvider.Kind.EMPTY,
@@ -51,62 +49,54 @@ public final class PatternProviderReader implements AutoCloseable {
     private record Cached(PatternProvider row, IPatternSlotHandle[] handles) {}
 
     private Map<StableKey, Cached> previous = Collections.emptyMap();
-    private Map<StableKey, Cached> next = new LinkedHashMap<>();
-    private final Map<StableKey, PatternProvider> replacements = new LinkedHashMap<>();
-    private @Nullable Iterator<? extends IPatternProvider> providers;
-    private @Nullable ProviderScan current;
 
-    /** Starts a new pass. Replacing an unfinished pass discards it without publishing partial rows. */
-    public void begin(@NotNull IAEGrid grid) {
-        next.clear();
-        replacements.clear();
-        current = null;
-        providers = grid.web$getPatternProviders()
-            .iterator();
+    public @NotNull Delta read(@NotNull IAEGrid grid) {
+        Map<StableKey, Cached> next = new LinkedHashMap<>();
+        Map<StableKey, PatternProvider> replacements = new LinkedHashMap<>();
+        for (IPatternProvider provider : grid.web$getPatternProviders()) {
+            PatternProvider.Header header = header(provider);
+            StableKey key = header.key();
+            if (next.containsKey(key)) {
+                throw new IllegalStateException(
+                    "Ambiguous pattern provider address " + header.location() + " side " + header.side());
+            }
+            Cached old = previous.get(key);
+            Cached result = readProvider(provider, header, old);
+            next.put(key, result);
+            if (old == null || result.row() != old.row()) replacements.put(key, result.row());
+        }
+        Set<StableKey> removed = new LinkedHashSet<>(previous.keySet());
+        removed.removeAll(next.keySet());
+        previous = next;
+        return new Delta(replacements, removed);
     }
 
-    /** Reads at least one provider header or slot, then yields at the deadline. Null means resume next tick. */
-    public @Nullable Delta step(long deadlineNanos, @NotNull LongSupplier nanoClock) {
-        if (providers == null) throw new IllegalStateException("Pattern provider scan has not started");
-        do {
-            if (current == null) {
-                if (!providers.hasNext()) {
-                    Set<StableKey> removed = new LinkedHashSet<>(previous.keySet());
-                    removed.removeAll(next.keySet());
-                    previous = next;
-                    next = new LinkedHashMap<>();
-                    providers = null;
-                    return new Delta(replacements, removed);
-                }
-                IPatternProvider provider = providers.next();
-                PatternProvider.Header header = header(provider);
-                if (next.containsKey(header.key())) {
-                    throw new IllegalStateException(
-                        "Ambiguous pattern provider address " + header.location() + " side " + header.side());
-                }
-                current = new ProviderScan(provider, header, previous.get(header.key()));
+    private static Cached readProvider(IPatternProvider provider, PatternProvider.Header header, @Nullable Cached old) {
+        IPatternSlotHandle[] handles = new IPatternSlotHandle[provider.web$getPatternSlotCount()];
+        List<PatternProvider.Slot> slots = new ArrayList<>(handles.length);
+        for (int i = 0; i < handles.length; i++) {
+            IPatternSlotHandle handle = provider.web$getPattern(i);
+            handles[i] = handle;
+            if (old != null && i < old.handles().length && sameEncoding(handle, old.handles()[i])) {
+                slots.add(
+                    old.row()
+                        .slots()
+                        .get(i));
             } else {
-                current.readSlot();
+                slots.add(decode(handle));
             }
-            if (current.complete()) {
-                Cached result = current.result();
-                StableKey key = current.header.key();
-                next.put(key, result);
-                if (current.changed) replacements.put(key, result.row());
-                current = null;
-            }
-        } while (nanoClock.getAsLong() - deadlineNanos < 0);
-        return null;
+        }
+        PatternProvider row = old != null && old.row()
+            .header()
+            .equals(header)
+            && old.row()
+                .slots()
+                .equals(slots) ? old.row() : new PatternProvider(header, slots);
+        return new Cached(row, handles);
     }
 
-    /** Releases encodings and native handles, including an unfinished pass. */
-    @Override
-    public void close() {
-        previous = Collections.emptyMap();
-        next.clear();
-        replacements.clear();
-        providers = null;
-        current = null;
+    private static boolean sameEncoding(@Nullable IPatternSlotHandle current, @Nullable IPatternSlotHandle previous) {
+        return current == null ? previous == null : previous != null && current.web$sameAs(previous);
     }
 
     private static PatternProvider.Header header(IPatternProvider provider) {
@@ -151,58 +141,5 @@ public final class PatternProviderReader implements AutoCloseable {
             if (value != null) result.add(value);
         }
         return result;
-    }
-
-    private static final class ProviderScan {
-
-        private final IPatternProvider provider;
-        private final PatternProvider.Header header;
-        private final @Nullable Cached old;
-        private final IPatternSlotHandle[] handles;
-        private final List<PatternProvider.Slot> slots;
-        private boolean changed;
-
-        private ProviderScan(IPatternProvider provider, PatternProvider.Header header, @Nullable Cached old) {
-            this.provider = provider;
-            this.header = header;
-            this.old = old;
-            handles = new IPatternSlotHandle[provider.web$getPatternSlotCount()];
-            slots = new ArrayList<>(handles.length);
-            changed = old == null || !old.row()
-                .header()
-                .equals(header) || old.handles().length != handles.length;
-        }
-
-        private void readSlot() {
-            int index = slots.size();
-            IPatternSlotHandle handle = provider.web$getPattern(index);
-            handles[index] = handle;
-            if (old != null && index < old.handles().length) {
-                IPatternSlotHandle before = old.handles()[index];
-                if (handle == null ? before == null : before != null && handle.web$sameAs(before)) {
-                    slots.add(
-                        old.row()
-                            .slots()
-                            .get(index));
-                    return;
-                }
-            }
-            PatternProvider.Slot decoded = decode(handle);
-            slots.add(decoded);
-            changed |= old == null || index >= old.handles().length
-                || !decoded.equals(
-                    old.row()
-                        .slots()
-                        .get(index));
-        }
-
-        private boolean complete() {
-            return slots.size() == handles.length;
-        }
-
-        private Cached result() {
-            PatternProvider row = changed || old == null ? new PatternProvider(header, slots) : old.row();
-            return new Cached(row, handles);
-        }
     }
 }
