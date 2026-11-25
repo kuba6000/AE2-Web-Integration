@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -34,6 +35,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
+import pl.kuba6000.ae2webintegration.core.patterns.PatternProviderCoordinator;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.telemetry.Telemetry;
@@ -87,6 +89,7 @@ public class CoreEngine {
     private static volatile @Nullable LiveStreams liveStreams;
     private static volatile @Nullable TerminalRegistry terminalRegistry;
     private static volatile @Nullable CpuRegistry cpuRegistry;
+    private static volatile @Nullable PatternProviderCoordinator patternProviders;
     private static volatile @Nullable CpuLiveCoordinator cpuLive;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
@@ -174,6 +177,13 @@ public class CoreEngine {
             CpuRegistry cpus = new CpuRegistry(hub);
             cpuRegistry = cpus;
             cpuLive = new CpuLiveCoordinator(cpus, GRID_IDENTITIES, trackingSettings);
+            patternProviders = new PatternProviderCoordinator(
+                hub,
+                GRID_IDENTITIES::getGrid,
+                () -> AE2Controller.AE2Interface != null && Boolean.TRUE.equals(
+                    AE2Controller.AE2Interface.web$getCapabilities()
+                        .get(ServerCapability.PATTERN_PROVIDERS)),
+                System::nanoTime);
             liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
             StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
             storageTracking = service;
@@ -209,6 +219,8 @@ public class CoreEngine {
             coordinator.applySettings(Config.INSTANCE.resourceTracking, now);
             coordinator.tick(ae, now);
         }
+        PatternProviderCoordinator patterns = patternProviders;
+        if (patterns != null) patterns.tick(System.currentTimeMillis());
         CpuLiveCoordinator cpus = cpuLive;
         if (cpus != null) {
             long now = System.currentTimeMillis();
@@ -404,6 +416,10 @@ public class CoreEngine {
         return cpuLive;
     }
 
+    public static @Nullable PatternProviderCoordinator getPatternProviders() {
+        return patternProviders;
+    }
+
     public static @Nullable LiveStreams getLiveStreams() {
         return liveStreams;
     }
@@ -412,6 +428,9 @@ public class CoreEngine {
         LiveStreams previousStreams = liveStreams;
         liveStreams = null;
         terminalRegistry = null;
+        PatternProviderCoordinator patterns = patternProviders;
+        patternProviders = null;
+        if (patterns != null) patterns.close();
         cpuRegistry = null;
         cpuLive = null;
         if (previousStreams != null) previousStreams.close();

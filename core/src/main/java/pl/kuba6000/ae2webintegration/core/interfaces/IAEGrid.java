@@ -31,6 +31,18 @@ public interface IAEGrid extends IIdentityHolder {
     @Nullable
     PlayerIdentity web$getRepresentativeOwner();
 
+    /** Server thread only, with PATTERN_PROVIDERS. Return a stable membership snapshot for traversal across ticks. */
+    default @NotNull Iterable<? extends IPatternProvider> web$getPatternProviders() {
+        throw new UnsupportedOperationException("Pattern providers are not supported");
+    }
+
+    /**
+     * Server thread only. Cheap change signal covering all reachable provider grids, including any paired repeaters.
+     */
+    default long web$getPatternRevision() {
+        throw new UnsupportedOperationException("Pattern providers are not supported");
+    }
+
     IAECraftingGrid web$getCraftingGrid();
 
     IAEPathingGrid web$getPathingGrid();

@@ -11,7 +11,9 @@ export type ApplicationContext = {
         craftingIgnoreMissing?: boolean;
         craftingPlanSteps?: boolean;
         cpuSelectionMode?: boolean;
+        patternProviders?: boolean;
     };
+    patternTerminalName: 'interface_terminal' | 'pattern_access_terminal' | null;
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;

@@ -35,6 +35,11 @@ public abstract class LiveTopic {
         this.generation = generation;
     }
 
+    /** A pending snapshot may need several server ticks before the first subscription can be reserved. */
+    protected boolean hasOpeningViewers() {
+        return false;
+    }
+
     public final @NotNull Key key() {
         return key;
     }

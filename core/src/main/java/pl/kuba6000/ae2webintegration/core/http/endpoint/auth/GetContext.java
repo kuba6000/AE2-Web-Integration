@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.api.PatternTerminalName;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -39,7 +40,7 @@ import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
  * @response 500 {@link ErrorResponse} Unexpected failure.
  * @response 503 {@link ErrorResponse} Server stopping.
  * @responseExample 200
- *                  {"status":"OK","data":{"publicMode":true,"modVersion":"1.2.0","isOutdated":false,"availableUpdate":null,"user":null,"capabilities":{}}}
+ *                  {"status":"OK","data":{"publicMode":true,"modVersion":"1.2.0","isOutdated":false,"availableUpdate":null,"user":null,"capabilities":{},"patternTerminalName":null}}
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
@@ -74,19 +75,22 @@ public final class GetContext extends IAsyncRequest {
     /**
      * Server information and available features.
      *
-     * @param publicMode      whether individual player web accounts are enabled
-     * @param modVersion      installed mod version, or null if unavailable
-     * @param isOutdated      whether update checking is enabled and a newer mod release is currently known
-     * @param availableUpdate recommendation for authenticated administrators, or null when unavailable or disabled
-     * @param user            current user, or null when unauthenticated
-     * @param capabilities    supported features; empty for anonymous requests. Keys include
-     *                        craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
-     *                        and craftingPlanSteps (per-resource crafting step counts).
+     * @param publicMode          whether individual player web accounts are enabled
+     * @param modVersion          installed mod version, or null if unavailable
+     * @param isOutdated          whether update checking is enabled and a newer mod release is currently known
+     * @param availableUpdate     recommendation for authenticated administrators, or null when unavailable or disabled
+     * @param user                current user, or null when unauthenticated
+     * @param capabilities        supported features; empty for anonymous requests. Keys include
+     *                            craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
+     *                            craftingPlanSteps (per-resource crafting step counts), and patternProviders (read-only
+     *                            pattern terminal).
+     * @param patternTerminalName in-game terminal name when pattern providers are supported, otherwise null
      * @keyExample capabilities craftingLightMode
      */
     @Desugar
     public record Metadata(boolean publicMode, @Nullable String modVersion, boolean isOutdated,
-        @Nullable AvailableUpdate availableUpdate, @Nullable User user, @NotNull Map<String, Boolean> capabilities) {}
+        @Nullable AvailableUpdate availableUpdate, @Nullable User user, @NotNull Map<String, Boolean> capabilities,
+        @Nullable PatternTerminalName patternTerminalName) {}
 
     /**
      * Application context result.
@@ -132,6 +136,9 @@ public final class GetContext extends IAsyncRequest {
                     release != null,
                     update,
                     user,
-                    capabilities)));
+                    capabilities,
+                    Boolean.TRUE.equals(capabilities.get(ServerCapability.PATTERN_PROVIDERS.wireName()))
+                        ? AE2Controller.AE2Interface.web$getPatternTerminalName()
+                        : null)));
     }
 }

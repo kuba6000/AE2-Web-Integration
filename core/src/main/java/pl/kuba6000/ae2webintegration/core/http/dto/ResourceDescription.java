@@ -66,7 +66,7 @@ public class ResourceDescription {
         this.icon = icon;
     }
 
-    protected ResourceDescription(@NotNull ResourceDescriptor descriptor, @Nullable IconMappings mappings) {
+    public ResourceDescription(@NotNull ResourceDescriptor descriptor, @Nullable IconMappings mappings) {
         this(
             descriptor.registryNamespace(),
             descriptor.registryPath(),

@@ -77,6 +77,7 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PatternTerminalName;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
@@ -672,9 +673,12 @@ class ServerLifecycleHttpTest {
                 .getAsString());
         JsonObject data = envelope.getAsJsonObject("data");
         assertEquals(
-            6,
+            7,
             data.entrySet()
                 .size());
+        assertTrue(
+            data.get("patternTerminalName")
+                .isJsonNull());
         assertEquals(new JsonObject(), data.getAsJsonObject("capabilities"));
         assertFalse(
             data.get("publicMode")
@@ -717,6 +721,11 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
+            public PatternTerminalName web$getPatternTerminalName() {
+                return PatternTerminalName.INTERFACE_TERMINAL;
+            }
+
+            @Override
             public Iterable<IAEGrid> web$getGrids() {
                 throw new AssertionError("Context must not read live game state");
             }
@@ -731,11 +740,14 @@ class ServerLifecycleHttpTest {
         expected.addProperty("craftingIgnoreMissing", true);
         expected.addProperty("craftingPlanSteps", true);
         expected.addProperty("cpuSelectionMode", true);
+        expected.addProperty("patternProviders", true);
+        JsonObject authenticated = new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
+            .getAsJsonObject("data");
+        assertEquals(expected, authenticated.getAsJsonObject("capabilities"));
         assertEquals(
-            expected,
-            new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
-                .getAsJsonObject("data")
-                .getAsJsonObject("capabilities"));
+            "interface_terminal",
+            authenticated.get("patternTerminalName")
+                .getAsString());
     }
 
     @Test

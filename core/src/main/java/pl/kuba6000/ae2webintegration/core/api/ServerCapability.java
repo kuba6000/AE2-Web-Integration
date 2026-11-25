@@ -6,7 +6,8 @@ public enum ServerCapability {
     CRAFTING_LIGHT_MODE("craftingLightMode"),
     CRAFTING_IGNORE_MISSING("craftingIgnoreMissing"),
     CRAFTING_PLAN_STEPS("craftingPlanSteps"),
-    CPU_SELECTION_MODE("cpuSelectionMode");
+    CPU_SELECTION_MODE("cpuSelectionMode"),
+    PATTERN_PROVIDERS("patternProviders");
 
     private final String wireName;
 
