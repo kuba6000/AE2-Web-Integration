@@ -4,6 +4,7 @@ import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CPU_SELECT
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_PLAN_STEPS;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.PATTERN_PROVIDERS;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,6 +22,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
+import pl.kuba6000.ae2webintegration.core.api.PatternTerminalName;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -38,12 +40,18 @@ public class AE implements IAE {
         capabilities.put(CRAFTING_IGNORE_MISSING, false);
         capabilities.put(CRAFTING_PLAN_STEPS, false);
         capabilities.put(CPU_SELECTION_MODE, false);
+        capabilities.put(PATTERN_PROVIDERS, true);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
     }
 
     @Override
     public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
         return CAPABILITIES;
+    }
+
+    @Override
+    public @NotNull PatternTerminalName web$getPatternTerminalName() {
+        return PatternTerminalName.INTERFACE_TERMINAL;
     }
 
     public static AE instance = new AE();

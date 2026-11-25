@@ -38,9 +38,11 @@ import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.GridDiscovery;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.TerminalPatternProvider;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
@@ -49,6 +51,7 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
@@ -182,6 +185,16 @@ public abstract class AEGridMixin
     @Override
     public @Nullable PlayerIdentity web$getRepresentativeOwner() {
         return GridDiscovery.representativeOwner((Grid) (Object) this);
+    }
+
+    @Override
+    public @NotNull Iterable<? extends IPatternProvider> web$getPatternProviders() {
+        return TerminalPatternProvider.snapshot((Grid) (Object) this);
+    }
+
+    @Override
+    public long web$getPatternRevision() {
+        return ((ICraftingRevision) web$getCraftingGrid()).web$getCraftingRevision();
     }
 
     @Override

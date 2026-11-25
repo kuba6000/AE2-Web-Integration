@@ -34,6 +34,7 @@ import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -42,7 +43,15 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
-public class CraftingGridCacheMixin implements ICraftingMediumTracker {
+public class CraftingGridCacheMixin implements ICraftingMediumTracker, ICraftingRevision {
+
+    @Unique
+    private long web$craftingRevision;
+
+    @Override
+    public long web$getCraftingRevision() {
+        return web$craftingRevision;
+    }
 
     @Final
     @Shadow
@@ -107,6 +116,7 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         method = "recalculateCraftingPatterns",
         at = @At(value = "INVOKE", target = "Ljava/util/Set;clear()V", ordinal = 0, shift = Shift.AFTER))
     void ae2webintegration$updatePatternsStart(CallbackInfo ci) {
+        web$craftingRevision++;
         web$mediumToViewable.clear();
         web$currentCraftingProvider = null;
     }
