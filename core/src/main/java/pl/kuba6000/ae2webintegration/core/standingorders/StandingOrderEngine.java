@@ -53,6 +53,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.StockObservationListener;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
@@ -521,8 +523,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
      * inventory extraction for each plan entry. This runs once per blocked calculation; it does not schedule a stock
      * sample, but one large summary can exceed the evaluation budget.
      */
-    private static List<StandingOrderSnapshot.MissingIngredient> missingIngredients(IAECraftingJob job,
-        @Nullable GridState grid) {
+    private static List<ResourceSnapshot> missingIngredients(IAECraftingJob job, @Nullable GridState grid) {
         IAEGrid live = grid == null ? null : grid.activeGrid();
         if (live == null) return Collections.emptyList();
         // Keep only five native entries, ordered by shortfall. Equal quantities retain summary order.
@@ -539,19 +540,26 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                 if (largest.size() == MAX_MISSING) largest.remove(MAX_MISSING - 1);
                 largest.add(index, entry);
             }
-            List<StandingOrderSnapshot.MissingIngredient> missing = new ArrayList<>(largest.size());
+            List<ResourceSnapshot> missing = new ArrayList<>(largest.size());
             for (ICraftingPlanSummaryEntry entry : largest) {
                 IAEKey resource = entry.web$getWhat();
-                missing.add(
-                    new StandingOrderSnapshot.MissingIngredient(
-                        resource.web$getKey(),
-                        resource.web$getDisplayName(),
-                        entry.web$getMissingAmount()));
+                StableKey exact = resource.web$getKey();
+                // A native variant can lack an exact identity but still have a displayable base variant.
+                ResourceDescriptor description = ResourceDescriptor.capture(resource, exact, missingBaseKey(resource));
+                missing.add(new ResourceSnapshot(description, entry.web$getMissingAmount()));
             }
             return Collections.unmodifiableList(missing);
         } catch (RuntimeException unreadable) {
             LOG.warn("The missing ingredients of a standing order calculation could not be read", unreadable);
             return Collections.emptyList();
+        }
+    }
+
+    private static @Nullable StableKey missingBaseKey(IAEKey resource) {
+        try {
+            return resource.web$getBaseKey();
+        } catch (RuntimeException unavailable) {
+            return null;
         }
     }
 
@@ -1040,7 +1048,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     /** Why an order has its status, as published in the snapshot. */
     @Desugar
     private record Cause(StandingOrderReason reason, @Nullable StableKey resource, @Nullable String path,
-        @Nullable String submitError, List<StandingOrderSnapshot.MissingIngredient> missing) {
+        @Nullable String submitError, List<ResourceSnapshot> missing) {
 
         private static Cause of(StandingOrderReason reason) {
             return new Cause(reason, null, null, null, Collections.emptyList());
@@ -1058,7 +1066,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             return new Cause(StandingOrderReason.SUBMIT_REJECTED, null, null, error, Collections.emptyList());
         }
 
-        private static Cause missing(List<StandingOrderSnapshot.MissingIngredient> missing) {
+        private static Cause missing(List<ResourceSnapshot> missing) {
             return new Cause(StandingOrderReason.MISSING_INGREDIENTS, null, null, null, missing);
         }
     }

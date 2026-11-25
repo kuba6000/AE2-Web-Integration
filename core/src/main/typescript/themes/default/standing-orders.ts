@@ -1,12 +1,13 @@
 import type { ThemeApplication, ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import type { StandingOrderStatusName } from '../../app/api-types.js';
+import type { IconTarget } from '../../app/icons.js';
 import { standingOrdersHref } from '../../app/router.js';
 import { reasonMessageKey } from '../../app/standing-order-model.js';
 import { statusExplanation } from '../../app/standing-orders.js';
 import { element } from './dom.js';
 import { craftingHammer } from './icons/pixel/terminal.js';
-import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
+import { createResourceIcon, inlineResourceName, paintResourceIcon, resourceMessage } from './resource-icon.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { createStandingOrderEditor } from './standing-order-editor.js';
 
@@ -57,6 +58,8 @@ function createRow() {
     actions.append(toggleLabel, run, edit, remove);
     li.append(head, target, message, submitError, missing, detail, actions);
     return {
+        resourceMessageKey: '',
+        messageIcons: [] as IconTarget[],
         li,
         name,
         chip,
@@ -97,6 +100,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     const empty = element('p', '', 'hint');
     const list = element('ul', '', 'standing-order-list inset-frame');
     let editorMetadata: ThemeState['itemIcons'] = null;
+    let savedMetadata: ThemeState['standingOrders']['icons'] = null;
     let editor: ReturnType<typeof createStandingOrderEditor> | undefined;
     let editorKey: string | null = null;
     scroll.append(status, notices, cadence, empty, list);
@@ -104,6 +108,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     root.append(view);
     const listIcons = application.icons.observe(list, paintResourceIcon);
     const editorIcons = application.icons.observe(scroll, paintResourceIcon);
+    const savedEditorIcons = application.icons.observe(scroll, paintResourceIcon);
     const rows = new Map<string, ReturnType<typeof createRow>>();
     let previous = '';
 
@@ -116,14 +121,17 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             editor = undefined;
             editorKey = key;
             if (model) {
-                const form = createStandingOrderEditor(application, () =>
-                    editorIcons.update(form.targets(), editorMetadata)
-                );
+                const form = createStandingOrderEditor(application, updateEditorIcons);
                 editor = form;
                 scroll.append(editor.element);
             }
         }
-        editorIcons.update(model && editor ? editor.render(state, model, locale, icons) : [], state.itemIcons);
+        if (model && editor) editor.render(state, model, locale, icons);
+        updateEditorIcons();
+    }
+    function updateEditorIcons() {
+        savedEditorIcons.update(editor?.targets(true) ?? [], savedMetadata);
+        editorIcons.update(editor?.targets(false) ?? [], editorMetadata);
     }
     function clearList() {
         if (rows.size) {
@@ -166,17 +174,40 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             row.target.dataset.resource = definition.action.resource;
         }
         const explained = definition && runtime ? statusExplanation(runtime, orders.resources, locale) : null;
-        row.message.textContent = '';
-        if (!definition && order.invalid)
-            row.message.textContent = t('standingOrderUnreadable', {
-                reason: t(reasonMessageKey(order.invalid.reason))
-            });
-        else if (explained?.reason) row.message.textContent = explained.reason;
-        row.message.hidden = !row.message.textContent;
+        const reason =
+            !definition && order.invalid
+                ? t('standingOrderUnreadable', { reason: t(reasonMessageKey(order.invalid.reason)) })
+                : (explained?.reason ?? '');
+        const ambiguous =
+            runtime?.reason === 'AMBIGUOUS_RESOURCE' && runtime.resource ? orders.resources[runtime.resource] : null;
+        const shortfalls = runtime?.missing ?? [];
+        // Keep the same atlas targets when a live update changes only the timestamps or order controls.
+        const messageKey = JSON.stringify([reason, ambiguous, shortfalls, state.preferences.language]);
+        if (messageKey !== row.resourceMessageKey) {
+            row.resourceMessageKey = messageKey;
+            row.messageIcons = [];
+            if (ambiguous) {
+                const label = inlineResourceName(ambiguous.displayName);
+                row.message.replaceChildren(
+                    resourceMessage(locale, 'standingOrderStatusReason_AMBIGUOUS_RESOURCE', { resource: label })
+                );
+                row.messageIcons.push({ element: label, icon: ambiguous.icon });
+            } else row.message.textContent = reason;
+            row.message.hidden = !reason;
+            row.missing.replaceChildren(
+                ...shortfalls.map((entry) => {
+                    const label = inlineResourceName(entry.displayName);
+                    const line = element('li');
+                    line.append(
+                        resourceMessage(locale, 'standingOrderMissingIngredient', { amount: entry.amount, name: label })
+                    );
+                    row.messageIcons.push({ element: label, icon: entry.icon });
+                    return line;
+                })
+            );
+        }
         row.submitError.textContent = explained?.submitError ?? '';
         row.submitError.hidden = !row.submitError.textContent;
-        const shortfalls = explained?.missing ?? [];
-        row.missing.replaceChildren(...shortfalls.map((text) => element('li', text)));
         row.missing.setAttribute('aria-label', t('standingOrderMissingList'));
         row.missing.hidden = !shortfalls.length;
         const facts: string[] = [];
@@ -243,7 +274,9 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
                 ? orders.orders.flatMap((order) => {
                       const row = rows.get(order.orderKey);
                       const resource = order.definition && orders.resources[order.definition.action.resource];
-                      return row && resource ? [{ element: row.target, icon: resource.icon }] : [];
+                      return row
+                          ? [...(resource ? [{ element: row.target, icon: resource.icon }] : []), ...row.messageIcons]
+                          : [];
                   })
                 : [],
             orders.icons
@@ -263,6 +296,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     return {
         render(state: ThemeState, locale: Translator, icons: boolean) {
             editorMetadata = state.itemIcons;
+            savedMetadata = state.standingOrders.icons;
             const { route, standingOrders: orders } = state;
             view.hidden = route.view !== 'standing-orders';
             if (route.view !== 'standing-orders') {
@@ -317,6 +351,7 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
             editor?.dispose();
             listIcons.dispose();
             editorIcons.dispose();
+            savedEditorIcons.dispose();
         }
     };
 }

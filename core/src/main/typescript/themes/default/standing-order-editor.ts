@@ -3,7 +3,7 @@ import type { Translator } from '../../app/i18n.js';
 import type { IconTarget } from '../../app/icons.js';
 import type { StandingOrderCondition, StandingOrderDefinition } from '../../app/api-types.js';
 import { formatCraftingRatio } from '../../app/crafting-quantity.js';
-import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { inlineResourceName, resourceMessage } from './resource-icon.js';
 import { standingOrdersHref } from '../../app/router.js';
 import {
     defaultRatio,
@@ -17,7 +17,6 @@ import {
 import { element } from './dom.js';
 import { createResourcePicker, type ResourceChoice } from './resource-picker.js';
 
-type Resources = ThemeState['standingOrders']['resources'];
 let nextId = 0;
 
 const kinds: { kind: ConditionKind; label: string }[] = [
@@ -72,36 +71,36 @@ function numberText(value: number | null, locale: Translator) {
         : locale.number(value);
 }
 
-function resourceName(key: string | null, resources: Resources, locale: Translator) {
-    const description = key === null ? undefined : resources[key];
-    return description ? plainMinecraftText(description.displayName) : locale.common('standingOrderUnknownResource');
-}
+type ResourceLabel = (key: string | null) => HTMLElement | string;
 
 function ratioSummary(
     ratio: ReadonlyData<StandingOrderCondition | StandingOrderDefinition['action']['amount']>,
-    resources: Resources,
+    label: ResourceLabel,
     locale: Translator
 ) {
-    return locale.common('standingOrderRatioSummary', {
-        reference: resourceName(ratio.reference ?? null, resources, locale),
+    return resourceMessage(locale, 'standingOrderRatioSummary', {
+        reference: label(ratio.reference ?? null),
         multiplier: formatCraftingRatio(ratio.numerator, ratio.denominator) ?? locale.common('standingOrderLargeAmount')
     });
 }
 
-function conditionSummary(condition: ReadonlyData<StandingOrderCondition>, resources: Resources, locale: Translator) {
+function conditionSummary(condition: ReadonlyData<StandingOrderCondition>, label: ResourceLabel, locale: Translator) {
     const item = element('li');
     const { common: t } = locale;
     if (condition.type === 'stockBelow' || condition.type === 'stockAtLeast' || isRatioCondition(condition.type)) {
-        item.textContent = t(
-            condition.type === 'stockBelow' || condition.type === 'stockRatioBelow'
-                ? 'standingOrderSummaryBelow'
-                : 'standingOrderSummaryAtLeast',
-            {
-                resource: resourceName(condition.resource, resources, locale),
-                amount: isRatioCondition(condition.type)
-                    ? ratioSummary(condition, resources, locale)
-                    : numberText(condition.amount, locale)
-            }
+        item.append(
+            resourceMessage(
+                locale,
+                condition.type === 'stockBelow' || condition.type === 'stockRatioBelow'
+                    ? 'standingOrderSummaryBelow'
+                    : 'standingOrderSummaryAtLeast',
+                {
+                    resource: label(condition.resource),
+                    amount: isRatioCondition(condition.type)
+                        ? ratioSummary(condition, label, locale)
+                        : numberText(condition.amount, locale)
+                }
+            )
         );
     } else if (isIdleCpuCondition(condition.type)) {
         item.textContent = t(
@@ -112,31 +111,31 @@ function conditionSummary(condition: ReadonlyData<StandingOrderCondition>, resou
         const children = condition.type === 'not' ? [condition.child] : (condition.children ?? []);
         const group = { all: 'standingOrderGroupAll', any: 'standingOrderGroupAny', not: 'standingOrderGroupNot' };
         const list = element('ul');
-        for (const child of children) if (child) list.append(conditionSummary(child, resources, locale));
+        for (const child of children) if (child) list.append(conditionSummary(child, label, locale));
         item.append(t(group[condition.type]), list);
     }
     return item;
 }
 
 /** The stored order, as text, for orders whose rules the editor cannot change. */
-function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resources: Resources, locale: Translator) {
+function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, label: ResourceLabel, locale: Translator) {
     const { common: t } = locale;
     const { action } = definition;
     const triggers = element('ul');
-    triggers.append(conditionSummary(definition.trigger, resources, locale));
+    triggers.append(conditionSummary(definition.trigger, label, locale));
     const amount = action.amount;
-    const craft = element(
-        'p',
+    const craft = element('p');
+    craft.append(
         amount.type === 'fixed'
-            ? t('standingOrderSummaryFixed', {
-                  resource: resourceName(action.resource, resources, locale),
+            ? resourceMessage(locale, 'standingOrderSummaryFixed', {
+                  resource: label(action.resource),
                   amount: numberText(amount.batch, locale)
               })
-            : t('standingOrderSummaryFillTo', {
-                  resource: resourceName(action.resource, resources, locale),
+            : resourceMessage(locale, 'standingOrderSummaryFillTo', {
+                  resource: label(action.resource),
                   target:
                       amount.type === 'fillToRatio'
-                          ? ratioSummary(amount, resources, locale)
+                          ? ratioSummary(amount, label, locale)
                           : numberText(amount.target, locale),
                   maxBatch: numberText(amount.maxBatch, locale)
               })
@@ -409,13 +408,27 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         }
     }
     let visiblePickers: ReturnType<typeof createResourcePicker>[] = [];
-    const targets = (): IconTarget[] => visiblePickers.flatMap((picker) => picker.targets());
+    let inlineTargets: { element: HTMLElement; key: string }[] = [];
+    let guardLabel: { element: HTMLElement; key: string } | null = null;
+    let summaryLabels: typeof inlineTargets = [];
+    const summaryNames = new Map<string, string | undefined>();
+    let guardSignature = '',
+        summarySignature = '';
+    let choices: ResourceChoice | undefined;
+    const targets = (saved: boolean): IconTarget[] => [
+        ...visiblePickers.flatMap((picker) => picker.targets(saved)),
+        ...inlineTargets.flatMap(({ element, key }) => {
+            const live = choices?.byKey.get(key)?.icon;
+            return saved === !live ? [{ element, icon: live ?? choices?.known[key]?.icon }] : [];
+        })
+    ];
     function render(
         state: ThemeState,
         editor: NonNullable<ThemeState['standingOrders']['editor']>,
         locale: Translator,
         iconsOn: boolean
-    ): IconTarget[] {
+    ) {
+        inlineTargets = [];
         visiblePickers = [];
         const orders = state.standingOrders;
         unsaved = editor.status === 'ready' && editor.dirty && !editor.saving;
@@ -449,7 +462,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         if (!ready) {
             resetPickers();
             locked.hidden = true;
-            return [];
+            return;
         }
         const editable = orders.canEdit && (orders.serverEnabled || editor.order !== null) && !editor.saving;
         const draft = editor.draft;
@@ -478,6 +491,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             locale,
             language: state.preferences.language
         };
+        choices = resourceChoice;
         errorTargets.clear();
         errorTargets.set('name', { target: nameField, controls: [name] });
         errorTargets.set('cooldownSeconds', { target: cooldownField, controls: [cooldown] });
@@ -514,12 +528,19 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         guardName.textContent = t('standingOrderCondition', { index: 0 });
         guardStatus.textContent = t('standingOrderAlwaysActive');
         const output = rules.locked === null ? rules.resource : editor.definition?.action.resource;
-        const outputName = output
-            ? (resourceChoice.byKey.get(output)?.displayName ?? orders.resources[output]?.displayName)
-            : undefined;
-        guardText.textContent = outputName
-            ? t('standingOrderGuardResource', { resource: plainMinecraftText(outputName) })
-            : t('standingOrderGuard');
+        const description = (key: string) => resourceChoice.byKey.get(key) ?? orders.resources[key];
+        const outputName = output ? description(output)?.displayName : null;
+        const signatureGuard = JSON.stringify([state.preferences.language, output, outputName]);
+        if (signatureGuard !== guardSignature) {
+            guardSignature = signatureGuard;
+            guardLabel = output && outputName ? { key: output, element: inlineResourceName(outputName) } : null;
+            guardText.replaceChildren(
+                guardLabel
+                    ? resourceMessage(locale, 'standingOrderGuardResource', { resource: guardLabel.element })
+                    : t('standingOrderGuard')
+            );
+        }
+        if (iconsOn && guardLabel) inlineTargets.push(guardLabel);
         rowList.hidden = !flat;
         add.hidden = !flat;
         matchField.wrap.hidden = !flat;
@@ -666,7 +687,26 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             lockedHelp.textContent = t(
                 rules.locked === 'nested' ? 'standingOrderLockedNested' : 'standingOrderLockedLarge'
             );
-            lockedBody.replaceChildren(...ruleSummary(editor.definition, orders.resources, locale));
+            const signature = JSON.stringify([editor.definition, state.preferences.language]);
+            if (
+                signature !== summarySignature ||
+                [...summaryNames].some(([key, name]) => description(key)?.displayName !== name)
+            ) {
+                summarySignature = signature;
+                summaryLabels = [];
+                summaryNames.clear();
+                const label: ResourceLabel = (key) => {
+                    if (!key) return t('standingOrderUnknownResource');
+                    const name = description(key)?.displayName;
+                    summaryNames.set(key, name);
+                    if (!name) return t('standingOrderUnknownResource');
+                    const element = inlineResourceName(name);
+                    summaryLabels.push({ key, element });
+                    return element;
+                };
+                lockedBody.replaceChildren(...ruleSummary(editor.definition, label, locale));
+            }
+            if (iconsOn) inlineTargets.push(...summaryLabels);
         }
         for (const control of [
             name,
@@ -696,7 +736,6 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             if (firstTarget) firstTarget.focus();
             else if (first === 'trigger') add.focus();
         }
-        return targets();
     }
     return {
         element: form,

@@ -5,6 +5,7 @@ import static java.net.HttpURLConnection.HTTP_OK;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,11 +33,14 @@ import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderExc
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderReason;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderSnapshot;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStatus;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Shared standing order request handling: authorization, definition parsing and the listing response. */
 public abstract class StandingOrderRequest extends IAsyncRequest {
@@ -97,7 +101,70 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
      */
     @Desugar
     public record Order(@NotNull StableKey orderKey, @Nullable StandingOrderJson.Definition definition,
-        @Nullable Rejection invalid, @Nullable StandingOrderSnapshot status) {}
+        @Nullable Rejection invalid, @Nullable Status status) {}
+
+    /**
+     * Runtime state, with icon references scoped to this response's atlas pages.
+     *
+     * @param status              current status
+     * @param reason              why the order has this status where the status alone does not say, or null
+     * @param resource            the resource a reason names (AMBIGUOUS_RESOURCE), or null
+     * @param path                the member of the definition a reason names (CAPABILITY_UNAVAILABLE), for example
+     *                            {@code action.options.lightMode}, or null
+     * @param submitError         the crafting system's error message when it refused the job (SUBMIT_REJECTED), in its
+     *                            own language, or null
+     * @param missing             up to five ingredients the network lacked for the blocked calculation
+     *                            (MISSING_INGREDIENTS), largest shortfall first; empty otherwise
+     * @param changedAt           when status or reason last changed
+     * @param lastSubmittedAmount amount of the last job this order submitted since the server started
+     * @param nextCheckAt         when the engine looks at the order next without waiting for new data: cooldown or
+     *                            backoff end, otherwise the expected next stock read
+     * @param craftingSince       when a running job was submitted or first noticed; set only while crafting
+     */
+    @Desugar
+    public record Status(@NotNull StandingOrderStatus status, @Nullable StandingOrderReason reason,
+        @Nullable StableKey resource, @Nullable String path, @Nullable String submitError,
+        @NotNull List<MissingIngredient> missing, long changedAt, long lastSubmittedAmount, long nextCheckAt,
+        long craftingSince) {
+
+        /** Map only detached descriptions: a missing ingredient need not be present in the item catalogue. */
+        public static @NotNull Status from(@NotNull StandingOrderSnapshot snapshot, @Nullable IconMappings mappings) {
+            List<MissingIngredient> missing = snapshot.missing()
+                .isEmpty() ? Collections.emptyList()
+                    : new ArrayList<>(
+                        snapshot.missing()
+                            .size());
+            for (ResourceSnapshot stack : snapshot.missing()) {
+                ResourceDescriptor descriptor = stack.description();
+                StableKey exact = descriptor.itemKey();
+                StableKey lookup = exact != null ? exact : descriptor.baseKey();
+                IconMappings.Reference icon = mappings == null || lookup == null ? null
+                    : mappings.resolve(lookup, descriptor.baseKey());
+                missing.add(new MissingIngredient(exact, descriptor.displayName(), stack.quantity(), icon));
+            }
+            return new Status(
+                snapshot.status(),
+                snapshot.reason(),
+                snapshot.resource(),
+                snapshot.path(),
+                snapshot.submitError(),
+                missing,
+                snapshot.changedAt(),
+                snapshot.lastSubmittedAmount(),
+                snapshot.nextCheckAt(),
+                snapshot.craftingSince());
+        }
+    }
+
+    /**
+     * @param resource    exact resource identifier, or null when the server cannot name it
+     * @param displayName original resource name
+     * @param amount      positive quantity missing from this calculation
+     * @param icon        optional exact or base variant image within this response's icon tables
+     */
+    @Desugar
+    public record MissingIngredient(@Nullable StableKey resource, @NotNull String displayName, long amount,
+        @Nullable IconMappings.Reference icon) {}
 
     private static final class OrderResource extends ResourceDescription {
 
@@ -216,7 +283,8 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
         List<Order> orders = new ArrayList<>();
         for (StandingOrderStore.Entry entry : snapshot.orders()) {
-            StandingOrderSnapshot status = engine.snapshot(entry.key());
+            StandingOrderSnapshot runtime = engine.snapshot(entry.key());
+            Status status = runtime == null ? null : Status.from(runtime, mappings);
             if (entry instanceof StandingOrderStore.Valid valid) {
                 orders.add(new Order(valid.key(), StandingOrderMapping.encode(valid.definition()), null, status));
             } else {

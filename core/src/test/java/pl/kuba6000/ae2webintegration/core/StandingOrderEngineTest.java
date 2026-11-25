@@ -7,6 +7,7 @@ import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_L
 import static pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStatus.*;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
@@ -34,6 +36,10 @@ import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders.StandingOrderRequest;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -62,6 +68,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
 import pl.kuba6000.ae2webintegration.core.standingorders.StockRatio;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
@@ -394,6 +401,60 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
+    void missingIngredientIconUsesTheResponseAtlasEvenWhenOnlyItsBaseIsInThePack(@TempDir Path directory)
+        throws Exception {
+        grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        ItemIdentityRequestTest.Resource variant = new ItemIdentityRequestTest.Resource("missing variant", 0, false) {
+
+            @Override
+            public StableKey web$getBaseKey() {
+                return key("base variant");
+            }
+        };
+        grid.calculations.get(0).future.complete(new FakeJob(true, shortfall(variant, 12)));
+        tick(0);
+        Path archive;
+        IconPack.Metadata metadata = new IconPack.Metadata(
+            "1.7.10",
+            "forge",
+            "test",
+            "test",
+            "today",
+            Collections.emptyMap());
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata)) {
+            int[] pixels = new int[4096];
+            Arrays.fill(pixels, 0xffffffff);
+            writer.add(key("base variant"), pixels);
+            archive = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(archive, "1.7.10", "forge", "test")) {
+            IconMappings atlas = new IconMappings(pack);
+            StandingOrderRequest.MissingIngredient missing = StandingOrderRequest.Status.from(snapshot(order), atlas)
+                .missing()
+                .get(0);
+            assertEquals(variant.web$getKey(), missing.resource());
+            assertEquals(12, missing.amount());
+            assertEquals("missing variant", missing.displayName());
+            assertNotNull(missing.icon());
+            assertEquals(
+                0,
+                missing.icon()
+                    .page());
+            assertEquals(1, atlas.pages.size());
+            assertNull(
+                StandingOrderRequest.Status.from(snapshot(order), null)
+                    .missing()
+                    .get(0)
+                    .icon());
+        }
+    }
+
+    @Test
     void aBlockedOrderNamesTheFiveLargestShortfallsOfItsCalculation() {
         grid.addCpu();
         grid.stock("so-plastic", 100);
@@ -418,7 +479,7 @@ class StandingOrderEngineTest extends GridTestScope {
         assertEquals(StandingOrderReason.MISSING_INGREDIENTS, snapshot(order).reason());
         assertEquals(1, job.summaries);
         assertEquals(storage, grid.storageReads, "The shortfalls come from the job, not from another stock read");
-        List<StandingOrderSnapshot.MissingIngredient> missing = snapshot(order).missing();
+        List<ResourceSnapshot> missing = snapshot(order).missing();
         assertEquals(5, missing.size());
         long[] amounts = { 99, 40, 20, 12, 7 };
         String[] names = { "so-f", "so-b", "so-h", "so-d", "so-e" };
@@ -426,15 +487,17 @@ class StandingOrderEngineTest extends GridTestScope {
             assertEquals(
                 amounts[index],
                 missing.get(index)
-                    .amount());
+                    .quantity());
             assertEquals(
                 names[index],
                 missing.get(index)
+                    .description()
                     .displayName());
             assertEquals(
                 key(names[index]),
                 missing.get(index)
-                    .resource());
+                    .description()
+                    .itemKey());
         }
         tick(30_000);
         grid.calculations.get(1).future.complete(new FakeJob(false));
@@ -465,7 +528,10 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     private static ICraftingPlanSummaryEntry shortfall(String id, long missing) {
-        ItemIdentityRequestTest.Resource what = new ItemIdentityRequestTest.Resource(id, 0, false);
+        return shortfall(new ItemIdentityRequestTest.Resource(id, 0, false), missing);
+    }
+
+    private static ICraftingPlanSummaryEntry shortfall(IAEKey what, long missing) {
         return new ICraftingPlanSummaryEntry() {
 
             @Override

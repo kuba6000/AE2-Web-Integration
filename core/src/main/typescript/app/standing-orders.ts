@@ -450,8 +450,12 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
             const editor = state.editor;
             if (!editor || editor.status !== 'ready' || editor.saving) return;
             if (resource?.itemKey) {
-                chosen[resource.itemKey] = resource;
-                state.resources = { ...state.resources, [resource.itemKey]: resource };
+                // The live item's page index belongs to the terminal response, not the standing orders atlas.
+                const fallback = { ...resource, icon: null };
+                const previous = chosen[resource.itemKey];
+                chosen[resource.itemKey] = fallback;
+                if (!state.resources[resource.itemKey] || state.resources[resource.itemKey] === previous)
+                    state.resources = { ...state.resources, [resource.itemKey]: fallback };
             }
             editor.draft = applyChange(editor.draft, change);
             editor.dirty = JSON.stringify(editor.draft) !== JSON.stringify(opened);

@@ -330,7 +330,12 @@ export type StandingOrderReason =
     | 'SELECTED_CPU_UNAVAILABLE'
     | 'CALCULATION_SLOTS_FULL';
 /** An ingredient a blocked calculation lacked; `resource` is null when the server cannot name it. */
-export type StandingOrderMissingIngredient = { resource: string | null; displayName: string; amount: number };
+export type StandingOrderMissingIngredient = {
+    resource: string | null;
+    displayName: string;
+    amount: number;
+    icon?: IconReference | null;
+};
 /**
  * Times are epoch milliseconds and zero means none. `reason` explains the status where the status alone does not;
  * `resource` (AMBIGUOUS_RESOURCE) and `path` (CAPABILITY_UNAVAILABLE) are its parameters. `submitError` is the

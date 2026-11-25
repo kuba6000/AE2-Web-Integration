@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Immutable runtime state of one standing order, safe to read from any thread. Times are epoch milliseconds; a zero
@@ -32,16 +33,5 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 @Desugar
 public record StandingOrderSnapshot(@NotNull StandingOrderStatus status, @Nullable StandingOrderReason reason,
     @Nullable StableKey resource, @Nullable String path, @Nullable String submitError,
-    @NotNull List<MissingIngredient> missing, long changedAt, long lastSubmittedAmount, long nextCheckAt,
-    long craftingSince) {
-
-    /**
-     * An ingredient a calculation found missing, described as the crafting plan endpoint describes plan entries.
-     *
-     * @param resource    identifier of the resource, or null when it has none the server can name
-     * @param displayName the resource's name as the game shows it
-     * @param amount      quantity missing, at least 1
-     */
-    @Desugar
-    public record MissingIngredient(@Nullable StableKey resource, @NotNull String displayName, long amount) {}
-}
+    @NotNull List<ResourceSnapshot> missing, long changedAt, long lastSubmittedAmount, long nextCheckAt,
+    long craftingSince) {}

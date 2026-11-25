@@ -145,10 +145,12 @@ export function createResourcePicker(
         element: root,
         choice,
         /** Icon targets of what is currently shown, for the caller's icon observer. */
-        targets(): IconTarget[] {
+        targets(saved: boolean): IconTarget[] {
             const found = selected === null ? undefined : context?.byKey.get(selected);
+            const stored = selected && context?.known[selected]?.icon;
+            if (saved) return !found?.icon && stored ? [{ element: choice, icon: stored }] : [];
             return [
-                { element: choice, icon: found?.icon ?? null },
+                ...(found?.icon ? [{ element: choice, icon: found.icon }] : []),
                 ...(panel.hidden ? [] : resultRows.map((row) => ({ element: row.button, icon: row.item.icon })))
             ];
         },

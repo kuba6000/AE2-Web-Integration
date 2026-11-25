@@ -1965,6 +1965,7 @@ label {
         .history-analysis-name,
         .tree-card,
         .standing-order-target,
+        .inline-resource-name,
         .resource-choice,
         .resource-result
     )
@@ -1994,6 +1995,7 @@ label {
         .history-analysis-name,
         .tree-card,
         .standing-order-target,
+        .inline-resource-name,
         .resource-choice,
         .resource-result
     )
@@ -4456,6 +4458,15 @@ button.toast:hover {
 .standing-order-status[data-tone='problem'] {
     color: light-dark(#743c36, #f0c4bc);
     background: light-dark(#d2b8b3, #5a3d3c);
+}
+.inline-resource-name {
+    --resource-icon-size: 16px;
+}
+.product-icons-enabled .inline-resource-name > .resource-icon {
+    display: inline-grid;
+    vertical-align: middle;
+    margin-inline-end: 4px;
+    font-size: 12px;
 }
 .standing-order-target {
     display: flex;

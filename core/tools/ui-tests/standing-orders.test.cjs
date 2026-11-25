@@ -465,3 +465,23 @@ test('a stale refresh aborted by an icon setting change neither overwrites state
         ['fresh']
     );
 });
+
+test('item picks retain names without installing live icon references in the standing order catalogue', async (t) => {
+    const saved = { itemKey: 'iron', displayName: 'Iron', icon: { page: 0, x: 0, y: 0 } };
+    const live = { itemKey: 'iron', displayName: 'Iron (live)', icon: { page: 0, x: 64, y: 0 } };
+    const orders = listing([order('o1')]);
+    orders.data.resources = { iron: saved };
+    const terminal = await app(t, { standingOrders: async () => orders });
+    terminal.route(editorRoute);
+    await terminal.refresh();
+    const pick = (item) => terminal.standingOrders.edit({ type: 'target', resource: { itemKey: item.itemKey } }, item);
+    const state = terminal.state.standingOrders;
+    pick(live);
+    assert.deepEqual(state.resources.iron, saved);
+    pick({ ...live, itemKey: 'glass', displayName: 'Glass' });
+    assert.equal(state.resources.glass.displayName, 'Glass');
+    assert.equal(state.resources.glass.icon, null);
+    await terminal.refresh();
+    assert.deepEqual(state.resources.iron, saved);
+    assert.equal(state.resources.glass.icon, null);
+});

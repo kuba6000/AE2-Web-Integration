@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
     fixture,
+    atlasFixture,
     refreshingFixture,
     gridA,
     iron,
@@ -104,6 +105,32 @@ test('the list shows every order with its target, a readable status and why it h
         0
     );
     assert.equal(await row('Busy order').getByRole('checkbox').isChecked(), true);
+});
+
+test('a missing ingredient has its own atlas icon even without a catalogue key', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    await atlasFixture(page, options);
+    const missing = { resource: null, displayName: 'Redstone', amount: 12, icon: { page: 0, x: 64, y: 0 } };
+    options.standingOrders.resources = { iron: { ...iron, icon: { page: 0, x: 0, y: 0 } } };
+    options.standingOrders.orders = [
+        listed('a', {}, runtime('BLOCKED_MISSING', { reason: 'MISSING_INGREDIENTS', missing: [missing] }))
+    ];
+    await page.addInitScript(() =>
+        localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ terminalDisplay: 'both' }))
+    );
+    await page.goto(`${base}#/grids/${gridA}/standing-orders`);
+    const shortfall = page.getByRole('list', { name: 'Missing ingredients' }).getByRole('listitem');
+    await shortfall.waitFor();
+    assert.match(await shortfall.innerText(), /Missing 12 Redstone/);
+    await shortfall.locator('[aria-hidden="true"]').first().waitFor({ timeout: 3000 });
+    await page.waitForFunction(() => {
+        const icon = document.querySelector('.standing-order-missing [aria-hidden="true"]');
+        return (
+            icon &&
+            getComputedStyle(icon).backgroundImage !== 'none' &&
+            parseFloat(getComputedStyle(icon).backgroundPositionX) < 0
+        );
+    });
 });
 
 test('enabling, running and deleting send exactly the requested change and the list follows the answer', async (t) => {
@@ -801,4 +828,55 @@ test('a stock comparison and a fill target can use the stock of another resource
         denominator: 3,
         maxBatch: 64
     });
+});
+
+test('the fixed condition and pickers paint a saved item even when it is absent from live stock', async (t) => {
+    const { waitIconColor } = require('./icon-pixels.cjs');
+    const { page, base, options } = await fixture(t);
+    await atlasFixture(page, options);
+    options.itemsA = [quartz];
+    options.standingOrders.orders = [listed('a', {})];
+    options.standingOrders.resources = { iron: { ...iron, icon: { page: 1, x: 64, y: 0 } } };
+    await page.route('**/standing-orders?*', async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        if (json.icons) json.icons.pages = [{ ...json.icons.pages[0], digest: 'c'.repeat(64) }, ...json.icons.pages];
+        await route.fulfill({ response, json });
+    });
+    await page.goto(base + '#/web-settings');
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
+    await page.goto(base + '#/grids/' + gridA + '/standing-orders/a');
+    const guard = page.getByRole('group', { name: /Condition 0/ });
+    await guard.waitFor();
+    assert.equal(await guard.locator('.resource-icon').count(), 1);
+    await waitIconColor(page, guard.locator('.resource-icon'), 'green');
+    const button = page.getByRole('button', { name: /Iron Ingot/ }).last();
+    await button.scrollIntoViewIfNeeded();
+    await waitIconColor(page, button.locator('.resource-icon'), 'green');
+
+    options.itemsA = [{ ...quartz, icon: { page: 0, x: 0, y: 0 } }];
+    const ratio = { reference: 'quartz', numerator: 1, denominator: 2 };
+    options.standingOrders.orders = [
+        listed('b', {
+            trigger: {
+                type: 'not',
+                child: { type: 'all', children: [{ type: 'stockRatioBelow', resource: 'iron', ...ratio }] }
+            },
+            action: { ...definition().action, amount: { type: 'fillToRatio', ...ratio, maxBatch: 10 } }
+        })
+    ];
+    await page.goto(base + '#/grids/' + gridA + '/standing-orders/b');
+    await page.reload();
+    const summary = page.locator('.standing-order-summary');
+    for (const line of [
+        summary
+            .locator('li')
+            .filter({ hasText: /^Iron Ingot:/ })
+            .last(),
+        summary.getByText(/^Craft Iron Ingot up to/)
+    ]) {
+        await line.scrollIntoViewIfNeeded();
+        await waitIconColor(page, line.locator('.resource-icon').first(), 'green');
+        await waitIconColor(page, line.locator('.resource-icon').last(), 'red');
+    }
 });
