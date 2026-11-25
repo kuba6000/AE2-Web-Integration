@@ -170,6 +170,7 @@ class StandingOrderEngineTest extends GridTestScope {
         StandingOrderSnapshot crafting = snapshot(order);
         assertEquals(64, crafting.lastSubmittedAmount());
         assertEquals(now, crafting.craftingSince());
+        assertEquals(cpu.web$getKey(), crafting.activeCpuKey());
 
         tick(MINUTE);
         assertEquals(CRAFTING, status(order));
@@ -181,6 +182,7 @@ class StandingOrderEngineTest extends GridTestScope {
         assertEquals(COOLDOWN, status(order));
         assertEquals(finished + 120_000, snapshot(order).nextCheckAt());
         assertEquals(0, snapshot(order).craftingSince());
+        assertNull(snapshot(order).activeCpuKey());
         tick(MINUTE);
         assertEquals(COOLDOWN, status(order));
         assertEquals(1, grid.calculations.size());
@@ -220,6 +222,23 @@ class StandingOrderEngineTest extends GridTestScope {
     // ----- Already crafting, CPU eligibility -----
 
     @Test
+    void multipleCpusWithTheSameOutputBlockDuplicateJobsWithoutChoosingALink() {
+        grid.addCpu()
+            .craft("so-plastic");
+        grid.addCpu()
+            .craft("so-plastic");
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        assertEquals(CRAFTING, status(order));
+        assertNull(snapshot(order).activeCpuKey());
+        assertTrue(grid.calculations.isEmpty());
+        assertTrue(grid.submissions.isEmpty());
+    }
+
+    @Test
     void aBusyCpuWhoseFinalOutputIsTheResourceBlocksTheOrderAcrossARestart() {
         OrderGrid.Cpu cpu = grid.addCpu();
         cpu.craft("so-plastic");
@@ -229,6 +248,7 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(0);
         tick(1000);
         assertEquals(CRAFTING, status(order));
+        assertEquals(cpu.web$getKey(), snapshot(order).activeCpuKey());
         assertTrue(grid.calculations.isEmpty());
 
         engine.close();
@@ -961,6 +981,27 @@ class StandingOrderEngineTest extends GridTestScope {
         cpu.finish();
         tick(MINUTE);
         assertNotEquals(CRAFTING_LONG, status(order));
+    }
+
+    @Test
+    void cancellingACraftReleasesItsStatusBeforeTheNextStockSample() {
+        OrderGrid.Cpu cpu = grid.addCpu();
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        grid.onSubmit = () -> cpu.craft("so-plastic");
+        StableKey order = post("Keep plastic", below("so-plastic", 1000), fixed("so-plastic", 64));
+        tick(0);
+        tick(1000);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(1000);
+        assertEquals(CRAFTING, status(order));
+        engine.jobEnded(grid, cpu);
+        cpu.finish();
+        tick(50);
+        assertEquals(WAITING_FOR_STOCK, status(order));
+        assertEquals(StandingOrderReason.WAITING_FRESH_READ_AFTER_JOB, snapshot(order).reason());
+        assertNull(snapshot(order).activeCpuKey());
+        assertEquals(1, grid.calculations.size());
     }
 
     // ----- Availability of the resource and of the server -----

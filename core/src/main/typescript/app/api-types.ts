@@ -352,6 +352,7 @@ export type StandingOrderRuntime = {
     lastSubmittedAmount: number;
     nextCheckAt: number;
     craftingSince: number;
+    activeCpuKey: string | null;
 };
 /** Members of a listed condition that do not apply to its `type` are null; request bodies omit them instead. */
 export type StandingOrderRatioInput = { reference: string; numerator: number; denominator: number };

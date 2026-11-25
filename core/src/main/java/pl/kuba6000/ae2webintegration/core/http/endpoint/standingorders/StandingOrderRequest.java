@@ -121,12 +121,13 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
      * @param nextCheckAt         when the engine looks at the order next without waiting for new data: cooldown or
      *                            backoff end, otherwise the expected next stock read
      * @param craftingSince       when a running job was submitted or first noticed; set only while crafting
+     * @param activeCpuKey        address of the observed CPU crafting the resource, or null when none can be identified
      */
     @Desugar
     public record Status(@NotNull StandingOrderStatus status, @Nullable StandingOrderReason reason,
         @Nullable StableKey resource, @Nullable String path, @Nullable String submitError,
         @NotNull List<MissingIngredient> missing, long changedAt, long lastSubmittedAmount, long nextCheckAt,
-        long craftingSince) {
+        long craftingSince, @Nullable StableKey activeCpuKey) {
 
         /** Map only detached descriptions: a missing ingredient need not be present in the item catalogue. */
         public static @NotNull Status from(@NotNull StandingOrderSnapshot snapshot, @Nullable IconMappings mappings) {
@@ -153,7 +154,8 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
                 snapshot.changedAt(),
                 snapshot.lastSubmittedAmount(),
                 snapshot.nextCheckAt(),
-                snapshot.craftingSince());
+                snapshot.craftingSince(),
+                snapshot.activeCpuKey());
         }
     }
 

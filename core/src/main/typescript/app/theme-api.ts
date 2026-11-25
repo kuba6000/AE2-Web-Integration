@@ -168,7 +168,7 @@ export type ThemeApplication = {
             metadata: ThemeState['itemIcons'],
             signal: AbortSignal
         ): Promise<ResolvedIcons>;
-        observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void): IconView;
+        observe(root: HTMLElement | null, paint: (target: HTMLElement, sprite: IconSprite | null) => void): IconView;
     };
 };
 export type ThemeSettings = {

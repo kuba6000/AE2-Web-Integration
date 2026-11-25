@@ -34,6 +34,12 @@ class Element extends EventTarget {
     }
     setAttribute() {}
     focus() {}
+    showModal() {
+        this.open = true;
+    }
+    close() {
+        this.open = false;
+    }
     querySelector(selector) {
         for (const child of this.children) {
             if (!(child instanceof Element)) continue;
@@ -116,7 +122,7 @@ test('opening and searching a resource picker paints the new visible icons witho
     );
     picker.render(
         { ...context, items: items.slice(0, 1), byKey: new Map([[items[0].itemKey, items[0]]]), catalogRevision: 2 },
-        null,
+        'Iron',
         false,
         'Resource'
     );

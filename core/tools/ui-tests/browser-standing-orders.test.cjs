@@ -325,8 +325,8 @@ test('a composed order sends one group with per-row negation, and options appear
     await page.getByRole('button', { name: 'Add condition' }).click();
     const second = page.getByRole('group', { name: 'Condition 2' });
     await second.getByRole('button', { name: /^Resource/ }).click();
-    await second.getByRole('searchbox', { name: 'Search resources' }).fill('iron');
-    await second.getByRole('button', { name: 'Iron Ingot' }).click();
+    await page.getByRole('dialog').getByRole('searchbox', { name: 'Search resources' }).fill('iron');
+    await page.getByRole('dialog').getByRole('button', { name: 'Iron Ingot' }).click();
     await second.getByLabel('Amount').fill('50k');
     await page.getByRole('button', { name: 'Add condition' }).click();
     const third = page.getByRole('group', { name: 'Condition 3' });
@@ -572,7 +572,8 @@ test('Enter in the resource search confirms nothing and never saves the editor',
     await search.press('Enter');
     await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0, 'nothing was saved');
-    await page.getByRole('heading', { name: 'Edit standing order' }).waitFor();
+    await search.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Pending rename');
 });
 
@@ -587,7 +588,9 @@ test('a resource can be picked when the pointer press leaves focus (as in Safari
     assert.match(await page.getByRole('button', { name: /^Resource to craft/ }).innerText(), /Plastic Sheet/);
     await page.getByRole('button', { name: /^Resource to craft/ }).click();
     await search.waitFor();
-    await page.getByRole('heading', { name: 'New standing order' }).click();
+    const dialog = page.getByRole('dialog');
+    const bounds = await dialog.boundingBox();
+    await page.mouse.click(bounds.x / 2, bounds.y + bounds.height / 2);
     await search.waitFor({ state: 'hidden' });
 });
 
@@ -645,6 +648,7 @@ test('typing into the editor searches its snapshot until the next visit', async 
     await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
     assert.equal(reads(), 1);
     assert.equal(options.itemStreams?.length ?? 0, 0);
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('link', { name: 'Back to standing orders' }).click();
     await enter();
     await page.getByRole('button', { name: /^Resource to craft/ }).click();
@@ -745,31 +749,22 @@ test('leaving an editor with unsaved changes asks first, while an unchanged edit
     assert.deepEqual(lastChange(options).body, { name: 'Saved name' });
 });
 
-test('an open resource list leaves no document listener behind when the page is torn down', async (t) => {
-    const context = await fixture(t);
-    const { page, options, base } = context;
-    await page.addInitScript(() => {
-        const live = new Set();
-        window.pointerListeners = live;
-        const add = EventTarget.prototype.addEventListener;
-        const remove = EventTarget.prototype.removeEventListener;
-        EventTarget.prototype.addEventListener = function (type, listener, ...rest) {
-            if (this === document && type === 'pointerdown') live.add(listener);
-            return add.call(this, type, listener, ...rest);
-        };
-        EventTarget.prototype.removeEventListener = function (type, listener, ...rest) {
-            if (this === document && type === 'pointerdown') live.delete(listener);
-            return remove.call(this, type, listener, ...rest);
-        };
-    });
-    options.itemsA = [iron, quartz, plastic];
-    await page.goto(`${base}#/grids/${gridA}/standing-orders/new`);
-    await page.getByRole('button', { name: /^Resource to craft/ }).click();
-    await page.getByRole('searchbox', { name: 'Search resources' }).waitFor();
-    const open = await page.evaluate(() => window.pointerListeners.size);
-    assert.ok(open >= 1, 'the open list listens for presses outside');
-    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
-    assert.equal(await page.evaluate(() => window.pointerListeners.size), open - 1);
+test('choosing a condition resource leaves the form in place and restores keyboard focus on cancel', async (t) => {
+    const { page } = await open(t, [], {}, '/new');
+    const condition = page.getByRole('group', { name: 'Condition 1', exact: true });
+    const trigger = condition.getByRole('button', { name: /^Resource/ });
+    await trigger.scrollIntoViewIfNeeded();
+    const anchor = await trigger.elementHandle();
+    const before = await anchor.boundingBox();
+    await trigger.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor({ timeout: 3000 });
+    const search = dialog.getByRole('searchbox');
+    assert.ok(await search.evaluate((input) => input === document.activeElement));
+    assert.deepEqual(await anchor.boundingBox(), before);
+    await search.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    assert.ok(await trigger.evaluate((button) => button === document.activeElement));
 });
 
 test('a modified click on a link leaves a dirty editor alone without asking', async (t) => {
@@ -815,7 +810,7 @@ test('a stock comparison and a fill target can use the stock of another resource
     await craft.getByLabel('How much').selectOption('fillToRatio');
     for (const group of [condition, craft]) {
         await group.getByRole('button', { name: /^Reference resource/ }).click();
-        await group.getByRole('button', { name: 'Certus Quartz Crystal', exact: true }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Certus Quartz Crystal', exact: true }).click();
     }
     assert.equal(await condition.getByLabel('Multiplier', { exact: true }).count(), 1);
     await condition.getByLabel('Multiplier').fill('1,5');
@@ -843,7 +838,7 @@ test('the fixed condition and pickers paint a saved item even when it is absent 
     const { waitIconColor } = require('./icon-pixels.cjs');
     const { page, base, options } = await fixture(t);
     await atlasFixture(page, options);
-    options.itemsA = [quartz];
+    options.itemsA = [{ ...quartz, icon: { page: 0, x: 0, y: 0 } }];
     options.standingOrders.orders = [listed('a', {})];
     options.standingOrders.resources = { iron: { ...iron, icon: { page: 1, x: 64, y: 0 } } };
     await page.route('**/standing-orders?*', async (route) => {
@@ -863,7 +858,19 @@ test('the fixed condition and pickers paint a saved item even when it is absent 
     await button.scrollIntoViewIfNeeded();
     await waitIconColor(page, button.locator('.resource-icon'), 'green');
 
-    options.itemsA = [{ ...quartz, icon: { page: 0, x: 0, y: 0 } }];
+    await page
+        .getByRole('group', { name: 'Condition 1', exact: true })
+        .getByRole('button', { name: /^Resource/ })
+        .click();
+    const chooser = page.getByRole('dialog');
+    await chooser.getByRole('searchbox').fill('quartz');
+    await waitIconColor(
+        page,
+        chooser.getByRole('button', { name: 'Certus Quartz Crystal' }).locator('.resource-icon'),
+        'red'
+    );
+    await chooser.getByRole('button', { name: 'Close', exact: true }).click();
+
     const ratio = { reference: 'quartz', numerator: 1, denominator: 2 };
     options.standingOrders.orders = [
         listed('b', {
@@ -888,4 +895,18 @@ test('the fixed condition and pickers paint a saved item even when it is absent 
         await waitIconColor(page, line.locator('.resource-icon').first(), 'green');
         await waitIconColor(page, line.locator('.resource-icon').last(), 'red');
     }
+});
+
+test('crafting status links only to an identified CPU', async (t) => {
+    const { page } = await open(t, [
+        listed('a', { name: 'Identified' }, runtime('CRAFTING', { activeCpuKey: 'cpu/one' })),
+        listed('b', { name: 'Ambiguous' }, runtime('CRAFTING', { activeCpuKey: null })),
+        listed('c', { name: 'Inactive' }, runtime('IDLE', { activeCpuKey: 'cpu/one' }))
+    ]);
+    const row = (name) => page.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) });
+    const link = row('Identified').getByRole('link', { name: 'Crafting', exact: true });
+    await link.waitFor();
+    assert.equal(await link.getAttribute('href'), `#/grids/${encodeURIComponent(gridA)}/cpus/cpu%2Fone`);
+    assert.equal(await row('Ambiguous').getByRole('link', { name: 'Crafting', exact: true }).count(), 0);
+    assert.equal(await row('Inactive').getByRole('link', { name: 'Nothing to do', exact: true }).count(), 0);
 });

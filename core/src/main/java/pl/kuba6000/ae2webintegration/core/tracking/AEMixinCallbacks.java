@@ -16,6 +16,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEngine;
 
 public class AEMixinCallbacks implements IAEMixinCallbacks {
 
@@ -69,14 +70,20 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
 
     @Override
     public void jobCompleted(IAEGrid grid, ICraftingCPUCluster cpu) {
-        jobChanged(cpu);
+        jobEnded(grid, cpu);
         AE2JobTracker.completeCrafting(grid, cpu);
     }
 
     @Override
     public void jobCancelled(IAEGrid grid, ICraftingCPUCluster cpu) {
-        jobChanged(cpu);
+        jobEnded(grid, cpu);
         AE2JobTracker.cancelCrafting(grid, cpu);
+    }
+
+    private static void jobEnded(IAEGrid grid, ICraftingCPUCluster cpu) {
+        jobChanged(cpu);
+        StandingOrderEngine orders = CoreEngine.getStandingOrders();
+        if (orders != null) orders.jobEnded(grid, cpu);
     }
 
     /** Ends plain HTTP job ownership and the live view independently of whether the job was tracked. */

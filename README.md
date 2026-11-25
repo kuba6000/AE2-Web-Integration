@@ -256,7 +256,7 @@ stock thresholds, stock ratios and counts of idle CPUs. Each of these conditions
 **Condition 0** always applies, even with **Any**: no busy CPU on the network may already have the
 ordered resource as its final output.
 
-Opening the editor loads the network’s stored and craftable resources once. The pickers search this
+Opening the editor loads the network’s stored and craftable resources once. The resource chooser opens in a separate dialog and searches this
 list locally. Reopen the editor or use **Refresh** to see resources added since you opened it.
 
 To keep Infinity level with Hypogen, choose **Stock below a proportion of another resource**, compare Infinity to
@@ -273,7 +273,8 @@ check using fresh stock. Requests on the same network share a read; extra reads 
 apart, and a scheduled sample can satisfy the request first.
 
 An order waits while its resource is already the final output of a running crafting job, including
-jobs started by players, and does not order resources provided by a level emitter. After a job
+jobs started by players, and does not order resources provided by a level emitter. Click **Crafting** to open the CPU
+when the order can identify it. Finishing or cancelling a job updates its status without waiting for the next stock sample. After a job
 finishes, the next order needs a storage sample taken afterwards, so one order runs at most about once
 per crafting time plus one sampling interval. An optional cooldown adds a further pause. Calculations
 that lack ingredients or fail are retried with a growing delay, from 30 seconds up to 10 minutes; the

@@ -2545,7 +2545,8 @@ code {
     height: fit-content;
     color: var(--text);
 }
-.network-dialog::backdrop {
+.network-dialog::backdrop,
+.resource-picker-dialog::backdrop {
     background: rgb(0 0 0 / 65%);
 }
 .network-dialog h2 {
@@ -4600,6 +4601,9 @@ button.toast:hover {
 .standing-order-condition > .standing-order-field {
     width: 100%;
 }
+.standing-order-condition > .checkbox {
+    align-self: end;
+}
 .standing-order-condition .standing-order-remove {
     justify-self: start;
 }
@@ -4649,26 +4653,34 @@ button.toast:hover {
     min-width: 0;
     text-align: start;
 }
-.resource-picker-panel {
-    display: grid;
-    gap: 8px;
-    padding: 8px;
-    background: var(--panel);
-    border: 2px solid var(--border);
+.resource-picker-dialog {
+    width: min(560px, calc(100% - 24px));
+    height: min(480px, calc(100dvh - 24px));
+    color: var(--text);
 }
-.resource-picker-panel input {
+.resource-picker-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.resource-picker-dialog input {
     width: 100%;
 }
-.resource-picker-panel p {
+.resource-picker-dialog p {
     margin: 0;
+}
+.resource-picker-dialog p:empty {
+    display: none;
 }
 .resource-picker-list {
     display: grid;
+    align-content: start;
     gap: 2px;
-    max-height: 260px;
+    min-height: 0;
     margin: 0;
     padding: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     list-style: none;
 }
 .resource-result {

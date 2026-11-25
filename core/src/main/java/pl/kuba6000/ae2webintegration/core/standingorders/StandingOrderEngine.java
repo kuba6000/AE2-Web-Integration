@@ -38,7 +38,6 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -186,6 +185,19 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         state.stockFailed = true;
         state.readWanted = true;
         state.pending = true;
+    }
+
+    /** Native completion/cancellation can fire before AE2 clears the CPU. Check its followers on the server tick. */
+    public void jobEnded(@Nullable IAEGrid live, @NotNull ICraftingCPUCluster cpu) {
+        if (live == null || grids.isEmpty()) return;
+        GridState grid = grids.get(identities.getKey(live));
+        if (grid == null || !grid.hasEnabledOrder) return;
+        for (OrderState order : grid.orders) {
+            if (order.status != StandingOrderStatus.CRAFTING && order.status != StandingOrderStatus.CRAFTING_LONG)
+                continue;
+            ICraftingCPUCluster followed = order.activeCpu == null ? null : order.activeCpu.get();
+            if (followed == null || followed == cpu) enqueue(order);
+        }
     }
 
     // ----- Tick (server thread) -----
@@ -660,12 +672,26 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private void follow(OrderState order, GridState grid, IAEGrid live, StandingOrderDefinition definition, long now) {
         boolean disabledWhileCrafting = order.disabledWhileCrafting;
         order.disabledWhileCrafting = false;
-        if (cpuView(grid, live).finalOutputs.contains(
-            definition.action()
-                .resource())) {
-            enterCrafting(order, now);
+        StableKey resource = definition.action()
+            .resource();
+        ICraftingCPUCluster followed = order.activeCpu == null ? null : order.activeCpu.get();
+        if (followed != null && followed.web$isValidForGrid(live) && followed.web$isBusy()) {
+            IAEGenericStack output = followed.web$getFinalOutput();
+            if (output != null && resource.equals(
+                output.web$what()
+                    .web$getKey())) {
+                updateCraftingStatus(order, now);
+                return;
+            }
+        }
+        // Another CPU may still be making this resource, even when the original job has ended.
+        CpuView cpus = cpuView(grid, live);
+        if (cpus.finalOutputs.containsKey(resource)) {
+            enterCrafting(order, cpus, resource, now);
             return;
         }
+        order.activeCpu = null;
+        order.activeCpuKey = null;
         // A job that ended while its order was off has no cooldown to serve; only the stale-data guard applies, and
         // the read it waits for is asked for instead of left to the next sample.
         if (disabledWhileCrafting) coordinator.requestStockRead(grid.key);
@@ -762,8 +788,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             return;
         }
         CpuView cpus = cpuView(grid, live);
-        if (cpus.finalOutputs.contains(action.resource())) {
-            enterCrafting(order, now);
+        if (cpus.finalOutputs.containsKey(action.resource())) {
+            enterCrafting(order, cpus, action.resource(), now);
             return;
         }
         ICraftingCPUCluster target = null;
@@ -879,10 +905,23 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         order.lastSubmittedAmount = order.plannedAmount;
         order.failures = 0;
         order.backoffUntil = 0;
-        enterCrafting(order, now);
+        enterCrafting(
+            order,
+            cpuView(grids.get(order.grid), live),
+            definition.action()
+                .resource(),
+            now);
     }
 
-    private void enterCrafting(OrderState order, long now) {
+    private void enterCrafting(OrderState order, CpuView view, StableKey resource, long now) {
+        ICraftingCPUCluster cpu = view.finalOutputs.get(resource);
+        order.activeCpu = cpu == null ? null : new WeakReference<>(cpu);
+        StableKey cpuKey = cpu == null ? null : cpu.web$getKey();
+        order.activeCpuKey = cpuKey != null && view.byKey.get(cpuKey) == cpu ? cpuKey : null;
+        updateCraftingStatus(order, now);
+    }
+
+    private void updateCraftingStatus(OrderState order, long now) {
         long threshold = MINUTES.toMillis(config.longRunningJobMinutes);
         // The job has been running since it was submitted or first seen, whatever the status showed in between.
         if (order.craftingSince == 0) order.craftingSince = now;
@@ -915,6 +954,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private void publish(OrderState order, @Nullable GridState grid) {
         if (order.removed) return;
         Cause cause = order.cause;
+        boolean crafting = order.status == StandingOrderStatus.CRAFTING
+            || order.status == StandingOrderStatus.CRAFTING_LONG;
         StandingOrderSnapshot next = new StandingOrderSnapshot(
             order.status,
             cause == null ? null : cause.reason(),
@@ -925,9 +966,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             order.changedAt,
             order.lastSubmittedAmount,
             nextCheck(order, grid),
-            order.status == StandingOrderStatus.CRAFTING || order.status == StandingOrderStatus.CRAFTING_LONG
-                ? order.craftingSince
-                : 0);
+            crafting ? order.craftingSince : 0,
+            crafting ? order.activeCpuKey : null);
         if (!next.equals(snapshots.get(order.key))) snapshots.put(order.key, next);
     }
 
@@ -1089,27 +1129,27 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     /** The crafting CPUs of a network as seen once in a tick. */
     private static final class CpuView {
 
-        private final IAECraftingGrid crafting;
-        private final Set<StableKey> finalOutputs = new HashSet<>();
+        /** A null value means that several CPUs are making the same output. */
+        private final Map<StableKey, ICraftingCPUCluster> finalOutputs = new HashMap<>();
         private int eligibleIdle;
         private int playerOnlyIdle;
         /** Largest idle reserved CPU; if this one cannot fit the completed plan, none can. */
         private @Nullable ICraftingCPUCluster machine;
-        private @Nullable Map<StableKey, ICraftingCPUCluster> byKey;
-
-        private CpuView(IAECraftingGrid crafting) {
-            this.crafting = crafting;
-        }
+        private final Map<StableKey, ICraftingCPUCluster> byKey = new LinkedHashMap<>();
 
         private static CpuView read(IAECraftingGrid crafting) {
-            CpuView view = new CpuView(crafting);
+            CpuView view = new CpuView();
             for (ICraftingCPUCluster cpu : crafting.web$getCPUs()) {
+                view.byKey.put(cpu.web$getKey(), cpu);
                 if (cpu.web$isBusy()) {
                     IAEGenericStack output = cpu.web$getFinalOutput();
                     StableKey key = output == null ? null
                         : output.web$what()
                             .web$getKey();
-                    if (key != null) view.finalOutputs.add(key);
+                    if (key != null) {
+                        if (view.finalOutputs.containsKey(key)) view.finalOutputs.put(key, null);
+                        else view.finalOutputs.put(key, cpu);
+                    }
                 } else {
                     CpuSelectionMode mode = cpu.web$getSelectionMode();
                     if (acceptsPlayerOrder(cpu, mode)) {
@@ -1124,7 +1164,6 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         }
 
         private @Nullable ICraftingCPUCluster find(StableKey key) {
-            if (byKey == null) byKey = CpuReader.list(crafting);
             return byKey.get(key);
         }
     }
@@ -1217,6 +1256,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private @Nullable Cause cause;
         private long changedAt;
         private long manualRunGeneration = -1;
+        private @Nullable WeakReference<ICraftingCPUCluster> activeCpu;
+        private @Nullable StableKey activeCpuKey;
         private long craftingSince;
         /** The order was disabled while its job ran, so the cooldown of that job ended with its activity. */
         private boolean disabledWhileCrafting;
@@ -1245,6 +1286,8 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         /** The crafted resource changed, so a running job, cooldown and failures no longer belong to this order. */
         private void forgetJob() {
             craftingSince = 0;
+            activeCpu = null;
+            activeCpuKey = null;
             disabledWhileCrafting = false;
             settledAt = 0;
             cooldownUntil = 0;

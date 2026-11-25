@@ -26,7 +26,7 @@ export type ResourceChoice = {
 };
 
 /**
- * A searchable list of the network's resources, as in the terminal, shown on demand next to the chosen resource.
+ * A searchable list of the network's resources, as in the terminal, shown in a modal so results do not reflow the editor.
  * `craftableOnly` limits it to what the network can craft.
  */
 export function createResourcePicker(
@@ -36,12 +36,16 @@ export function createResourcePicker(
     const root = element('div', '', 'resource-picker');
     const choice = element('button', '', 'resource-choice');
     choice.type = 'button';
-    choice.setAttribute('aria-expanded', 'false');
+    choice.setAttribute('aria-haspopup', 'dialog');
     const choiceIcon = createResourceIcon();
     const choiceName = element('span', '', 'resource-choice-name');
     choice.append(choiceIcon, choiceName);
-    const panel = element('div', '', 'resource-picker-panel');
-    panel.hidden = true;
+    const dialog = element('dialog', '', 'window-frame resource-picker-dialog');
+    const heading = element('div', '', 'craft-dialog-heading');
+    const title = element('h2');
+    const dismiss = element('button', '×', 'close-dialog');
+    dismiss.type = 'button';
+    heading.append(title, dismiss);
     const search = element('input');
     search.type = 'search';
     search.autocomplete = 'off';
@@ -52,29 +56,21 @@ export function createResourcePicker(
     retryButton.hidden = true;
     retryButton.addEventListener('click', retry);
     const list = element('ul', '', 'resource-picker-list');
-    panel.append(search, status, retryButton, list);
-    root.append(choice, panel);
+    dialog.append(heading, search, status, retryButton, list);
+    root.append(choice, dialog);
     let context: ResourceChoice | undefined;
     let selected: string | null = null;
     let shownSignature = '';
     let searchIndex: ReturnType<typeof resourceSearch<Item>> | undefined;
     let resultRows: { item: Item; button: HTMLButtonElement }[] = [];
     let renderedState = '';
-    /** Not focus: a click on a result must not close the panel in browsers that do not focus buttons. */
-    const outside = (event: PointerEvent) => {
-        if (!root.contains(event.target as Node | null)) close(false);
-    };
-
-    function close(restoreFocus: boolean) {
-        if (panel.hidden) return;
-        panel.hidden = true;
-        document.removeEventListener('pointerdown', outside, true);
-        choice.setAttribute('aria-expanded', 'false');
+    function close() {
+        if (!dialog.open) return;
+        dialog.close();
         searchIndex = undefined;
         resultRows = [];
         list.replaceChildren();
         changed();
-        if (restoreFocus) choice.focus();
     }
     const resultSignature = (state: ResourceChoice) =>
         JSON.stringify([state.catalogRevision, state.itemsReady, state.itemsError, state.language]);
@@ -100,7 +96,7 @@ export function createResourcePicker(
             button.append(createResourceIcon(), name, element('code', registryId(item)));
             button.setAttribute('aria-label', plainMinecraftText(item.displayName));
             button.addEventListener('click', () => {
-                close(true);
+                close();
                 choose(item);
             });
             return { item, button };
@@ -114,10 +110,7 @@ export function createResourcePicker(
         );
     }
     choice.addEventListener('click', () => {
-        if (!panel.hidden) return close(false);
-        panel.hidden = false;
-        document.addEventListener('pointerdown', outside, true);
-        choice.setAttribute('aria-expanded', 'true');
+        dialog.showModal();
         search.value = '';
         renderResults();
         changed();
@@ -130,16 +123,27 @@ export function createResourcePicker(
     // Enter confirms the search; it must never reach the editor form's submit.
     search.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') event.preventDefault();
+        if (event.key === 'Escape') {
+            // A search input otherwise consumes the first Escape to clear its text.
+            event.preventDefault();
+            close();
+        }
     });
-    root.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape' || panel.hidden) return;
+    dismiss.addEventListener('click', close);
+    dialog.addEventListener('cancel', (event) => {
         event.preventDefault();
-        event.stopPropagation();
-        close(true);
+        close();
     });
-    root.addEventListener('focusout', (event) => {
-        // Tabbing away; a null target is a pointer press, which `outside` handles.
-        if (event.relatedTarget && !root.contains(event.relatedTarget as Node)) close(false);
+    dialog.addEventListener('click', (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        if (
+            event.clientX < rect.left ||
+            event.clientX >= rect.right ||
+            event.clientY < rect.top ||
+            event.clientY >= rect.bottom
+        )
+            close();
     });
     return {
         element: root,
@@ -151,7 +155,7 @@ export function createResourcePicker(
             if (saved) return !found?.icon && stored ? [{ element: choice, icon: stored }] : [];
             return [
                 ...(found?.icon ? [{ element: choice, icon: found.icon }] : []),
-                ...(panel.hidden ? [] : resultRows.map((row) => ({ element: row.button, icon: row.item.icon })))
+                ...(!dialog.open ? [] : resultRows.map((row) => ({ element: row.button, icon: row.item.icon })))
             ];
         },
         render(next: ResourceChoice, key: string | null, invalid: boolean, label: string) {
@@ -170,15 +174,18 @@ export function createResourcePicker(
                 choice.setAttribute('aria-label', `${label}: ${plainMinecraftText(name)}`);
             }
             choice.setAttribute('aria-invalid', String(invalid));
+            title.textContent = next.locale.common('standingOrderSearchResources');
+            dialog.setAttribute('aria-label', title.textContent);
+            dismiss.setAttribute('aria-label', next.locale.common('close'));
             search.setAttribute('aria-label', next.locale.common('standingOrderSearchResources'));
             search.placeholder = next.locale.common('searchHint');
-            if (!panel.hidden && renderedState !== resultSignature(next)) renderResults();
+            if (dialog.open && renderedState !== resultSignature(next)) renderResults();
         },
         reset() {
             context = undefined;
             selected = null;
-            close(false);
+            close();
         },
-        close: () => close(false)
+        close
     };
 }

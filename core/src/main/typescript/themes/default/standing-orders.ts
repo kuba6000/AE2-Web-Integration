@@ -2,7 +2,7 @@ import type { ThemeApplication, ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import type { StandingOrderStatusName } from '../../app/api-types.js';
 import type { IconTarget } from '../../app/icons.js';
-import { standingOrdersHref } from '../../app/router.js';
+import { cpuHref, standingOrdersHref } from '../../app/router.js';
 import { reasonMessageKey } from '../../app/standing-order-model.js';
 import { statusExplanation } from '../../app/standing-orders.js';
 import { element } from './dom.js';
@@ -34,7 +34,7 @@ function createRow() {
     const li = element('li', '', 'standing-order');
     const head = element('div', '', 'standing-order-head');
     const name = element('h3');
-    const chip = element('span', '', 'standing-order-status');
+    const chip = element('a', '', 'standing-order-status');
     head.append(name, chip);
     const target = element('div', '', 'standing-order-target');
     const targetName = element('strong');
@@ -107,7 +107,8 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
     view.append(heading, body);
     root.append(view);
     const listIcons = application.icons.observe(list, paintResourceIcon);
-    const editorIcons = application.icons.observe(scroll, paintResourceIcon);
+    // Modal results render in the top layer, outside the scrolling panel.
+    const editorIcons = application.icons.observe(null, paintResourceIcon);
     const savedEditorIcons = application.icons.observe(scroll, paintResourceIcon);
     const rows = new Map<string, ReturnType<typeof createRow>>();
     let previous = '';
@@ -165,6 +166,9 @@ export function createStandingOrdersView(root: HTMLElement, application: ThemeAp
                     : statusName
                 : t('standingOrderStatus_PENDING')
             : t('standingOrderStatus_UNAVAILABLE');
+        if (definition && runtime?.activeCpuKey && (statusName === 'CRAFTING' || statusName === 'CRAFTING_LONG'))
+            row.chip.href = cpuHref(state.route.gridKey, runtime.activeCpuKey);
+        else row.chip.removeAttribute('href');
         const resource = definition ? orders.resources[definition.action.resource] : undefined;
         row.target.hidden = !definition;
         if (definition) {

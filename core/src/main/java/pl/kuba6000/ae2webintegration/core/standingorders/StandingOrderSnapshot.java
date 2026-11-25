@@ -29,9 +29,10 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
  * @param nextCheckAt         when the engine looks at the order next without waiting for new data: cooldown or
  *                            backoff end, otherwise the expected next stock read
  * @param craftingSince       when a running job was submitted or first noticed; set only while crafting
+ * @param activeCpuKey        address of the observed CPU crafting the resource, or null when none can be identified
  */
 @Desugar
 public record StandingOrderSnapshot(@NotNull StandingOrderStatus status, @Nullable StandingOrderReason reason,
     @Nullable StableKey resource, @Nullable String path, @Nullable String submitError,
     @NotNull List<ResourceSnapshot> missing, long changedAt, long lastSubmittedAmount, long nextCheckAt,
-    long craftingSince) {}
+    long craftingSince, @Nullable StableKey activeCpuKey) {}

@@ -398,7 +398,6 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     document.addEventListener('click', confirmLeaving, true);
     window.addEventListener('beforeunload', warnBeforeUnload);
 
-    /** Closing a picker also removes its document listener. */
     function resetPickers() {
         target.reset();
         fillRatio.picker.reset();
