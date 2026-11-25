@@ -7,9 +7,10 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import stat
 import sys
 import zipfile
-from fullpack import disjoint, prepare, write_json
+from fullpack import disjoint, prepare, safe_path, write_json
 from fullpack_lifecycle import owned_slot, reject_links, reset_game, run_process
 from progress import Activity, status
 
@@ -45,8 +46,20 @@ def check_world(world, runtime_root):
     if world is None:
         return
     disjoint(world, runtime_root)
+    if world.is_file() and world.suffix.lower() == '.zip':
+        with zipfile.ZipFile(world) as archive:
+            for entry in archive.infolist():
+                safe_path(entry.filename.removesuffix('/'))
+                if stat.S_ISLNK(entry.external_attr >> 16):
+                    raise ValueError('World archive contains a symbolic link: ' + entry.filename)
+            if 'level.dat' not in archive.namelist():
+                raise ValueError('World ZIP must contain level.dat at its root')
+            damaged = archive.testzip()
+            if damaged:
+                raise ValueError('Damaged world ZIP entry: ' + damaged)
+        return
     if not world.is_dir() or not (world / 'level.dat').is_file():
-        raise ValueError('--world must be a fixture directory containing level.dat')
+        raise ValueError('--world must be a directory or ZIP containing level.dat at its root')
     for current, directories, files in os.walk(world, followlinks=False):
         reject_links(Path(current))
         for name in directories + files:
@@ -100,8 +113,12 @@ def prepare_slot(args, slot):
         destination = game / ('world' if args.role == 'server' else 'saves/fullpack')
         if destination.exists():
             raise ValueError('Pack contains a world at the fixture destination')
-        with Activity('Copying fixture world'):
-            shutil.copytree(args.world, destination)
+        with Activity('Restoring fixture world from ' + str(args.world)):
+            if args.world.is_file():
+                with zipfile.ZipFile(args.world) as archive:
+                    archive.extractall(destination)
+            else:
+                shutil.copytree(args.world, destination)
     artifacts = {}
     if args.mod_jar:
         artifacts['ae2webintegration'] = (args.mod_jar, 'ae2webintegration-local.jar')

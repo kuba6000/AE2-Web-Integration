@@ -72,7 +72,7 @@ runtimes and saved launch commands contain platform-specific paths.
 | `fullpackHome` | Cache, Python environment and owned instances; default `.gradle/fullpack` |
 | `fullpackProfile` | Profile directory name under `tools/fullpack/profiles` |
 | `fullpackSlot` | Instance name; defaults to the selected profile |
-| `fullpackWorld` | World directory containing `level.dat`, copied into the client/server instance |
+| `fullpackWorld` | Use this world directory or ZIP for this run. It must contain `level.dat` at its root. |
 | `fullpackJava` | Explicit game Java executable instead of Gradle's toolchain selection |
 | `fullpackPython` | Python3.10+ executable used to create the launcher environment |
 | `fullpackMemoryMiB` | Heap limit; default6144 for clients and4096 for servers |
@@ -81,6 +81,9 @@ runtimes and saved launch commands contain platform-specific paths.
 | `fullpackUser` | Offline client name; default `FullpackTest` |
 | `fullpackJoinServer` | Optional localhost address for modern/1.12.2 multiplayer startup |
 
+By default both roles restore `.worlds/<fullpackProfile>.zip` from the checkout, when present.
+This directory is local and ignored by Git. Profiles without an archive use the pack's normal startup.
+For example, `.worlds/atm10-8.5.zip` supplies the same starting world for every ATM10 slot.
 Relative paths are resolved from the repository root. Client tasks do not require EULA acceptance.
 GTNH connects through Multiplayer → Direct Connect after the menu
 loads; its Forge startup-join path is unsupported by these Gradle tasks.

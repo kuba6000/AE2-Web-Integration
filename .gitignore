@@ -9,6 +9,7 @@ griddata.json
 !/.idea/inspectionProfiles/AE2_Web_Integration.xml
 !/.idea/inspectionProfiles/profiles_settings.xml
 /.vscode/
+/.worlds/
 /run/
 /build/
 /eclipse/

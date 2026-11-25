@@ -75,7 +75,12 @@ def setupRuntime = tasks.register('setupFullPackRuntime', Exec) {
                 }
             }
             def world = setting('fullpackWorld', '')
-            if (world) command.addAll(['--world', path(world).path])
+            if (world) {
+                command.addAll(['--world', path(world).path])
+            } else {
+                def archive = new File(repository, ".worlds/${profileName}.zip")
+                if (archive.isFile()) command.addAll(['--world', archive.path])
+            }
             commandLine command
         }
     }

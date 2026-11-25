@@ -228,6 +228,25 @@ class LauncherTests(unittest.TestCase):
             (game / 'old-world').write_text('discard next run')
         self.assertEqual(b'fixture world', (world / 'level.dat').read_bytes())
 
+    def test_world_archive_restores_independent_client_and_server_copies(self):
+        lock = self.root / 'pack.lock.json'
+        lock.write_text(json.dumps({'lockVersion': 1, 'manifest': {'version': 1}}))
+        archive = self.root / 'test-world.zip'
+        with zipfile.ZipFile(archive, 'w') as zipped:
+            zipped.writestr('level.dat', b'level')
+            zipped.writestr('region/r.0.0.mca', b'original terrain')
+        for role, folder in [('client', 'saves/fullpack'), ('server', 'world'), ('client', 'saves/fullpack')]:
+            command = [sys.executable, str(SCRIPT), 'prepare', '--content-only', '--lock', str(lock),
+                       '--cache', str(self.root / 'cache'), '--runtime-root', str(self.root / 'runtimes'),
+                       '--profile', 'fixture', '--role', role, '--world', str(archive), '--accept-eula']
+            result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+            self.assertEqual(0, result.returncode, result.stderr)
+            world = self.root / 'runtimes/fixture' / role / 'game' / folder
+            self.assertEqual(b'level', (world / 'level.dat').read_bytes())
+            region = world / 'region/r.0.0.mca'
+            self.assertEqual(b'original terrain', region.read_bytes())
+            region.write_bytes(b'changed terrain')
+
     def test_client_is_muted_on_prepare_and_persistent_launch(self):
         lock = self.root / 'pack.lock.json'
         lock.write_text(json.dumps({'lockVersion': 1, 'manifest': {'version': 1,
