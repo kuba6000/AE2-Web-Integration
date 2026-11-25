@@ -32,7 +32,7 @@ final class SqliteHistoryReader {
     private SqliteHistoryReader() {}
 
     static @NotNull StorageHistory read(@NotNull Connection db, @NotNull StableKey gridKey, @Nullable StableKey itemKey,
-        long fromMillis, long nowMillis, int limit) throws SQLException {
+        long fromMillis, long untilMillis, int limit) throws SQLException {
         long gridId;
         boolean retired;
         long expiry;
@@ -48,15 +48,17 @@ final class SqliteHistoryReader {
                 gridId = rows.getLong("id");
                 long deletedUntil = rows.getLong("deleted_until");
                 long firstObserved = rows.getLong("first_observed");
-                expiry = nowMillis - DAYS.toMillis(rows.getInt("retention_days"));
+                expiry = System.currentTimeMillis() - DAYS.toMillis(rows.getInt("retention_days"));
                 retired = deletedUntil != Long.MIN_VALUE && fromMillis <= deletedUntil
                     || fromMillis < expiry && firstObserved < expiry;
             }
         }
         long start = Math.max(fromMillis, expiry);
-        boolean complete = !retired && !hasGap(db, gridId, start);
+        if (untilMillis < start)
+            return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), !retired, retired);
+        boolean complete = !retired && !hasGap(db, gridId, start, untilMillis);
         Long resourceId = itemKey == null ? null : resourceId(db, itemKey);
-        List<QueryPoint> selected = selectPoints(db, gridId, resourceId, start, limit);
+        List<QueryPoint> selected = selectPoints(db, gridId, resourceId, start, untilMillis, limit);
         boolean truncated = retired || selected.size() > limit;
         List<StorageHistoryPoint> points = new ArrayList<>();
         int count = Math.min(limit, selected.size());
@@ -91,10 +93,10 @@ final class SqliteHistoryReader {
     }
 
     private static @NotNull List<QueryPoint> selectPoints(@NotNull Connection db, long gridId,
-        @Nullable Long resourceId, long fromMillis, int limit) throws SQLException {
+        @Nullable Long resourceId, long fromMillis, long untilMillis, int limit) throws SQLException {
         List<QueryPoint> selected = new ArrayList<>();
         for (Table table : Table.values())
-            selected.addAll(queryPoints(db, gridId, resourceId, table, fromMillis, limit));
+            selected.addAll(queryPoints(db, gridId, resourceId, table, fromMillis, untilMillis, limit));
         selected.sort((left, right) -> {
             int time = Long.compare(right.point.observedAt(), left.point.observedAt());
             return time == 0 ? Long.compare(right.id, left.id) : time;
@@ -115,7 +117,7 @@ final class SqliteHistoryReader {
     }
 
     private static @NotNull List<QueryPoint> queryPoints(@NotNull Connection db, long gridId, @Nullable Long resourceId,
-        Table table, long fromMillis, int limit) throws SQLException {
+        Table table, long fromMillis, long untilMillis, int limit) throws SQLException {
         List<QueryPoint> result = new ArrayList<>();
         boolean filtered = resourceId != null && table != Table.COVERAGE;
         String filter = filtered ? "AND p.resource_id = ?\n" : "";
@@ -126,12 +128,13 @@ final class SqliteHistoryReader {
                         + (table == Table.COVERAGE ? " FROM " + table.joined() + "\n"
                             : ", r.item_key FROM " + table.joined()
                                 + " JOIN history_resources r ON r.id = p.resource_id\n")
-                        + "WHERE m.grid_id = ? AND m.observed_at >= ?\n"
+                        + "WHERE m.grid_id = ? AND m.observed_at BETWEEN ? AND ?\n"
                         + filter
                         + "ORDER BY m.observed_at DESC, p.id DESC LIMIT ?")) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
-            int parameter = 3;
+            query.setLong(3, untilMillis);
+            int parameter = 4;
             if (filtered) query.setLong(parameter++, resourceId);
             query.setInt(parameter, limit + 1);
             try (ResultSet rows = query.executeQuery()) {
@@ -153,17 +156,19 @@ final class SqliteHistoryReader {
         }
     }
 
-    private static boolean hasGap(@NotNull Connection db, long gridId, long fromMillis) throws SQLException {
+    private static boolean hasGap(@NotNull Connection db, long gridId, long fromMillis, long untilMillis)
+        throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
             SELECT p.id
             FROM history_coverage p JOIN history_measurements m ON m.id = p.measurement_id
             WHERE m.grid_id = ?
                 AND p.kind = 'GAP'
-                AND m.observed_at >= ?
+                AND m.observed_at BETWEEN ? AND ?
             LIMIT 1
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
+            query.setLong(3, untilMillis);
             try (ResultSet rows = query.executeQuery()) {
                 return rows.next();
             }

@@ -3541,21 +3541,93 @@ button.toast:hover {
     margin-top: 12px;
     font-size: 13px;
 }
-.tracking-catalog ul {
-    list-style: none;
-    padding: 0;
+.tracking-catalog {
+    min-width: 0;
+    container-type: inline-size;
 }
-.tracking-catalog li {
+.catalog-filters {
+    display: grid;
+    grid-template-columns: minmax(7em, 1fr) minmax(6em, 0.8fr) minmax(10em, 1.4fr);
+    gap: 8px 12px;
+    margin: 0 var(--grid-inset, 22px) 10px;
+}
+.catalog-search {
+    grid-column: 1 / -1;
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 12px;
-    padding-block: 6px;
-    border-bottom: 1px solid var(--border);
+    gap: 8px;
+}
+.catalog-search input {
+    flex: 1;
+    min-width: 0;
+}
+.catalog-filters label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 11px;
+}
+.catalog-filters select {
+    width: 100%;
+    min-width: 0;
+}
+.catalog-help,
+.catalog-identity small,
+.catalog-stats dt,
+.catalog-stats time,
+.catalog-last-seen {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+.catalog-help {
+    margin: 0 0 10px;
+}
+.catalog-list > li > a {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+    padding-block: 12px;
+}
+.catalog-identity {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
     overflow-wrap: anywhere;
 }
-.tracking-catalog input {
-    max-width: 100%;
+.catalog-stats {
+    display: grid;
+    grid-template-columns: 1.4fr repeat(4, 1fr);
+    gap: 6px 12px;
+    margin: 0;
+}
+.catalog-stats dd {
+    margin: 3px 0 0;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+.catalog-ranked dd {
+    color: var(--terminal-title);
+    font-weight: bold;
+}
+@container (max-width: 450px) {
+    .catalog-filters {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 5px 8px;
+        margin-inline: 4px;
+    }
+    .catalog-filters label:last-child {
+        grid-column: 1 / -1;
+    }
+    .catalog-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .catalog-stats > :first-child {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
 }
 .resource-history .tracking-chart {
     position: relative;

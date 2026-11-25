@@ -35,13 +35,14 @@ export function createResourceHistory(
         error: null
     };
     let preferredRangeMillis = state.rangeMillis;
-    let selected: { gridKey: string; itemKey: string } | null = null;
+    let selected: { gridKey: string; itemKey: string; until: number | null } | null = null;
     let request: AbortController | undefined;
     let generation = 0;
     let reading = false;
     async function refresh(automatic = false) {
         if (!selected || reading) return;
-        if (automatic && state.status === 'ready' && Date.now() - state.until < 30000) return;
+        if (automatic && state.status === 'ready' && (selected.until !== null || Date.now() - state.until < 30000))
+            return;
         const current = selected;
         const version = generation;
         request = new AbortController();
@@ -49,14 +50,15 @@ export function createResourceHistory(
         if (state.status !== 'ready') state.status = 'loading';
         changed();
         try {
-            const until = Date.now();
+            const until = current.until ?? Date.now();
             const from = Math.max(0, until - state.rangeMillis);
             const history = await api.resourceHistory(
                 current.gridKey,
                 current.itemKey,
                 request.signal,
                 from,
-                iconsEnabled()
+                iconsEnabled(),
+                current.until
             );
             if (version !== generation) return;
             Object.assign(state, history.data, { icons: history.icons, status: 'ready', error: null, from, until });
@@ -101,14 +103,19 @@ export function createResourceHistory(
             request?.abort();
             reading = false;
         },
-        async select(gridKey: string | null, itemKey: string | null, rangeMillis?: number) {
+        async select(
+            gridKey: string | null,
+            itemKey: string | null,
+            rangeMillis?: number,
+            until: number | null = null
+        ) {
             clear();
             state.rangeMillis =
                 rangeMillis !== undefined && Number.isSafeInteger(rangeMillis) && rangeMillis > 0
                     ? rangeMillis
                     : preferredRangeMillis;
             if (gridKey && itemKey) {
-                selected = { gridKey, itemKey };
+                selected = { gridKey, itemKey, until };
                 await refresh();
             } else changed();
         },
@@ -116,11 +123,11 @@ export function createResourceHistory(
         async range(millis: number) {
             if (!Number.isSafeInteger(millis) || millis <= 0) return;
             preferredRangeMillis = millis;
-            if (state.rangeMillis === millis) return;
+            if (state.rangeMillis === millis && !selected?.until) return;
             const current = selected;
             clear();
             state.rangeMillis = millis;
-            selected = current;
+            selected = current ? { ...current, until: null } : null;
             await refresh();
         },
         clear,

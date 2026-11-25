@@ -109,7 +109,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     const settingsView = createSettingsView(windowFrame, application);
     const serverSettingsView = createServerSettingsView(windowFrame, application, tooltips);
     const aboutView = createAboutView(windowFrame, modVersion);
-    const trackingCatalog = createTrackingCatalogView(windowFrame);
+    const trackingCatalog = createTrackingCatalogView(windowFrame, application);
+    lifetime.onCleanup(trackingCatalog.dispose);
     const trackingView = createResourceHistoryView(windowFrame, application, settings, true);
     lifetime.onCleanup(trackingView.dispose);
     function updateLabels() {
@@ -178,7 +179,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         tooltips.refresh();
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
-        trackingCatalog(state, locale);
+        trackingCatalog.render(state, locale, effectiveDisplay !== 'names');
         trackingView.render(state, locale, effectiveDisplay !== 'names');
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);

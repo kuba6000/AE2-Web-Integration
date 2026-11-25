@@ -35,6 +35,8 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.ResourceFilter;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.ResourceSort;
 
 class StorageTrackingRecoveryTest {
 
@@ -67,13 +69,22 @@ class StorageTrackingRecoveryTest {
                 Collections.singletonMap(foreign, description(foreign)),
                 Collections.singletonList(
                     new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.STOCK, foreign, 1, 0, 0, 0, 0, null)));
-            var page = stored.resources(grid, null, null, 1);
+            var activity = stored
+                .resources(grid, null, new ResourceFilter(null, null, ResourceSort.INSERTS, 0, now), 10)
+                .activity();
+            assertFalse(activity.containsKey(first.toString()), "Stock observations are not evidence of zero flow");
+            assertEquals(
+                "0",
+                activity.get(second.toString())
+                    .output());
+            var page = stored.resources(grid, null, new ResourceFilter(null, null, ResourceSort.NAME, 0, now), 1);
             assertEquals(
                 1,
                 page.entries()
                     .size());
             assertNotNull(page.nextAfter());
-            var next = stored.resources(grid, page.nextAfter(), "TEST:ITEM", 1);
+            var next = stored
+                .resources(grid, page.nextAfter(), new ResourceFilter("TEST:ITEM", null, ResourceSort.NAME, 0, now), 1);
             assertEquals(
                 1,
                 next.entries()
@@ -88,7 +99,7 @@ class StorageTrackingRecoveryTest {
                     .itemKey());
             assertEquals(
                 0,
-                stored.resources(grid, null, "missing", 10)
+                stored.resources(grid, null, new ResourceFilter("missing", null, ResourceSort.NAME, 0, now), 10)
                     .entries()
                     .size());
             assertFalse(
@@ -102,6 +113,109 @@ class StorageTrackingRecoveryTest {
                     .itemKey()
                     .equals(foreign));
         }
+    }
+
+    @Test
+    @Tag(SQLITE)
+    void ranksExactRecordedActivityByIntervalEndBeforePaging() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey first = StableKey.random();
+        StableKey second = StableKey.random();
+        long now = System.currentTimeMillis();
+        long from = now - 60000;
+        Map<StableKey, ResourceDescriptor> descriptions = new java.util.HashMap<>();
+        descriptions.put(first, description(first));
+        descriptions.put(second, description(second));
+        try (SqliteStorageHistoryStore stored = store()) {
+            WorldHistoryFixtures.register(stored, grid);
+            stored.append(
+                grid,
+                descriptions,
+                Arrays.asList(
+                    new StorageHistoryPoint(from - 1, 1, StorageHistoryPoint.Kind.STOCK, first, 0, 0, 0, 0, 0, null),
+                    // The interval contributes at its recorded end; the previous interval ends at the excluded
+                    // boundary.
+                    flow(first, from - 2, from, Long.MAX_VALUE, 5),
+                    flow(first, from - 1, from + 1, 3, 1),
+                    flow(first, from, now - 1, Long.MAX_VALUE, 1),
+                    flow(second, from, now - 1, Long.MAX_VALUE, 3),
+                    flow(first, now - 1, now, 2, 1),
+                    flow(second, now - 1, now, 1, 1)));
+            var inputs = new ResourceFilter(null, ResourceType.ITEM, ResourceSort.INPUT, from, now);
+            var leaders = stored.resources(grid, null, inputs, 1);
+            assertEquals(
+                first,
+                leaders.entries()
+                    .get(0)
+                    .itemKey());
+            assertEquals(
+                "9223372036854775812",
+                leaders.activity()
+                    .get(first.toString())
+                    .input());
+            var next = stored.resources(grid, leaders.nextAfter(), inputs, 1);
+            assertEquals(
+                second,
+                next.entries()
+                    .get(0)
+                    .itemKey());
+            assertEquals(
+                "9223372036854775808",
+                next.activity()
+                    .get(second.toString())
+                    .input());
+            var operations = stored
+                .resources(grid, null, new ResourceFilter(null, null, ResourceSort.INSERTS, from, now), 1);
+            assertEquals(
+                second,
+                operations.entries()
+                    .get(0)
+                    .itemKey());
+            assertEquals(
+                "4",
+                operations.activity()
+                    .get(second.toString())
+                    .inputOperations());
+            var noFlow = stored.resources(
+                grid,
+                null,
+                new ResourceFilter(null, ResourceType.ITEM, ResourceSort.STOCK, now, now + 1),
+                5);
+            assertEquals(
+                2,
+                noFlow.entries()
+                    .size());
+            assertTrue(
+                noFlow.activity()
+                    .isEmpty());
+            assertEquals(
+                first,
+                noFlow.entries()
+                    .get(0)
+                    .itemKey());
+            assertEquals(
+                "0",
+                noFlow.stock()
+                    .get(first.toString())
+                    .quantity());
+            assertFalse(
+                noFlow.stock()
+                    .containsKey(second.toString()));
+        }
+    }
+
+    private static StorageHistoryPoint flow(StableKey resource, long from, long end, long amount, long operations) {
+        return new StorageHistoryPoint(
+            end,
+            1,
+            StorageHistoryPoint.Kind.FLOW,
+            resource,
+            0,
+            amount,
+            0,
+            operations,
+            0,
+            from);
     }
 
     @Test
@@ -216,8 +330,8 @@ class StorageTrackingRecoveryTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             @Override
@@ -232,8 +346,8 @@ class StorageTrackingRecoveryTest {
 
             @Override
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
-                int limit) {
-                return stored.read(key, resource, from, limit);
+                long until, int limit) {
+                return stored.read(key, resource, from, until, limit);
             }
         };
         AbstractAppender appender = new AbstractAppender("history-recovery", null, null, true, Property.EMPTY_ARRAY) {
@@ -431,8 +545,8 @@ class StorageTrackingRecoveryTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             @Override
@@ -443,8 +557,8 @@ class StorageTrackingRecoveryTest {
 
             @Override
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
-                int limit) throws IOException {
-                StorageHistory result = writes.read(key, resource, from, limit);
+                long until, int limit) throws IOException {
+                StorageHistory result = writes.read(key, resource, from, until, limit);
                 if (key.equals(grid) && pauseNextRead.getAndSet(false)) {
                     entered.countDown();
                     try {
@@ -501,8 +615,8 @@ class StorageTrackingRecoveryTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             @Override
@@ -516,9 +630,9 @@ class StorageTrackingRecoveryTest {
             }
 
             @Override
-            public @NotNull StorageHistory read(@NotNull StableKey grid, @Nullable StableKey item, long from, int limit)
-                throws IOException {
-                return stored.read(grid, item, from, limit);
+            public @NotNull StorageHistory read(@NotNull StableKey grid, @Nullable StableKey item, long from,
+                long until, int limit) throws IOException {
+                return stored.read(grid, item, from, until, limit);
             }
         };
     }

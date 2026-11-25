@@ -47,14 +47,15 @@ class TrackingResourcesRequestTest extends GridTestScope {
             StableKey b = StableKey.random();
             Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
             descriptions.put(a, new ResourceDescriptor("test", "alpha", 0, 0, "Alpha", ResourceType.ITEM, a, null));
-            descriptions.put(b, new ResourceDescriptor("test", "beta", 0, 0, "Beta", ResourceType.ITEM, b, null));
+            descriptions.put(b, new ResourceDescriptor("test", "beta", 0, 0, "Beta", ResourceType.FLUID, b, null));
+            long observedAt = System.currentTimeMillis();
             service.open(gridKey, 1);
             assertTrue(
                 service.submit(
                     gridKey,
                     1,
                     new StorageObservation(
-                        System.currentTimeMillis(),
+                        observedAt,
                         true,
                         true,
                         true,
@@ -66,9 +67,58 @@ class TrackingResourcesRequestTest extends GridTestScope {
                     false,
                     0));
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-            while (service.resources(gridKey, null, null, 10)
-                .entries()
+            while (request(user, gridKey, "").getAsJsonArray("data")
                 .size() < 2 && System.nanoTime() < deadline) Thread.sleep(10);
+            JsonObject filtered = request(user, gridKey, "&type=FLUID&sort=RECENT");
+            assertEquals(
+                1,
+                filtered.getAsJsonArray("data")
+                    .size());
+            assertEquals(
+                b.toString(),
+                filtered.getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("itemKey")
+                    .getAsString());
+            assertEquals(
+                observedAt,
+                filtered.getAsJsonObject("lastObservedAt")
+                    .get(b.toString())
+                    .getAsLong());
+            assertEquals(
+                "BAD_PARAM",
+                request(user, gridKey, "&sort=INVALID").get("status")
+                    .getAsString());
+            assertEquals(
+                "BAD_PARAM",
+                request(user, gridKey, "&type=INVALID").get("status")
+                    .getAsString());
+            assertEquals(
+                "BAD_PARAM",
+                request(user, gridKey, "&sort=STOCK").get("status")
+                    .getAsString());
+            JsonObject stock = request(
+                user,
+                gridKey,
+                "&type=ITEM&sort=STOCK&minutes=15&until=" + (observedAt + 3600000)).getAsJsonObject("stock")
+                .getAsJsonObject(a.toString());
+            assertEquals(
+                "1",
+                stock.get("quantity")
+                    .getAsString());
+            assertEquals(
+                observedAt,
+                stock.get("observedAt")
+                    .getAsLong());
+            JsonObject descending = request(user, gridKey, "&sort=NAME_DESC&limit=1");
+            assertEquals(
+                b.toString(),
+                descending.getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("itemKey")
+                    .getAsString());
             JsonObject page = request(user, gridKey, "&limit=1");
             assertEquals(
                 "OK",

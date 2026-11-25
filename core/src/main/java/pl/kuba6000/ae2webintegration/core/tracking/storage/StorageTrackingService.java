@@ -117,9 +117,14 @@ public final class StorageTrackingService implements AutoCloseable {
     /** Blocking detached-store query: call on HTTP/background threads, never the game thread. */
     public @NotNull StorageHistory history(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis,
         int limit) throws IOException {
+        return history(gridKey, itemKey, fromMillis, Long.MAX_VALUE, limit);
+    }
+
+    public @NotNull StorageHistory history(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis,
+        long untilMillis, int limit) throws IOException {
         State before = states.get(gridKey);
         boolean persistence = before == null || before.persistenceComplete;
-        StorageHistory result = store.read(gridKey, itemKey, fromMillis, limit);
+        StorageHistory result = store.read(gridKey, itemKey, fromMillis, untilMillis, limit);
         State state = states.get(gridKey);
         boolean complete = persistence && result.complete() && (state == null || state.persistenceComplete);
         return new StorageHistory(
@@ -131,8 +136,8 @@ public final class StorageTrackingService implements AutoCloseable {
     }
 
     public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey gridKey, @Nullable Long after,
-        @Nullable String search, int limit) throws IOException {
-        return store.resources(gridKey, after, search, limit);
+        @NotNull IStorageHistoryStore.ResourceFilter filter, int limit) throws IOException {
+        return store.resources(gridKey, after, filter, limit);
     }
 
     /** Records a history coverage gap without affecting live terminal subscriptions. */

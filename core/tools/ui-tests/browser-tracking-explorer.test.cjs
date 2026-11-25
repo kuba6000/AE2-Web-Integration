@@ -87,3 +87,54 @@ test('an archived flow-only resource can be viewed beyond the last 24 hours', as
     await page.locator('.tracking-view').getByRole('heading', { name: iron.displayName }).waitFor();
     assert.equal(await page.locator('.tracking-view .tracking-totals [aria-label="12,345"]').count(), 1);
 });
+
+test('Tracking distinguishes incoming volume from insertion frequency and scrolls only the results', async (t) => {
+    const { page, base } = await fixture(t);
+    const bulk = { ...iron, itemKey: 'bulk', displayName: 'Bulk transfer' };
+    const frequent = { ...iron, itemKey: 'frequent', displayName: 'Frequent transfer' };
+    const inactive = Array.from({ length: 36 }, (_, i) => ({
+        ...iron,
+        itemKey: 'old' + i,
+        displayName: 'Archived ' + i
+    }));
+    await page.route('**/tracking/resources?**', (route) => {
+        const params = new URL(route.request().url()).searchParams;
+        const first = params.get('sort') === 'INSERTS' ? [frequent, bulk] : [bulk, frequent];
+        return route.fulfill({
+            json: {
+                status: 'OK',
+                data: [...first, ...inactive],
+                nextAfter: null,
+                windowEnd: Date.now(),
+                stock: { bulk: { quantity: '0', observedAt: Date.UTC(2026, 0, 1) } },
+                activity: {
+                    bulk: { input: '3840', output: '0', inputOperations: '60', outputOperations: '0' },
+                    frequent: { input: '600', output: '0', inputOperations: '600', outputOperations: '0' }
+                }
+            }
+        });
+    });
+    await page.goto(base + '#/grids/' + gridA + '/tracking');
+    const results = page.getByRole('region', { name: 'Recorded resources' });
+    const first = results.getByRole('link').first();
+    await first.waitFor({ timeout: 2500 });
+    assert.match(await first.innerText(), /Bulk transfer/);
+    assert.match(await first.innerText(), /\b64\b/);
+    const stock = (link) => link.getByRole('definition').first();
+    assert.equal(await stock(first).innerText(), '0');
+    assert.equal(await stock(results.getByRole('link').nth(1)).innerText(), '—');
+    assert.equal(await first.locator('time').getAttribute('datetime'), '2026-01-01T00:00:00.000Z');
+    await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption('INSERTS');
+    await results.getByRole('link').first().filter({ hasText: 'Frequent transfer' }).waitFor();
+    for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 800 });
+        const box = await results.boundingBox();
+        assert.ok(box.height > 100 && box.y + box.height <= 801);
+        assert.ok(
+            await results.evaluate((el) => {
+                el.scrollTop = 400;
+                return el.scrollTop > 0 && document.documentElement.scrollWidth <= innerWidth && window.scrollY === 0;
+            })
+        );
+    }
+});

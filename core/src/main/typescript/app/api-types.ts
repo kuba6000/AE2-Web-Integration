@@ -34,7 +34,10 @@ export type ResourceDescription = {
     componentCount: number;
     damage: number;
 };
-export type HistoricalResource = Omit<ResourceDescription, 'icon' | 'itemKey'> & { itemKey: string };
+export type HistoricalResource = Omit<ResourceDescription, 'icon' | 'itemKey'> & {
+    itemKey: string;
+    icon?: IconReference | null;
+};
 export type ResourceStack = ResourceDescription & {
     quantity: number;
 };
@@ -89,6 +92,10 @@ export type ResourceResponse<T> = {
     subscription?: string;
     recent?: RecentTracking;
     nextAfter?: string | null;
+    lastObservedAt?: Record<string, number>;
+    activity?: Record<string, ActivityTotals>;
+    stock?: Record<string, StockObservation>;
+    windowEnd?: number;
     nextBefore?: string | null;
     groups?: HomePinGroup[];
 };
@@ -231,16 +238,19 @@ export type CraftingHistory = {
 };
 
 /** Tracking counters use decimal strings so long values are never rounded by JSON parsing. */
-export type ResourceHistoryPoint = {
+export type ActivityTotals = {
+    input: string;
+    output: string;
+    inputOperations: string;
+    outputOperations: string;
+};
+export type StockObservation = { quantity: string; observedAt: number };
+export type ResourceHistoryPoint = ActivityTotals & {
     flowFrom: number | null;
     observedAt: number;
     generation: string;
     kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';
     resource: (ResourceDescription & { quantity: string }) | null;
-    input: string;
-    output: string;
-    inputOperations: string;
-    outputOperations: string;
 };
 export type ResourceHistory = {
     baseline: ResourceHistoryPoint | null;

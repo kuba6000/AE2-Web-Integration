@@ -102,6 +102,32 @@ class SqliteStorageHistoryStoreTest {
     }
 
     @Test
+    void frozenHistoryEndsBeforeLaterMeasurementsAndCoverageGaps() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long until = System.currentTimeMillis() - 10;
+        StorageHistoryPoint last = stock(item, until, 9);
+        StorageHistoryPoint gap = new StorageHistoryPoint(
+            until + 1,
+            7,
+            StorageHistoryPoint.Kind.GAP,
+            null,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null);
+        try (SqliteStorageHistoryStore store = store(100)) {
+            append(store, grid, Arrays.asList(last, gap, stock(item, until + 2, 99)));
+            StorageHistory history = store.read(grid, item, until - 1, until, 1);
+            assertEquals(Collections.singletonList(last), history.points());
+            assertTrue(history.complete());
+            assertFalse(history.truncated());
+        }
+    }
+
+    @Test
     void boundedPartialFlowIncludesItsGapAsOneExtraBoundaryMarker() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();

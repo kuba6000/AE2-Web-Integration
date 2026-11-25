@@ -126,7 +126,7 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
-    const trackingCatalog = createTrackingCatalog(api, notify);
+    const trackingCatalog = createTrackingCatalog(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const resourceHistory = createResourceHistory(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const pins = createPins(
         api,
@@ -354,6 +354,7 @@ export function createTerminal(
                 cpus.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
+                if (iconsEnabled) trackingCatalog.invalidateIcons();
                 resourceHistory.invalidateIcons();
                 pins.invalidateIcons();
             }
@@ -363,6 +364,7 @@ export function createTerminal(
                 void loadCpus();
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
+                if (iconsEnabled) void loadTrackingCatalog(true);
                 void resourceHistory.refresh();
                 void pins.refresh();
             }
@@ -531,6 +533,7 @@ export function createTerminal(
             cpus.invalidateIcons();
             crafting.invalidateIcons();
             history.invalidateIcons();
+            if (state.iconPack.available) trackingCatalog.invalidateIcons();
             resourceHistory.invalidateIcons();
             pins.invalidateIcons();
             void pins.refresh();
@@ -539,6 +542,7 @@ export function createTerminal(
             void loadCpus();
             void loadCrafting();
             if (state.route.view === 'history') void loadHistory();
+            if (state.iconPack.available) void loadTrackingCatalog(true);
             void resourceHistory.refresh();
             notify();
         },
@@ -574,8 +578,15 @@ export function createTerminal(
             trackingCatalog.clear();
             state.route = route;
             pins.route(route);
-            if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
-            else if (related) resourceHistory.clear();
+            if (route.view === 'tracking') {
+                const catalog = route.itemKey === null ? undefined : route.catalog;
+                void resourceHistory.select(
+                    route.gridKey,
+                    route.itemKey,
+                    catalog ? catalog.minutes * 60000 : undefined,
+                    catalog?.until
+                );
+            } else if (related) resourceHistory.clear();
             const needsDiscovery =
                 !!route.gridKey &&
                 (state.gridStatus !== 'ready' || !state.grids.some((grid) => grid.key === route.gridKey));

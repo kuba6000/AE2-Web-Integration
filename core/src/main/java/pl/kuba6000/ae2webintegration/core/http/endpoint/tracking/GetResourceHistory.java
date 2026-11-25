@@ -74,6 +74,9 @@ public final class GetResourceHistory extends IAsyncRequest {
     /** Earliest observation time in Unix epoch milliseconds, inclusive; defaults to zero. */
     @QueryParam("from")
     long from;
+    /** Latest observation time in Unix epoch milliseconds, inclusive; omit for an open-ended history. */
+    @QueryParam("until")
+    long until = Long.MAX_VALUE;
     /**
      * Maximum number of newest matching points, from 1 to 10000; defaults to 200. One extra boundary GAP may be
      * returned.
@@ -132,7 +135,7 @@ public final class GetResourceHistory extends IAsyncRequest {
 
     @Override
     public void handle() {
-        if (from < 0 || limit < 1 || limit > MAX_QUERY_LIMIT) {
+        if (from < 0 || until < from || limit < 1 || limit > MAX_QUERY_LIMIT) {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
@@ -142,7 +145,7 @@ public final class GetResourceHistory extends IAsyncRequest {
             return;
         }
         try {
-            StorageHistory history = service.history(gridKey, itemKey, from, limit);
+            StorageHistory history = service.history(gridKey, itemKey, from, until, limit);
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
             Map<StableKey, IconMappings.Reference> references = iconReferences(history, mappings);

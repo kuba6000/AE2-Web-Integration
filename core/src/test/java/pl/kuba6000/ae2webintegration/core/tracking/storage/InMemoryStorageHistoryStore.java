@@ -19,9 +19,9 @@ public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
     private final Map<StableKey, List<StorageHistoryPoint>> records = new HashMap<>();
 
     @Override
-    public @NotNull ResourcePage resources(@NotNull StableKey grid, @Nullable Long after, @Nullable String search,
-        int limit) {
-        return new ResourcePage(Collections.emptyList(), null);
+    public @NotNull ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+        @NotNull ResourceFilter filter, int limit) {
+        return ResourcePage.empty();
     }
 
     @Override
@@ -34,12 +34,12 @@ public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
 
     @Override
     public synchronized @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey,
-        long fromMillis, int limit) {
+        long fromMillis, long until, int limit) {
         List<StorageHistoryPoint> result = new ArrayList<>();
         boolean complete = true;
         List<StorageHistoryPoint> points = records.getOrDefault(gridKey, Collections.emptyList());
         for (StorageHistoryPoint point : points) {
-            if (point.observedAt() < fromMillis
+            if (point.observedAt() < fromMillis || point.observedAt() > until
                 || itemKey != null && point.itemKey() != null && !itemKey.equals(point.itemKey())) continue;
             complete &= point.kind() != StorageHistoryPoint.Kind.GAP;
             result.add(point);

@@ -310,59 +310,23 @@ public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
 
     @Override
     public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis,
-        int limit) throws IOException {
+        long untilMillis, int limit) throws IOException {
+        if (untilMillis < fromMillis) throw new IllegalArgumentException("History end must not precede its start");
         if (limit < 1 || limit > 10000)
             throw new IllegalArgumentException("History query limit must be between 1 and 10000");
         if (Thread.currentThread()
             .isInterrupted()) throw new IOException("Interrupted while waiting to read history");
         initialize();
-        return database
-            .read(db -> SqliteHistoryReader.read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit));
+        return database.read(db -> SqliteHistoryReader.read(db, gridKey, itemKey, fromMillis, untilMillis, limit));
     }
 
     @Override
-    public @NotNull ResourcePage resources(@NotNull StableKey gridKey, @Nullable Long after, @Nullable String search,
-        int limit) throws IOException {
+    public @NotNull ResourcePage resources(@NotNull StableKey gridKey, @Nullable Long after,
+        @NotNull ResourceFilter filter, int limit) throws IOException {
         if (limit < 1 || limit > 100 || after != null && after < 1)
             throw new IllegalArgumentException("Invalid resource page");
         initialize();
-        return database.read(db -> {
-            List<ResourceDescriptor> entries = new ArrayList<>();
-            Long cursor = null;
-            try (PreparedStatement query = db.prepareStatement(
-                """
-                    WITH measurements AS (SELECT m.id FROM history_measurements m
-                        JOIN grids g ON g.id = m.grid_id WHERE g.grid_key = ?),
-                    retained(resource_id) AS (
-                        SELECT s.resource_id FROM measurements m JOIN history_stock s ON s.measurement_id = m.id
-                        WHERE s.resource_id > ?
-                        UNION
-                        SELECT f.resource_id FROM measurements m JOIN history_flow f ON f.measurement_id = m.id
-                        WHERE f.resource_id > ?
-                    )
-                    SELECT r.* FROM retained JOIN history_resources r ON r.id = retained.resource_id
-                    WHERE (? IS NULL OR instr(lower(r.display_name), lower(?)) > 0
-                        OR instr(lower(coalesce(r.registry_namespace, '') || ':' || coalesce(r.registry_path, '')), lower(?)) > 0)
-                    ORDER BY retained.resource_id LIMIT ?
-                    """)) {
-                query.setString(1, gridKey.toString());
-                long previous = after == null ? 0 : after;
-                query.setLong(2, previous);
-                query.setLong(3, previous);
-                query.setString(4, search);
-                query.setString(5, search);
-                query.setString(6, search);
-                query.setInt(7, limit + 1);
-                try (ResultSet rows = query.executeQuery()) {
-                    while (rows.next()) {
-                        if (entries.size() == limit) return new ResourcePage(entries, cursor);
-                        entries.add(SqliteHistoryReader.readDescription(rows));
-                        cursor = rows.getLong("id");
-                    }
-                }
-            }
-            return new ResourcePage(entries, null);
-        });
+        return database.read(db -> SqliteResourceExplorer.read(db, gridKey, after, filter, limit));
     }
 
     /** Called only after registry admission stops and the history worker drains. */

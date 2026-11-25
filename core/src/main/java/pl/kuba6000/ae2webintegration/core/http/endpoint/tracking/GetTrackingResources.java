@@ -4,7 +4,10 @@ import static java.net.HttpURLConnection.HTTP_OK;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -13,14 +16,23 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.Activity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.ResourceFilter;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.ResourceSort;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore.Stock;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
@@ -50,9 +62,16 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/tracking/resources")
 public final class GetTrackingResources extends IAsyncRequest {
 
+    private static final int DEFAULT_LIMIT = 50;
+    private static final int MAX_LIMIT = 100;
+    private static final int MAX_SEARCH = 256;
+    private static final int QUARTER_HOUR = 15;
+    private static final int HOUR = 60;
+    private static final int DAY = 1440;
+
     /** Page size, from 1 to 100. */
     @QueryParam("limit")
-    int limit = 50;
+    int limit = DEFAULT_LIMIT;
 
     /** Exclusive cursor returned by the previous page. */
     @QueryParam("after")
@@ -63,32 +82,90 @@ public final class GetTrackingResources extends IAsyncRequest {
     String search;
 
     /**
-     * @param status    request status
-     * @param data      retained resource descriptions
-     * @param nextAfter exclusive cursor for the next page, or null
+     * Resource type (ITEM, FLUID or OTHER); omit for all types. Required for unit-based STOCK/INPUT/OUTPUT rankings.
+     */
+    @QueryParam("type")
+    String type;
+
+    /**
+     * NAME (default), NAME_DESC, RECENT, STOCK, INPUT, OUTPUT, INSERTS or EXTRACTS. Activity rankings are highest
+     * first.
+     */
+    @QueryParam("sort")
+    String sort = "NAME";
+
+    /** Activity window duration: 15, 60 (default) or 1440 minutes. */
+    @QueryParam("minutes")
+    int minutes = HOUR;
+
+    /** Inclusive upper observation bound in Unix epoch milliseconds. Defaults to now; reuse windowEnd when paging. */
+    @QueryParam("until")
+    long until = System.currentTimeMillis();
+
+    /** Include resource icons and atlas metadata; defaults to false. */
+    @QueryParam("icons")
+    boolean icons;
+
+    /** Catalog descriptor, including its last known base variant for existing clients. */
+    public static final class Resource extends ResourceDescription {
+
+        /** Last known base variant, if retained. */
+        public final @Nullable StableKey baseKey;
+
+        Resource(ResourceDescriptor descriptor, @Nullable IconMappings mappings) {
+            super(descriptor, mappings);
+            baseKey = descriptor.baseKey();
+        }
+    }
+
+    /**
+     * @param status         request status
+     * @param data           retained resource descriptions
+     * @param nextAfter      exclusive cursor for the next page, or null
+     * @param lastObservedAt last stock or flow observation for each resource, in Unix epoch milliseconds
+     * @param activity       recorded totals by key, including whole flow intervals ending inside the window (exclusive
+     *                       start,
+     *                       inclusive end). Absent for resources with no recorded transfers. Dividing by minutes gives
+     *                       a rate over wall time,
+     *                       including gaps, not an estimate of unobserved traffic
+     * @param stock          latest retained stock measurement by key at or before windowEnd; absent when never measured
+     * @param windowEnd      inclusive upper bound used for this page, in Unix epoch milliseconds
+     * @param icons          optional atlas metadata
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<ResourceDescriptor> data,
-        @Nullable String nextAfter) implements IResponseBody {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<Resource> data, @Nullable String nextAfter,
+        @NotNull Map<String, Long> lastObservedAt, @NotNull Map<String, Activity> activity,
+        @NotNull Map<String, Stock> stock, long windowEnd, @Nullable IconMappings icons) implements IResponseBody {}
+
+    private @Nullable Long cursor() {
+        if (after == null) return null;
+        long parsed = Long.parseLong(after);
+        if (parsed < 1 || !Long.toString(parsed)
+            .equals(after)) throw new IllegalArgumentException("Invalid cursor");
+        return parsed;
+    }
+
+    private ResourceFilter filter() {
+        if (limit < 1 || limit > MAX_LIMIT || search != null && search.length() > MAX_SEARCH)
+            throw new IllegalArgumentException("Invalid page size or search");
+        if (until < 0 || minutes != QUARTER_HOUR && minutes != HOUR && minutes != DAY)
+            throw new IllegalArgumentException("Invalid activity window");
+        ResourceType category = type == null ? null : ResourceType.valueOf(type);
+        ResourceSort order = ResourceSort.valueOf(sort);
+        if (category == null && order.requiresType())
+            throw new IllegalArgumentException("Quantity ranking requires a type");
+        return new ResourceFilter(search, category, order, until - TimeUnit.MINUTES.toMillis(minutes), until);
+    }
 
     @Override
     public void handle() {
-        Long cursor = null;
-        if (after != null) {
-            try {
-                cursor = Long.parseLong(after);
-            } catch (NumberFormatException invalid) {
-                deny(ApiStatus.BAD_PARAM);
-                return;
-            }
-            if (cursor < 1 || !Long.toString(cursor)
-                .equals(after)) {
-                deny(ApiStatus.BAD_PARAM);
-                return;
-            }
-        }
-        if (limit < 1 || limit > 100 || search != null && search.length() > 256) {
+        Long cursor;
+        ResourceFilter filter;
+        try {
+            cursor = cursor();
+            filter = filter();
+        } catch (IllegalArgumentException invalid) {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
@@ -98,13 +175,24 @@ public final class GetTrackingResources extends IAsyncRequest {
             return;
         }
         try {
-            IStorageHistoryStore.ResourcePage page = service.resources(gridKey, cursor, search, limit);
+            IStorageHistoryStore.ResourcePage page = service.resources(gridKey, cursor, filter, limit);
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            List<Resource> entries = new ArrayList<>(
+                page.entries()
+                    .size());
+            for (ResourceDescriptor resource : page.entries()) entries.add(new Resource(resource, mappings));
             respondDetached(
                 HTTP_OK,
                 new Response(
                     ApiStatus.OK,
-                    page.entries(),
-                    page.nextAfter() == null ? null : Long.toString(page.nextAfter())));
+                    entries,
+                    page.nextAfter() == null ? null : Long.toString(page.nextAfter()),
+                    page.lastObservedAt(),
+                    page.activity(),
+                    page.stock(),
+                    until,
+                    mappings));
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }

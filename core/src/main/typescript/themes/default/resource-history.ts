@@ -125,7 +125,7 @@ export function createResourceHistoryView(
             state.route.view === 'tracking' && state.route.itemKey !== null ? state.route.catalog : undefined;
         back.textContent = `← ${catalog ? locale.t('trackingTab') : locale.common('terminal')}`;
         back.href = catalog
-            ? trackingCatalogHref(state.route.gridKey!, catalog.search, catalog.after)
+            ? trackingCatalogHref(state.route.gridKey!, catalog)
             : `#/grids/${encodeURIComponent(state.route.gridKey ?? '')}/items`;
         link.hidden = full;
         link.textContent = locale.t('viewTracking');

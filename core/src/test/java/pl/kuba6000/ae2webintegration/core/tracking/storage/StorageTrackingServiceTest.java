@@ -415,8 +415,8 @@ class StorageTrackingServiceTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             public void append(@NotNull StableKey grid, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -425,7 +425,7 @@ class StorageTrackingServiceTest {
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey grid, @Nullable StableKey resource, long from,
-                int limit) {
+                long until, int limit) {
                 return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
 
@@ -652,8 +652,8 @@ class StorageTrackingServiceTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -670,8 +670,8 @@ class StorageTrackingServiceTest {
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
-                int limit) {
-                return stored.read(key, resource, from, limit);
+                long until, int limit) {
+                return stored.read(key, resource, from, until, limit);
             }
         };
         try (StorageTrackingService service = new StorageTrackingService(blocked, 4)) {
@@ -812,7 +812,7 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void retirementAndShutdownKeepAcceptedDetachedHistoryWithoutPublishingOldGeneration() {
+    void retirementAndShutdownKeepAcceptedDetachedHistoryWithoutPublishingOldGeneration() throws IOException {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
@@ -853,8 +853,8 @@ class StorageTrackingServiceTest {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -864,8 +864,8 @@ class StorageTrackingServiceTest {
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
-                int limit) {
-                return stored.read(key, resource, from, limit);
+                long until, int limit) {
+                return stored.read(key, resource, from, until, limit);
             }
         };
         try (StorageTrackingService service = new StorageTrackingService(failing, 100)) {

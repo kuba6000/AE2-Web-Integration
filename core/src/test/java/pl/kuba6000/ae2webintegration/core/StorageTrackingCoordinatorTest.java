@@ -1223,8 +1223,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             @Override
@@ -1241,7 +1241,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey resource, long from,
-                int limit) {
+                long until, int limit) {
                 return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
         };
@@ -1310,8 +1310,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
 
             @Override
             public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
-                @Nullable String search, int limit) {
-                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+                @NotNull ResourceFilter filter, int limit) {
+                return IStorageHistoryStore.ResourcePage.empty();
             }
 
             @Override
@@ -1322,7 +1322,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey resource, long from,
-                int limit) {
+                long until, int limit) {
                 return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
         };

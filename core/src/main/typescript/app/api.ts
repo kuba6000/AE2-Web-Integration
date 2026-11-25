@@ -1,3 +1,4 @@
+import { trackingCatalogParams, type TrackingCatalogLocation } from './router.js';
 import type { TreeDocument, TreeQuery } from './crafting-tree.js';
 import type { ThemeManifest } from './theme-manifest.js';
 import type { ServerSettingsResponse, ServerSettingsUpdate } from './server-settings.js';
@@ -17,10 +18,9 @@ import type {
     ResourcePin,
     ResourcePinUpdate,
     HomePinGroupUpdate,
-    HomePinGroup,
     PinPlacement
 } from './api-types.js';
-import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
+import type { ResourceResponse, ApplicationContext, TerminalDelta } from './api-types.js';
 
 /** Wire codes declared by core ApiStatus; unrecognized replies leave mutations unconfirmed. */
 const responseStatuses = new Set([
@@ -160,16 +160,17 @@ export type Api = {
     ) => Promise<ResourceResponse<CraftingHistory>>;
     historicalResources: (
         gridKey: string,
-        search: string,
-        after: string | null,
-        signal: AbortSignal
+        options: TrackingCatalogLocation,
+        signal: AbortSignal,
+        icons?: boolean
     ) => Promise<ResourceResponse<HistoricalResource[]>>;
     resourceHistory: (
         gridKey: string,
         itemKey: string,
         signal?: AbortSignal,
         from?: number,
-        icons?: boolean
+        icons?: boolean,
+        until?: number | null
     ) => Promise<ResourceResponse<ResourceHistory>>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettingsResponse>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettingsResponse>;
@@ -288,17 +289,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             (parsed.status === 'OK' && (!response.ok || !Object.hasOwn(parsed, 'data')))
         )
             throw new ApiError('INVALID_RESPONSE', response.status);
-        const envelope = parsed as {
-            status: string;
-            data: T;
-            icons?: IconMetadata | null;
-            nextAfter?: string | null;
-            nextBefore?: string | null;
-            view?: TerminalView;
-            subscription?: string;
-            groups?: HomePinGroup[];
-            recent?: import('./api-types.js').RecentTracking;
-        };
+        const envelope = parsed as Partial<ResourceResponse<T>> & { status: string; data: T };
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status, response.status, envelope.data);
         }
@@ -307,6 +298,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             recent: envelope.recent,
             icons: envelope.icons ?? null,
             nextAfter: envelope.nextAfter ?? null,
+            lastObservedAt: envelope.lastObservedAt,
+            activity: envelope.activity,
+            stock: envelope.stock,
+            windowEnd: envelope.windowEnd,
             nextBefore: envelope.nextBefore ?? null,
             view: envelope.view,
             subscription: envelope.subscription,
@@ -478,17 +473,18 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
-        historicalResources: (gridKey, search, after, signal) => {
-            const query = new URLSearchParams({ limit: '50' });
-            if (search) query.set('search', search);
-            if (after) query.set('after', after);
+        historicalResources: (gridKey, options, signal, icons = false) => {
+            const query = trackingCatalogParams(options);
+            if (icons) query.set('icons', 'true');
+            query.set('limit', '50');
             return read(`api/grids/${encodeURIComponent(gridKey)}/tracking/resources?${query}`, { signal });
         },
-        resourceHistory: (gridKey, itemKey, signal, from = Date.now() - 900000, icons = false) =>
-            read(
-                `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&from=${from}&limit=10000${icons ? '&icons=true' : ''}`,
-                { signal }
-            ),
+        resourceHistory: (gridKey, itemKey, signal, from = Date.now() - 900000, icons = false, until = null) => {
+            const query = new URLSearchParams({ itemKey, from: String(from), limit: '10000' });
+            if (until !== null) query.set('until', String(until));
+            if (icons) query.set('icons', 'true');
+            return read(`api/grids/${encodeURIComponent(gridKey)}/resource-history?${query}`, { signal });
+        },
         serverSettings: (signal) => request('api/server/settings', { signal }),
         saveServerSettings: (body) => request('api/server/settings', { method: 'POST', body }),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
