@@ -199,10 +199,9 @@ export function createTerminal(
         serverSettings: serverSettings.state
     };
 
-    /** The standing order editor picks from the terminal's resources, which the server only describes while it is live. */
-    const wantsItems = () =>
-        state.route.view === 'items' || (state.route.view === 'standing-orders' && state.route.editor !== null);
-    const liveItems = () => state.preferences.autoRefresh || state.route.view === 'standing-orders';
+    const editingOrder = () => state.route.view === 'standing-orders' && state.route.editor !== null;
+    const wantsItems = () => state.route.view === 'items' || editingOrder();
+    const liveItems = () => state.route.view === 'items' && state.preferences.autoRefresh;
     const live = createLiveStream<StoredResource, StoredResourceUpdate, TerminalDelta>({
         enabled: liveItems,
         rows: () => state.items,
@@ -289,6 +288,8 @@ export function createTerminal(
             notify();
             return;
         }
+        // A picker uses one catalogue per visit. Status polls do not retry failures or replace its search results.
+        if (automatic && editingOrder() && state.itemStatus !== 'idle') return;
         const recovering = state.stream?.status === 'connecting' && state.itemStatus === 'ready';
         live.stop();
         if (recovering) state.stream = { status: 'connecting', lastEventAt: null };
@@ -301,12 +302,9 @@ export function createTerminal(
         if (!recovering) state.itemError = null;
         notify();
         try {
-            const result = await api.items(
-                key,
-                request.signal,
-                iconsEnabled && state.iconPack.available === true,
-                liveItems()
-            );
+            const result = editingOrder()
+                ? await api.standingOrderResources(key, request.signal, iconsEnabled)
+                : await api.items(key, request.signal, iconsEnabled && state.iconPack.available === true, liveItems());
             if (disposed || version !== serial) return;
             const items = result.data;
             state.itemIcons = result.icons;
@@ -371,6 +369,8 @@ export function createTerminal(
             const pack = await api.iconPack(request.signal);
             if (disposed || request !== iconRequest) return;
             if (typeof pack?.available !== 'boolean') throw new Error('Invalid icon availability');
+            // The editor already requested icon mappings with its snapshot, even if pack discovery finished later.
+            const reloadItemsForPack = !editingOrder() || state.iconPack.available !== null;
             const changed =
                 (state.iconPack.available === true) !== pack.available ||
                 (pack.available && iconPackId !== pack.packId);
@@ -378,7 +378,7 @@ export function createTerminal(
             iconPackId = pack.packId;
             icons.enabled(iconsEnabled && pack.available);
             if (changed) {
-                state.itemIcons = null;
+                if (reloadItemsForPack) state.itemIcons = null;
                 cpus.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
@@ -388,7 +388,7 @@ export function createTerminal(
             }
             notify();
             if (changed) {
-                void loadItems();
+                if (reloadItemsForPack) void loadItems();
                 void loadCpus();
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
@@ -459,7 +459,7 @@ export function createTerminal(
                 await Promise.all([homeRefresh, refreshingGrids]);
                 return;
             }
-            if (!automatic && ['items', 'cpus'].includes(state.route.view)) {
+            if (!automatic && (['items', 'cpus'].includes(state.route.view) || editingOrder())) {
                 if (!refreshingAutomatically) return refreshingGrids;
                 const route = state.route;
                 return refreshingGrids.then(() => {
@@ -647,7 +647,7 @@ export function createTerminal(
             preferences.set(name, value);
             if (name === 'autoRefresh') {
                 if (value) {
-                    void loadItems();
+                    if (state.route.view === 'items') void loadItems();
                     void loadCpus();
                 } else {
                     if (!liveItems()) live.stop();

@@ -29,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
@@ -242,14 +243,18 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
         }
     }
 
-    /** Descriptions the terminal currently holds for the definition's resources; others must already be stored. */
+    /** Trusted descriptions from this grid's last editor catalogue or live terminal. */
     protected final @NotNull Map<StableKey, ResourceDescriptor> descriptions(
         @NotNull StandingOrderDefinition definition) {
         Map<StableKey, ResourceDescriptor> result = new HashMap<>();
         TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
-        if (terminals == null) return result;
+        IAEGrid grid = CoreEngine.GRID_IDENTITIES.getGrid(gridKey);
+        StandingOrderEditor editor = CoreEngine.getStandingOrderEditor();
+        Map<StableKey, ResourceDescriptor> catalogue = grid != null && editor != null ? editor.catalogue(grid)
+            : Collections.emptyMap();
         for (StableKey resource : definition.resources()) {
-            ResourceDescriptor description = terminals.description(gridKey, resource);
+            ResourceDescriptor description = catalogue.get(resource);
+            if (description == null && terminals != null) description = terminals.description(gridKey, resource);
             if (description != null) result.put(resource, description);
         }
         return result;

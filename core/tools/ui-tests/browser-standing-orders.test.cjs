@@ -507,7 +507,7 @@ test('the phone layout keeps the list and the editor inside the screen width', a
     assert.ok((await overflow()) <= 0, 'the editor does not scroll sideways');
 });
 
-test('only the editor reads the network resources, and it reads them live so the server can describe a pick', async (t) => {
+test('only the editor requests the network inventory, without reserving a live stream', async (t) => {
     const { page, options, base } = await open(t, [listed('a', { name: 'Keep iron' })]);
     const itemReads = () => options.requests.filter((request) => request.path.endsWith('/items'));
     await page.getByRole('heading', { name: 'Keep iron' }).waitFor();
@@ -515,7 +515,9 @@ test('only the editor reads the network resources, and it reads them live so the
     await page.goto(`${base}#/grids/${gridA}/standing-orders/new`);
     await page.getByRole('heading', { name: 'New standing order' }).waitFor();
     await serverState(() => itemReads().length > 0, true);
-    assert.equal(new URLSearchParams(itemReads()[0].query).get('live'), 'true');
+    const query = new URLSearchParams(itemReads()[0].query);
+    assert.notEqual(query.get('live'), 'true');
+    assert.equal(query.get('catalog'), 'true');
     const reads = itemReads().length;
     await page.goto(`${base}#/grids/${gridA}/standing-orders`);
     await page.getByRole('heading', { name: 'Keep iron' }).waitFor();
@@ -630,18 +632,25 @@ test('deleting an unreadable order names it as unreadable in the confirmation', 
     assert.doesNotMatch(messages[0], /Repair/);
 });
 
-test('the editor holds one live resource stream while it is open and releases it on every way out', async (t) => {
-    const { page, options, base } = await open(t, [listed('a', { name: 'Keep iron' })]);
+test('typing into the editor searches its snapshot until the next visit', async (t) => {
+    const { page, options } = await open(t, [listed('a', { name: 'Keep iron' })]);
     options.liveView = { generation: '1', revision: '1' };
-    const streams = () => options.itemStreams?.length ?? 0;
-    await page.goto(`${base}#/grids/${gridA}/standing-orders/a`);
-    await serverState(streams, 1);
+    const reads = () => options.requests.filter((request) => request.path.endsWith('/items')).length;
+    const enter = () => page.getByRole('link', { name: 'Edit: Keep iron' }).click();
+    await enter();
+    await page.getByRole('button', { name: /^Resource to craft/ }).click();
+    await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
+    options.itemsA = [iron];
+    await page.getByRole('searchbox').filter({ visible: true }).fill('plastic');
+    await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
+    assert.equal(reads(), 1);
+    assert.equal(options.itemStreams?.length ?? 0, 0);
     await page.getByRole('link', { name: 'Back to standing orders' }).click();
-    await serverState(streams, 0);
-    await page.goto(`${base}#/grids/${gridA}/standing-orders/new`);
-    await serverState(streams, 1);
-    await page.goto(`${base}#/grids/${gridA}/settings`);
-    await serverState(streams, 0);
+    await enter();
+    await page.getByRole('button', { name: /^Resource to craft/ }).click();
+    await page.getByRole('button', { name: 'Iron Ingot', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Plastic Sheet' }).count(), 0);
+    assert.equal(reads(), 2);
 });
 
 test('a failed resource read leaves no stream, says so in the picker and can be retried', async (t) => {
@@ -656,7 +665,7 @@ test('a failed resource read leaves no stream, says so in the picker and can be 
     options.status = 200;
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.getByRole('button', { name: 'Plastic Sheet' }).waitFor();
-    await serverState(() => options.itemStreams?.length ?? 0, 1);
+    assert.equal(options.itemStreams?.length ?? 0, 0);
 });
 
 test('with the server switch off orders can be disabled, edited and deleted, but not created, enabled or run', async (t) => {

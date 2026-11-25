@@ -138,6 +138,11 @@ export type Api = {
         icons?: boolean,
         live?: boolean
     ) => Promise<ResourceResponse<StoredResource[]>>;
+    standingOrderResources(
+        gridKey: string,
+        signal: AbortSignal,
+        icons: boolean
+    ): Promise<ResourceResponse<StoredResource[]>>;
     itemEvents: (
         gridKey: string,
         subscription: string,
@@ -478,6 +483,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false, live = false) =>
             snapshot<StoredResource[]>(`api/grids/${encodeURIComponent(gridKey)}/items`, signal, icons, live),
+        standingOrderResources: (gridKey, signal, icons) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/items?catalog=true${icons ? '&icons=true' : ''}`, {
+                signal
+            }),
         itemEvents: (gridKey, subscription, icons, handlers) =>
             events(`api/grids/${encodeURIComponent(gridKey)}/items/events`, subscription, icons, handlers),
         createPlan: (gridKey, body) =>

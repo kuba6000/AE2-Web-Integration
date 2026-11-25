@@ -57,6 +57,7 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders.DeleteStandingOrder;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders.GetStandingOrders;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders.PatchStandingOrder;
@@ -141,7 +142,11 @@ class StandingOrderHttpTest {
                 return new AE2Controller.RequestContext(exchange, TestGridFixtures.principal(42));
             if ("Bearer admin".equals(token)) return new AE2Controller.RequestContext(exchange, WebPrincipal.admin());
             return null;
-        }, exchange -> false, request -> fail("Standing orders never dispatch game-thread work"));
+        }, exchange -> false, request -> {
+            assertInstanceOf(GetItems.class, request);
+            request.runOnServerThread(AE2Controller.AE2Interface);
+        });
+        router.register(GetItems.class);
         router.register(GetStandingOrders.class);
         router.register(PostStandingOrder.class);
         router.register(PatchStandingOrder.class);
@@ -1087,6 +1092,37 @@ class StandingOrderHttpTest {
             2,
             data(post(OWNER, unknown)).getAsJsonArray("orders")
                 .size());
+    }
+
+    @Test
+    void aCatalogueAdmitsNewPicksAfterTheTerminalClosesWithoutKeepingNativeObservationAlive() throws Exception {
+        String items = "/api/grids/" + gridKey + "/items?catalog=true";
+        JsonObject selected = platesBelow(
+            definition -> object(definition, "action").addProperty("resource", key(dust)));
+        assertRejected(post(OWNER, selected), HTTP_NOT_FOUND, "ITEM_NOT_FOUND", null, null);
+        JsonObject snapshot = request("GET", items, OWNER, "").json();
+        assertEquals(
+            3,
+            snapshot.getAsJsonArray("data")
+                .size());
+        assertNull(grid.web$getStorageCapture(), "The editor is not a live terminal viewer");
+        TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+        assertNotNull(terminals);
+        terminals.retire(gridKey, 1);
+        int reads = grid.storageReads;
+        ItemIdentityRequestTest.Grid other = new ItemIdentityRequestTest.Grid(771302, plate, dust);
+        String otherOrders = "/api/grids/" + TestGridFixtures.resolvedKey(other) + "/standing-orders";
+        assertRejected(
+            request("POST", otherOrders, OWNER, selected.toString()),
+            HTTP_NOT_FOUND,
+            "ITEM_NOT_FOUND",
+            null,
+            null);
+        assertEquals(
+            1,
+            data(post(OWNER, selected)).getAsJsonArray("orders")
+                .size());
+        assertEquals(reads, grid.storageReads, "Saving uses detached catalogue metadata");
     }
 
     @Test

@@ -256,6 +256,9 @@ stock thresholds, stock ratios and counts of idle CPUs. Each of these conditions
 **Condition 0** always applies, even with **Any**: no busy CPU on the network may already have the
 ordered resource as its final output.
 
+Opening the editor loads the network’s stored and craftable resources once. The pickers search this
+list locally. Reopen the editor or use **Refresh** to see resources added since you opened it.
+
 To keep Infinity level with Hypogen, choose **Stock below a proportion of another resource**, compare Infinity to
 Hypogen using a multiplier of 1, and fill up to that same ratio with a maximum batch. With 80 Infinity and 120 Hypogen the
 shortfall is 40; a maximum batch of 24 orders 24. The condition and amount are independent: you can

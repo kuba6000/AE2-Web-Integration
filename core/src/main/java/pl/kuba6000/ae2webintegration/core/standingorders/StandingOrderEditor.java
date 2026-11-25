@@ -1,14 +1,20 @@
 package pl.kuba6000.ae2webintegration.core.standingorders;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 
 /**
  * The only way HTTP threads change standing orders: stores the change and tells the engine about it.
@@ -47,6 +53,23 @@ public final class StandingOrderEditor {
 
     private final @NotNull StandingOrderStore store;
     private final @NotNull StandingOrderEngine engine;
+
+    // Keep only the latest detached descriptions, never quantities, subscriptions or native grid references.
+    private final Cache<IAEGrid, Map<StableKey, ResourceDescriptor>> catalogues = CacheBuilder.newBuilder()
+        .weakKeys()
+        .maximumSize(8)
+        .build();
+
+    /** Publish a complete game-thread read for new picks, scoped to this exact grid instance. */
+    public void rememberCatalogue(@NotNull IAEGrid grid, @NotNull StorageObservation snapshot) {
+        catalogues.put(grid, snapshot.descriptions());
+    }
+
+    /** The immutable catalogue can be used by an HTTP worker even after a live viewer lease would expire. */
+    public @NotNull Map<StableKey, ResourceDescriptor> catalogue(@NotNull IAEGrid grid) {
+        Map<StableKey, ResourceDescriptor> descriptions = catalogues.getIfPresent(grid);
+        return descriptions == null ? Collections.emptyMap() : descriptions;
+    }
 
     public StandingOrderEditor(@NotNull StandingOrderStore store, @NotNull StandingOrderEngine engine) {
         this.store = store;

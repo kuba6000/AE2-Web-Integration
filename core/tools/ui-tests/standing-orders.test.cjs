@@ -38,6 +38,7 @@ async function app(t, overrides = {}, preferences = { autoRefresh: false }) {
             settings: async () => ({ stockSampleIntervalSeconds: 300 }),
             cpus: async () => ({ data: {}, icons: null }),
             items: async () => ({ data: [], icons: null }),
+            standingOrderResources: async () => ({ data: [], icons: null }),
             standingOrders: async () => listing([order('o1')]),
             ...overrides
         },
@@ -160,16 +161,31 @@ function liveItems() {
     };
 }
 
-test('the editor keeps its live resource stream when automatic updates are turned off and releases it on closing', async (t) => {
-    const items = liveItems();
-    const terminal = await app(t, items.api, { autoRefresh: true });
+test('an open editor keeps one inventory snapshot across status polls and preference changes', async (t) => {
+    const streams = liveItems();
+    const reads = [];
+    const terminal = await app(
+        t,
+        {
+            ...streams.api,
+            standingOrderResources: async (...args) => {
+                reads.push(args);
+                return { data: [], icons: null };
+            }
+        },
+        { autoRefresh: true }
+    );
     terminal.route(editorRoute);
     await terminal.refresh();
-    assert.equal(items.active(), 1);
+    await terminal.refresh({ automatic: true });
     terminal.preference('autoRefresh', false);
-    assert.equal(items.active(), 1, 'the editor still needs the stream');
+    terminal.preference('autoRefresh', true);
+    await terminal.refresh({ automatic: true });
+    assert.equal(reads.length, 1);
+    assert.equal(streams.open.length, 0);
     terminal.route(listRoute);
-    assert.equal(items.active(), 0, 'closing the editor releases it');
+    terminal.route(editorRoute);
+    assert.equal(reads.length, 2, 'reopening the editor obtains a fresh inventory');
 });
 
 test('the terminal still stops its live stream when automatic updates are turned off', async (t) => {

@@ -226,7 +226,7 @@ const translations: Dictionaries = {
         STANDING_ORDER_LIMIT_REACHED: 'This network has reached its standing order limit. Delete an order first.',
         STANDING_ORDER_NOT_RUNNABLE: 'This order cannot run now. It is disabled, unreadable or switched off.',
         standingOrderResourceUnknown:
-            'The server does not know this resource yet. Wait for the resource list to load and try again.',
+            'Refresh the resource list and try saving again. If a chosen resource is no longer listed, choose another.',
         standingOrderNoPermission: 'You are not allowed to change standing orders here.',
         gridStandingOrders: 'Run standing orders on this network',
         gridStandingOrdersHelp:
@@ -844,7 +844,7 @@ const translations: Dictionaries = {
         STANDING_ORDER_NOT_RUNNABLE:
             'To zlecenie nie może teraz działać. Jest wyłączone, nieczytelne lub wyłączone w sieci.',
         standingOrderResourceUnknown:
-            'Serwer nie zna jeszcze tego zasobu. Poczekaj na wczytanie listy zasobów i spróbuj ponownie.',
+            'Odśwież listę zasobów i spróbuj zapisać ponownie. Jeśli wybranego zasobu nie ma już na liście, wybierz inny.',
         standingOrderNoPermission: 'Nie możesz tu zmieniać zleceń stałych.',
         gridStandingOrders: 'Uruchamiaj zlecenia stałe w tej sieci',
         gridStandingOrdersHelp:
