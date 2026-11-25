@@ -1816,7 +1816,8 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll
+    .cpu-selector-scroll,
+    .resource-picker-list
 )::-webkit-scrollbar {
     width: 18px;
 }
@@ -1827,7 +1828,8 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll
+    .cpu-selector-scroll,
+    .resource-picker-list
 )::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
@@ -1840,7 +1842,8 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll
+    .cpu-selector-scroll,
+    .resource-picker-list
 )::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
@@ -1854,12 +1857,22 @@ label {
         .info-notices,
         #plan-panel,
         #cpu-panel,
-        .cpu-selector-scroll
+        .cpu-selector-scroll,
+        .resource-picker-list
     )::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel, #cpu-panel, .cpu-selector-scroll) {
+    :is(
+        #item-scroll,
+        .terminal-scroll,
+        .network-dialog,
+        .info-notices,
+        #plan-panel,
+        #cpu-panel,
+        .cpu-selector-scroll,
+        .resource-picker-list
+    ) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
