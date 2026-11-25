@@ -25,17 +25,22 @@ public abstract class LiveSnapshotRequest extends ISyncedRequest {
     protected abstract void cancel(String token);
 
     /** Called by the router after the game-thread operation; only detached state is read here. */
-    public final ApiResponse finishResponse() {
+    public ApiResponse finishResponse() {
         ApiResponse response = getResponse();
         if (!context.isLifecycleUnchanged()) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
         if (subscription == null) return response;
-        ApiStatus failure = null;
-        if (context.getSession() == null || !AuthService.isValid(context.getSession(), System.currentTimeMillis()))
-            failure = ApiStatus.UNAUTHORIZED;
-        else if (CoreEngine.GRID_IDENTITIES.getGrid(gridKey) != grid) failure = ApiStatus.GRID_NOT_FOUND;
-        else if (!GridAccess.allows(grid, context.getPrincipal())) failure = ApiStatus.NO_PERMISSIONS;
+        ApiStatus failure = snapshotAccessFailure();
         if (failure == null) return response;
         cancel(subscription);
         return ApiResponse.error(failure);
+    }
+
+    /** Recheck the session, exact network identity and access after detached work on the HTTP worker. */
+    protected final @Nullable ApiStatus snapshotAccessFailure() {
+        if (!context.isLifecycleUnchanged()) return ApiStatus.SERVER_STOPPING;
+        if (context.getSession() == null || !AuthService.isValid(context.getSession(), System.currentTimeMillis()))
+            return ApiStatus.UNAUTHORIZED;
+        if (CoreEngine.GRID_IDENTITIES.getGrid(gridKey) != grid) return ApiStatus.GRID_NOT_FOUND;
+        return GridAccess.allows(grid, context.getPrincipal()) ? null : ApiStatus.NO_PERMISSIONS;
     }
 }

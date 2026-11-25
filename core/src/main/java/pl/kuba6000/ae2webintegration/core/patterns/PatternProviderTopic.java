@@ -27,6 +27,7 @@ public final class PatternProviderTopic extends LiveTopic {
 
     final CountDownLatch baseline = new CountDownLatch(1);
     int openings;
+    long retryUntil;
     private final Map<StableKey, PatternProvider> rows = new LinkedHashMap<>();
 
     PatternProviderTopic(StableKey grid, long generation) {
@@ -54,6 +55,11 @@ public final class PatternProviderTopic extends LiveTopic {
     @Override
     protected boolean hasOpeningViewers() {
         return openings > 0;
+    }
+
+    @Override
+    protected boolean retainedWhileIdle(long now) {
+        return hasOpeningViewers() || retryUntil > now;
     }
 
     List<PatternProvider> snapshot() {
@@ -92,7 +98,13 @@ public final class PatternProviderTopic extends LiveTopic {
         }
     }
 
+    /**
+     * @param view      updated snapshot version
+     * @param providers full replacement rows, including newly added providers
+     * @param removed   keys of providers no longer present
+     * @param icons     icon atlas metadata for this event; null when absent
+     */
     @Desugar
-    private record Delta(LiveView view, List<PatternProviderView> providers, List<StableKey> removed,
-        @Nullable IconMappings icons) implements IResponseBody {}
+    public record Delta(@NotNull LiveView view, @NotNull List<PatternProviderView> providers,
+        @NotNull List<StableKey> removed, @Nullable IconMappings icons) implements IResponseBody {}
 }

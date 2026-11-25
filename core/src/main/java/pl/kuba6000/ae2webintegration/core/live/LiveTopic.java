@@ -40,6 +40,11 @@ public abstract class LiveTopic {
         return false;
     }
 
+    /** Allows an incomplete baseline to survive the gap between a timeout and a prompt retry. */
+    protected boolean retainedWhileIdle(long now) {
+        return hasOpeningViewers();
+    }
+
     public final @NotNull Key key() {
         return key;
     }

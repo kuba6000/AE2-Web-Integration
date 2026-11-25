@@ -17,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveView;
 /** Detached publications and atomic subscription reservation, guarded by the shared hub monitor. */
 public final class PatternProviderRegistry {
 
+    private static final long RETRY_GRACE_MILLIS = TimeUnit.SECONDS.toMillis(10);
     private final LiveHub hub;
 
     PatternProviderRegistry(LiveHub hub) {
@@ -32,11 +33,14 @@ public final class PatternProviderRegistry {
 
         private final LiveHub hub;
         private final PatternProviderTopic topic;
+        final boolean resuming;
         private boolean closed;
 
         private Opening(LiveHub hub, PatternProviderTopic topic) {
             this.hub = hub;
             this.topic = topic;
+            this.resuming = topic.retryUntil != 0;
+            topic.retryUntil = 0;
             topic.openings++;
         }
 
@@ -45,6 +49,14 @@ public final class PatternProviderRegistry {
             if (!topic.baseline.await(timeout, unit)) return false;
             synchronized (hub) {
                 return !closed && hub.topic(topic.key()) == topic && topic.initialized();
+            }
+        }
+
+        /** Release a request whose initial baseline reached its HTTP deadline. */
+        public void closeForRetry(long now) {
+            synchronized (hub) {
+                if (!closed && topic.openings == 1 && !topic.initialized()) topic.retryUntil = now + RETRY_GRACE_MILLIS;
+                close();
             }
         }
 
@@ -71,16 +83,25 @@ public final class PatternProviderRegistry {
         }
     }
 
-    boolean exists(StableKey grid, long generation) {
+    boolean exists(StableKey grid, long generation, long now) {
         synchronized (hub) {
+            hub.expire(now);
             return topic(grid, generation) != null;
         }
     }
 
-    boolean opening(StableKey grid, long generation) {
+    enum Demand {
+        OPENING,
+        PAUSED,
+        NONE
+    }
+
+    Demand demand(StableKey grid, long generation, long now) {
         synchronized (hub) {
             PatternProviderTopic topic = topic(grid, generation);
-            return topic != null && topic.openings > 0;
+            if (topic == null) return Demand.NONE;
+            if (topic.openings > 0) return Demand.OPENING;
+            return topic.retryUntil > now ? Demand.PAUSED : Demand.NONE;
         }
     }
 

@@ -27,6 +27,11 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
         this(httpStatus, json, false);
     }
 
+    /** Successful metadata-only HEAD. Its GET representation has not been measured. */
+    public static ApiResponse headOnly() {
+        return new ApiResponse(java.net.HttpURLConnection.HTTP_OK, "");
+    }
+
     public static ApiResponse error(ApiStatus status) {
         return of(status.httpStatus(), new ErrorResponse(status, null));
     }
@@ -101,7 +106,7 @@ public record ApiResponse(int httpStatus, @NotNull String json, boolean compress
             exchange.getResponseHeaders()
                 .set("WWW-Authenticate", "Bearer");
         }
-        exchange.getResponseHeaders()
+        if (body.length != 0) exchange.getResponseHeaders()
             .set("Content-Length", Integer.toString(body.length));
         if (exchange.getRequestMethod()
             .equals("HEAD")) {

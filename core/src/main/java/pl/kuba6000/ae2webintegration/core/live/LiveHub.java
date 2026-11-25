@@ -181,7 +181,7 @@ public final class LiveHub {
             .iterator();
         while (idle.hasNext()) {
             LiveTopic topic = idle.next();
-            if (topic.activeUntil <= now && topic.subscribers.isEmpty() && !topic.hasOpeningViewers()) idle.remove();
+            if (topic.activeUntil <= now && topic.subscribers.isEmpty() && !topic.retainedWhileIdle(now)) idle.remove();
         }
     }
 

@@ -53,8 +53,11 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItemEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetPatternProviderEvents;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetPatternProviders;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.RenewItemEvents;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.RenewPatternProviderEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePinGroup;
@@ -183,7 +186,7 @@ public class AE2Controller {
     static final BlockingQueue<IServerThreadTask> requests = new ArrayBlockingQueue<>(SERVER_THREAD_QUEUE_CAPACITY);
 
     private static final long AUTH_LOOKUP_TIMEOUT_SECONDS = 2L;
-    private static final long REQUEST_TIMEOUT_SECONDS = 10L;
+    public static final long REQUEST_TIMEOUT_SECONDS = 10L;
 
     public static final class ServerTaskUnavailableException extends Exception {
 
@@ -259,6 +262,9 @@ public class AE2Controller {
                 api.register(GetItems.class);
                 api.register(GetItemEvents.class);
                 api.register(RenewItemEvents.class);
+                api.register(GetPatternProviders.class);
+                api.register(GetPatternProviderEvents.class);
+                api.register(RenewPatternProviderEvents.class);
                 api.register(GetServerSettings.class);
                 api.register(PostServerSettings.class);
                 api.register(GetGridSettings.class);

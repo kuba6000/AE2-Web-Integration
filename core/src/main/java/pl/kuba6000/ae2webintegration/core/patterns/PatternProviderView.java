@@ -15,16 +15,49 @@ import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
-/** Detached wire rows for a snapshot or a live update, using the response's icon mappings. */
+/**
+ * One physical pattern provider in a network.
+ *
+ * @param key       stable provider identity derived from dimension, position and side
+ * @param name      displayed terminal group name
+ * @param icon      resource displayed for the provider; null when unavailable
+ * @param location  position and optional side of this provider
+ * @param online    whether the provider is online
+ * @param visible   whether the provider is visible in its native terminal
+ * @param rowSize   number of physical slots in one terminal row
+ * @param priority  native crafting priority; null when unavailable
+ * @param sortValue native sort value for ordering providers within a group
+ * @param slots     physical slots in index order, including empty slots
+ * @example key AAAAAAAAAAAAAAAAAAAAAA
+ * @example name Furnace
+ * @example rowSize 9
+ */
 @Desugar
-public record PatternProviderView(StableKey key, String name, @Nullable ResourceDescription icon, Location location,
-    boolean online, boolean visible, int rowSize, @Nullable Integer priority, long sortValue, List<Slot> slots) {
+public record PatternProviderView(@NotNull StableKey key, @NotNull String name, @Nullable ResourceDescription icon,
+    @NotNull Location location, boolean online, boolean visible, int rowSize, @Nullable Integer priority,
+    long sortValue, @NotNull List<Slot> slots) {
 
+    /**
+     * @param dimension native dimension identifier; numeric on legacy versions
+     * @param x         block X coordinate
+     * @param y         block Y coordinate
+     * @param z         block Z coordinate
+     * @param side      mounted side, or null for a full block
+     * @example dimension minecraft:overworld
+     * @example x 120
+     * @example y 64
+     * @example z -32
+     */
     @Desugar
-    public record Location(String dimension, int x, int y, int z, @Nullable String side) {}
+    public record Location(@NotNull String dimension, int x, int y, int z, @Nullable String side) {}
 
+    /**
+     * @param kind    physical slot state: {@code empty} or {@code pattern}
+     * @param pattern decoded summary; null for an empty slot
+     * @example kind pattern
+     */
     @Desugar
-    public record Slot(String kind, @Nullable Pattern pattern) {
+    public record Slot(@NotNull String kind, @Nullable Pattern pattern) {
 
         private static final Slot EMPTY = new Slot("empty", null);
 
@@ -40,8 +73,15 @@ public record PatternProviderView(StableKey key, String name, @Nullable Resource
         }
     }
 
+    /**
+     * @param kind    pattern type: {@code crafting}, {@code processing}, or {@code invalid} when decoding failed
+     * @param inputs  condensed inputs per execution, in native resource units; empty for an invalid pattern
+     * @param outputs condensed outputs per execution, in native resource units; empty for an invalid pattern
+     * @example kind processing
+     */
     @Desugar
-    public record Pattern(String kind, List<ResourceStack> inputs, List<ResourceStack> outputs) {}
+    public record Pattern(@NotNull String kind, @NotNull List<ResourceStack> inputs,
+        @NotNull List<ResourceStack> outputs) {}
 
     public static @NotNull List<PatternProviderView> rows(@NotNull List<PatternProvider> providers,
         @Nullable IconMappings icons) {

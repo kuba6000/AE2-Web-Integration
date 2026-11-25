@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -16,6 +17,13 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternSlotHandle;
 
 class PatternProviderReaderTest {
 
+    private final PatternProviderReader reader = new PatternProviderReader();
+
+    @AfterEach
+    void closeReader() {
+        reader.close();
+    }
+
     @Test
     void resumesAtSlotBoundariesAndOnlyDecodesReplacedSlots() {
         AtomicInteger decodes = new AtomicInteger();
@@ -23,10 +31,9 @@ class PatternProviderReaderTest {
         IPatternSlotHandle[] slots = { null, broken, broken };
         IPatternProvider provider = provider(slots);
         IAEGrid grid = grid(provider);
-        PatternProviderReader reader = new PatternProviderReader();
         reader.begin(grid);
         assertNull(reader.step(0L, () -> 0L));
-        PatternProviderReader.Delta initial = reader.step(1L, () -> 0L);
+        PatternProviderReader.Delta initial = finishScan();
         PatternProvider row = initial.replacements()
             .values()
             .iterator()
@@ -45,8 +52,7 @@ class PatternProviderReaderTest {
 
         reader.begin(grid);
         assertTrue(
-            reader.step(1L, () -> 0L)
-                .replacements()
+            finishScan().replacements()
                 .isEmpty());
         assertEquals(2, decodes.get());
 
@@ -54,8 +60,7 @@ class PatternProviderReaderTest {
         reader.begin(grid);
         assertEquals(
             PatternProvider.Kind.EMPTY,
-            reader.step(1L, () -> 0L)
-                .replacements()
+            finishScan().replacements()
                 .get(
                     row.header()
                         .key())
@@ -75,8 +80,7 @@ class PatternProviderReaderTest {
             Collections.singleton(
                 row.header()
                     .key()),
-            reader.step(1L, () -> 0L)
-                .removed());
+            finishScan().removed());
     }
 
     @Test
@@ -84,23 +88,19 @@ class PatternProviderReaderTest {
         AtomicInteger decodes = new AtomicInteger();
         IPatternSlotHandle[] slots = { broken(decodes) };
         IAEGrid grid = grid(provider(slots));
-        PatternProviderReader reader = new PatternProviderReader();
         reader.begin(grid);
         assertEquals(
             1,
-            reader.step(1L, () -> 0L)
-                .replacements()
+            finishScan().replacements()
                 .size());
         slots[0] = broken(decodes);
         reader.begin(grid);
         assertTrue(
-            reader.step(1L, () -> 0L)
-                .replacements()
+            finishScan().replacements()
                 .isEmpty());
         reader.begin(grid);
         assertTrue(
-            reader.step(1L, () -> 0L)
-                .replacements()
+            finishScan().replacements()
                 .isEmpty());
         assertEquals(2, decodes.get(), "Retain the replacement encoding even when the output is unchanged");
     }
@@ -109,9 +109,14 @@ class PatternProviderReaderTest {
     void ambiguousProviderAddressesCannotOverwriteEachOther() {
         IPatternProvider first = provider(new IPatternSlotHandle[0]);
         IPatternProvider second = provider(new IPatternSlotHandle[0]);
-        PatternProviderReader reader = new PatternProviderReader();
         reader.begin(grid(first, second));
-        assertThrows(IllegalStateException.class, () -> reader.step(1L, () -> 0L));
+        assertThrows(IllegalStateException.class, () -> finishScan());
+    }
+
+    private PatternProviderReader.Delta finishScan() {
+        PatternProviderReader.Delta delta = reader.step(1L, () -> 0L);
+        assertNotNull(delta, "The remaining rows fit in this slice");
+        return delta;
     }
 
     private static IAEGrid grid(IPatternProvider... providers) {

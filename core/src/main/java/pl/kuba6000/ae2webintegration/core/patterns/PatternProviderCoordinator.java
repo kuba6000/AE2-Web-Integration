@@ -52,19 +52,27 @@ public final class PatternProviderCoordinator implements AutoCloseable {
         return registry;
     }
 
+    /** Static adapter capability, also safe to check while authorizing an HTTP request. */
+    public boolean isSupported() {
+        return supported.getAsBoolean();
+    }
+
     /** Game thread after access checks. Opening does no native enumeration. Null means unsupported or at capacity. */
     public @Nullable PatternProviderRegistry.Opening prepare(@NotNull StableKey grid, @NotNull IAEGrid nativeGrid,
         long now) {
-        if (!supported.getAsBoolean()) return null;
+        if (!isSupported()) return null;
         Binding binding = bindings.get(grid);
-        if (binding != null && (binding.grid.get() != nativeGrid || !registry.exists(grid, binding.generation))) {
+        if (binding != null && (binding.grid.get() != nativeGrid || !registry.exists(grid, binding.generation, now))) {
             retire(binding);
             bindings.remove(grid);
             binding = null;
         }
         long generation = binding == null ? ++nextGeneration : binding.generation;
         PatternProviderRegistry.Opening opening = registry.open(grid, generation, now);
-        if (opening != null && binding == null) bindings.put(grid, new Binding(grid, nativeGrid, generation));
+        if (opening != null) {
+            if (binding == null) bindings.put(grid, new Binding(grid, nativeGrid, generation));
+            else if (opening.resuming && binding.scanning) binding.recheckRevision = true;
+        }
         return opening;
     }
 
@@ -76,7 +84,9 @@ public final class PatternProviderCoordinator implements AutoCloseable {
         for (Iterator<Binding> it = bindings.values()
             .iterator(); it.hasNext();) {
             Binding binding = it.next();
-            if (!viewing.contains(binding.key) && !registry.opening(binding.key.grid(), binding.generation)) {
+            PatternProviderRegistry.Demand demand = registry.demand(binding.key.grid(), binding.generation, now);
+            if (demand == PatternProviderRegistry.Demand.PAUSED) continue;
+            if (!viewing.contains(binding.key) && demand == PatternProviderRegistry.Demand.NONE) {
                 it.remove();
                 retire(binding);
             } else if ((binding.scanning || now >= binding.nextCheck)
@@ -101,6 +111,14 @@ public final class PatternProviderCoordinator implements AutoCloseable {
 
     private void observe(Binding binding, IAEGrid grid, long now) {
         long deadline = nanoClock.getAsLong() + BUDGET_NANOS;
+        if (binding.recheckRevision) {
+            binding.recheckRevision = false;
+            long revision = grid.web$getPatternRevision();
+            if (binding.revision != revision) {
+                binding.revision = revision;
+                binding.reader.begin(grid);
+            }
+        }
         if (!binding.scanning) {
             binding.nextCheck = now + CHECK_MILLIS;
             long revision = grid.web$getPatternRevision();
@@ -138,6 +156,7 @@ public final class PatternProviderCoordinator implements AutoCloseable {
         private long nextLightPass;
         private long lastTurn;
         private boolean scanning;
+        private boolean recheckRevision;
 
         private Binding(StableKey gridKey, IAEGrid grid, long generation) {
             key = PatternProviderTopic.keyOf(gridKey);

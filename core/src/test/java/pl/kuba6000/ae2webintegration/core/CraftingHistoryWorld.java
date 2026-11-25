@@ -39,7 +39,7 @@ final class CraftingHistoryWorld implements AutoCloseable {
     }
 
     @Desugar
-    private record Platform(File root) implements IServerPlatform {
+    record Platform(File root) implements IServerPlatform {
 
         @Override
         public Path getModFile() {
