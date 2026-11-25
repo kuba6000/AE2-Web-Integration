@@ -1,3 +1,4 @@
+import { createTrackingCatalog, type TrackingCatalogState } from './tracking-catalog.js';
 import { createPins, type PinsState } from './pins.js';
 import { createServerSettings, type ServerSettingsState } from './server-settings.js';
 import type { Route } from './router.js';
@@ -56,6 +57,7 @@ export type TerminalState = TerminalData & {
     crafting: CraftingState;
     cpus: CpuState;
     history: HistoryState;
+    trackingCatalog: TrackingCatalogState;
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
@@ -124,6 +126,7 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
+    const trackingCatalog = createTrackingCatalog(api, notify);
     const resourceHistory = createResourceHistory(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const pins = createPins(
         api,
@@ -175,6 +178,7 @@ export function createTerminal(
         crafting: crafting.state,
         cpus: cpus.state,
         history: history.state,
+        trackingCatalog: trackingCatalog.state,
         resourceHistory: resourceHistory.state,
         recent: null,
         pins: pins.state,
@@ -390,6 +394,12 @@ export function createTerminal(
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
         else return history.refresh(reloadDetail);
     }
+    function loadTrackingCatalog(manual = false) {
+        const route = state.route;
+        if (route.view !== 'tracking' || route.itemKey !== null || state.gridStatus !== 'ready') return;
+        if (!state.grids.some((grid) => grid.key === route.gridKey)) trackingCatalog.clear('GRID_NOT_FOUND');
+        else return trackingCatalog.load(route, manual);
+    }
     function loadSettings() {
         if (state.route.view !== 'settings') return;
         if (state.gridStatus === 'error') {
@@ -462,6 +472,7 @@ export function createTerminal(
                 await loadCpus(automatic);
                 await loadHistory(reloadDetail);
                 await loadSettings();
+                await loadTrackingCatalog(!automatic);
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
                 if (!homeRefresh || state.route.view !== 'home') await pins.refresh(automatic);
             } catch (caught) {
@@ -486,6 +497,7 @@ export function createTerminal(
                 crafting.block(state.gridError);
                 cpus.block(state.gridError);
                 history.block(state.gridError);
+                trackingCatalog.clear(state.gridError);
                 settings.block(state.gridError);
                 if (state.route.view !== 'home' || status === 'UNAUTHORIZED') pins.block(state.gridError);
                 notify();
@@ -559,6 +571,7 @@ export function createTerminal(
                 itemRequest?.abort();
                 state.refreshing = false;
             } else invalidateItems();
+            trackingCatalog.clear();
             state.route = route;
             pins.route(route);
             if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
@@ -582,6 +595,7 @@ export function createTerminal(
                 loadCrafting();
                 loadCpus();
                 loadHistory();
+                void loadTrackingCatalog();
                 loadSettings();
             }
             void pins.refresh();
@@ -622,6 +636,7 @@ export function createTerminal(
             crafting.dispose();
             cpus.dispose();
             history.dispose();
+            trackingCatalog.clear();
             resourceHistory.dispose();
             settings.dispose();
             serverSettings.dispose();

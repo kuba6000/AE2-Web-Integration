@@ -43,6 +43,69 @@ class StorageTrackingRecoveryTest {
 
     @Test
     @Tag(SQLITE)
+    void resourcesPageIncludesOnlyRetainedRowsForTheRequestedGrid() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey other = StableKey.random();
+        StableKey first = StableKey.random();
+        StableKey second = StableKey.random();
+        StableKey foreign = StableKey.random();
+        long now = System.currentTimeMillis();
+        try (SqliteStorageHistoryStore stored = store()) {
+            WorldHistoryFixtures.register(stored, grid);
+            WorldHistoryFixtures.register(stored, other);
+            Map<StableKey, ResourceDescriptor> descriptions = new java.util.HashMap<>();
+            descriptions.put(first, description(first));
+            descriptions.put(second, description(second));
+            stored.append(
+                grid,
+                descriptions,
+                Arrays.asList(
+                    new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.STOCK, first, 0, 0, 0, 0, 0, null),
+                    new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.FLOW, second, 0, 1, 0, 1, 0, now - 1)));
+            stored.append(
+                other,
+                Collections.singletonMap(foreign, description(foreign)),
+                Collections.singletonList(
+                    new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.STOCK, foreign, 1, 0, 0, 0, 0, null)));
+            var page = stored.resources(grid, null, null, 1);
+            assertEquals(
+                1,
+                page.entries()
+                    .size());
+            assertNotNull(page.nextAfter());
+            var next = stored.resources(grid, page.nextAfter(), "TEST:ITEM", 1);
+            assertEquals(
+                1,
+                next.entries()
+                    .size());
+            assertNull(next.nextAfter());
+            assertNotEquals(
+                page.entries()
+                    .get(0)
+                    .itemKey(),
+                next.entries()
+                    .get(0)
+                    .itemKey());
+            assertEquals(
+                0,
+                stored.resources(grid, null, "missing", 10)
+                    .entries()
+                    .size());
+            assertFalse(
+                page.entries()
+                    .get(0)
+                    .itemKey()
+                    .equals(foreign));
+            assertFalse(
+                next.entries()
+                    .get(0)
+                    .itemKey()
+                    .equals(foreign));
+        }
+    }
+
+    @Test
+    @Tag(SQLITE)
     void sameGenerationStockRecoveryRestoresKnownAmountsAndFencesAnUncertainNewResource() throws Exception {
         StableKey grid = StableKey.random();
         StableKey unchanged = StableKey.random();
@@ -150,6 +213,12 @@ class StorageTrackingRecoveryTest {
         AtomicInteger warnings = new AtomicInteger();
         InMemoryStorageHistoryStore stored = new InMemoryStorageHistoryStore();
         IStorageHistoryStore failing = new IStorageHistoryStore() {
+
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
 
             @Override
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -361,6 +430,12 @@ class StorageTrackingRecoveryTest {
         IStorageHistoryStore blockedRead = new IStorageHistoryStore() {
 
             @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
+
+            @Override
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) throws IOException {
                 writes.append(key, descriptions, points);
@@ -423,6 +498,12 @@ class StorageTrackingRecoveryTest {
     private static IStorageHistoryStore failAt(IStorageHistoryStore stored, long at, boolean commitBeforeFailure) {
         // The test owns the delegate, allowing reads after the service has drained and closed its wrapper.
         return new IStorageHistoryStore() {
+
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
 
             @Override
             public void append(@NotNull StableKey grid, @NotNull Map<StableKey, ResourceDescriptor> descriptions,

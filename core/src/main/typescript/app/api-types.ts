@@ -34,6 +34,7 @@ export type ResourceDescription = {
     componentCount: number;
     damage: number;
 };
+export type HistoricalResource = Omit<ResourceDescription, 'icon' | 'itemKey'> & { itemKey: string };
 export type ResourceStack = ResourceDescription & {
     quantity: number;
 };
@@ -87,6 +88,7 @@ export type ResourceResponse<T> = {
     view?: TerminalView;
     subscription?: string;
     recent?: RecentTracking;
+    nextAfter?: string | null;
     nextBefore?: string | null;
     groups?: HomePinGroup[];
 };

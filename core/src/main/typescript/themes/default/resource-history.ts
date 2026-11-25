@@ -1,6 +1,6 @@
 import type { ThemeApplication, ThemeSettings, ThemeState, Translator } from '../../app/theme-api.js';
 import { createPinActions } from './pin-actions.js';
-import { trackingHref } from '../../app/router.js';
+import { trackingCatalogHref, trackingHref } from '../../app/router.js';
 import { createTrackingChart } from './tracking-chart.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
@@ -29,7 +29,9 @@ export function createResourceHistoryView(
     for (const [value, text] of [
         [900000, '15 min'],
         [3600000, '1 h'],
-        [86400000, '24 h']
+        [86400000, '24 h'],
+        [604800000, '7 d'],
+        [1296000000, '15 d']
     ] as const) {
         const option = element('option', text);
         option.value = String(value);
@@ -89,7 +91,7 @@ export function createResourceHistoryView(
         lastState = state;
         lastLocale = locale;
         const active = full
-            ? state.route.view === 'tracking'
+            ? state.route.view === 'tracking' && state.route.itemKey !== null
             : state.route.view === 'items' && !!state.selected?.itemKey;
         section.hidden = !active;
         if (!active) return;
@@ -119,8 +121,12 @@ export function createResourceHistoryView(
             ...(resource ? [renderMinecraftText(resource.displayName)] : [document.createTextNode(itemKey ?? '')])
         );
         back.hidden = !full;
-        back.textContent = `← ${locale.common('terminal')}`;
-        back.href = `#/grids/${encodeURIComponent(state.route.gridKey ?? '')}/items`;
+        const catalog =
+            state.route.view === 'tracking' && state.route.itemKey !== null ? state.route.catalog : undefined;
+        back.textContent = `← ${catalog ? locale.t('trackingTab') : locale.common('terminal')}`;
+        back.href = catalog
+            ? trackingCatalogHref(state.route.gridKey!, catalog.search, catalog.after)
+            : `#/grids/${encodeURIComponent(state.route.gridKey ?? '')}/items`;
         link.hidden = full;
         link.textContent = locale.t('viewTracking');
         link.href = trackingHref(state.route.gridKey!, itemKey!);

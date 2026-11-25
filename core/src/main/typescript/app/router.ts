@@ -1,7 +1,8 @@
 export type Route =
     | { view: 'home' | 'missing' | 'web-settings' | 'server-settings' | 'about'; gridKey: null }
     | { view: 'items' | 'settings'; gridKey: string }
-    | { view: 'tracking'; gridKey: string; itemKey: string }
+    | { view: 'tracking'; gridKey: string; itemKey: string; catalog?: { search: string; after: string | null } }
+    | { view: 'tracking'; gridKey: string; itemKey: null; search: string; after: string | null }
     | { view: 'cpus'; gridKey: string; cpuKey: string | null }
     | { view: 'history'; gridKey: string; entryId: string | null }
     | { view: 'plan'; gridKey: string; planId: string; tree?: boolean };
@@ -12,13 +13,32 @@ export function readRoute(): Route {
     if (hash === '/web-settings') return { view: 'web-settings', gridKey: null };
     if (hash === '/server-settings') return { view: 'server-settings', gridKey: null };
     if (hash === '/about') return { view: 'about', gridKey: null };
-    const tracking = /^\/grids\/([^/]+)\/tracking\/([^/]+)$/.exec(hash);
+    const catalog = /^\/grids\/([^/]+)\/tracking(?:\?([^#]*))?$/.exec(hash);
+    if (catalog) {
+        try {
+            const params = new URLSearchParams(catalog[2]);
+            return {
+                view: 'tracking',
+                gridKey: decodeURIComponent(catalog[1]),
+                itemKey: null,
+                search: params.get('search') ?? '',
+                after: params.get('after')
+            };
+        } catch {
+            return { view: 'missing', gridKey: null };
+        }
+    }
+    const tracking = /^\/grids\/([^/]+)\/tracking\/([^/?]+)(?:\?([^#]*))?$/.exec(hash);
     if (tracking) {
         try {
+            const params = new URLSearchParams(tracking[3]);
             return {
                 view: 'tracking',
                 gridKey: decodeURIComponent(tracking[1]),
-                itemKey: decodeURIComponent(tracking[2])
+                itemKey: decodeURIComponent(tracking[2]),
+                ...(params.has('catalog')
+                    ? { catalog: { search: params.get('search') ?? '', after: params.get('after') } }
+                    : {})
             };
         } catch {
             return { view: 'missing', gridKey: null };
@@ -92,6 +112,18 @@ export function navigateToGrid(key: string | null) {
     location.hash = key ? `/grids/${encodeURIComponent(key)}/items` : '/';
 }
 
-export function trackingHref(gridKey: string, itemKey: string) {
-    return `#/grids/${encodeURIComponent(gridKey)}/tracking/${encodeURIComponent(itemKey)}`;
+export function trackingCatalogHref(gridKey: string, search = '', after: string | null = null) {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (after) params.set('after', after);
+    return `#/grids/${encodeURIComponent(gridKey)}/tracking${params.size ? '?' + params : ''}`;
+}
+
+export function trackingHref(gridKey: string, itemKey: string, catalog?: { search: string; after: string | null }) {
+    const href = `#/grids/${encodeURIComponent(gridKey)}/tracking/${encodeURIComponent(itemKey)}`;
+    if (!catalog) return href;
+    const params = new URLSearchParams({ catalog: '1' });
+    if (catalog.search) params.set('search', catalog.search);
+    if (catalog.after) params.set('after', catalog.after);
+    return href + '?' + params;
 }

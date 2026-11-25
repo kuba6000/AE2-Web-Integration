@@ -276,7 +276,7 @@ final class SqliteHistoryReader {
         return descriptions;
     }
 
-    private static @NotNull ResourceDescriptor readDescription(@NotNull ResultSet row) throws SQLException {
+    static @NotNull ResourceDescriptor readDescription(@NotNull ResultSet row) throws SQLException {
         String baseKey = row.getString("base_key");
         return new ResourceDescriptor(
             row.getString("registry_namespace"),

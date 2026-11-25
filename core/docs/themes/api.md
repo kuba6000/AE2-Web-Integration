@@ -155,6 +155,10 @@ fields as other pin actions.
 identifier and settings but have null resource/network metadata. Render an unavailable entry and
 allow removal; do not keep displaying previously cached metadata after access is lost.
 
+On a network's Tracking route, a null `itemKey` identifies the resource catalog. Read the current
+page from `state.trackingCatalog`; the route contains the search string and optional page cursor.
+A non-null `itemKey` opens the existing resource history detail.
+
 On Home, `state.pins.histories[pinKey][rangeMillis]` supplies recorded history for the required
 ranges. `homeConfig.flowRangeMillis` selects historical flow totals independently of the chart's
 `rangeMillis`; equal ranges share one result. `showRecentFlow` controls the separate recent flow

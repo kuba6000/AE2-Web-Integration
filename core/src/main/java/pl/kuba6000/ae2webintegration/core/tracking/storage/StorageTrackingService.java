@@ -130,6 +130,11 @@ public final class StorageTrackingService implements AutoCloseable {
             result.baseline());
     }
 
+    public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey gridKey, @Nullable Long after,
+        @Nullable String search, int limit) throws IOException {
+        return store.resources(gridKey, after, search, limit);
+    }
+
     /** Records a history coverage gap without affecting live terminal subscriptions. */
     public void invalidate(@NotNull StableKey gridKey, long generation) {
         State state = states.get(gridKey);

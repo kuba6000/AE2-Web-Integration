@@ -3541,6 +3541,22 @@ button.toast:hover {
     margin-top: 12px;
     font-size: 13px;
 }
+.tracking-catalog ul {
+    list-style: none;
+    padding: 0;
+}
+.tracking-catalog li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding-block: 6px;
+    border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+}
+.tracking-catalog input {
+    max-width: 100%;
+}
 .resource-history .tracking-chart {
     position: relative;
 }

@@ -1222,6 +1222,12 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
             @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
+
+            @Override
             public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) throws IOException {
                 entered.countDown();
@@ -1301,6 +1307,12 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         StableKey key = trackStock(grid);
         AtomicInteger appends = new AtomicInteger();
         IStorageHistoryStore failing = new IStorageHistoryStore() {
+
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
 
             @Override
             public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,

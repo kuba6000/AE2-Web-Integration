@@ -1,7 +1,7 @@
 import type { ApiError } from '../../app/api.js';
 import type { ThemeApplication, ThemeContext, ThemeState } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
-import { cpuHref, historyHref } from '../../app/router.js';
+import { cpuHref, historyHref, trackingCatalogHref } from '../../app/router.js';
 import { networkLabel } from './network.js';
 import { craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
@@ -41,6 +41,7 @@ export function createHeader(
                 <a id="settings-link" data-view="settings" data-text="network" hidden></a>
                 <a id="terminal-link" data-view="items" data-text="terminal" hidden></a>
                 <a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a>
+                <a id="tracking-link" data-view="tracking" data-theme-text="trackingTab" hidden></a>
                 <a id="history-link" data-view="history" data-text="history" hidden></a>
                 <a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a>
                 <a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a>
@@ -62,6 +63,7 @@ export function createHeader(
         activityText: panel.querySelector<HTMLSpanElement>('#activity-text')!,
         terminalLink: panel.querySelector<HTMLAnchorElement>('#terminal-link')!,
         cpuLink: panel.querySelector<HTMLAnchorElement>('#cpu-link')!,
+        trackingLink: panel.querySelector<HTMLAnchorElement>('#tracking-link')!,
         historyLink: panel.querySelector<HTMLAnchorElement>('#history-link')!,
         settingsLink: panel.querySelector<HTMLAnchorElement>('#settings-link')!,
         updated: panel.querySelector<HTMLSpanElement>('#updated')!
@@ -126,7 +128,7 @@ export function createHeader(
         links.forEach((link) => {
             if (
                 link.dataset.view === state.route.view ||
-                (link.dataset.view === 'items' && (state.route.view === 'plan' || state.route.view === 'tracking'))
+                (link.dataset.view === 'items' && state.route.view === 'plan')
             )
                 link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
@@ -136,6 +138,8 @@ export function createHeader(
         controls.terminalLink.hidden = !navigationGridKey;
         controls.terminalLink.href = `#/grids/${encodeURIComponent(String(navigationGridKey))}/items`;
         controls.cpuLink.href = cpuHref(navigationGridKey);
+        controls.trackingLink.hidden = !navigationGridKey;
+        if (navigationGridKey) controls.trackingLink.href = trackingCatalogHref(navigationGridKey);
         controls.historyLink.hidden = !navigationGridKey;
         controls.historyLink.href = historyHref(navigationGridKey);
         controls.settingsLink.hidden = !navigationGridKey;

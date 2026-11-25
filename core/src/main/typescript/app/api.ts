@@ -9,6 +9,7 @@ import type {
     CpuDetail,
     CpuDelta,
     HistoryEntry,
+    HistoricalResource,
     CraftingHistory,
     GridSettings,
     GridSettingsResponse,
@@ -157,6 +158,12 @@ export type Api = {
         signal?: AbortSignal,
         icons?: boolean
     ) => Promise<ResourceResponse<CraftingHistory>>;
+    historicalResources: (
+        gridKey: string,
+        search: string,
+        after: string | null,
+        signal: AbortSignal
+    ) => Promise<ResourceResponse<HistoricalResource[]>>;
     resourceHistory: (
         gridKey: string,
         itemKey: string,
@@ -285,6 +292,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             status: string;
             data: T;
             icons?: IconMetadata | null;
+            nextAfter?: string | null;
             nextBefore?: string | null;
             view?: TerminalView;
             subscription?: string;
@@ -298,6 +306,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             data: envelope.data,
             recent: envelope.recent,
             icons: envelope.icons ?? null,
+            nextAfter: envelope.nextAfter ?? null,
             nextBefore: envelope.nextBefore ?? null,
             view: envelope.view,
             subscription: envelope.subscription,
@@ -469,6 +478,12 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
+        historicalResources: (gridKey, search, after, signal) => {
+            const query = new URLSearchParams({ limit: '50' });
+            if (search) query.set('search', search);
+            if (after) query.set('after', after);
+            return read(`api/grids/${encodeURIComponent(gridKey)}/tracking/resources?${query}`, { signal });
+        },
         resourceHistory: (gridKey, itemKey, signal, from = Date.now() - 900000, icons = false) =>
             read(
                 `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&from=${from}&limit=10000${icons ? '&icons=true' : ''}`,

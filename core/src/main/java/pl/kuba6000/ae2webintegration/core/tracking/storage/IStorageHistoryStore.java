@@ -7,6 +7,8 @@ import java.util.Map;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -18,6 +20,13 @@ public interface IStorageHistoryStore extends AutoCloseable {
 
     @NotNull
     StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis, int limit)
+        throws IOException;
+
+    @Desugar
+    record ResourcePage(@NotNull List<ResourceDescriptor> entries, @Nullable Long nextAfter) {}
+
+    @NotNull
+    ResourcePage resources(@NotNull StableKey gridKey, @Nullable Long after, @Nullable String search, int limit)
         throws IOException;
 
     /** Close after the persistence worker has drained; file-only stores own no open handles. */

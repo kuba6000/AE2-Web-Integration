@@ -1,3 +1,4 @@
+import type { TrackingCatalogState } from './tracking-catalog.js';
 import type { PinsState } from './pins.js';
 import type { TerminalStreamState, TerminalUpdateHint } from './terminal.js';
 import type { CraftingState } from './crafting.js';
@@ -63,6 +64,7 @@ export type ThemeState = ReadonlyData<{
     crafting: CraftingState;
     cpus: CpuState;
     history: HistoryState;
+    trackingCatalog: TrackingCatalogState;
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;

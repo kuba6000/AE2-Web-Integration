@@ -413,6 +413,12 @@ class StorageTrackingServiceTest {
         AtomicInteger closeCalls = new AtomicInteger();
         IStorageHistoryStore store = new IStorageHistoryStore() {
 
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
+
             public void append(@NotNull StableKey grid, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) {
                 written.set(true);
@@ -644,6 +650,12 @@ class StorageTrackingServiceTest {
         InMemoryStorageHistoryStore stored = new InMemoryStorageHistoryStore();
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
+
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) throws IOException {
                 entered.countDown();
@@ -838,6 +850,12 @@ class StorageTrackingServiceTest {
         AtomicBoolean failNextWrite = new AtomicBoolean(true);
         InMemoryStorageHistoryStore stored = new InMemoryStorageHistoryStore();
         IStorageHistoryStore failing = new IStorageHistoryStore() {
+
+            @Override
+            public @NotNull IStorageHistoryStore.ResourcePage resources(@NotNull StableKey grid, @Nullable Long after,
+                @Nullable String search, int limit) {
+                return new IStorageHistoryStore.ResourcePage(Collections.emptyList(), null);
+            }
 
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) throws IOException {

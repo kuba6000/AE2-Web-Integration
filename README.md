@@ -212,8 +212,10 @@ Choose crafting history retention in the network settings. The default is 7 days
 Network settings have independent switches for input/output history and periodic storage quantities.
 Choose each network's storage sampling interval, input/output interval and history retention there,
 within the server's allowed ranges. Input/output recording alone does not scan the inventory;
-accepted input includes resources consumed by void storage. Select a resource in the terminal and open
-**Resource history** in its details to view measurements.
+accepted input includes resources consumed by void storage. Open **Tracking** for the selected network
+to search recorded resources by name or registry identifier, including resources no longer in storage.
+Select a result to open its stock and flow history. You can also open **Resource history** from a
+resource in the terminal.
 
 Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
 to five minutes. Recent summaries show **two minutes of flow** and **one hour of stock changes**.

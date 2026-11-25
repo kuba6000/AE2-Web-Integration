@@ -19,6 +19,12 @@ public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
     private final Map<StableKey, List<StorageHistoryPoint>> records = new HashMap<>();
 
     @Override
+    public @NotNull ResourcePage resources(@NotNull StableKey grid, @Nullable Long after, @Nullable String search,
+        int limit) {
+        return new ResourcePage(Collections.emptyList(), null);
+    }
+
+    @Override
     public synchronized void append(@NotNull StableKey gridKey,
         @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageHistoryPoint> points) {
         resources.putAll(descriptions);

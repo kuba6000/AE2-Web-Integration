@@ -1,3 +1,4 @@
+import { createTrackingCatalogView } from './tracking-catalog.js';
 import { createResourceTerminal, resourceMetadata } from './resource-terminal.js';
 import { createTooltips } from './tooltips.js';
 import { createWebSettings, type TerminalDisplay } from './web-settings.js';
@@ -108,6 +109,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     const settingsView = createSettingsView(windowFrame, application);
     const serverSettingsView = createServerSettingsView(windowFrame, application, tooltips);
     const aboutView = createAboutView(windowFrame, modVersion);
+    const trackingCatalog = createTrackingCatalogView(windowFrame);
     const trackingView = createResourceHistoryView(windowFrame, application, settings, true);
     lifetime.onCleanup(trackingView.dispose);
     function updateLabels() {
@@ -176,6 +178,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         tooltips.refresh();
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
+        trackingCatalog(state, locale);
         trackingView.render(state, locale, effectiveDisplay !== 'names');
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
