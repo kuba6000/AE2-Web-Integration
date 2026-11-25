@@ -92,6 +92,7 @@ class StandingOrderHttpTest {
 
     @TempDir
     File configRoot;
+    private final AtomicBoolean cpuModesSupported = new AtomicBoolean();
     private final AtomicBoolean lightModeSupported = new AtomicBoolean();
     private IAE previousAe;
     private HttpServer server;
@@ -119,6 +120,7 @@ class StandingOrderHttpTest {
             @Override
             public Map<ServerCapability, Boolean> web$getCapabilities() {
                 Map<ServerCapability, Boolean> capabilities = super.web$getCapabilities();
+                capabilities.put(ServerCapability.CPU_SELECTION_MODE, cpuModesSupported.get());
                 capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, lightModeSupported.get());
                 return capabilities;
             }
@@ -415,6 +417,27 @@ class StandingOrderHttpTest {
             list(OWNER).getAsJsonArray("orders")
                 .get(0),
             order);
+    }
+
+    @Test
+    void aRatioOrderPreservesItsComparisonAndReferenceTargetOnDisk() throws Exception {
+        JsonObject body = platesBelow(def -> {
+            String ratio = "\"reference\":\"" + key(ingot) + "\",\"numerator\":2,\"denominator\":3";
+            def.add(
+                "trigger",
+                new JsonParser()
+                    .parse("{\"type\":\"stockRatioBelow\",\"resource\":\"" + key(plate) + "\"," + ratio + "}"));
+            object(def, "action")
+                .add("amount", new JsonParser().parse("{\"type\":\"fillToRatio\",\"maxBatch\":200," + ratio + "}"));
+        });
+        data(post(OWNER, body));
+        assertEquals(
+            body,
+            withoutNulls(
+                list(OWNER).getAsJsonArray("orders")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("definition")));
     }
 
     @Test
@@ -983,6 +1006,29 @@ class StandingOrderHttpTest {
             ((StandingOrderStore.Valid) CoreEngine.getStandingOrderStore()
                 .get(gridKey, seeded.key())).definition()
                 .name());
+    }
+
+    @Test
+    void cpuReservationsRequireSelectionModesAndSurviveAStoredRoundTrip() throws Exception {
+        JsonObject body = platesBelow(definition -> {
+            definition.add("trigger", new JsonParser().parse("{\"type\":\"idlePlayerCpusAtLeast\",\"count\":1}"));
+            object(definition, "action").add("cpu", new JsonParser().parse("{\"type\":\"machineOnly\"}"));
+        });
+        assertRejected(
+            post(OWNER, body),
+            HTTP_BAD_REQUEST,
+            "INVALID_STANDING_ORDER",
+            "CAPABILITY_UNAVAILABLE",
+            "action.cpu.type");
+        cpuModesSupported.set(true);
+        data(post(OWNER, body));
+        assertEquals(
+            body,
+            withoutNulls(
+                list(OWNER).getAsJsonArray("orders")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("definition")));
     }
 
     @Test

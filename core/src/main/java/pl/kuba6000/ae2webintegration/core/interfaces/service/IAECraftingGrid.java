@@ -33,6 +33,11 @@ public interface IAECraftingGrid {
 
     String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
 
+    /** Submit using the chosen CPU's native machine source. Never fall back to automatic selection. */
+    default String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+        throw new UnsupportedOperationException("Machine-only CPU selection is unavailable");
+    }
+
     Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter);
 
 }

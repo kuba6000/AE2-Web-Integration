@@ -181,7 +181,7 @@ public abstract class StandingOrderRequest extends IAsyncRequest {
         Map<StableKey, ResourceDescriptor> result = new HashMap<>();
         TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
         if (terminals == null) return result;
-        for (StableKey resource : StandingOrderMapping.resources(definition)) {
+        for (StableKey resource : definition.resources()) {
             ResourceDescriptor description = terminals.description(gridKey, resource);
             if (description != null) result.put(resource, description);
         }

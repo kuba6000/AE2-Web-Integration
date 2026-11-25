@@ -316,6 +316,7 @@ export type StandingOrderReason =
     | 'CALCULATION_TIMED_OUT'
     | 'SUBMIT_REJECTED'
     | 'SUBMIT_ERROR'
+    | 'MACHINE_CPU_TOO_SMALL'
     | 'UNEXPECTED_ERROR'
     | 'INVALID_DEFINITION'
     | 'CAPABILITY_UNAVAILABLE'
@@ -348,8 +349,19 @@ export type StandingOrderRuntime = {
     craftingSince: number;
 };
 /** Members of a listed condition that do not apply to its `type` are null; request bodies omit them instead. */
-export type StandingOrderCondition = {
-    type: 'stockBelow' | 'stockAtLeast' | 'idleCpusAtLeast' | 'all' | 'any' | 'not';
+export type StandingOrderRatioInput = { reference: string; numerator: number; denominator: number };
+type ListedRatio = { [K in keyof StandingOrderRatioInput]?: StandingOrderRatioInput[K] | null };
+export type StandingOrderCondition = ListedRatio & {
+    type:
+        | 'stockBelow'
+        | 'stockAtLeast'
+        | 'stockRatioBelow'
+        | 'stockRatioAtLeast'
+        | 'idleCpusAtLeast'
+        | 'idlePlayerCpusAtLeast'
+        | 'all'
+        | 'any'
+        | 'not';
     resource: string | null;
     amount: number | null;
     count: number | null;
@@ -358,9 +370,14 @@ export type StandingOrderCondition = {
 };
 export type StandingOrderAction = {
     resource: string;
-    amount: { type: 'fixed' | 'fillTo'; batch: number | null; target: number | null; maxBatch: number | null };
+    amount: ListedRatio & {
+        type: 'fixed' | 'fillTo' | 'fillToRatio';
+        batch: number | null;
+        target: number | null;
+        maxBatch: number | null;
+    };
     options: { lightMode: boolean; ignoreMissing: boolean };
-    cpu: { type: 'any' | 'specific'; key: string | null };
+    cpu: { type: 'any' | 'machineOnly' | 'specific'; key: string | null };
 };
 export type StandingOrderDefinition = {
     name: string;
@@ -370,15 +387,19 @@ export type StandingOrderDefinition = {
     action: StandingOrderAction;
 };
 export type StandingOrderConditionInput =
+    | ({ type: 'stockRatioBelow' | 'stockRatioAtLeast'; resource: string } & StandingOrderRatioInput)
     | { type: 'stockBelow' | 'stockAtLeast'; resource: string; amount: number }
-    | { type: 'idleCpusAtLeast'; count: number }
+    | { type: 'idleCpusAtLeast' | 'idlePlayerCpusAtLeast'; count: number }
     | { type: 'all' | 'any'; children: StandingOrderConditionInput[] }
     | { type: 'not'; child: StandingOrderConditionInput };
 export type StandingOrderActionInput = {
     resource: string;
-    amount: { type: 'fixed'; batch: number } | { type: 'fillTo'; target: number; maxBatch: number };
+    amount:
+        | { type: 'fixed'; batch: number }
+        | { type: 'fillTo'; target: number; maxBatch: number }
+        | ({ type: 'fillToRatio'; maxBatch: number } & StandingOrderRatioInput);
     options: { lightMode: boolean; ignoreMissing: boolean };
-    cpu: { type: 'any' } | { type: 'specific'; key: string };
+    cpu: { type: 'any' | 'machineOnly' } | { type: 'specific'; key: string };
 };
 export type StandingOrderDefinitionInput = {
     name: string;

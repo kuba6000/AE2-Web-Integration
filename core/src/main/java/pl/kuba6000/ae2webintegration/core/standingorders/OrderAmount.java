@@ -16,10 +16,12 @@ public record OrderAmount(@NotNull Outcome outcome, long amount) {
     public enum Outcome {
         ORDER,
         NOTHING_TO_ORDER,
-        OVERFLOW
+        OVERFLOW,
+        UNKNOWN_STOCK
     }
 
     private static final OrderAmount NOTHING_TO_ORDER = new OrderAmount(Outcome.NOTHING_TO_ORDER, 0);
+    private static final OrderAmount UNKNOWN = new OrderAmount(Outcome.UNKNOWN_STOCK, 0);
     private static final OrderAmount OVERFLOW = new OrderAmount(Outcome.OVERFLOW, 0);
 
     public static @NotNull OrderAmount order(long amount) {
@@ -28,6 +30,10 @@ public record OrderAmount(@NotNull Outcome outcome, long amount) {
 
     public static @NotNull OrderAmount nothingToOrder() {
         return NOTHING_TO_ORDER;
+    }
+
+    public static @NotNull OrderAmount unknownStock() {
+        return UNKNOWN;
     }
 
     public static @NotNull OrderAmount overflow() {

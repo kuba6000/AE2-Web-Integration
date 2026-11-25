@@ -85,6 +85,16 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
+    default String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+        ICraftingCPU cpu = (ICraftingCPU) target;
+        if (!target.web$acceptsMachineOrders() || !target.web$isValidForGrid(grid) || cpu.getActionSource() == null)
+            return "No suitable automation CPU.";
+        ICraftingLink link = ((ICraftingGrid) this)
+            .submitJob((ICraftingJob<?>) job, null, cpu, true, cpu.getActionSource());
+        return link == null ? "Submission failed" : null;
+    }
+
+    @Override
     default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
         ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) ((IGridPlayerSource) grid).web$getPlayerSource();

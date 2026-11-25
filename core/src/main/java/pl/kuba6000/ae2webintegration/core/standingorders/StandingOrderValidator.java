@@ -53,6 +53,13 @@ public final class StandingOrderValidator {
      */
     public static void validateCapabilities(@NotNull StandingOrderDefinition definition,
         @NotNull Map<ServerCapability, Boolean> capabilities) throws InvalidStandingOrderException {
+        if (!Boolean.TRUE.equals(capabilities.get(ServerCapability.CPU_SELECTION_MODE))) {
+            if (definition.action()
+                .cpu()
+                .machineOnly())
+                throw new InvalidStandingOrderException(Reason.CAPABILITY_UNAVAILABLE, "action.cpu.type");
+            requireUnfilteredCpuCounts(definition.trigger(), "trigger");
+        }
         CraftingOptions options = definition.action()
             .options();
         if (options.lightMode() && !Boolean.TRUE.equals(capabilities.get(ServerCapability.CRAFTING_LIGHT_MODE))) {
@@ -62,6 +69,19 @@ public final class StandingOrderValidator {
             && !Boolean.TRUE.equals(capabilities.get(ServerCapability.CRAFTING_IGNORE_MISSING))) {
             throw new InvalidStandingOrderException(Reason.CAPABILITY_UNAVAILABLE, "action.options.ignoreMissing");
         }
+    }
+
+    private static void requireUnfilteredCpuCounts(Condition condition, String path)
+        throws InvalidStandingOrderException {
+        if (condition instanceof Condition.IdleCpusAtLeast idle && idle.playerOnly())
+            throw new InvalidStandingOrderException(Reason.CAPABILITY_UNAVAILABLE, path + ".type");
+        if (condition instanceof Condition.Not not) requireUnfilteredCpuCounts(not.child(), path + ".child");
+        List<Condition> children;
+        if (condition instanceof Condition.All all) children = all.children();
+        else if (condition instanceof Condition.Any any) children = any.children();
+        else return;
+        for (int i = 0; i < children.size(); i++)
+            requireUnfilteredCpuCounts(children.get(i), path + ".children[" + i + "]");
     }
 
     private static void validateName(@NotNull String name) throws InvalidStandingOrderException {
@@ -92,6 +112,8 @@ public final class StandingOrderValidator {
             requirePositive(below.amount(), path + ".amount");
         } else if (condition instanceof Condition.StockAtLeast atLeast) {
             requirePositive(atLeast.amount(), path + ".amount");
+        } else if (condition instanceof Condition.StockComparison compared) {
+            validateRatio(compared.ratio(), path);
         } else if (condition instanceof Condition.IdleCpusAtLeast idle) {
             if (idle.count() < 1 || idle.count() > MAX_IDLE_CPUS) {
                 throw new InvalidStandingOrderException(Reason.IDLE_CPU_COUNT_OUT_OF_RANGE, path + ".count");
@@ -124,9 +146,17 @@ public final class StandingOrderValidator {
         } else if (amount instanceof AmountPolicy.FillTo fillTo) {
             requirePositive(fillTo.target(), "action.amount.target");
             requirePositive(fillTo.maxBatch(), "action.amount.maxBatch");
+        } else if (amount instanceof AmountPolicy.FillToRatio relative) {
+            validateRatio(relative.ratio(), "action.amount");
+            requirePositive(relative.maxBatch(), "action.amount.maxBatch");
         } else {
             throw new IllegalStateException("Unsupported amount policy " + amount.getClass());
         }
+    }
+
+    private static void validateRatio(StockRatio ratio, String path) throws InvalidStandingOrderException {
+        requirePositive(ratio.numerator(), path + ".numerator");
+        requirePositive(ratio.denominator(), path + ".denominator");
     }
 
     private static void requirePositive(long value, String path) throws InvalidStandingOrderException {

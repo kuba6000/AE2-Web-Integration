@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.standingorders;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.OptionalLong;
 
@@ -42,13 +43,33 @@ public interface Condition {
         }
     }
 
-    /** At least {@code count} eligible crafting CPUs are idle. */
+    /** Compares stock with the scaled stock of another resource in the same observation. */
     @Desugar
-    record IdleCpusAtLeast(long count) implements Condition {
+    record StockComparison(@NotNull StableKey resource, @NotNull StockRatio ratio, boolean atLeast)
+        implements Condition {
 
         @Override
         public @NotNull Truth evaluate(@NotNull ConditionInput input) {
-            return Truth.of(input.eligibleIdleCpus() >= count);
+            OptionalLong actual = input.storedAmount(resource);
+            OptionalLong reference = input.storedAmount(ratio.reference());
+            if (!actual.isPresent() || !reference.isPresent()) return Truth.UNKNOWN;
+            boolean meetsTarget = BigInteger.valueOf(actual.getAsLong())
+                .compareTo(ratio.target(reference.getAsLong())) >= 0;
+            return Truth.of(atLeast == meetsTarget);
+        }
+    }
+
+    /** At least {@code count} eligible crafting CPUs are idle. */
+    @Desugar
+    record IdleCpusAtLeast(long count, boolean playerOnly) implements Condition {
+
+        public IdleCpusAtLeast(long count) {
+            this(count, false);
+        }
+
+        @Override
+        public @NotNull Truth evaluate(@NotNull ConditionInput input) {
+            return Truth.of(input.eligibleIdleCpus(playerOnly) >= count);
         }
     }
 

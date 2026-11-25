@@ -324,11 +324,16 @@ test('a composed order sends one group with per-row negation, and options appear
 
 test('crafting options and the CPU choice follow the server capabilities and the network CPUs', async (t) => {
     const { page, options, base } = await fixture(t);
-    options.capabilities = { craftingLightMode: true, craftingIgnoreMissing: true };
+    options.capabilities = { craftingLightMode: true, craftingIgnoreMissing: true, cpuSelectionMode: true };
     options.itemsA = [iron, quartz, plastic];
     options.cpus = {
         'cpu-a': { ...options.cpus['cpu-a'], name: 'Assembler' },
-        'cpu-b': { ...options.cpus['cpu-b'], name: 'Automation only', acceptsPlayerJobs: false }
+        'cpu-b': {
+            ...options.cpus['cpu-b'],
+            name: 'Automation only',
+            acceptsPlayerJobs: true,
+            selectionMode: 'AUTOMATION_ONLY'
+        }
     };
     await page.goto(`${base}#/grids/${gridA}/standing-orders/new/iron`);
     await page.getByLabel('Lite mode').check();
@@ -754,4 +759,46 @@ test('an editor whose list read fails shows the error without a loading message'
     await page.goto(`${base}#/grids/${gridA}/standing-orders/a`);
     await page.getByText('The server is busy.').first().waitFor();
     assert.equal(await page.getByText('Loading', { exact: false }).filter({ visible: true }).count(), 0);
+});
+
+test('the built-in condition identifies the output and cannot be edited', async (t) => {
+    const { page } = await open(t, [listed('a', { name: 'Keep iron' })], {}, '/a');
+    await page.getByLabel('Name', { exact: true }).waitFor();
+    const guard = page.getByRole('group', { name: 'Condition 0', exact: true });
+    assert.equal(await guard.count(), 1);
+    assert.match(await guard.innerText(), /Iron Ingot/);
+    assert.equal(await guard.locator('select,input,button').count(), 0);
+});
+
+test('a stock comparison and a fill target can use the stock of another resource', async (t) => {
+    const { page, options } = await open(t, [], {}, '/new/iron');
+    await page.getByLabel('Name', { exact: true }).fill('Match quartz reserves');
+    const condition = page.getByRole('group', { name: 'Condition 1', exact: true });
+    const craft = page.getByRole('group', { name: 'Then craft', exact: true });
+    await condition.getByLabel('Kind').selectOption('stockRatioBelow');
+    await craft.getByLabel('How much').selectOption('fillToRatio');
+    for (const group of [condition, craft]) {
+        await group.getByRole('button', { name: /^Reference resource/ }).click();
+        await group.getByRole('button', { name: 'Certus Quartz Crystal', exact: true }).click();
+    }
+    assert.equal(await condition.getByLabel('Multiplier', { exact: true }).count(), 1);
+    await condition.getByLabel('Multiplier').fill('1,5');
+    await craft.getByLabel('Multiplier').fill('1/3');
+    await craft.getByLabel('Largest single order').fill('64');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('heading', { name: 'Match quartz reserves' }).waitFor();
+    assert.deepEqual(lastChange(options).body.trigger, {
+        type: 'stockRatioBelow',
+        resource: 'iron',
+        reference: 'quartz',
+        numerator: 3,
+        denominator: 2
+    });
+    assert.deepEqual(lastChange(options).body.action.amount, {
+        type: 'fillToRatio',
+        reference: 'quartz',
+        numerator: 1,
+        denominator: 3,
+        maxBatch: 64
+    });
 });

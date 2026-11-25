@@ -19,8 +19,9 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
  * Create standing order.
  *
  * <p>
- * Adds an order after the network's others. Orders belong to the network, not to their creator, and run as the
- * network's web player. Creating needs network access and, unless the account is an administrator, the server's
+ * Adds an order after the network's others. Orders belong to the network. The network's web player calculates
+ * plans; an order targeting a machine-only CPU submits using that CPU's native machine source.
+ * Creating needs network access and, unless the account is an administrator, the server's
  * allow_players setting. Every resource must be known to the network: open its terminal before choosing a resource
  * that was never stored. Creating an order may make the server read the whole network once; such reads are spaced
  * by the server and never refused.

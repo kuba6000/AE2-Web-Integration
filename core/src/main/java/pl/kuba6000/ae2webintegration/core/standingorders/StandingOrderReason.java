@@ -29,6 +29,8 @@ public enum StandingOrderReason {
     CALCULATION_FAILED,
     /** The calculation was cancelled after exceeding {@code standing_orders.max_calculation_minutes}. */
     CALCULATION_TIMED_OUT,
+    /** No idle machine-reserved CPU has enough storage for the finished plan. */
+    MACHINE_CPU_TOO_SMALL,
     /** The crafting system refused the job; the native message is in the snapshot's submitError. */
     SUBMIT_REJECTED,
     /** Submitting the job failed unexpectedly; the details are in the server log. */

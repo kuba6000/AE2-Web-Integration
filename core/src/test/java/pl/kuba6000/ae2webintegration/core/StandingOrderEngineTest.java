@@ -59,6 +59,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderReason;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderSnapshot;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStatus;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderStore;
+import pl.kuba6000.ae2webintegration.core.standingorders.StockRatio;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
@@ -272,6 +273,40 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     @Test
+    void machineOrdersUseOnlyReservedCpusAndCanReserveIdlePlayerCapacity() {
+        capabilities.put(ServerCapability.CPU_SELECTION_MODE, true);
+        OrderGrid.Cpu mixed = grid.addCpu();
+        mixed.mode = CpuSelectionMode.ALL;
+        OrderGrid.Cpu small = grid.addCpu();
+        small.mode = CpuSelectionMode.AUTOMATION_ONLY;
+        small.storage = 8;
+        OrderGrid.Cpu machine = grid.addCpu();
+        machine.storage = 256;
+        machine.mode = CpuSelectionMode.AUTOMATION_ONLY;
+        machine.acceptsPlayerJobs = false;
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        CraftAction action = new CraftAction(
+            key("so-plastic"),
+            new AmountPolicy.Fixed(64),
+            PLAIN,
+            CpuTarget.machines());
+        StableKey order = post("Machine", new Condition.IdleCpusAtLeast(1, true), action);
+        tick(0);
+        tick(1000);
+        assertEquals(IDLE, status(order));
+        mixed.mode = CpuSelectionMode.PLAYER_ONLY;
+        tick(MINUTE);
+        assertEquals(CALCULATING, status(order));
+        FakeJob plan = new FakeJob(false);
+        plan.bytes = 64;
+        grid.calculations.get(0).future.complete(plan);
+        tick(1000);
+        assertSame(machine, grid.submissions.get(0).target);
+        assertEquals(CraftingRequester.Source.STANDING_ORDER, grid.submissions.get(0).requester.source());
+    }
+
+    @Test
     void aSelectedCpuMustBeIdleAndAcceptPlayerJobs() {
         OrderGrid.Cpu other = grid.addCpu();
         OrderGrid.Cpu selected = grid.addCpu();
@@ -290,6 +325,10 @@ class StandingOrderEngineTest extends GridTestScope {
         assertEquals(StandingOrderReason.SELECTED_CPU_UNAVAILABLE, snapshot(order).reason());
         assertNotNull(other);
         selected.finish();
+        selected.mode = CpuSelectionMode.AUTOMATION_ONLY;
+        tick(MINUTE);
+        assertEquals(WAITING_FOR_CPU, status(order));
+        selected.mode = CpuSelectionMode.ALL;
         tick(MINUTE);
         assertEquals(CALCULATING, status(order));
         grid.calculations.get(0).future.complete(new FakeJob(false));
@@ -298,6 +337,35 @@ class StandingOrderEngineTest extends GridTestScope {
     }
 
     // ----- Failures and backoff -----
+
+    @Test
+    void aPlanTooLargeForTheReservedCpuWaitsBeforeCalculatingAgain() {
+        capabilities.put(ServerCapability.CPU_SELECTION_MODE, true);
+        OrderGrid.Cpu machine = grid.addCpu();
+        machine.mode = CpuSelectionMode.AUTOMATION_ONLY;
+        machine.storage = 8;
+        grid.stock("so-plastic", 100);
+        grid.craftable("so-plastic");
+        CraftAction action = new CraftAction(
+            key("so-plastic"),
+            new AmountPolicy.Fixed(64),
+            PLAIN,
+            CpuTarget.machines());
+        StableKey order = post("Machine", below("so-plastic", 1000), action);
+        tick(0);
+        tick(1000);
+        FakeJob plan = new FakeJob(false);
+        plan.bytes = 64;
+        grid.calculations.get(0).future.complete(plan);
+        tick(0);
+        assertEquals(SUBMIT_FAILED, status(order));
+        assertEquals(StandingOrderReason.MACHINE_CPU_TOO_SMALL, snapshot(order).reason());
+        tick(29_999);
+        assertEquals(1, grid.calculations.size());
+        tick(1);
+        assertEquals(2, grid.calculations.size());
+        assertTrue(grid.submissions.isEmpty());
+    }
 
     @Test
     void missingIngredientsBlockTheOrderWithGrowingBackoffCappedAtTenMinutes() {
@@ -591,6 +659,36 @@ class StandingOrderEngineTest extends GridTestScope {
         tick(1000);
         assertEquals(WAITING_FOR_CPU, status(order));
         assertTrue(grid.submissions.isEmpty());
+    }
+
+    @Test
+    void shrinkingReferenceStockReplansAnOversizedRatioBatch() {
+        grid.addCpu();
+        grid.stock("so-plastic", 10);
+        grid.stock("so-reference", 100);
+        grid.craftable("so-plastic");
+        StockRatio ratio = new StockRatio(key("so-reference"), 1, 1);
+        CraftAction action = new CraftAction(
+            key("so-plastic"),
+            new AmountPolicy.FillToRatio(ratio, 50),
+            PLAIN,
+            CpuTarget.any());
+        StableKey order = post(
+            "Match reference",
+            new Condition.StockComparison(key("so-plastic"), ratio, false),
+            action);
+        tick(0);
+        tick(1000);
+        assertEquals(50, grid.calculations.get(0).amount);
+        grid.stock("so-reference", 15);
+        tick(MINUTE);
+        grid.calculations.get(0).future.complete(new FakeJob(false));
+        tick(1000);
+        assertTrue(grid.submissions.isEmpty());
+        assertEquals(5, grid.calculations.get(1).amount);
+        grid.calculations.get(1).future.complete(new FakeJob(false));
+        tick(1000);
+        assertEquals(5, snapshot(order).lastSubmittedAmount());
     }
 
     @Test
@@ -1926,6 +2024,7 @@ class StandingOrderEngineTest extends GridTestScope {
 
         private final boolean simulation;
         private final List<ICraftingPlanSummaryEntry> entries;
+        private long bytes;
         private int summaries;
         private boolean summaryFails;
         private Runnable onSimulation = () -> {};
@@ -1943,7 +2042,7 @@ class StandingOrderEngineTest extends GridTestScope {
 
         @Override
         public long web$getByteTotal() {
-            return 0;
+            return bytes;
         }
 
         @Override
@@ -1998,6 +2097,8 @@ class StandingOrderEngineTest extends GridTestScope {
             private final StableKey key = TestGridFixtures.key(930000L + cpus.size());
             private boolean busy;
             private boolean acceptsPlayerJobs = true;
+            private CpuSelectionMode mode;
+            private long storage;
             private @Nullable IAEGenericStack finalOutput;
             private boolean cancelled;
 
@@ -2028,7 +2129,7 @@ class StandingOrderEngineTest extends GridTestScope {
 
             @Override
             public long web$getAvailableStorage() {
-                return 0;
+                return storage;
             }
 
             @Override
@@ -2047,13 +2148,18 @@ class StandingOrderEngineTest extends GridTestScope {
             }
 
             @Override
+            public boolean web$acceptsMachineOrders() {
+                return !busy && mode == CpuSelectionMode.AUTOMATION_ONLY;
+            }
+
+            @Override
             public boolean web$acceptsPlayerJobs() {
                 return acceptsPlayerJobs;
             }
 
             @Override
             public @Nullable CpuSelectionMode web$getSelectionMode() {
-                return null;
+                return mode;
             }
 
             @Override
@@ -2166,6 +2272,11 @@ class StandingOrderEngineTest extends GridTestScope {
             Calculation calculation = new Calculation(grid, key, amount, options);
             calculations.add(calculation);
             return calculation.future;
+        }
+
+        @Override
+        public String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+            return web$submitJob(job, target, true, grid);
         }
 
         @Override

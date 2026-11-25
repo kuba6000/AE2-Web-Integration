@@ -80,7 +80,7 @@ public final class StandingOrderCodec {
     private static JsonObject encodeAction(CraftAction action, Map<StableKey, Integer> slots) {
         JsonObject result = new JsonObject();
         result.addProperty("resource", slot(slots, action.resource()));
-        JsonObject amount = encodeAmount(action.amount());
+        JsonObject amount = encodeAmount(action.amount(), slots);
         result.add("amount", amount);
         JsonObject options = new JsonObject();
         CraftingOptions craftingOptions = action.options();
@@ -91,7 +91,10 @@ public final class StandingOrderCodec {
         StableKey selected = action.cpu()
             .cpu();
         if (selected == null) {
-            cpu.addProperty("type", "any");
+            cpu.addProperty(
+                "type",
+                action.cpu()
+                    .machineOnly() ? "machineOnly" : "any");
         } else {
             cpu.addProperty("type", "specific");
             cpu.addProperty("key", selected.toString());
@@ -100,7 +103,7 @@ public final class StandingOrderCodec {
         return result;
     }
 
-    private static JsonObject encodeAmount(AmountPolicy policy) {
+    private static JsonObject encodeAmount(AmountPolicy policy, Map<StableKey, Integer> slots) {
         JsonObject amount = new JsonObject();
         if (policy instanceof AmountPolicy.Fixed fixed) {
             amount.addProperty("type", "fixed");
@@ -109,10 +112,20 @@ public final class StandingOrderCodec {
             amount.addProperty("type", "fillTo");
             amount.addProperty("target", fillTo.target());
             amount.addProperty("maxBatch", fillTo.maxBatch());
+        } else if (policy instanceof AmountPolicy.FillToRatio relative) {
+            amount.addProperty("type", "fillToRatio");
+            encodeRatio(amount, relative.ratio(), slots);
+            amount.addProperty("maxBatch", relative.maxBatch());
         } else {
             throw new IllegalStateException("Unsupported amount policy " + policy.getClass());
         }
         return amount;
+    }
+
+    private static void encodeRatio(JsonObject result, StockRatio ratio, Map<StableKey, Integer> slots) {
+        result.addProperty("reference", slot(slots, ratio.reference()));
+        result.addProperty("numerator", ratio.numerator());
+        result.addProperty("denominator", ratio.denominator());
     }
 
     private static JsonObject encodeCondition(Condition condition, Map<StableKey, Integer> slots) {
@@ -125,8 +138,12 @@ public final class StandingOrderCodec {
             result.addProperty("type", "stockAtLeast");
             result.addProperty("resource", slot(slots, atLeast.resource()));
             result.addProperty("amount", atLeast.amount());
+        } else if (condition instanceof Condition.StockComparison compared) {
+            result.addProperty("type", compared.atLeast() ? "stockRatioAtLeast" : "stockRatioBelow");
+            result.addProperty("resource", slot(slots, compared.resource()));
+            encodeRatio(result, compared.ratio(), slots);
         } else if (condition instanceof Condition.IdleCpusAtLeast idle) {
-            result.addProperty("type", "idleCpusAtLeast");
+            result.addProperty("type", idle.playerOnly() ? "idlePlayerCpusAtLeast" : "idleCpusAtLeast");
             result.addProperty("count", idle.count());
         } else if (condition instanceof Condition.All all) {
             result.addProperty("type", "all");
@@ -339,8 +356,7 @@ public final class StandingOrderCodec {
             }
         }
 
-        private StableKey resource(Fields fields) throws InvalidStandingOrderException {
-            String name = "resource";
+        private StableKey resource(Fields fields, String name) throws InvalidStandingOrderException {
             long slot = fields.integer(name);
             if (slot < 0 || slot >= resources.size()) {
                 throw new InvalidStandingOrderException(Reason.INVALID_RESOURCE_SLOT, fields.path(name));
@@ -349,18 +365,30 @@ public final class StandingOrderCodec {
             return resources.get((int) slot);
         }
 
+        private StockRatio ratio(Fields fields) throws InvalidStandingOrderException {
+            return new StockRatio(
+                resource(fields, "reference"),
+                fields.integer("numerator"),
+                fields.integer("denominator"));
+        }
+
         private Condition condition(Fields fields) throws InvalidStandingOrderException {
             String type = fields.string("type");
             Condition result;
             switch (type) {
                 case "stockBelow" -> {
-                    StableKey resource = resource(fields);
+                    StableKey resource = resource(fields, "resource");
                     result = new Condition.StockBelow(resource, fields.integer("amount"));
                 }
                 case "stockAtLeast" -> {
-                    StableKey resource = resource(fields);
+                    StableKey resource = resource(fields, "resource");
                     result = new Condition.StockAtLeast(resource, fields.integer("amount"));
                 }
+                case "stockRatioBelow", "stockRatioAtLeast" -> result = new Condition.StockComparison(
+                    resource(fields, "resource"),
+                    ratio(fields),
+                    type.equals("stockRatioAtLeast"));
+                case "idlePlayerCpusAtLeast" -> result = new Condition.IdleCpusAtLeast(fields.integer("count"), true);
                 case "idleCpusAtLeast" -> result = new Condition.IdleCpusAtLeast(fields.integer("count"));
                 case "all" -> result = new Condition.All(conditions(fields.children()));
                 case "any" -> result = new Condition.Any(conditions(fields.children()));
@@ -378,7 +406,7 @@ public final class StandingOrderCodec {
         }
 
         private CraftAction action(Fields fields) throws InvalidStandingOrderException {
-            StableKey resource = resource(fields);
+            StableKey resource = resource(fields, "resource");
             AmountPolicy amount = amount(fields.object("amount"));
             Fields optionFields = fields.object("options");
             CraftingOptions options = new CraftingOptions(
@@ -390,11 +418,12 @@ public final class StandingOrderCodec {
             return new CraftAction(resource, amount, options, cpu);
         }
 
-        private static AmountPolicy amount(Fields fields) throws InvalidStandingOrderException {
+        private AmountPolicy amount(Fields fields) throws InvalidStandingOrderException {
             String type = fields.string("type");
             AmountPolicy result;
             switch (type) {
                 case "fixed" -> result = new AmountPolicy.Fixed(fields.integer("batch"));
+                case "fillToRatio" -> result = new AmountPolicy.FillToRatio(ratio(fields), fields.integer("maxBatch"));
                 case "fillTo" -> {
                     long target = fields.integer("target");
                     result = new AmountPolicy.FillTo(target, fields.integer("maxBatch"));
@@ -410,6 +439,7 @@ public final class StandingOrderCodec {
             CpuTarget result;
             switch (type) {
                 case "any" -> result = CpuTarget.any();
+                case "machineOnly" -> result = CpuTarget.machines();
                 case "specific" -> {
                     String token = fields.string("key");
                     try {

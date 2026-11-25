@@ -20,6 +20,21 @@ class ConditionEvaluationTest {
     private static final StableKey PLATES = key(10);
 
     @Test
+    void ratioComparisonKeepsTheFractionAndUsesAnInclusiveLowerBound() {
+        StockRatio ratio = new StockRatio(key(11), 2, 3);
+        Condition below = new Condition.StockComparison(PLATES, ratio, false);
+        Condition atLeast = new Condition.StockComparison(PLATES, ratio, true);
+        StandingOrderTestData.Stock stock = new StandingOrderTestData.Stock(0).with(PLATES, 2);
+        assertEquals(Truth.UNKNOWN, below.evaluate(stock));
+        stock.with(ratio.reference(), 4);
+        assertEquals(Truth.TRUE, below.evaluate(stock));
+        assertEquals(Truth.FALSE, atLeast.evaluate(stock));
+        stock.with(ratio.reference(), 3);
+        assertEquals(Truth.FALSE, below.evaluate(stock));
+        assertEquals(Truth.TRUE, atLeast.evaluate(stock));
+    }
+
+    @Test
     void stockBelowIsStrict() {
         Condition below = new Condition.StockBelow(PLATES, 10);
 

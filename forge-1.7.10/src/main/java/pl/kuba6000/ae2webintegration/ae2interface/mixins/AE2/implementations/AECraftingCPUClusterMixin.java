@@ -117,6 +117,12 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     }
 
     @Override
+    public boolean web$acceptsMachineOrders() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && !cpu.isBusy() && cpu.getCraftingAllowMode() == CraftingAllow.ONLY_NONPLAYER;
+    }
+
+    @Override
     public boolean web$acceptsPlayerJobs() {
         CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
         return cpu.isActive() && cpu.getCraftingAllowMode() != CraftingAllow.ONLY_NONPLAYER

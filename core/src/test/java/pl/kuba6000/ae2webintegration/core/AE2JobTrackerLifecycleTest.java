@@ -103,7 +103,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         StableKey circuits = StableKey.random();
         AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
         try (CraftingRequesterContext ignored = CraftingRequesterContext.openStandingOrder(plastic, "Keep plastic")) {
-            callbacks.jobStarted(cpu, grid, false, false, webPlayer);
+            callbacks.jobStarted(cpu, grid, false, true, null);
         }
         try (CraftingRequesterContext ignored = CraftingRequesterContext.openStandingOrder(plastic, "Renamed")) {
             callbacks.jobStarted(cpu, grid, true, false, webPlayer);

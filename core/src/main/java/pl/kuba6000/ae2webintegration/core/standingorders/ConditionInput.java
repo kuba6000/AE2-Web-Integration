@@ -14,5 +14,5 @@ public interface ConditionInput {
     OptionalLong storedAmount(@NotNull StableKey resource);
 
     /** Idle crafting CPUs that a standing order's submission may use. */
-    int eligibleIdleCpus();
+    int eligibleIdleCpus(boolean playerOnly);
 }

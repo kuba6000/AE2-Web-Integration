@@ -69,7 +69,7 @@ final class StandingOrderTestData {
         }
 
         @Override
-        public int eligibleIdleCpus() {
+        public int eligibleIdleCpus(boolean playerOnly) {
             return idleCpus;
         }
     }

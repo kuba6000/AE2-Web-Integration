@@ -35,6 +35,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
@@ -297,14 +298,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         StandingOrderDefinition previous = order.definition;
         if (entry instanceof StandingOrderStore.Valid valid) {
             order.definition = valid.definition();
-            order.triggerResources.clear();
-            GridState.collect(
-                valid.definition()
-                    .trigger(),
-                order.triggerResources);
+            order.resources = valid.definition()
+                .resources();
         } else {
             order.definition = null;
-            order.triggerResources.clear();
+            order.resources = Collections.emptySet();
         }
         if (previous == null || order.definition == null
             || !previous.action()
@@ -721,14 +719,15 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.UNKNOWN_RESOURCE), now);
             return;
         }
-        for (StableKey triggerResource : order.triggerResources) {
-            if (isAmbiguous(triggerResource)) {
-                setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.ambiguous(triggerResource), now);
+        for (StableKey dependency : order.resources) {
+            if (!dependency.equals(action.resource()) && isAmbiguous(dependency)) {
+                setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.ambiguous(dependency), now);
                 return;
             }
         }
+        Input input = new Input(grid, live, baseline);
         Truth trigger = definition.trigger()
-            .evaluate(new Input(grid, live, baseline));
+            .evaluate(input);
         if (trigger == Truth.UNKNOWN) {
             waitForStock(order, StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, now);
             return;
@@ -763,7 +762,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         StableKey selected = action.cpu()
             .cpu();
         boolean cpuAvailable;
-        if (selected == null) {
+        if (action.cpu()
+            .machineOnly()) {
+            target = cpus.machine;
+            cpuAvailable = target != null;
+        } else if (selected == null) {
             cpuAvailable = cpus.eligibleIdle > 0;
         } else {
             target = cpus.find(selected);
@@ -784,7 +787,11 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             return;
         }
         OrderAmount amount = action.amount()
-            .orderAmount(stored.getAsLong());
+            .orderAmount(stored.getAsLong(), input);
+        if (amount.outcome() == OrderAmount.Outcome.UNKNOWN_STOCK) {
+            waitForStock(order, StandingOrderReason.WAITING_READ_FOR_NEW_RESOURCES, now);
+            return;
+        }
         if (amount.outcome() == OrderAmount.Outcome.NOTHING_TO_ORDER) {
             setStatus(order, StandingOrderStatus.IDLE, Cause.of(StandingOrderReason.NOTHING_TO_ORDER), now);
             return;
@@ -793,8 +800,20 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             setStatus(order, StandingOrderStatus.UNAVAILABLE, Cause.of(StandingOrderReason.AMOUNT_OVERFLOW), now);
             return;
         }
-        if (plan != null) {
-            // Orders only ever plan up to the batch limit, so a still positive need cannot be overshot by more.
+        // A scaled target moves with another resource: recalculate when the prepared plan now exceeds its deficit.
+        boolean oversizedRatioPlan = action.amount() instanceof AmountPolicy.FillToRatio
+            && order.plannedAmount > amount.amount();
+        if (plan != null && !oversizedRatioPlan) {
+            // No idle reserved CPU is larger. Drop the plan and back off before calculating it again.
+            if (action.cpu()
+                .machineOnly() && target.web$getAvailableStorage() < plan.web$getByteTotal()) {
+                fail(
+                    order,
+                    StandingOrderStatus.SUBMIT_FAILED,
+                    Cause.of(StandingOrderReason.MACHINE_CPU_TOO_SMALL),
+                    now);
+                return;
+            }
             submit(order, definition, live, crafting, plan, target, now);
         } else {
             beginCalculation(order, grid, baseline, definition, live, crafting, resource, amount.amount(), now);
@@ -834,7 +853,10 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         String error;
         try (CraftingRequesterContext ignored = CraftingRequesterContext
             .openStandingOrder(order.key, definition.name())) {
-            error = crafting.web$submitJob(plan, target, true, live);
+            error = definition.action()
+                .cpu()
+                .machineOnly() ? crafting.web$submitMachineJob(plan, Objects.requireNonNull(target), live)
+                    : crafting.web$submitJob(plan, target, true, live);
         } catch (RuntimeException failure) {
             LOG.warn("Submitting the job of standing order {} failed", order.key, failure);
             fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.SUBMIT_ERROR), now);
@@ -975,9 +997,13 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         }
     }
 
-    /** Standing orders submit as the network's web player, so only CPUs that accept player jobs are usable. */
+    /** A named player target follows the same reservation as automatic player selection. */
     private static boolean isEligible(ICraftingCPUCluster cpu) {
-        return !cpu.web$isBusy() && cpu.web$acceptsPlayerJobs();
+        return !cpu.web$isBusy() && acceptsPlayerOrder(cpu, cpu.web$getSelectionMode());
+    }
+
+    private static boolean acceptsPlayerOrder(ICraftingCPUCluster cpu, @Nullable CpuSelectionMode mode) {
+        return mode != CpuSelectionMode.AUTOMATION_ONLY && cpu.web$acceptsPlayerJobs();
     }
 
     private static String describe(Throwable failure) {
@@ -1058,6 +1084,9 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private final IAECraftingGrid crafting;
         private final Set<StableKey> finalOutputs = new HashSet<>();
         private int eligibleIdle;
+        private int playerOnlyIdle;
+        /** Largest idle reserved CPU; if this one cannot fit the completed plan, none can. */
+        private @Nullable ICraftingCPUCluster machine;
         private @Nullable Map<StableKey, ICraftingCPUCluster> byKey;
 
         private CpuView(IAECraftingGrid crafting) {
@@ -1073,8 +1102,14 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                         : output.web$what()
                             .web$getKey();
                     if (key != null) view.finalOutputs.add(key);
-                } else if (cpu.web$acceptsPlayerJobs()) {
-                    view.eligibleIdle++;
+                } else {
+                    CpuSelectionMode mode = cpu.web$getSelectionMode();
+                    if (acceptsPlayerOrder(cpu, mode)) {
+                        view.eligibleIdle++;
+                        if (mode == CpuSelectionMode.PLAYER_ONLY) view.playerOnlyIdle++;
+                    }
+                    if (cpu.web$acceptsMachineOrders() && (view.machine == null
+                        || cpu.web$getAvailableStorage() > view.machine.web$getAvailableStorage())) view.machine = cpu;
                 }
             }
             return view;
@@ -1104,8 +1139,9 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         }
 
         @Override
-        public int eligibleIdleCpus() {
-            return cpuView(grid, live).eligibleIdle;
+        public int eligibleIdleCpus(boolean playerOnly) {
+            CpuView cpus = cpuView(grid, live);
+            return playerOnly ? cpus.playerOnlyIdle : cpus.eligibleIdle;
         }
     }
 
@@ -1156,22 +1192,10 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                 StandingOrderDefinition definition = order.definition;
                 if (definition == null || !definition.enabled()) continue;
                 hasEnabledOrder = true;
-                referenced.add(
-                    definition.action()
-                        .resource());
-                referenced.addAll(order.triggerResources);
+                referenced.addAll(order.resources);
             }
         }
 
-        private static void collect(Condition condition, Set<StableKey> resources) {
-            if (condition instanceof Condition.StockBelow below) resources.add(below.resource());
-            else if (condition instanceof Condition.StockAtLeast atLeast) resources.add(atLeast.resource());
-            else if (condition instanceof Condition.All all) {
-                for (Condition child : all.children()) collect(child, resources);
-            } else if (condition instanceof Condition.Any any) {
-                for (Condition child : any.children()) collect(child, resources);
-            } else if (condition instanceof Condition.Not not) collect(not.child(), resources);
-        }
     }
 
     private static final class OrderState {
@@ -1180,7 +1204,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
         private final StableKey grid;
         private int ordinal;
         private @Nullable StandingOrderDefinition definition;
-        private final Set<StableKey> triggerResources = new HashSet<>();
+        private Set<StableKey> resources = Collections.emptySet();
         private StandingOrderStatus status = StandingOrderStatus.IDLE;
         private @Nullable Cause cause;
         private long changedAt;

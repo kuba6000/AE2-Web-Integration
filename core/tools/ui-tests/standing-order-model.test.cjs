@@ -293,6 +293,7 @@ test('a rejection path points at the editor field that produced it', async () =>
     assert.equal(fieldForPath('action.resource', draft), 'action.resource');
     assert.equal(fieldForPath('action.amount.maxBatch', draft), 'action.amount.maxBatch');
     assert.equal(fieldForPath('action.cpu.key', draft), 'action.cpu.key');
+    assert.equal(fieldForPath('action.cpu.type', draft), 'action.cpu.key');
     assert.equal(fieldForPath('action.options.lightMode', draft), 'action.options.lightMode');
     assert.equal(fieldForPath('', draft), null);
     assert.equal(fieldForPath('somewhere.else', draft), null);
@@ -303,4 +304,67 @@ test('known refusal reasons keep their own message and an unknown one falls back
     assert.notEqual(reasonMessageKey('NAME_LENGTH'), reasonMessageKey('COOLDOWN_OUT_OF_RANGE'));
     assert.notEqual(reasonMessageKey('NAME_LENGTH'), reasonMessageKey('SOMETHING_NEW'));
     assert.equal(reasonMessageKey('SOMETHING_NEW'), reasonMessageKey('ALSO_NEW'));
+});
+
+test('editable stock ratios retain their reference, scale and batch limit when rebuilding a saved rule', async () => {
+    const { draftFromDefinition, buildDefinition, applyChange, fieldForPath } = await model;
+    const scale = { reference: 'hypogen', numerator: 2, denominator: 3 };
+    const trigger = { type: 'stockRatioBelow', resource: 'infinity', ...scale };
+    const amount = { type: 'fillToRatio', ...scale, maxBatch: 64 };
+    const draft = draftFromDefinition(
+        definition(leaf(trigger.type, trigger), {
+            action: action({ resource: 'infinity', amount: { batch: null, target: null, ...amount } })
+        })
+    );
+    assert.equal(draft.rules.locked, null);
+    assert.equal(draft.rules.amount.ratio.multiplier, '2/3');
+    for (const [input, numerator, denominator, displayed] of [
+        ['1,5', 3, 2, '1.5'],
+        ['0.25', 1, 4, '0.25'],
+        ['1/3', 1, 3, '1/3'],
+        ['(1k/500)*3', 6, 1, '6'],
+        [
+            '(9007199254740991 - 1)/9007199254740991',
+            9007199254740990,
+            9007199254740991,
+            '9007199254740990/9007199254740991'
+        ]
+    ]) {
+        const changed = applyChange(draft, { type: 'ratio', field: 'multiplier', value: input });
+        const built = buildDefinition(changed);
+        assert.deepEqual(built.value.action.amount, { ...amount, numerator, denominator });
+        const reopened = draftFromDefinition(
+            definition(leaf(trigger.type, trigger), {
+                action: action({ amount: { batch: null, target: null, ...built.value.action.amount } })
+            })
+        );
+        assert.equal(reopened.rules.amount.ratio.multiplier, displayed);
+    }
+    for (const input of ['0', '-1', 'x', '1/0', '9007199254740992', '1/9007199254740992', '1'.repeat(257)]) {
+        const changed = applyChange(draft, { type: 'ratio', index: 0, field: 'multiplier', value: input });
+        assert.ok(buildDefinition(changed).errors['condition.0.multiplier'], input);
+    }
+    for (const part of ['numerator', 'denominator']) {
+        assert.equal(fieldForPath('trigger.' + part, draft), 'condition.0.multiplier');
+        assert.equal(fieldForPath('action.amount.' + part, draft), 'action.amount.multiplier');
+    }
+    const result = buildDefinition(draft);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.value.trigger, trigger);
+    assert.deepEqual(result.value.action.amount, amount);
+});
+
+test('an order can require idle player-only CPUs while crafting on a machine-only CPU', async () => {
+    const { draftFromDefinition, buildDefinition, applyChange } = await model;
+    const stored = definition(leaf('idlePlayerCpusAtLeast', { count: 2 }), {
+        action: action({ cpu: { type: 'machineOnly', key: null } })
+    });
+    const draft = draftFromDefinition(stored);
+    assert.equal(draft.rules.locked, null);
+    const built = buildDefinition(draft);
+    assert.equal(built.ok, true);
+    assert.deepEqual(built.value.trigger, { type: 'idlePlayerCpusAtLeast', count: 2 });
+    assert.deepEqual(built.value.action.cpu, { type: 'machineOnly' });
+    const ordinary = buildDefinition(applyChange(draft, { type: 'cpu', key: null }));
+    assert.deepEqual(ordinary.value.action.cpu, { type: 'any' });
 });

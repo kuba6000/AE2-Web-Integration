@@ -252,9 +252,16 @@ topology change, the terminal loads a fresh snapshot automatically.
 
 A standing order crafts a resource automatically. **Keep stocked** is the simple form: when stock falls
 below a low mark, craft up to a target. An order can also combine several conditions, met all or any:
-**Stock below**, **Stock at least** for any resource of the network, and **Idle CPUs at least**; each
-can be inverted. The amount is either fixed per order or fills up to a target, optionally limited to a
-largest single order. Lite mode and ignoring missing ingredients are offered where the server supports them.
+stock thresholds, stock ratios and counts of idle CPUs. Each of these conditions can be inverted.
+**Condition 0** always applies, even with **Any**: no busy CPU on the network may already have the
+ordered resource as its final output.
+
+To keep Infinity level with Hypogen, choose **Stock below a proportion of another resource**, compare Infinity to
+Hypogen using a multiplier of 1, and fill up to that same ratio with a maximum batch. With 80 Infinity and 120 Hypogen the
+shortfall is 40; a maximum batch of 24 orders 24. The condition and amount are independent: you can
+instead choose a fixed batch. Enter a decimal (such as 0.5 or 0,5) or an exact fraction (1/3) in
+the multiplier field. Ratio targets round up to a whole unit. Lite mode and ignoring missing ingredients are
+offered where the server supports them.
 
 Orders are checked when the network's storage is sampled, at the storage sampling interval from the
 network settings (five minutes by default, 60 seconds at the shortest). Storage history does not have
@@ -269,9 +276,10 @@ per crafting time plus one sampling interval. An optional cooldown adds a furthe
 that lack ingredients or fail are retried with a growing delay, from 30 seconds up to 10 minutes; the
 list shows the status, the reason and the largest missing ingredients.
 
-Jobs are submitted like orders from the web terminal, so only CPUs that accept player jobs are used;
-automation-only CPUs are skipped. The CPU view, crafting history and notifications name the standing
-order as the requester. Running jobs are never cancelled by an order, also not when it is edited,
+By default, orders use CPUs that accept player jobs. On GTNH, Forge 1.20.1 and NeoForge 1.21.1 you
+can instead send the order to a machine-only CPU. The separate player-only idle condition counts
+free CPUs dedicated to players; mixed CPUs do not count. Forge 1.12.2 has no such native CPU modes.
+The CPU view, crafting history and notifications name the standing order as the requester. Running jobs are never cancelled by an order, also not when it is edited,
 disabled or deleted. After a server restart orders resume by themselves and recognise a job that is
 still running.
 

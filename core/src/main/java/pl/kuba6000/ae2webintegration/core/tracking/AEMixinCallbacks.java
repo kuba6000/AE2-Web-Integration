@@ -5,6 +5,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.api.CraftingRequester;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
@@ -24,13 +25,15 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isMachineRequest,
         @Nullable PlayerIdentity nativeRequester) {
         jobChanged(cpuCluster);
-        if (!isMerging && isMachineRequest) {
+        CraftingRequester requester = CraftingRequesterContext.resolve(nativeRequester);
+        // The CPU's machine source selects its reserved mode; the standing order still owns the tracked job.
+        if (!isMerging && isMachineRequest && requester.source() != CraftingRequester.Source.STANDING_ORDER) {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
             if (data == null || !data.getSettings()
                 .isTrackMachineCrafting()) return;
         }
-        AE2JobTracker.addJob(cpuCluster, grid, isMerging, CraftingRequesterContext.resolve(nativeRequester));
+        AE2JobTracker.addJob(cpuCluster, grid, isMerging, requester);
     }
 
     @Override

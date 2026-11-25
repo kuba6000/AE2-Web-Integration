@@ -93,6 +93,7 @@ const statusReasons: Record<StandingOrderReason, true> = {
     CALCULATION_TIMED_OUT: true,
     SUBMIT_REJECTED: true,
     SUBMIT_ERROR: true,
+    MACHINE_CPU_TOO_SMALL: true,
     UNEXPECTED_ERROR: true,
     INVALID_DEFINITION: true,
     CAPABILITY_UNAVAILABLE: true,
@@ -108,6 +109,7 @@ const statusReasons: Record<StandingOrderReason, true> = {
 };
 /** Message keys of the definition members a CAPABILITY_UNAVAILABLE reason can name. */
 const optionLabels: Record<string, string> = {
+    'action.cpu.type': 'standingOrderCpuMachine',
     'action.options.lightMode': 'craftingLightMode',
     'action.options.ignoreMissing': 'ignoreMissing'
 };
@@ -124,7 +126,14 @@ export function statusExplanation(
     const { common: t } = locale;
     const { reason, resource, path } = runtime;
     const resourceName = resource === null ? '' : (resources[resource]?.displayName ?? resource);
-    const option = path === null ? '' : Object.hasOwn(optionLabels, path) ? t(optionLabels[path]) : path;
+    const option =
+        path === null
+            ? ''
+            : Object.hasOwn(optionLabels, path)
+              ? t(optionLabels[path])
+              : path.startsWith('trigger') && path.endsWith('.type')
+                ? t('conditionIdlePlayerCpus')
+                : path;
     return {
         reason:
             reason !== null && Object.hasOwn(statusReasons, reason)
@@ -301,7 +310,7 @@ export function createStandingOrders(api: Api, changed: () => void, iconsEnabled
                         state.cpus = Object.entries(data).map(([cpu, info]) => ({
                             key: cpu,
                             name: info.name,
-                            eligible: info.acceptsPlayerJobs
+                            eligible: info.acceptsPlayerJobs && info.selectionMode !== 'AUTOMATION_ONLY'
                         }));
                     },
                     () => {}

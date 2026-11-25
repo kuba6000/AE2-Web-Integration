@@ -1,9 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.standingorders;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,6 +16,7 @@ import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderExc
 import pl.kuba6000.ae2webintegration.core.standingorders.InvalidStandingOrderException.Reason;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderDefinition;
 import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderValidator;
+import pl.kuba6000.ae2webintegration.core.standingorders.StockRatio;
 
 /** Maps the typed API representation to the domain; domain limits are shared with persisted definitions. */
 final class StandingOrderMapping {
@@ -87,6 +86,14 @@ final class StandingOrderMapping {
             case "stockAtLeast" -> new Condition.StockAtLeast(
                 required(input.resource(), path + ".resource"),
                 required(input.amount(), path + ".amount"));
+            case "stockRatioBelow", "stockRatioAtLeast" -> new Condition.StockComparison(
+                required(input.resource(), path + ".resource"),
+                ratio(input.reference(), input.numerator(), input.denominator(), path),
+                input.type()
+                    .equals("stockRatioAtLeast"));
+            case "idlePlayerCpusAtLeast" -> new Condition.IdleCpusAtLeast(
+                required(input.count(), path + ".count"),
+                true);
             case "idleCpusAtLeast" -> new Condition.IdleCpusAtLeast(required(input.count(), path + ".count"));
             case "all" -> new Condition.All(conditions(required(input.children(), path + ".children"), path));
             case "any" -> new Condition.Any(conditions(required(input.children(), path + ".children"), path));
@@ -94,7 +101,9 @@ final class StandingOrderMapping {
             default -> throw new InvalidStandingOrderException(Reason.UNKNOWN_KIND, path + ".type");
         };
         boolean stock = result instanceof Condition.StockBelow || result instanceof Condition.StockAtLeast;
-        unexpected(input.resource(), stock, path + ".resource");
+        boolean relative = result instanceof Condition.StockComparison;
+        checkRatioFields(input.reference(), input.numerator(), input.denominator(), relative, path);
+        unexpected(input.resource(), stock || relative, path + ".resource");
         unexpected(input.amount(), stock, path + ".amount");
         unexpected(input.count(), result instanceof Condition.IdleCpusAtLeast, path + ".count");
         unexpected(
@@ -124,6 +133,7 @@ final class StandingOrderMapping {
         StandingOrderJson.Cpu cpu = input.cpu();
         CpuTarget target = switch (cpu.type()) {
             case "any" -> CpuTarget.any();
+            case "machineOnly" -> CpuTarget.machines();
             case "specific" -> CpuTarget.specific(required(cpu.key(), "action.cpu.key"));
             default -> throw new InvalidStandingOrderException(Reason.UNKNOWN_KIND, "action.cpu.type");
         };
@@ -134,6 +144,9 @@ final class StandingOrderMapping {
     private static AmountPolicy amount(StandingOrderJson.Amount input) throws InvalidStandingOrderException {
         AmountPolicy result = switch (input.type()) {
             case "fixed" -> new AmountPolicy.Fixed(required(input.batch(), "action.amount.batch"));
+            case "fillToRatio" -> new AmountPolicy.FillToRatio(
+                ratio(input.reference(), input.numerator(), input.denominator(), "action.amount"),
+                required(input.maxBatch(), "action.amount.maxBatch"));
             case "fillTo" -> new AmountPolicy.FillTo(
                 required(input.target(), "action.amount.target"),
                 required(input.maxBatch(), "action.amount.maxBatch"));
@@ -141,8 +154,25 @@ final class StandingOrderMapping {
         };
         unexpected(input.batch(), result instanceof AmountPolicy.Fixed, "action.amount.batch");
         unexpected(input.target(), result instanceof AmountPolicy.FillTo, "action.amount.target");
-        unexpected(input.maxBatch(), result instanceof AmountPolicy.FillTo, "action.amount.maxBatch");
+        boolean relative = result instanceof AmountPolicy.FillToRatio;
+        checkRatioFields(input.reference(), input.numerator(), input.denominator(), relative, "action.amount");
+        unexpected(input.maxBatch(), relative || result instanceof AmountPolicy.FillTo, "action.amount.maxBatch");
         return result;
+    }
+
+    private static StockRatio ratio(@Nullable StableKey reference, @Nullable Long numerator, @Nullable Long denominator,
+        String path) throws InvalidStandingOrderException {
+        return new StockRatio(
+            required(reference, path + ".reference"),
+            required(numerator, path + ".numerator"),
+            required(denominator, path + ".denominator"));
+    }
+
+    private static void checkRatioFields(@Nullable StableKey reference, @Nullable Long numerator,
+        @Nullable Long denominator, boolean allowed, String path) throws InvalidStandingOrderException {
+        unexpected(reference, allowed, path + ".reference");
+        unexpected(numerator, allowed, path + ".numerator");
+        unexpected(denominator, allowed, path + ".denominator");
     }
 
     private static <T> @NotNull T required(@Nullable T value, String path) throws InvalidStandingOrderException {
@@ -153,26 +183,6 @@ final class StandingOrderMapping {
     private static void unexpected(@Nullable Object value, boolean allowed, String path)
         throws InvalidStandingOrderException {
         if (value != null && !allowed) throw new InvalidStandingOrderException(Reason.UNKNOWN_FIELD, path);
-    }
-
-    /** Distinct resources needed to describe this definition, without constructing its persisted document. */
-    static Set<StableKey> resources(StandingOrderDefinition definition) {
-        Set<StableKey> resources = new LinkedHashSet<>();
-        resources.add(
-            definition.action()
-                .resource());
-        collectResources(definition.trigger(), resources);
-        return resources;
-    }
-
-    private static void collectResources(Condition condition, Set<StableKey> resources) {
-        if (condition instanceof Condition.StockBelow below) resources.add(below.resource());
-        else if (condition instanceof Condition.StockAtLeast atLeast) resources.add(atLeast.resource());
-        else if (condition instanceof Condition.All all) {
-            for (Condition child : all.children()) collectResources(child, resources);
-        } else if (condition instanceof Condition.Any any) {
-            for (Condition child : any.children()) collectResources(child, resources);
-        } else if (condition instanceof Condition.Not not) collectResources(not.child(), resources);
     }
 
     private static StandingOrderJson.Condition json(Condition condition) {
@@ -186,8 +196,26 @@ final class StandingOrderMapping {
                 null,
                 null,
                 null);
+        } else if (condition instanceof Condition.StockComparison compared) {
+            StockRatio ratio = compared.ratio();
+            return new StandingOrderJson.Condition(
+                compared.atLeast() ? "stockRatioAtLeast" : "stockRatioBelow",
+                compared.resource(),
+                null,
+                null,
+                null,
+                null,
+                ratio.reference(),
+                ratio.numerator(),
+                ratio.denominator());
         } else if (condition instanceof Condition.IdleCpusAtLeast idle) {
-            return new StandingOrderJson.Condition("idleCpusAtLeast", null, null, idle.count(), null, null);
+            return new StandingOrderJson.Condition(
+                idle.playerOnly() ? "idlePlayerCpusAtLeast" : "idleCpusAtLeast",
+                null,
+                null,
+                idle.count(),
+                null,
+                null);
         } else if (condition instanceof Condition.All all) {
             return new StandingOrderJson.Condition("all", null, null, null, children(all.children()), null);
         } else if (condition instanceof Condition.Any any) {
@@ -214,9 +242,19 @@ final class StandingOrderMapping {
 
     private static StandingOrderJson.Amount json(AmountPolicy policy) {
         if (policy instanceof AmountPolicy.Fixed fixed) {
-            return new StandingOrderJson.Amount("fixed", fixed.batch(), null, null);
+            return new StandingOrderJson.Amount("fixed", fixed.batch(), null, null, null, null, null);
         } else if (policy instanceof AmountPolicy.FillTo fillTo) {
-            return new StandingOrderJson.Amount("fillTo", null, fillTo.target(), fillTo.maxBatch());
+            return new StandingOrderJson.Amount("fillTo", null, fillTo.target(), fillTo.maxBatch(), null, null, null);
+        } else if (policy instanceof AmountPolicy.FillToRatio relative) {
+            StockRatio ratio = relative.ratio();
+            return new StandingOrderJson.Amount(
+                "fillToRatio",
+                null,
+                null,
+                relative.maxBatch(),
+                ratio.reference(),
+                ratio.numerator(),
+                ratio.denominator());
         }
         throw new IllegalStateException("Unsupported amount policy " + policy.getClass());
     }
@@ -226,7 +264,7 @@ final class StandingOrderMapping {
     }
 
     private static StandingOrderJson.Cpu json(CpuTarget target) {
-        return target.cpu() == null ? new StandingOrderJson.Cpu("any", null)
+        return target.cpu() == null ? new StandingOrderJson.Cpu(target.machineOnly() ? "machineOnly" : "any", null)
             : new StandingOrderJson.Cpu("specific", target.cpu());
     }
 }

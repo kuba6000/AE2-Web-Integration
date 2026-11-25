@@ -17,8 +17,8 @@ public interface IAEMixinCallbacks {
     }
 
     /**
-     * An accepted submission or merge. The adapter's machine classification controls machine tracking independently
-     * of the optional native player. Core resolves web attribution; adapters need no web context.
+     * An accepted submission or merge. Core resolves web attribution and applies the adapter's machine
+     * classification to new jobs outside a standing order, independently of the optional native player.
      */
     void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isMachineRequest,
         @Nullable PlayerIdentity nativeRequester);

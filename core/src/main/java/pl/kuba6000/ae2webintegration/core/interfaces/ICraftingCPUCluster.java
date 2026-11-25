@@ -40,6 +40,11 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
      */
     boolean web$acceptsPlayerJobs();
 
+    /** True only for an active, idle CPU reserved exclusively for automation with native targeted submission. */
+    default boolean web$acceptsMachineOrders() {
+        return false;
+    }
+
     /** Native automatic-selection policy; null when unsupported or unknown. Read on the server thread. */
     @Nullable
     CpuSelectionMode web$getSelectionMode();

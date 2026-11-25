@@ -4588,6 +4588,13 @@ button.toast:hover {
 .standing-order-condition .standing-order-remove {
     justify-self: start;
 }
+.standing-order-ratio {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+    gap: 12px;
+    width: min(100%, 680px);
+    grid-column: 1 / -1;
+}
 .standing-order-options {
     display: grid;
     gap: 8px;

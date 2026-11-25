@@ -2,9 +2,18 @@ import type { ConditionKind, FieldId, ReadonlyData, ThemeApplication, ThemeState
 import type { Translator } from '../../app/i18n.js';
 import type { IconTarget } from '../../app/icons.js';
 import type { StandingOrderCondition, StandingOrderDefinition } from '../../app/api-types.js';
+import { formatCraftingRatio } from '../../app/crafting-quantity.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { standingOrdersHref } from '../../app/router.js';
-import { maxConditions, reasonMessageKey } from '../../app/standing-order-model.js';
+import {
+    defaultRatio,
+    isIdleCpuCondition,
+    isRatioCondition,
+    maxConditions,
+    reasonMessageKey,
+    type RatioDraft,
+    type AmountDraft
+} from '../../app/standing-order-model.js';
 import { element } from './dom.js';
 import { createResourcePicker, type ResourceChoice } from './resource-picker.js';
 
@@ -14,7 +23,10 @@ let nextId = 0;
 const kinds: { kind: ConditionKind; label: string }[] = [
     { kind: 'stockBelow', label: 'conditionStockBelow' },
     { kind: 'stockAtLeast', label: 'conditionStockAtLeast' },
-    { kind: 'idleCpusAtLeast', label: 'conditionIdleCpus' }
+    { kind: 'stockRatioBelow', label: 'conditionRatioBelow' },
+    { kind: 'stockRatioAtLeast', label: 'conditionRatioAtLeast' },
+    { kind: 'idleCpusAtLeast', label: 'conditionIdleCpus' },
+    { kind: 'idlePlayerCpusAtLeast', label: 'conditionIdlePlayerCpus' }
 ];
 
 /** A control with its label and the message of the field's current error. */
@@ -65,19 +77,37 @@ function resourceName(key: string | null, resources: Resources, locale: Translat
     return description ? plainMinecraftText(description.displayName) : locale.common('standingOrderUnknownResource');
 }
 
+function ratioSummary(
+    ratio: ReadonlyData<StandingOrderCondition | StandingOrderDefinition['action']['amount']>,
+    resources: Resources,
+    locale: Translator
+) {
+    return locale.common('standingOrderRatioSummary', {
+        reference: resourceName(ratio.reference ?? null, resources, locale),
+        multiplier: formatCraftingRatio(ratio.numerator, ratio.denominator) ?? locale.common('standingOrderLargeAmount')
+    });
+}
+
 function conditionSummary(condition: ReadonlyData<StandingOrderCondition>, resources: Resources, locale: Translator) {
     const item = element('li');
     const { common: t } = locale;
-    if (condition.type === 'stockBelow' || condition.type === 'stockAtLeast') {
+    if (condition.type === 'stockBelow' || condition.type === 'stockAtLeast' || isRatioCondition(condition.type)) {
         item.textContent = t(
-            condition.type === 'stockBelow' ? 'standingOrderSummaryBelow' : 'standingOrderSummaryAtLeast',
+            condition.type === 'stockBelow' || condition.type === 'stockRatioBelow'
+                ? 'standingOrderSummaryBelow'
+                : 'standingOrderSummaryAtLeast',
             {
                 resource: resourceName(condition.resource, resources, locale),
-                amount: numberText(condition.amount, locale)
+                amount: isRatioCondition(condition.type)
+                    ? ratioSummary(condition, resources, locale)
+                    : numberText(condition.amount, locale)
             }
         );
-    } else if (condition.type === 'idleCpusAtLeast') {
-        item.textContent = t('standingOrderSummaryIdle', { count: condition.count ?? 0 });
+    } else if (isIdleCpuCondition(condition.type)) {
+        item.textContent = t(
+            condition.type === 'idlePlayerCpusAtLeast' ? 'standingOrderSummaryPlayerIdle' : 'standingOrderSummaryIdle',
+            { count: condition.count ?? 0 }
+        );
     } else {
         const children = condition.type === 'not' ? [condition.child] : (condition.children ?? []);
         const group = { all: 'standingOrderGroupAll', any: 'standingOrderGroupAny', not: 'standingOrderGroupNot' };
@@ -104,7 +134,10 @@ function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resource
               })
             : t('standingOrderSummaryFillTo', {
                   resource: resourceName(action.resource, resources, locale),
-                  target: numberText(amount.target, locale),
+                  target:
+                      amount.type === 'fillToRatio'
+                          ? ratioSummary(amount, resources, locale)
+                          : numberText(amount.target, locale),
                   maxBatch: numberText(amount.maxBatch, locale)
               })
     );
@@ -116,6 +149,7 @@ function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, resource
     if (options.length) details.push(element('p', `${t('standingOrderOptions')}: ${options.join(', ')}`));
     if (action.cpu.type === 'specific')
         details.push(element('p', t('standingOrderSummaryCpu', { cpu: action.cpu.key ?? '' })));
+    if (action.cpu.type === 'machineOnly') details.push(element('p', t('standingOrderCpuMachine')));
     return [triggers, ...details];
 }
 
@@ -149,6 +183,10 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
 
     const whenSet = element('fieldset', '', 'standing-order-section');
     const whenLegend = element('legend');
+    const guard = element('fieldset', '', 'standing-order-condition');
+    const guardTitle = element('legend');
+    const guardText = element('p', '', 'hint');
+    guard.append(guardTitle, guardText);
     const match = element('select');
     match.append(option('all', ''), option('any', ''));
     const matchField = labelledField(match);
@@ -159,7 +197,27 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     const add = element('button');
     add.type = 'button';
     add.addEventListener('click', () => edit({ type: 'addCondition' }));
-    whenSet.append(whenLegend, matchField.wrap, rowList, triggerError, add);
+    whenSet.append(whenLegend, guard, matchField.wrap, rowList, triggerError, add);
+
+    function createRatioFields(index: () => number | undefined) {
+        const wrap = element('div', '', 'standing-order-ratio');
+        const picker = createResourcePicker(
+            (item) => edit({ type: 'ratio', index: index(), field: 'reference', value: item.itemKey! }, item),
+            { craftableOnly: false, retry: () => void application.refresh(), changed: iconsChanged }
+        );
+        const reference = field(picker.choice);
+        reference.wrap.append(reference.text, picker.element, reference.error);
+        const input = element('input');
+        input.autocomplete = 'off';
+        input.addEventListener('input', () =>
+            edit({ type: 'ratio', index: index(), field: 'multiplier', value: input.value })
+        );
+        const multiplier = labelledField(input, 'standing-order-value');
+        const help = element('p', '', 'hint');
+        multiplier.wrap.append(help);
+        wrap.append(reference.wrap, multiplier.wrap);
+        return { wrap, picker, reference, input, multiplier, help };
+    }
 
     function createRow() {
         const row = {
@@ -188,7 +246,16 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         );
         const resourceField = field(picker.choice, 'standing-order-condition-resource');
         resourceField.wrap.append(resourceField.text, picker.element, resourceField.error);
-        row.group.append(row.legend, kindField.wrap, resourceField.wrap, valueField.wrap, negateLabel, row.remove);
+        const ratio = createRatioFields(() => row.index);
+        row.group.append(
+            row.legend,
+            kindField.wrap,
+            resourceField.wrap,
+            valueField.wrap,
+            ratio.wrap,
+            negateLabel,
+            row.remove
+        );
         row.kind.addEventListener('change', () =>
             edit({ type: 'conditionKind', index: row.index, kind: row.kind.value as ConditionKind })
         );
@@ -199,7 +266,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             edit({ type: 'conditionNegate', index: row.index, value: row.negate.checked })
         );
         row.remove.addEventListener('click', () => edit({ type: 'removeCondition', index: row.index }));
-        return Object.assign(row, { kindField, valueField, resourceField, picker });
+        return Object.assign(row, { kindField, valueField, resourceField, picker, ratio });
     }
     const rows: ReturnType<typeof createRow>[] = [];
 
@@ -212,10 +279,11 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     const targetField = field(target.choice);
     targetField.wrap.append(targetField.text, target.element, targetField.error);
     const amountType = element('select');
-    amountType.append(option('fillTo', ''), option('fixed', ''));
+    amountType.append(option('fillTo', ''), option('fixed', ''), option('fillToRatio', ''));
+    const fillRatio = createRatioFields(() => undefined);
     const amountTypeField = labelledField(amountType);
     amountType.addEventListener('change', () =>
-        edit({ type: 'amountType', value: amountType.value === 'fixed' ? 'fixed' : 'fillTo' })
+        edit({ type: 'amountType', value: amountType.value as AmountDraft['type'] })
     );
     function amountInput(fieldName: 'batch' | 'target' | 'maxBatch') {
         const input = element('input');
@@ -251,13 +319,17 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     const cpuField = labelledField(cpu);
     const cpuHelp = element('p', '', 'hint');
     cpuField.wrap.append(cpuHelp);
-    cpu.addEventListener('change', () => edit({ type: 'cpu', key: cpu.value || null }));
+    const machineChoice = ':machine'; // Stable CPU keys cannot contain a colon.
+    cpu.addEventListener('change', () =>
+        edit(cpu.value === machineChoice ? { type: 'machineCpu' } : { type: 'cpu', key: cpu.value || null })
+    );
     craftSet.append(
         craftLegend,
         targetField.wrap,
         amountTypeField.wrap,
         batch.wrap,
         fillTarget.wrap,
+        fillRatio.wrap,
         maxBatch.wrap,
         optionsGroup,
         cpuField.wrap
@@ -327,7 +399,11 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
     /** Closing a picker also removes its document listener. */
     function resetPickers() {
         target.reset();
-        for (const row of rows) row.picker.reset();
+        fillRatio.picker.reset();
+        for (const row of rows) {
+            row.picker.reset();
+            row.ratio.picker.reset();
+        }
     }
     let visiblePickers: ReturnType<typeof createResourcePicker>[] = [];
     const targets = (): IconTarget[] => visiblePickers.flatMap((picker) => picker.targets());
@@ -403,11 +479,49 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
         errorTargets.set('name', { target: nameField, controls: [name] });
         errorTargets.set('cooldownSeconds', { target: cooldownField, controls: [cooldown] });
 
-        whenSet.hidden = !flat;
+        function renderRatio(
+            fields: ReturnType<typeof createRatioFields>,
+            shown: boolean,
+            ratio: Readonly<RatioDraft> = defaultRatio,
+            prefix: `condition.${number}` | 'action.amount'
+        ) {
+            fields.wrap.hidden = !shown;
+            if (!shown) {
+                fields.picker.reset();
+                return;
+            }
+            fields.reference.text.textContent = t('standingOrderReference');
+            fields.picker.render(
+                resourceChoice,
+                ratio.reference,
+                !!errors[`${prefix}.reference`],
+                t('standingOrderReference')
+            );
+            fields.picker.choice.disabled = !editable;
+            errorTargets.set(`${prefix}.reference`, { target: fields.reference, controls: [fields.picker.choice] });
+            if (iconsOn) visiblePickers.push(fields.picker);
+            fields.multiplier.text.textContent = t('standingOrderMultiplier');
+            fields.help.textContent = t('standingOrderMultiplierHelp');
+            fields.input.setAttribute('aria-description', fields.help.textContent);
+            if (fields.input.value !== ratio.multiplier) fields.input.value = ratio.multiplier;
+            fields.input.disabled = !editable;
+            errorTargets.set(`${prefix}.multiplier`, { target: fields.multiplier, controls: [fields.input] });
+        }
+        whenLegend.textContent = t('standingOrderWhen');
+        guardTitle.textContent = t('standingOrderCondition', { index: 0 });
+        const output = rules.locked === null ? rules.resource : editor.definition?.action.resource;
+        const outputName = output
+            ? (resourceChoice.byKey.get(output)?.displayName ?? orders.resources[output]?.displayName)
+            : undefined;
+        guardText.textContent = outputName
+            ? t('standingOrderGuardResource', { resource: plainMinecraftText(outputName) })
+            : t('standingOrderGuard');
+        rowList.hidden = !flat;
+        add.hidden = !flat;
+        matchField.wrap.hidden = !flat;
         craftSet.hidden = !flat;
         locked.hidden = flat;
         if (rules.locked === null) {
-            whenLegend.textContent = t('standingOrderWhen');
             craftLegend.textContent = t('standingOrderThenCraft');
             matchField.text.textContent = t('standingOrderMatch');
             match.options[0].textContent = t('standingOrderMatchAll');
@@ -424,15 +538,21 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             while (rows.length > rules.conditions.length) {
                 const row = rows.pop()!;
                 row.picker.reset();
+                row.ratio.picker.reset();
                 row.group.remove();
             }
             rules.conditions.forEach((condition, index) => {
                 const row = rows[index];
-                const idle = condition.kind === 'idleCpusAtLeast';
+                const idle = isIdleCpuCondition(condition.kind);
                 row.index = index;
                 row.legend.textContent = t('standingOrderCondition', { index: index + 1 });
                 row.kindField.text.textContent = t('standingOrderConditionKind');
-                kinds.forEach(({ label }, position) => (row.kind.options[position].textContent = t(label)));
+                kinds.forEach(({ kind, label }, position) => {
+                    const option = row.kind.options[position];
+                    option.textContent = t(label);
+                    option.disabled = kind === 'idlePlayerCpusAtLeast' && !state.capabilities.cpuSelectionMode;
+                    option.hidden = option.disabled && condition.kind !== kind;
+                });
                 row.kind.value = condition.kind;
                 row.valueField.text.textContent = t(
                     idle ? 'standingOrderConditionCpuCount' : 'standingOrderConditionAmount'
@@ -442,6 +562,8 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
                 row.negateText.textContent = t('standingOrderConditionNegate');
                 row.resourceField.text.textContent = t('standingOrderResource');
                 row.resourceField.wrap.hidden = idle;
+                row.valueField.wrap.hidden = isRatioCondition(condition.kind);
+                renderRatio(row.ratio, isRatioCondition(condition.kind), condition.ratio, `condition.${index}`);
                 row.picker.render(
                     resourceChoice,
                     condition.resource,
@@ -468,15 +590,19 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             amountTypeField.text.textContent = t('standingOrderAmountKind');
             amountType.options[0].textContent = t('standingOrderAmountFillTo');
             amountType.options[1].textContent = t('standingOrderAmountFixed');
+            amountType.options[2].textContent = t('standingOrderAmountFillRatio');
             amountType.value = rules.amount.type;
             const fixed = rules.amount.type === 'fixed';
             batch.wrap.hidden = !fixed;
-            fillTarget.wrap.hidden = fixed;
+            fillTarget.wrap.hidden = rules.amount.type !== 'fillTo';
+            renderRatio(fillRatio, rules.amount.type === 'fillToRatio', rules.amount.ratio, 'action.amount');
             maxBatch.wrap.hidden = fixed;
             batch.text.textContent = t('standingOrderBatch');
             fillTarget.text.textContent = t('standingOrderFillTarget');
             maxBatch.text.textContent = t('standingOrderMaxBatch');
-            maxBatchHelp.textContent = t('standingOrderMaxBatchHelp');
+            maxBatchHelp.textContent = t(
+                rules.amount.type === 'fillToRatio' ? 'standingOrderRatioBatchHelp' : 'standingOrderMaxBatchHelp'
+            );
             for (const [input, value] of [
                 [batch.input, rules.amount.batch],
                 [fillTarget.input, rules.amount.target],
@@ -501,13 +627,18 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
             ignoreMissing.input.disabled = !editable;
 
             cpuField.text.textContent = t('standingOrderCpu');
-            cpuHelp.textContent = t('standingOrderCpuHelp');
+            const machineSupported = state.capabilities.cpuSelectionMode === true;
+            cpuHelp.textContent = t(machineSupported ? 'standingOrderCpuModeHelp' : 'standingOrderCpuHelp');
+            const specific = rules.cpu.type === 'specific' ? rules.cpu.key : null;
             const choices = orders.cpus.filter((entry) => entry.eligible);
             const wanted = [
                 ['', t('standingOrderCpuAny')],
+                ...(machineSupported || rules.cpu.type === 'machineOnly'
+                    ? [[machineChoice, t('standingOrderCpuMachine')]]
+                    : []),
                 ...choices.map((entry) => [entry.key, `${entry.name || t('cpuUnnamed')} · ${entry.key.slice(0, 6)}`]),
-                ...(rules.cpu !== null && !choices.some((entry) => entry.key === rules.cpu)
-                    ? [[rules.cpu, `${t('standingOrderCpuMissing')} · ${rules.cpu.slice(0, 6)}`]]
+                ...(specific !== null && !choices.some((entry) => entry.key === specific)
+                    ? [[specific, `${t('standingOrderCpuMissing')} · ${specific.slice(0, 6)}`]]
                     : [])
             ] as [string, string][];
             if (
@@ -517,7 +648,7 @@ export function createStandingOrderEditor(application: ThemeApplication, iconsCh
                 )
             )
                 cpu.replaceChildren(...wanted.map(([value, text]) => option(value, text)));
-            cpu.value = rules.cpu ?? '';
+            cpu.value = rules.cpu.type === 'machineOnly' ? machineChoice : (specific ?? '');
             cpu.disabled = !editable;
             errorTargets.set('action.cpu.key', { target: cpuField, controls: [cpu] });
             errorTargets.set('action.options.lightMode', { target: lightMode.owner, controls: [lightMode.input] });

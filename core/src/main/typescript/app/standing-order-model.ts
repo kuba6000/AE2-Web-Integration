@@ -6,9 +6,10 @@ import type {
     StandingOrderConditionInput,
     StandingOrderDefinition,
     StandingOrderDefinitionInput,
+    StandingOrderRatioInput,
     StandingOrderRejection
 } from './api-types.js';
-import { parseCraftingQuantity } from './crafting-quantity.js';
+import { formatCraftingRatio, parseCraftingQuantity, parseCraftingRatio } from './crafting-quantity.js';
 
 /** Limits of the server's validator; the server remains the authority and answers with the same reasons. */
 export const maxNameLength = 128;
@@ -17,11 +18,37 @@ export const maxIdleCpus = 1024;
 /** One group plus a negated row per condition must stay within the server's 32 conditions. */
 export const maxConditions = 15;
 
-export type ConditionKind = 'stockBelow' | 'stockAtLeast' | 'idleCpusAtLeast';
+export type RatioDraft = { reference: string | null; multiplier: string };
+export const defaultRatio: Readonly<RatioDraft> = { reference: null, multiplier: '1' };
+export function isRatioCondition(type: string): type is 'stockRatioBelow' | 'stockRatioAtLeast' {
+    return type === 'stockRatioBelow' || type === 'stockRatioAtLeast';
+}
+export type ConditionKind =
+    | 'stockRatioBelow'
+    | 'stockRatioAtLeast'
+    | 'stockBelow'
+    | 'stockAtLeast'
+    | 'idleCpusAtLeast'
+    | 'idlePlayerCpusAtLeast';
+export function isIdleCpuCondition(kind: string): kind is 'idleCpusAtLeast' | 'idlePlayerCpusAtLeast' {
+    return kind === 'idleCpusAtLeast' || kind === 'idlePlayerCpusAtLeast';
+}
 /** `value` is the quantity of a stock condition or the CPU count of an idle-CPU condition, as typed. */
-export type ConditionDraft = { kind: ConditionKind; resource: string | null; value: string; negate: boolean };
+export type ConditionDraft = {
+    kind: ConditionKind;
+    resource: string | null;
+    value: string;
+    ratio?: RatioDraft;
+    negate: boolean;
+};
 /** All three amounts are kept as typed so that switching between the two kinds loses nothing. */
-export type AmountDraft = { type: 'fixed' | 'fillTo'; batch: string; target: string; maxBatch: string };
+export type AmountDraft = {
+    type: 'fixed' | 'fillTo' | 'fillToRatio';
+    ratio?: RatioDraft;
+    batch: string;
+    target: string;
+    maxBatch: string;
+};
 export type FlatRules = {
     locked: null;
     match: 'all' | 'any';
@@ -31,8 +58,7 @@ export type FlatRules = {
     amount: AmountDraft;
     lightMode: boolean;
     ignoreMissing: boolean;
-    /** The key of the one CPU to use, or null for any. */
-    cpu: string | null;
+    cpu: StandingOrderActionInput['cpu'];
 };
 /** Conditions and action of a stored order the editor cannot change without altering it. */
 export type LockedRules = { locked: 'nested' | 'large' };
@@ -50,6 +76,8 @@ export type FieldId =
     | 'trigger'
     | `condition.${number}.resource`
     | `condition.${number}.value`
+    | `condition.${number}.${keyof RatioDraft}`
+    | `action.amount.${keyof RatioDraft}`
     | 'action.resource'
     | 'action.amount.batch'
     | 'action.amount.target'
@@ -68,13 +96,15 @@ export type DraftChange =
     | { type: 'enabled' | 'lightMode' | 'ignoreMissing'; value: boolean }
     | { type: 'match'; value: 'all' | 'any' }
     | { type: 'target'; resource: ResourceChoice }
-    | { type: 'amountType'; value: 'fixed' | 'fillTo' }
+    | { type: 'amountType'; value: AmountDraft['type'] }
     | { type: 'amount'; field: 'batch' | 'target' | 'maxBatch'; value: string }
     | { type: 'cpu'; key: string | null }
+    | { type: 'machineCpu' }
     | { type: 'addCondition' }
     | { type: 'removeCondition'; index: number }
     | { type: 'conditionKind'; index: number; kind: ConditionKind }
     | { type: 'conditionResource'; index: number; resource: ResourceChoice }
+    | { type: 'ratio'; index?: number; field: keyof RatioDraft; value: string }
     | { type: 'conditionValue'; index: number; value: string }
     | { type: 'conditionNegate'; index: number; value: boolean };
 
@@ -96,16 +126,24 @@ export function keepStockedDraft(resource: string | null): FlatDraft {
             amount: { type: 'fillTo', batch: '', target: '', maxBatch: '' },
             lightMode: false,
             ignoreMissing: false,
-            cpu: null
+            cpu: { type: 'any' }
         }
     };
 }
 
 function row(condition: StandingOrderCondition): ConditionDraft | null {
-    if (condition.type === 'idleCpusAtLeast')
+    if (isIdleCpuCondition(condition.type))
         return condition.count === null
             ? null
             : { kind: condition.type, resource: null, value: String(condition.count), negate: false };
+    if (isRatioCondition(condition.type) && condition.resource !== null)
+        return {
+            kind: condition.type,
+            resource: condition.resource,
+            value: '',
+            ratio: readRatio(condition),
+            negate: false
+        };
     if (stockKinds.includes(condition.type) && condition.resource !== null && condition.amount !== null)
         return {
             kind: condition.type as ConditionKind,
@@ -114,6 +152,13 @@ function row(condition: StandingOrderCondition): ConditionDraft | null {
             negate: false
         };
     return null;
+}
+
+function readRatio(value: StandingOrderCondition | StandingOrderDefinition['action']['amount']): RatioDraft {
+    return {
+        reference: value.reference ?? null,
+        multiplier: formatCraftingRatio(value.numerator, value.denominator) ?? ''
+    };
 }
 
 function flatRows(trigger: StandingOrderCondition): { match: 'all' | 'any'; rows: ConditionDraft[] } | null {
@@ -134,6 +179,8 @@ function numbers(condition: StandingOrderCondition): (number | null)[] {
     return [
         condition.amount,
         condition.count,
+        condition.numerator ?? null,
+        condition.denominator ?? null,
         ...(condition.children ?? []).flatMap(numbers),
         ...(condition.child ? numbers(condition.child) : [])
     ];
@@ -149,7 +196,14 @@ export function draftFromDefinition(definition: StandingOrderDefinition): OrderD
     };
     const flat = flatRows(definition.trigger);
     if (!flat) return { ...shared, rules: { locked: 'nested' } };
-    const values = [...numbers(definition.trigger), action.amount.batch, action.amount.target, action.amount.maxBatch];
+    const values = [
+        ...numbers(definition.trigger),
+        action.amount.batch,
+        action.amount.target,
+        action.amount.maxBatch,
+        action.amount.numerator ?? null,
+        action.amount.denominator ?? null
+    ];
     // JSON parsing has already rounded such values; sending them back would silently change the order.
     if (values.some((value) => value !== null && !Number.isSafeInteger(value)))
         return { ...shared, rules: { locked: 'large' } };
@@ -163,13 +217,17 @@ export function draftFromDefinition(definition: StandingOrderDefinition): OrderD
             resource: action.resource,
             amount: {
                 type: action.amount.type,
+                ...(action.amount.type === 'fillToRatio' ? { ratio: readRatio(action.amount) } : {}),
                 batch: text(action.amount.batch),
                 target: text(action.amount.target),
                 maxBatch: text(action.amount.maxBatch)
             },
             lightMode: action.options.lightMode,
             ignoreMissing: action.options.ignoreMissing,
-            cpu: action.cpu.type === 'specific' ? action.cpu.key : null
+            cpu:
+                action.cpu.type === 'specific' && action.cpu.key !== null
+                    ? { type: 'specific', key: action.cpu.key }
+                    : { type: action.cpu.type === 'machineOnly' ? 'machineOnly' : 'any' }
         }
     };
 }
@@ -202,7 +260,9 @@ function edited(rules: FlatRules, change: DraftChange): FlatRules {
         case 'ignoreMissing':
             return { ...rules, [change.type]: change.value };
         case 'cpu':
-            return { ...rules, cpu: change.key };
+            return { ...rules, cpu: change.key === null ? { type: 'any' } : { type: 'specific', key: change.key } };
+        case 'machineCpu':
+            return { ...rules, cpu: { type: 'machineOnly' } };
         case 'addCondition':
             return rules.conditions.length >= maxConditions
                 ? rules
@@ -221,13 +281,16 @@ function edited(rules: FlatRules, change: DraftChange): FlatRules {
             return at(change.index, (condition) => ({
                 ...condition,
                 kind: change.kind,
-                value:
-                    (change.kind === 'idleCpusAtLeast') === (condition.kind === 'idleCpusAtLeast')
-                        ? condition.value
-                        : ''
+                value: isIdleCpuCondition(change.kind) === isIdleCpuCondition(condition.kind) ? condition.value : ''
             }));
         case 'conditionResource':
             return at(change.index, (condition) => ({ ...condition, resource: change.resource.itemKey }));
+        case 'ratio': {
+            const update = (ratio?: RatioDraft) => ({ ...(ratio ?? defaultRatio), [change.field]: change.value });
+            return change.index === undefined
+                ? { ...rules, amount: { ...rules.amount, ratio: update(rules.amount.ratio) } }
+                : at(change.index, (condition) => ({ ...condition, ratio: update(condition.ratio) }));
+        }
         case 'conditionValue':
             return at(change.index, (condition) => ({ ...condition, value: change.value }));
         case 'conditionNegate':
@@ -269,13 +332,29 @@ function idleCount(text: string) {
 export const quantityError = 'INVALID_QUANTITY';
 export const resourceError = 'standingOrderResourceRequired';
 
+function ratioInput(
+    ratio: RatioDraft = defaultRatio,
+    prefix: `condition.${number}` | 'action.amount',
+    errors: FieldErrors
+): StandingOrderRatioInput | null {
+    const { reference } = ratio;
+    const scale = parseCraftingRatio(ratio.multiplier);
+    if (!reference) errors[`${prefix}.reference`] = resourceError;
+    if (!scale) errors[`${prefix}.multiplier`] = 'standingOrderInvalidMultiplier';
+    return reference && scale ? { reference, ...scale } : null;
+}
+
 function triggerInput(rules: FlatRules, errors: FieldErrors): StandingOrderConditionInput | null {
     const inputs = rules.conditions.map((condition, index) => {
         let input: StandingOrderConditionInput | null = null;
-        if (condition.kind === 'idleCpusAtLeast') {
+        if (isIdleCpuCondition(condition.kind)) {
             const count = idleCount(condition.value);
             if (count === null) errors[`condition.${index}.value`] = reasonMessageKey('IDLE_CPU_COUNT_OUT_OF_RANGE');
             else input = { type: condition.kind, count };
+        } else if (isRatioCondition(condition.kind)) {
+            const scale = ratioInput(condition.ratio, `condition.${index}`, errors);
+            if (!condition.resource) errors[`condition.${index}.resource`] = resourceError;
+            if (scale && condition.resource) input = { type: condition.kind, resource: condition.resource, ...scale };
         } else {
             const amount = parseCraftingQuantity(condition.value);
             if (condition.resource === null) errors[`condition.${index}.resource`] = resourceError;
@@ -298,6 +377,11 @@ function actionInput(rules: FlatRules, errors: FieldErrors): StandingOrderAction
         const batch = parseCraftingQuantity(rules.amount.batch);
         if (batch === null) errors['action.amount.batch'] = quantityError;
         else amount = { type: 'fixed', batch };
+    } else if (rules.amount.type === 'fillToRatio') {
+        const scale = ratioInput(rules.amount.ratio, 'action.amount', errors);
+        const maxBatch = parseCraftingQuantity(rules.amount.maxBatch);
+        if (!maxBatch) errors['action.amount.maxBatch'] = quantityError;
+        if (scale && maxBatch) amount = { type: 'fillToRatio', ...scale, maxBatch };
     } else {
         const target = parseCraftingQuantity(rules.amount.target);
         if (target === null) errors['action.amount.target'] = quantityError;
@@ -311,7 +395,7 @@ function actionInput(rules: FlatRules, errors: FieldErrors): StandingOrderAction
         resource: rules.resource,
         amount,
         options: { lightMode: rules.lightMode, ignoreMissing: rules.ignoreMissing },
-        cpu: rules.cpu === null ? { type: 'any' } : { type: 'specific', key: rules.cpu }
+        cpu: rules.cpu
     };
 }
 
@@ -380,6 +464,7 @@ export function fieldForPath(path: string, draft: OrderDraft): FieldId | null {
         'name',
         'cooldownSeconds',
         'action.resource',
+        'action.amount.reference',
         'action.amount.batch',
         'action.amount.target',
         'action.amount.maxBatch',
@@ -387,13 +472,20 @@ export function fieldForPath(path: string, draft: OrderDraft): FieldId | null {
         'action.options.lightMode',
         'action.options.ignoreMissing'
     ] as const;
+    if (path === 'action.amount.numerator' || path === 'action.amount.denominator') return 'action.amount.multiplier';
+    if (path === 'action.cpu.type') return 'action.cpu.key';
     const direct = fixed.find((field) => field === path);
     if (direct) return direct;
     if (path !== 'trigger' && !path.startsWith('trigger.')) return null;
-    const member = /^trigger(?:\.children\[(\d+)\])?(?:\.child)?\.(amount|count|resource)$/.exec(path);
+    const member =
+        /^trigger(?:\.children\[(\d+)\])?(?:\.child)?\.(amount|count|resource|reference|numerator|denominator)$/.exec(
+            path
+        );
     if (!member || !isFlat(draft)) return 'trigger';
     const index = member[1] === undefined ? 0 : Number(member[1]);
     if (index >= draft.rules.conditions.length) return 'trigger';
+    if (member[2] === 'reference') return `condition.${index}.reference`;
+    if (member[2] === 'numerator' || member[2] === 'denominator') return `condition.${index}.multiplier`;
     return member[2] === 'resource' ? `condition.${index}.resource` : `condition.${index}.value`;
 }
 

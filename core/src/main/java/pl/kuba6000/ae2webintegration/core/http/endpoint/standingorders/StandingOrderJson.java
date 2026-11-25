@@ -54,23 +54,37 @@ public final class StandingOrderJson {
 
     /**
      * One condition of a trigger, at most 32 conditions nested at most 4 levels deep. The type selects which other
-     * members apply: {@code stockBelow} and {@code stockAtLeast} use resource and amount, {@code idleCpusAtLeast}
-     * uses count, {@code all} and {@code any} use children, {@code not} uses child.
+     * members apply: {@code stockBelow} and {@code stockAtLeast} use resource and amount. Stock ratio comparisons
+     * use resource, reference, numerator and denominator. {@code idleCpusAtLeast} and {@code idlePlayerCpusAtLeast}
+     * use count, {@code all} and {@code any} use children, {@code not} uses child.
      *
-     * @param type     {@code stockBelow}, {@code stockAtLeast}, {@code idleCpusAtLeast}, {@code all}, {@code any} or
-     *                 {@code not}
-     * @param resource resource whose stored amount is compared
-     * @param amount   quantity compared with the stored amount, at least 1
-     * @param count    idle crafting CPUs required, from 1 to 1024; only CPUs that accept player jobs count
-     * @param children conditions of a group, at least one
-     * @param child    the condition a {@code not} negates
+     * @param type        {@code stockBelow}, {@code stockAtLeast}, {@code stockRatioBelow}, {@code stockRatioAtLeast},
+     *                    {@code idleCpusAtLeast}, {@code all}, {@code any} or
+     *                    {@code not}
+     * @param resource    resource whose stored amount is compared
+     * @param amount      quantity compared with the stored amount, at least 1
+     * @param count       idle crafting CPUs required, from 1 to 1024; the player-only filter also excludes mixed CPUs
+     *                    and requires cpuSelectionMode
+     * @param reference   other resource whose observed stock is scaled for stockRatioBelow and stockRatioAtLeast
+     * @param numerator   positive multiplier of the reference stock
+     * @param denominator positive divisor of the reference stock
+     * @param children    conditions of a group, at least one
+     * @param child       the condition a {@code not} negates
      * @example type stockBelow
      * @example amount 1000
      */
     @Desugar
     public record Condition(@NotNull String type, @OptionalInput @Nullable StableKey resource,
         @OptionalInput @Nullable Long amount, @OptionalInput @Nullable Long count,
-        @OptionalInput @Nullable List<Condition> children, @OptionalInput @Nullable Condition child) {}
+        @OptionalInput @Nullable List<Condition> children, @OptionalInput @Nullable Condition child,
+        @OptionalInput @Nullable StableKey reference, @OptionalInput @Nullable Long numerator,
+        @OptionalInput @Nullable Long denominator) {
+
+        Condition(String type, @Nullable StableKey resource, @Nullable Long amount, @Nullable Long count,
+            @Nullable List<Condition> children, @Nullable Condition child) {
+            this(type, resource, amount, count, children, child, null, null, null);
+        }
+    }
 
     /**
      * What a standing order crafts once its trigger holds.
@@ -86,18 +100,24 @@ public final class StandingOrderJson {
 
     /**
      * How much one submission orders. {@code fixed} uses batch; {@code fillTo} orders the missing quantity up to
-     * target, at most maxBatch at a time.
+     * target, at most maxBatch at a time. {@code fillToRatio} applies the same cap to the shortfall from the scaled
+     * reference stock.
      *
-     * @param type     {@code fixed} or {@code fillTo}
-     * @param batch    quantity of every submission, at least 1
-     * @param target   stock to reach, at least 1
-     * @param maxBatch largest single submission, at least 1
+     * @param type        {@code fixed}, {@code fillTo} or {@code fillToRatio}
+     * @param reference   resource whose stock determines a fillToRatio target (rounded up)
+     * @param numerator   positive multiplier of the reference stock
+     * @param denominator positive divisor of the reference stock
+     * @param batch       quantity of every submission, at least 1
+     * @param target      stock to reach, at least 1
+     * @param maxBatch    largest single submission, at least 1
      * @example type fixed
      * @example batch 64
      */
     @Desugar
     public record Amount(@NotNull String type, @OptionalInput @Nullable Long batch,
-        @OptionalInput @Nullable Long target, @OptionalInput @Nullable Long maxBatch) {}
+        @OptionalInput @Nullable Long target, @OptionalInput @Nullable Long maxBatch,
+        @OptionalInput @Nullable StableKey reference, @OptionalInput @Nullable Long numerator,
+        @OptionalInput @Nullable Long denominator) {}
 
     /**
      * Calculation options of the crafting plan, as for a manually created plan.
@@ -112,7 +132,8 @@ public final class StandingOrderJson {
     /**
      * Which crafting CPU runs the jobs.
      *
-     * @param type {@code any} lets the network choose; {@code specific} uses the CPU named by key
+     * @param type {@code any} lets the network choose; {@code specific} uses the CPU named by key; {@code machineOnly}
+     *             requires cpuSelectionMode and selects a reserved automation CPU
      * @param key  crafting CPU identifier of a {@code specific} selection
      * @example type any
      */

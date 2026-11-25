@@ -155,6 +155,7 @@ const historyDetail = {
 let browserLaunch;
 
 const listedCondition = (condition) => ({
+    ...condition,
     type: condition.type,
     resource: condition.resource ?? null,
     amount: condition.amount ?? null,
@@ -172,6 +173,7 @@ function listedDefinition(definition) {
         action: {
             ...definition.action,
             amount: {
+                ...amount,
                 type: amount.type,
                 batch: amount.batch ?? null,
                 target: amount.target ?? null,
