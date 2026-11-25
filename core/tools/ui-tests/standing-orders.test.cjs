@@ -349,3 +349,70 @@ test('repairing an unreadable order with the server switch off sends a switched-
     assert.equal(sent.length, 1);
     assert.equal(sent[0].enabled, false);
 });
+
+test('an unconfirmed create keeps saving locked until the follow-up read finishes', async (t) => {
+    let orders = [order('o1')];
+    let creates = 0;
+    let releaseRead;
+    const terminal = await app(t, {
+        standingOrders: () => {
+            if (creates === 0) return Promise.resolve(listing(orders));
+            return new Promise((resolve) => {
+                releaseRead = () => resolve(listing(orders));
+            });
+        },
+        createStandingOrder: async () => {
+            creates++;
+            orders = [order('o1'), order('o2')];
+            throw Object.assign(new Error('timeout'), { status: 'TIMEOUT' });
+        }
+    });
+    terminal.route(newIronRoute);
+    await terminal.refresh();
+    fillNewOrder(terminal);
+    const firstSave = terminal.standingOrders.save();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.standingOrders.editor.saving, true, 'saving stays locked during follow-up read');
+    await terminal.standingOrders.save();
+    assert.equal(creates, 1, 'a second save while checking cannot duplicate the order');
+    releaseRead();
+    await firstSave;
+    assert.equal(terminal.state.standingOrders.editor.saving, false);
+    assert.equal(terminal.state.standingOrders.editor.formError, 'standingOrderCreateUnconfirmed');
+});
+
+test('a stale refresh aborted by an icon setting change neither overwrites state nor breaks single-flight', async (t) => {
+    let calls = 0;
+    const resolvers = [];
+    const terminal = await app(t, {
+        standingOrders: () => {
+            calls++;
+            if (calls === 1) return Promise.resolve(listing([order('initial')]));
+            return new Promise((resolve) => {
+                resolvers.push(resolve);
+            });
+        }
+    });
+    terminal.route(listRoute);
+    await terminal.refresh();
+    assert.equal(calls, 1);
+    const first = terminal.standingOrders.refresh();
+    assert.equal(calls, 2);
+    terminal.displayIcons(true);
+    assert.equal(calls, 3, 'icon invalidation started a fresh read');
+    resolvers[0](listing([order('stale')]));
+    await first;
+    assert.deepEqual(
+        terminal.state.standingOrders.orders.map((entry) => entry.orderKey),
+        ['initial'],
+        'stale read must not overwrite state'
+    );
+    const deduped = terminal.standingOrders.refresh();
+    assert.equal(calls, 3, 'stale finally must not clear single-flight for the newer read');
+    resolvers[1](listing([order('fresh')]));
+    await deduped;
+    assert.deepEqual(
+        terminal.state.standingOrders.orders.map((entry) => entry.orderKey),
+        ['fresh']
+    );
+});

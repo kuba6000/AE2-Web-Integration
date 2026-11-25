@@ -459,11 +459,15 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
     private boolean completeCalculation(OrderState order, GridState grid, long now) {
         Future<IAECraftingJob> future = order.calculation;
         if (future == null) return true;
+        ensureSynced(grid, now);
+        future = order.calculation;
+        if (future == null) return true;
         if (!future.isDone()) {
             if (now - order.calculationStartedAt < MINUTES.toMillis(config.maxCalculationMinutes)) return true;
             LOG.warn("Calculation of standing order {} exceeded {} minutes", order.key, config.maxCalculationMinutes);
             dropCalculation(order);
             fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_TIMED_OUT), now);
+            if (grid.live == null) setStatus(order, StandingOrderStatus.GRID_UNAVAILABLE, null, now);
             return false;
         }
         releaseCalculation(order, grid);
@@ -471,6 +475,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
             IAECraftingJob job = future.get();
             if (job.web$isSimulation() && !order.simulationAllowed) {
                 fail(order, StandingOrderStatus.BLOCKED_MISSING, Cause.missing(missingIngredients(job, grid)), now);
+                if (grid.live == null) setStatus(order, StandingOrderStatus.GRID_UNAVAILABLE, null, now);
                 return false;
             }
             order.job = job;
@@ -482,6 +487,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
                 .interrupt();
         }
         fail(order, StandingOrderStatus.SUBMIT_FAILED, Cause.of(StandingOrderReason.CALCULATION_FAILED), now);
+        if (grid.live == null) setStatus(order, StandingOrderStatus.GRID_UNAVAILABLE, null, now);
         return false;
     }
 
@@ -492,7 +498,7 @@ public final class StandingOrderEngine implements StockObservationListener, Auto
      */
     private static List<StandingOrderSnapshot.MissingIngredient> missingIngredients(IAECraftingJob job,
         @Nullable GridState grid) {
-        IAEGrid live = grid == null ? null : grid.seen.get();
+        IAEGrid live = grid == null ? null : grid.live;
         if (live == null) return Collections.emptyList();
         List<StandingOrderSnapshot.MissingIngredient> missing = new ArrayList<>();
         try {
