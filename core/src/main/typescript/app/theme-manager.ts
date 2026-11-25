@@ -50,6 +50,7 @@ export function createThemeManager(
         safe: new URL(location.href).searchParams.get('safe') === '1'
     };
     let current: Presentation | null = null;
+    let patternsView = false;
     let disposed = false;
     let generation = 0;
     const controller = new AbortController();
@@ -65,15 +66,23 @@ export function createThemeManager(
         current = presentation;
         state.active = key;
         // Unmount the previous presentation before releasing its stylesheets.
-        show(presentation.definition, presentation.assets, (error) => {
-            queueMicrotask(() => {
-                if (disposed || token !== generation) return;
-                state.error = message(error);
-                if (key !== 'builtin:default') fallback(token);
-                notify();
-            });
-        });
+        renderCurrent(presentation, key, token);
         old?.release();
+    }
+    function renderCurrent(presentation: Presentation, key: string, token: number) {
+        const useBuiltin = patternsView && !presentation.definition.views.includes('patterns');
+        show(
+            useBuiltin ? builtin : presentation.definition,
+            useBuiltin ? builtinAssets : presentation.assets,
+            (error) => {
+                queueMicrotask(() => {
+                    if (disposed || token !== generation) return;
+                    state.error = message(error);
+                    if (key !== 'builtin:default') fallback(token);
+                    notify();
+                });
+            }
+        );
     }
     function fallback(token: number) {
         display({ definition: builtin, assets: builtinAssets, release() {} }, 'builtin:default', token);
@@ -126,6 +135,7 @@ export function createThemeManager(
                 ...choice,
                 mount(root, application, context) {
                     for (const style of styles) {
+                        if (!style.isConnected) document.head.append(style);
                         style.media = 'all';
                         context.lifetime.onCleanup(() => style.remove());
                     }
@@ -193,6 +203,12 @@ export function createThemeManager(
             return () => {
                 listeners.delete(listener);
             };
+        },
+        setPatternsView(active: boolean) {
+            if (patternsView === active) return;
+            patternsView = active;
+            if (current && !current.definition.views.includes('patterns'))
+                renderCurrent(current, state.active, generation);
         },
         async start() {
             state.busy = !state.safe;

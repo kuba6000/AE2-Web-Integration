@@ -4387,3 +4387,145 @@ button.toast:hover {
         font-size: 12px;
     }
 }
+
+/* Pattern terminal: physical inventory rows, grouped by device. */
+.pattern-view {
+    min-width: 0;
+    gap: 8px;
+    padding: 0 var(--grid-inset, 22px) 12px;
+}
+.pattern-view > .terminal-heading {
+    margin: 0;
+}
+.pattern-view h1 {
+    margin: 0;
+    font-size: 1.35em;
+    font-weight: 400;
+}
+.pattern-controls,
+.pattern-pages,
+.pattern-position,
+.pattern-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.pattern-controls {
+    flex-wrap: wrap;
+    align-items: end;
+}
+.pattern-controls label {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    color: var(--text);
+    font-size: 12px;
+}
+.pattern-controls label:first-child {
+    flex: 1 1 15em;
+}
+.pattern-controls :is(input, select) {
+    width: 100%;
+    min-width: 0;
+}
+.pattern-scroll {
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+    scrollbar-gutter: stable;
+}
+.pattern-group-toggle {
+    margin-top: 6px;
+    text-align: start;
+    width: 100%;
+    overflow-wrap: anywhere;
+}
+.pattern-group-toggle::before {
+    content: '▸';
+}
+.pattern-group-toggle[aria-expanded='true']::before {
+    content: '▾';
+}
+.pattern-provider {
+    padding: 6px 0;
+}
+.pattern-position {
+    flex-wrap: wrap;
+    font-size: 12px;
+    margin: 0 0 4px;
+    color: var(--muted);
+}
+.pattern-offline,
+.pattern-invalid {
+    color: light-dark(#771b10, #ffb4ab);
+}
+.pattern-slots {
+    display: grid;
+    grid-template-columns: repeat(var(--pattern-columns), minmax(0, 1fr));
+    overflow-x: auto;
+    max-width: calc(var(--pattern-columns) * 6.5rem);
+}
+.pattern-slot {
+    min-width: 0;
+    min-height: 48px;
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    overflow: hidden;
+}
+.pattern-slot-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font-size: 11px;
+    line-height: 1.2;
+}
+.pattern-view .resource-icon {
+    display: inline-block;
+    width: var(--resource-icon-size, 32px);
+    height: var(--resource-icon-size, 32px);
+    background-repeat: no-repeat;
+}
+.pattern-pages {
+    justify-content: space-between;
+    font-size: 12px;
+    flex-wrap: wrap;
+}
+.pattern-message {
+    margin: 3px 0;
+    color: var(--muted);
+}
+.pattern-view button:focus-visible {
+    outline-offset: -3px;
+}
+
+/* Keep names legible on narrow terminals without breaking the physical slot rows. */
+.pattern-view:not([data-display='icons']) .pattern-slots {
+    grid-template-columns: repeat(var(--pattern-columns), minmax(5.5rem, 1fr));
+    overscroll-behavior-x: contain;
+}
+
+.pattern-slot:has(> .pattern-duplicate-badge) {
+    position: relative;
+    padding-bottom: 1.1rem;
+    box-shadow: inset 0 0 0 1px light-dark(#69408c, #c69be4);
+}
+.pattern-duplicate-badge {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    padding: 1px 3px;
+    background: light-dark(#573571, #dbc4ed);
+    color: light-dark(#fff, #321842);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.pattern-duplicates-only .pattern-slot[data-duplicates='0']:not(:focus-visible, :hover) {
+    color: var(--surface-muted);
+}

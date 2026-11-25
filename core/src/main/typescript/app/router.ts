@@ -1,6 +1,6 @@
 export type Route =
     | { view: 'home' | 'missing' | 'web-settings' | 'server-settings' | 'about'; gridKey: null }
-    | { view: 'items' | 'settings'; gridKey: string }
+    | { view: 'items' | 'settings' | 'patterns'; gridKey: string }
     | { view: 'tracking'; gridKey: string; itemKey: string }
     | { view: 'cpus'; gridKey: string; cpuKey: string | null }
     | { view: 'history'; gridKey: string; entryId: string | null }
@@ -65,10 +65,10 @@ export function readRoute(): Route {
             // Malformed URL encoding falls through to the missing-route view.
         }
     }
-    const match = /^\/grids\/([^/]+)\/items$/.exec(hash);
+    const match = /^\/grids\/([^/]+)\/(items|patterns)$/.exec(hash);
     if (match) {
         try {
-            return { view: 'items', gridKey: decodeURIComponent(match[1]) };
+            return { view: match[2] === 'patterns' ? 'patterns' : 'items', gridKey: decodeURIComponent(match[1]) };
         } catch {
             // Malformed URL encoding falls through to the missing-route view.
         }

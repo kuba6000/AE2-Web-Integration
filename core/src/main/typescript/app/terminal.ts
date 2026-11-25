@@ -1,3 +1,4 @@
+import { createPatterns, type PatternsState } from './patterns.js';
 import { createPins, type PinsState } from './pins.js';
 import { createServerSettings, type ServerSettingsState } from './server-settings.js';
 import type { Route } from './router.js';
@@ -53,6 +54,8 @@ export type TerminalData = {
 export type TerminalState = TerminalData & {
     readonly refreshingView: boolean;
     selectedGridKey: string | null;
+    patterns: PatternsState;
+    patternTerminalName: ApplicationContext['patternTerminalName'];
     crafting: CraftingState;
     cpus: CpuState;
     history: HistoryState;
@@ -69,7 +72,8 @@ export function createTerminal(
     preferences: ReturnType<typeof createPreferences>,
     icons: ReturnType<typeof createIconLoader>,
     capabilities: ApplicationContext['capabilities'],
-    isAdmin = false
+    isAdmin = false,
+    patternTerminalName: ApplicationContext['patternTerminalName'] = null
 ) {
     const notifications = createNotifications();
     let iconsEnabled = false;
@@ -124,6 +128,12 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
+    const patterns = createPatterns(
+        api,
+        notify,
+        () => iconsEnabled && state.iconPack.available === true,
+        () => state.preferences.autoRefresh
+    );
     const resourceHistory = createResourceHistory(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const pins = createPins(
         api,
@@ -172,6 +182,8 @@ export function createTerminal(
         search: '',
         selected: null,
         preferences: preferences.values,
+        patterns: patterns.state,
+        patternTerminalName,
         crafting: crafting.state,
         cpus: cpus.state,
         history: history.state,
@@ -348,6 +360,7 @@ export function createTerminal(
             if (changed) {
                 state.itemIcons = null;
                 cpus.invalidateIcons();
+                patterns.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
                 resourceHistory.invalidateIcons();
@@ -357,6 +370,7 @@ export function createTerminal(
             if (changed) {
                 void loadItems();
                 void loadCpus();
+                void loadPatterns();
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
                 void resourceHistory.refresh();
@@ -384,6 +398,15 @@ export function createTerminal(
         if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
         else return cpus.refresh(automatic);
+    }
+    function loadPatterns(automatic = false) {
+        if (state.route.view !== 'patterns' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) {
+            patterns.block('GRID_NOT_FOUND');
+            notify();
+            return;
+        }
+        return patterns.load(state.route.gridKey, automatic);
     }
     function loadHistory(reloadDetail = false) {
         if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
@@ -420,7 +443,7 @@ export function createTerminal(
                 await Promise.all([homeRefresh, refreshingGrids]);
                 return;
             }
-            if (!automatic && ['items', 'cpus'].includes(state.route.view)) {
+            if (!automatic && ['items', 'cpus', 'patterns'].includes(state.route.view)) {
                 if (!refreshingAutomatically) return refreshingGrids;
                 const route = state.route;
                 return refreshingGrids.then(() => {
@@ -460,6 +483,7 @@ export function createTerminal(
                 else if (state.selected) await resourceHistory.refresh(automatic);
                 await loadCrafting();
                 await loadCpus(automatic);
+                await loadPatterns(automatic);
                 await loadHistory(reloadDetail);
                 await loadSettings();
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
@@ -485,6 +509,7 @@ export function createTerminal(
                 invalidateItems();
                 crafting.block(state.gridError);
                 cpus.block(state.gridError);
+                patterns.block(state.gridError);
                 history.block(state.gridError);
                 settings.block(state.gridError);
                 if (state.route.view !== 'home' || status === 'UNAUTHORIZED') pins.block(state.gridError);
@@ -517,6 +542,7 @@ export function createTerminal(
             iconsEnabled = enabled;
             state.itemIcons = null;
             cpus.invalidateIcons();
+            patterns.invalidateIcons();
             crafting.invalidateIcons();
             history.invalidateIcons();
             resourceHistory.invalidateIcons();
@@ -525,6 +551,7 @@ export function createTerminal(
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
+            void loadPatterns();
             void loadCrafting();
             if (state.route.view === 'history') void loadHistory();
             void resourceHistory.refresh();
@@ -537,6 +564,9 @@ export function createTerminal(
         },
         refresh,
         route(route: Route) {
+            if (route.view === 'patterns' && !capabilities.patternProviders) route = { view: 'missing', gridKey: null };
+            if (state.route.view === 'patterns' && (route.view !== 'patterns' || state.route.gridKey !== route.gridKey))
+                patterns.clear();
             if (
                 route.view === 'plan' &&
                 state.route.view === 'plan' &&
@@ -581,6 +611,7 @@ export function createTerminal(
                 void loadItems();
                 loadCrafting();
                 loadCpus();
+                void loadPatterns();
                 loadHistory();
                 loadSettings();
             }
@@ -603,9 +634,11 @@ export function createTerminal(
                 if (value) {
                     void loadItems();
                     void loadCpus();
+                    void loadPatterns();
                 } else {
                     live.stop();
                     cpus.stopLive();
+                    patterns.stopLive();
                 }
                 schedule();
             }
@@ -621,6 +654,7 @@ export function createTerminal(
             iconRequest?.abort();
             crafting.dispose();
             cpus.dispose();
+            patterns.clear();
             history.dispose();
             resourceHistory.dispose();
             settings.dispose();

@@ -37,7 +37,13 @@ export function boot(
         else location.replace(target.href);
     }
     const api = createApi(base, returnToLogin);
-    const route = () => application?.route(readRoute());
+    const route = () => {
+        const next = readRoute();
+        const patterns = next.view === 'patterns' && !!application?.state.capabilities.patternProviders;
+        if (patterns) themeManager?.setPatternsView(true);
+        application?.route(next);
+        if (!patterns) themeManager?.setPatternsView(false);
+    };
     function dispose() {
         disposed = true;
         controller.abort();
@@ -80,7 +86,8 @@ export function boot(
                     await application?.refresh();
                 }),
                 metadata.capabilities,
-                metadata.user.isAdmin
+                metadata.user.isAdmin,
+                metadata.patternTerminalName
             );
             const context = {
                 ...theme,
@@ -142,6 +149,7 @@ export function boot(
             );
             themeDialog = createThemeDialog(themeManager, () => preferences.values.language, root);
             window.addEventListener('hashchange', route);
+            themeManager.setPatternsView(readRoute().view === 'patterns' && !!metadata.capabilities.patternProviders);
             await themeManager.start();
         } catch {
             if (disposed || leaving) return;

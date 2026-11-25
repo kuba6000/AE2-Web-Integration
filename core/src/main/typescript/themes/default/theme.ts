@@ -8,6 +8,7 @@ export const defaultTheme: ThemeDefinition = {
     views: [
         'home',
         'items',
+        'patterns',
         'cpus',
         'history',
         'plan',

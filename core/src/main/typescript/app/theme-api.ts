@@ -1,3 +1,4 @@
+import type { PatternsState } from './patterns.js';
 import type { PinsState } from './pins.js';
 import type { TerminalStreamState, TerminalUpdateHint } from './terminal.js';
 import type { CraftingState } from './crafting.js';
@@ -60,6 +61,8 @@ export type ThemeState = ReadonlyData<{
     selected: StoredResource | null;
     selectedGridKey: string | null;
     preferences: Preferences;
+    patterns: PatternsState;
+    patternTerminalName: ApplicationContext['patternTerminalName'];
     crafting: CraftingState;
     cpus: CpuState;
     history: HistoryState;

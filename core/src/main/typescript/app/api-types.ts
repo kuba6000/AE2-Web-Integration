@@ -92,6 +92,30 @@ export type ResourceResponse<T> = {
     nextBefore?: string | null;
     groups?: HomePinGroup[];
 };
+export type EncodedPattern = {
+    kind: 'crafting' | 'processing' | 'invalid';
+    inputs: ResourceStack[];
+    outputs: ResourceStack[];
+};
+export type PatternSlot = { kind: 'empty'; pattern: null } | { kind: 'pattern'; pattern: EncodedPattern };
+export type PatternProvider = {
+    key: string;
+    name: string;
+    icon: ResourceDescription | null;
+    location: { dimension: string; x: number; y: number; z: number; side: string | null };
+    online: boolean;
+    visible: boolean;
+    rowSize: number;
+    priority: number | null;
+    sortValue: number;
+    slots: PatternSlot[];
+};
+export type PatternDelta = {
+    view: TerminalView;
+    providers: PatternProvider[];
+    removed: string[];
+    icons: IconMetadata | null;
+};
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };

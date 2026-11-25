@@ -12,25 +12,29 @@ export type LiveChange<Row> = {
 /** Maps the delta-local icon page of a value to the page of the owner's merged icon metadata. */
 export type IconRemap = <Value extends { icon: IconReference | null }>(value: Value) => Value;
 
-/**
- * The owner keeps the rows; the stream only keeps them current. Rows are keyed by `itemKey` and an update
- * replaces its row's fields with its own.
- */
-export type LiveStreamHost<Row, Delta> = {
+type StreamCallbacks = {
     /** Whether live updates are wanted at all. */
     enabled: () => boolean;
-    rows: () => Row[];
     icons: () => IconMetadata | null;
-    /** Receives every accepted newer delta before its rows, for sections beyond the keyed list. */
-    section?: (delta: Delta, remap: IconRemap) => void;
-    /** Mirrors the connection state; `null` once the stream is stopped. */
+    /** Mirrors the connection state; null when stopped. */
     status: (next: LiveStreamState | null) => void;
-    apply: (change: LiveChange<Row>) => void;
-    /** An open connection failed; `confirmed` tells whether it had ever delivered an event. */
     failed?: (confirmed: boolean) => void;
     changed: () => void;
-    /** The stream is stopped and the owner must take a fresh snapshot. */
-    resync: () => void;
+    /** The stream stopped and needs a fresh snapshot. */
+    resync: (reason: 'invalidate' | 'reconnect') => void;
+};
+
+/** Shared lifetime, revision and icon handling; each view understands its own delta shape. */
+type ViewStreamHost<Delta> = StreamCallbacks & {
+    /** Return false when a delta cannot be applied to the current snapshot. */
+    apply: (delta: Delta, remap: IconRemap, icons: IconMetadata | null) => boolean;
+};
+
+/** The owner keeps keyed item rows and any additional sections of the delta. */
+export type LiveStreamHost<Row, Delta> = StreamCallbacks & {
+    rows: () => Row[];
+    section?: (delta: Delta, remap: IconRemap) => void;
+    apply: (change: LiveChange<Row>) => void;
 };
 
 const reconnectDelayMillis = 2000;
@@ -41,6 +45,39 @@ export function createLiveStream<
     Update extends { itemKey: string },
     Delta extends LiveDelta<Row, Update>
 >(host: LiveStreamHost<Row, Delta>) {
+    return createViewStream<Delta>({
+        ...host,
+        apply(delta, remap, icons) {
+            host.section?.(delta, remap);
+            let rows: LiveChange<Row>['rows'] = null;
+            if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
+                const existing = host.rows();
+                const keyed = new Map<string, Row>();
+                for (const row of existing) {
+                    if (row.itemKey) keyed.set(row.itemKey, row);
+                }
+                for (const removed of delta.removed) keyed.delete(removed);
+                for (const row of delta.definitions) {
+                    if (row.itemKey) keyed.set(row.itemKey, remap(row));
+                }
+                for (const update of delta.updates) {
+                    const row = keyed.get(update.itemKey);
+                    if (!row) return false;
+                    keyed.set(update.itemKey, { ...row, ...update });
+                }
+                const unkeyed = delta.unkeyed?.map(remap) ?? existing.filter((row) => !row.itemKey);
+                rows = { all: [...keyed.values(), ...unkeyed], keyed };
+            }
+            host.apply({ rows, icons });
+            return true;
+        }
+    });
+}
+
+/** Shared lifetime, version checks and atlas mapping for any versioned view. */
+export function createViewStream<Delta extends { view: TerminalView; icons: IconMetadata | null }>(
+    host: ViewStreamHost<Delta>
+) {
     let view: TerminalView | undefined;
     let subscription: string | undefined;
     let close: (() => void) | undefined;
@@ -68,7 +105,7 @@ export function createLiveStream<
     }
     function resync() {
         stop();
-        host.resync();
+        host.resync('invalidate');
     }
     /** Opens the stream of a snapshot's subscription while `scope` still holds for the snapshot's owner. */
     function start(
@@ -154,30 +191,10 @@ export function createLiveStream<
                     });
                     icons = { ...delta.icons, pages, animations };
                 }
-                host.section?.(delta, remap);
-                let rows: LiveChange<Row>['rows'] = null;
-                if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
-                    const existing = host.rows();
-                    const keyed = new Map<string, Row>();
-                    for (const row of existing) {
-                        if (row.itemKey) keyed.set(row.itemKey, row);
-                    }
-                    for (const removed of delta.removed) keyed.delete(removed);
-                    for (const row of delta.definitions) {
-                        if (row.itemKey) keyed.set(row.itemKey, remap(row));
-                    }
-                    for (const update of delta.updates) {
-                        const row = keyed.get(update.itemKey);
-                        if (!row) {
-                            resync();
-                            return;
-                        }
-                        keyed.set(update.itemKey, { ...row, ...update });
-                    }
-                    const unkeyed = delta.unkeyed?.map(remap) ?? existing.filter((row) => !row.itemKey);
-                    rows = { all: [...keyed.values(), ...unkeyed], keyed };
+                if (!host.apply(delta, remap, icons)) {
+                    resync();
+                    return;
                 }
-                host.apply({ rows, icons });
                 view = delta.view;
                 host.changed();
             },
@@ -192,7 +209,7 @@ export function createLiveStream<
                 host.changed();
                 reconnect = setTimeout(() => {
                     reconnect = undefined;
-                    if (scope()) host.resync();
+                    if (scope()) host.resync('reconnect');
                 }, reconnectDelayMillis);
             }
         });

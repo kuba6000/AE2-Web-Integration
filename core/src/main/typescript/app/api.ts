@@ -17,7 +17,9 @@ import type {
     ResourcePinUpdate,
     HomePinGroupUpdate,
     HomePinGroup,
-    PinPlacement
+    PinPlacement,
+    PatternProvider,
+    PatternDelta
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
 
@@ -113,6 +115,18 @@ export type Api = {
         subscription: string,
         icons: boolean,
         handlers: EventHandlers<TerminalDelta>
+    ) => () => void;
+    patternProviders: (
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean,
+        live?: boolean
+    ) => Promise<ResourceResponse<PatternProvider[]>>;
+    patternEvents: (
+        gridKey: string,
+        subscription: string,
+        icons: boolean,
+        handlers: EventHandlers<PatternDelta>
     ) => () => void;
     createPlan: (
         gridKey: string,
@@ -427,6 +441,15 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             snapshot<StoredResource[]>(`api/grids/${encodeURIComponent(gridKey)}/items`, signal, icons, live),
         itemEvents: (gridKey, subscription, icons, handlers) =>
             events(`api/grids/${encodeURIComponent(gridKey)}/items/events`, subscription, icons, handlers),
+        patternProviders: (gridKey, signal, icons = false, live = false) =>
+            snapshot<PatternProvider[]>(
+                `api/grids/${encodeURIComponent(gridKey)}/pattern-providers`,
+                signal,
+                icons,
+                live
+            ),
+        patternEvents: (gridKey, subscription, icons, handlers) =>
+            events(`api/grids/${encodeURIComponent(gridKey)}/pattern-providers/events`, subscription, icons, handlers),
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal, icons) =>

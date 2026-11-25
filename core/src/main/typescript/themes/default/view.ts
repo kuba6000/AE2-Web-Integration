@@ -1,3 +1,4 @@
+import { createPatternView } from './patterns.js';
 import { createResourceTerminal, resourceMetadata } from './resource-terminal.js';
 import { createTooltips } from './tooltips.js';
 import { createWebSettings, type TerminalDisplay } from './web-settings.js';
@@ -101,6 +102,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     workspace.prepend(resourceTerminal.tools);
     windowFrame.insertBefore(resourceTerminal.element, missingView);
     workspace.insertBefore(resourceTerminal.panel, windowFrame.nextSibling);
+    const patternsView = createPatternView(windowFrame, application, tooltips);
+    lifetime.onCleanup(patternsView.dispose);
     const cpuView = createCpuView(windowFrame, application, { workspace: workspace, settings, lifetime });
     lifetime.onCleanup(() => cpuView.dispose());
     const historyView = createHistoryView(windowFrame, application, tooltips.bind, settings);
@@ -146,6 +149,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         workspace.classList.toggle('product-icons-enabled', effectiveDisplay !== 'names');
         notices.render(state, locale, effectiveDisplay === 'names');
         resourceTerminal.render(state, locale, effectiveDisplay);
+        patternsView.render(state, locale, effectiveDisplay);
         craftingView.render(state, locale, effectiveDisplay);
     }
 

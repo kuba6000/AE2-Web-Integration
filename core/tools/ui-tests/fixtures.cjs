@@ -367,6 +367,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                                 ? {
                                       publicMode: options.publicMode,
                                       capabilities: options.loggedOut ? {} : options.capabilities,
+                                      patternTerminalName: options.patternTerminalName ?? null,
                                       modVersion: options.modVersion,
                                       isOutdated: options.isOutdated || false,
                                       availableUpdate:
@@ -380,6 +381,28 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                                 : null
                     })
                 );
+            } else if (resource === `/api/grids/${gridA}/pattern-providers`) {
+                const live = url.searchParams.get('live') === 'true';
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: options.patternRows || [],
+                        icons: null,
+                        view: live ? { generation: '1.0', revision: '1' } : null,
+                        subscription: live ? 'pattern-subscription' : null
+                    })
+                );
+            } else if (resource === `/api/grids/${gridA}/pattern-providers/events`) {
+                if (request.method === 'POST') {
+                    response.end(JSON.stringify({ status: 'OK', data: null }));
+                } else {
+                    response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+                    options.patternStream = response;
+                    response.write('event: ready\ndata: {}\n\n');
+                    response.on('close', () => {
+                        if (options.patternStream === response) options.patternStream = null;
+                    });
+                }
             } else if (resource === '/api/server/settings') {
                 let status = options.isAdmin ? 'OK' : 'NO_PERMISSIONS';
                 if (status === 'OK' && !options.serverConfigurationReadOnly.allowServerSettingsEditing)
