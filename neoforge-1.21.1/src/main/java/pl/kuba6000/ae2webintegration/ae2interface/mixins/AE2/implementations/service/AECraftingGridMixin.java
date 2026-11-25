@@ -44,7 +44,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
 @Mixin(value = CraftingService.class, remap = false)
-public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingMediumTracker {
+public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingMediumTracker, ICraftingRevision {
 
     @Shadow
     @Final
@@ -57,9 +57,14 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
     @Unique
     private long web$lastObservedCraftingRevision = Long.MIN_VALUE;
 
+    @Override
+    public long web$getCraftingRevision() {
+        return ((ICraftingRevision) craftingProviders).web$getCraftingRevision();
+    }
+
     @WrapMethod(method = "onServerEndTick")
     private void web$craftingChanged(Operation<Void> original) {
-        long modified = ((ICraftingRevision) craftingProviders).web$getCraftingRevision();
+        long modified = web$getCraftingRevision();
         if (modified != web$lastObservedCraftingRevision) {
             web$lastObservedCraftingRevision = modified;
             StorageCapture capture = ((IAEStorageGrid) grid.getStorageService()).web$getStorageCapture();

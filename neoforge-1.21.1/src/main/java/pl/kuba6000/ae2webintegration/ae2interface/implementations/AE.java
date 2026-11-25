@@ -4,6 +4,7 @@ import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CPU_SELECT
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_IGNORE_MISSING;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_LIGHT_MODE;
 import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.CRAFTING_PLAN_STEPS;
+import static pl.kuba6000.ae2webintegration.core.api.ServerCapability.PATTERN_PROVIDERS;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -26,6 +27,7 @@ import appeng.me.Grid;
 import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
 import appeng.parts.reporting.PatternAccessTerminalPart;
+import pl.kuba6000.ae2webintegration.core.api.PatternTerminalName;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -44,12 +46,18 @@ public class AE implements IAE {
         capabilities.put(CRAFTING_IGNORE_MISSING, false);
         capabilities.put(CRAFTING_PLAN_STEPS, false);
         capabilities.put(CPU_SELECTION_MODE, true);
+        capabilities.put(PATTERN_PROVIDERS, true);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
     }
 
     @Override
     public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
         return CAPABILITIES;
+    }
+
+    @Override
+    public @NotNull PatternTerminalName web$getPatternTerminalName() {
+        return PatternTerminalName.PATTERN_ACCESS_TERMINAL;
     }
 
     public static WeakHashMap<ICraftingCPUCluster, Integer> cpuInternalIDMap = new WeakHashMap<>();

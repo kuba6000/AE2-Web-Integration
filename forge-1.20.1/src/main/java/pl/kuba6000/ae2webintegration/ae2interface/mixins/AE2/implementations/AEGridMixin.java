@@ -39,14 +39,17 @@ import appeng.me.GridNode;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.TerminalPatternProvider;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
@@ -220,6 +223,16 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
             : profileCache.get(uuid)
                 .orElse(null);
         return new PlayerIdentity(uuid, profile == null ? uuid.toString() : profile.getName());
+    }
+
+    @Override
+    public @NotNull Iterable<? extends IPatternProvider> web$getPatternProviders() {
+        return TerminalPatternProvider.snapshot((Grid) (Object) this);
+    }
+
+    @Override
+    public long web$getPatternRevision() {
+        return ((ICraftingRevision) ((Grid) (Object) this).getCraftingService()).web$getCraftingRevision();
     }
 
     @Override
