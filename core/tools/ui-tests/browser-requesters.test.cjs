@@ -122,3 +122,27 @@ test('CPU overview and side tooltip show known authors without requiring trackin
         .getByText('Requested by: NativePlayer', { exact: true })
         .waitFor();
 });
+
+test('CPU and history views name the standing order that submitted a job instead of calling it Automation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const requesters = [
+        { source: 'STANDING_ORDER', player: null, orderKey: 'order-1', orderName: '<b>Keep plastic</b>' },
+        { source: 'AUTOMATION', player: null }
+    ];
+    options.cpus = { 'cpu-a': { ...options.cpus['cpu-a'], ...cpuWork, name: 'Orders', requesters } };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, requesters };
+    options.historyDetail = { ...historyDetail, requesters };
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const overview = page.getByRole('region', { name: 'CPUs', exact: true });
+    await overview
+        .getByText('Requested by: Standing order: <b>Keep plastic</b>, Automation', { exact: true })
+        .waitFor({ timeout: 5000 });
+    assert.equal(await overview.locator('b').count(), 0, 'The order name renders as text');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page
+        .getByRole('region', { name: 'Current job', exact: true })
+        .getByText('Requested by: Standing order: <b>Keep plastic</b>, Automation', { exact: true })
+        .waitFor();
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await page.getByText('Standing order: <b>Keep plastic</b>, Automation', { exact: true }).waitFor();
+});

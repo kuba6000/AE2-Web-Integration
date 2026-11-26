@@ -44,12 +44,23 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final long DISCOVERY_MILLIS = SECONDS.toMillis(1);
     private static final long VIEWER_LEASE_MILLIS = SECONDS.toMillis(10);
     private static final long FAILURE_RETRY_MILLIS = SECONDS.toMillis(30);
+    /**
+     * Shortest time between two extra full reads of one grid that were asked for through {@link #requestStockRead}.
+     * The shortest stock sample interval is 60 s, so a grid is never read more than three times as often as its
+     * scheduled cadence, however often reads are requested.
+     */
+    static final long EXTRA_READ_INTERVAL_MILLIS = SECONDS.toMillis(30);
     private final StorageTrackingService service;
     private final RecentTrackingService recent;
     private final TerminalRegistry terminals;
     private final GridIdentityRegistry identities;
     private ConfigSettings.ResourceTracking settings;
     private final Map<StableKey, Binding> bindings = new HashMap<>();
+    private final Set<StableKey> stockLeases = new HashSet<>();
+    private final Set<StableKey> stockReadRequests = new HashSet<>();
+    private final Map<StableKey, Long> lastExtraRead = new HashMap<>();
+    private final Map<StableKey, Retained> retained = new HashMap<>();
+    private @Nullable StockObservationListener stockListener;
     private final List<Binding> scheduled = new ArrayList<>();
     private long nextDiscovery;
     private long nextViewerRefresh;
@@ -83,6 +94,42 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         service.setMaximumQueuedRows(updated.maxQueuedRows);
         recent.applyLimits(updated.maxQueuedRows, updated.maxResourcesPerGrid);
         settings = updated;
+    }
+
+    /** Receives every complete stock read and every stock read failure; at most one listener, null removes it. */
+    public void setStockListener(@Nullable StockObservationListener listener) {
+        stockListener = listener;
+    }
+
+    /**
+     * Keeps a binding for the grid and takes a full stock read at its stock sample interval even when stock tracking
+     * is off. The reads write no history and never activate the terminal view. Takes effect within a second.
+     */
+    public void leaseStock(@NotNull StableKey grid) {
+        stockLeases.add(grid);
+    }
+
+    /** Ends {@link #leaseStock}; a pending {@link #requestStockRead} of the grid is dropped as well. */
+    public void releaseStock(@NotNull StableKey grid) {
+        stockLeases.remove(grid);
+        stockReadRequests.remove(grid);
+    }
+
+    /**
+     * Asks for one extra full stock read of the grid, without history. The grid must be stock tracked or leased.
+     * Requests
+     * coalesce, and the read is taken at the first tick at least 30 s after the
+     * grid's previous extra read; a scheduled sample that arrives first satisfies the request. The request stays until
+     * a complete read was delivered.
+     */
+    public void requestStockRead(@NotNull StableKey grid) {
+        stockReadRequests.add(grid);
+    }
+
+    /** A native storage reset invalidates previously published quantities even before the next scheduled sample. */
+    public boolean stockTopologyChanged(@NotNull StableKey grid) {
+        Binding binding = bindings.get(grid);
+        return binding != null && binding.capture.terminalEpoch() != binding.terminalEpoch;
     }
 
     /** Off-thread read of an immutable worker publication; never touches native bindings or schedules work. */
@@ -209,24 +256,50 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             Binding existing = bindings.get(key);
             GridSettingsData configuration = gridSettings(key);
             boolean persist = configuration != null
-                && (configuration.isStorageTracked() || configuration.isFlowTracked());
+                && (configuration.isStorageTracked() || configuration.isFlowTracked()) || stockLeases.contains(key);
             if (!persist && (existing == null || existing.activeUntil <= nowMillis
                 && (existing.lastFailure == null || nowMillis >= existing.retryAfter))) continue;
             binding(key, grid, configuration, nowMillis);
             present.add(key);
         }
         if (!failedDiscovery) discoveryFailed = false;
+        lastExtraRead.values()
+            .removeIf(at -> nowMillis - at >= EXTRA_READ_INTERVAL_MILLIS);
+        // A remembered schedule that has passed is the same as none.
+        retained.values()
+            .removeIf(schedule -> schedule.nextStockSample <= nowMillis || schedule.grid.get() == null);
         Iterator<Map.Entry<StableKey, Binding>> iterator = bindings.entrySet()
             .iterator();
         while (iterator.hasNext()) {
             Map.Entry<StableKey, Binding> entry = iterator.next();
             if (!present.contains(entry.getKey())) {
-                detach(entry.getValue(), nowMillis);
+                Binding gone = entry.getValue();
+                detach(gone, nowMillis);
+                remember(gone, nowMillis);
+                // A pending read request stays: it is served when the grid returns, and releaseStock ends it.
                 iterator.remove();
             }
         }
         scheduled.clear();
         for (Binding binding : bindings.values()) if (binding.attached) scheduled.add(binding);
+    }
+
+    /**
+     * A grid that is only unavailable for a moment, for example while its network boots after a topology change, loses
+     * its binding. The same native grid returning must not sample at once just because its binding is new.
+     */
+    private void remember(Binding binding, long nowMillis) {
+        IAEGrid grid = binding.grid.get();
+        if (grid == null || binding.nextStockSample <= nowMillis) return;
+        retained.put(
+            binding.key,
+            new Retained(
+                binding.grid,
+                binding.stock,
+                binding.flow,
+                stockLeases.contains(binding.key),
+                binding.stockInterval,
+                binding.nextStockSample));
     }
 
     private @Nullable StableKey eligibleKey(IAEGrid grid) {
@@ -270,12 +343,21 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 grid,
                 new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
             binding.activeUntil = activeUntil;
-            binding.capture.setStockNeeded(stock || activeUntil > nowMillis);
+            binding.capture.setStockNeeded(stock || activeUntil > nowMillis || stockLeases.contains(key));
             binding.stock = stock;
             binding.flow = flow;
             binding.nextFlowFlush = nowMillis + flowInterval;
             binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             binding.flowFrom = nowMillis;
+            Retained schedule = retained.remove(key);
+            if (schedule != null && schedule.grid.get() == grid
+                && schedule.stock == stock
+                && schedule.flow == flow
+                && schedule.leased == stockLeases.contains(key)
+                && schedule.stockInterval == stockInterval) {
+                binding.stockInterval = stockInterval;
+                binding.nextStockSample = schedule.nextStockSample;
+            }
             // Native installation may mutate one owner before failing on another. Retain the candidate for retry.
             bindings.put(key, binding);
         }
@@ -312,17 +394,37 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             || binding.flow && nowMillis >= binding.nextFlowFlush
             || binding.flow && nowMillis >= binding.nextFlowSample
             || binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead
-            || binding.flow && binding.activeUntil > nowMillis && nowMillis >= binding.nextRecentPublication;
+            || binding.flow && binding.activeUntil > nowMillis && nowMillis >= binding.nextRecentPublication
+            || leaseSampleDue(binding, nowMillis)
+            || extraReadDue(binding, nowMillis);
+    }
+
+    private boolean extraReadDue(Binding binding, long nowMillis) {
+        if (!stockReadRequests.contains(binding.key)) return false;
+        Long last = lastExtraRead.get(binding.key);
+        return last == null || nowMillis - last >= EXTRA_READ_INTERVAL_MILLIS;
+    }
+
+    /** Stock tracking already samples at this cadence; a lease only matters for grids that are not tracked. */
+    private boolean leaseSampleDue(Binding binding, long nowMillis) {
+        return !binding.stock && nowMillis >= binding.nextStockSample && stockLeases.contains(binding.key);
     }
 
     private void observe(Binding binding, IAEGrid grid, long nowMillis) {
-        binding.capture.setStockNeeded(binding.stock || binding.activeUntil > nowMillis);
+        binding.capture
+            .setStockNeeded(binding.stock || binding.activeUntil > nowMillis || stockLeases.contains(binding.key));
         long started = System.nanoTime();
         boolean stockSample = binding.stock && nowMillis >= binding.nextStockSample;
+        boolean leaseSample = leaseSampleDue(binding, nowMillis);
+        boolean extraRead = extraReadDue(binding, nowMillis);
+        boolean engineRead = leaseSample || extraRead;
+        // Spaced from the attempt, whatever it delivers; a scheduled sample that serves the request is not an extra
+        // read.
+        if (extraRead && !stockSample && !leaseSample) lastExtraRead.put(binding.key, nowMillis);
         boolean flowFlush = binding.flow && nowMillis >= binding.nextFlowFlush;
         boolean flowSample = binding.flow && (flowFlush || nowMillis >= binding.nextFlowSample);
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
-        if (!stockSample && !flowSample && !liveRead) {
+        if (!stockSample && !flowSample && !liveRead && !engineRead) {
             publishRecent(binding, nowMillis);
             return;
         }
@@ -330,11 +432,13 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             long terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
+                notifyInvalidated(binding.key);
                 binding.terminalEpoch = terminalEpoch;
                 recent.invalidate(binding.key, binding.generation, nowMillis);
             }
-            StorageObservation observation = stockSample || liveRead
-                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, flowSample)
+            StorageObservation observation = stockSample || liveRead || engineRead
+                ? binding.capture
+                    .observe(grid, nowMillis, stockSample || engineRead || nowMillis >= binding.nextFull, flowSample)
                 : binding.capture.flushFlow(nowMillis);
             if (observation.full())
                 binding.nextFull = nowMillis + SECONDS.toMillis(settings.reconciliationIntervalSeconds);
@@ -342,6 +446,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
+                notifyInvalidated(binding.key);
                 binding.terminalEpoch = terminalEpoch;
                 recent.invalidate(binding.key, binding.generation, nowMillis);
                 binding.capture.invalidate();
@@ -361,6 +466,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                     flowDescriptions,
                     Collections.emptyList());
                 stockSample = false;
+                leaseSample = false;
             }
             binding.accumulateFlow(observation);
             if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);
@@ -378,11 +484,16 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 else if (nowMillis >= binding.nextRecentPublication || terminals.recent(binding.key) == null)
                     publishRecent(binding, nowMillis);
             }
-            if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
+            if (stockSample || leaseSample) binding.nextStockSample = nowMillis + binding.stockInterval;
             if (flowFlush) binding.nextFlowFlush = nowMillis + binding.flowInterval;
             if (flowSample) binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             if (observation.stockObserved()) binding.nextViewerRead = nowMillis + settings.activeIntervalMillis;
             binding.lastFailure = null;
+            // Last, so that nothing a listener does can affect this tick's own bookkeeping.
+            if (observation.full() && observation.stockObserved()) {
+                stockReadRequests.remove(binding.key);
+                notifyObserved(binding.key, observation);
+            }
         } catch (RuntimeException failure) {
             failed(binding, failure, nowMillis, started);
         }
@@ -395,9 +506,30 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         terminals.invalidate(binding.key, binding.generation);
         if (binding.lastFailure == null) LOG.warn("Storage tracking failed for network {}", binding.key, failure);
         binding.lastFailure = failure;
+        notifyInvalidated(binding.key);
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
             : binding.flow ? binding.flowInterval : binding.stockInterval;
         binding.retryAfter = retryAt(nowMillis, started, interval);
+    }
+
+    private void notifyObserved(StableKey grid, StorageObservation observation) {
+        StockObservationListener listener = stockListener;
+        if (listener == null) return;
+        try {
+            listener.stockObserved(grid, observation);
+        } catch (RuntimeException failure) {
+            LOG.error("Stock listener failed on an observation of network {}", grid, failure);
+        }
+    }
+
+    private void notifyInvalidated(StableKey grid) {
+        StockObservationListener listener = stockListener;
+        if (listener == null) return;
+        try {
+            listener.stockInvalidated(grid);
+        } catch (RuntimeException failure) {
+            LOG.error("Stock listener failed on stock invalidation of network {}", grid, failure);
+        }
     }
 
     private void publishRecent(Binding binding, long nowMillis) {
@@ -448,6 +580,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 LOG.warn("Native storage capture could not be detached for network {}", binding.key, failure);
             }
         }
+        // Discovery can retire a booting grid before observe() handles its last native reset.
+        if (binding.capture.terminalEpoch() != binding.terminalEpoch) notifyInvalidated(binding.key);
         binding.capture.close();
         recent.retire(binding.key, binding.generation);
         service.retire(binding.key, binding.generation);
@@ -460,6 +594,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         for (Binding binding : bindings.values()) detach(binding, nowMillis);
         bindings.clear();
         scheduled.clear();
+        stockLeases.clear();
+        stockReadRequests.clear();
+        lastExtraRead.clear();
+        retained.clear();
+        stockListener = null;
         recent.close();
     }
 
@@ -546,6 +685,27 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             return history;
         }
 
+    }
+
+    /** The stock schedule of a torn-down binding, valid for the same native grid under the same settings. */
+    private static final class Retained {
+
+        private final WeakReference<IAEGrid> grid;
+        private final boolean stock;
+        private final boolean flow;
+        private final boolean leased;
+        private final long stockInterval;
+        private final long nextStockSample;
+
+        private Retained(WeakReference<IAEGrid> grid, boolean stock, boolean flow, boolean leased, long stockInterval,
+            long nextStockSample) {
+            this.grid = grid;
+            this.stock = stock;
+            this.flow = flow;
+            this.leased = leased;
+            this.stockInterval = stockInterval;
+            this.nextStockSample = nextStockSample;
+        }
     }
 
     private static final class PendingFlow {

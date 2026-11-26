@@ -4,7 +4,10 @@ export type Route =
     | { view: 'tracking'; gridKey: string; itemKey: string }
     | { view: 'cpus'; gridKey: string; cpuKey: string | null }
     | { view: 'history'; gridKey: string; entryId: string | null }
-    | { view: 'plan'; gridKey: string; planId: string; tree?: boolean };
+    | { view: 'plan'; gridKey: string; planId: string; tree?: boolean }
+    | { view: 'standing-orders'; gridKey: string; editor: StandingOrderEditorRoute | null };
+/** `order` is null for a new standing order, whose `itemKey` optionally prefills its resource. */
+export type StandingOrderEditorRoute = { order: string | null; itemKey: string | null };
 
 export function readRoute(): Route {
     const hash = location.hash.replace(/^#/, '');
@@ -65,6 +68,19 @@ export function readRoute(): Route {
             // Malformed URL encoding falls through to the missing-route view.
         }
     }
+    const orders = /^\/grids\/([^/]+)\/standing-orders(?:\/(new)(?:\/([^/]+))?|\/([^/]+))?$/.exec(hash);
+    if (orders) {
+        try {
+            const editor: StandingOrderEditorRoute | null = orders[2]
+                ? { order: null, itemKey: orders[3] ? decodeURIComponent(orders[3]) : null }
+                : orders[4]
+                  ? { order: decodeURIComponent(orders[4]), itemKey: null }
+                  : null;
+            return { view: 'standing-orders', gridKey: decodeURIComponent(orders[1]), editor };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
+    }
     const match = /^\/grids\/([^/]+)\/items$/.exec(hash);
     if (match) {
         try {
@@ -94,4 +110,11 @@ export function navigateToGrid(key: string | null) {
 
 export function trackingHref(gridKey: string, itemKey: string) {
     return `#/grids/${encodeURIComponent(gridKey)}/tracking/${encodeURIComponent(itemKey)}`;
+}
+
+export function standingOrdersHref(gridKey: string | null, editor: StandingOrderEditorRoute | null = null) {
+    const base = `#/grids/${encodeURIComponent(String(gridKey))}/standing-orders`;
+    if (!editor) return base;
+    if (editor.order !== null) return `${base}/${encodeURIComponent(editor.order)}`;
+    return `${base}/new${editor.itemKey === null ? '' : '/' + encodeURIComponent(editor.itemKey)}`;
 }

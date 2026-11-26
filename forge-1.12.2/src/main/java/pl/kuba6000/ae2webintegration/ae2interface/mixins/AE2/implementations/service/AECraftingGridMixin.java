@@ -33,6 +33,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
+    default boolean web$canEmitFor(IAEKey key) {
+        // AE2UEL level emitters register item stacks only; fluid level emitters are not crafting providers.
+        return key instanceof IAEItemStack item && ((ICraftingGrid) (Object) this).canEmitFor(item);
+    }
+
+    @Override
     default int web$getCPUCount() {
         return ((ICraftingGrid) (Object) this).getCpus()
             .size();

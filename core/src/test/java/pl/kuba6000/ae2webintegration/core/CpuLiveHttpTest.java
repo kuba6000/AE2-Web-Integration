@@ -128,7 +128,8 @@ class CpuLiveHttpTest {
         for (CraftingRequester requester : Arrays.asList(
             CraftingRequester.player(TestGridFixtures.playerIdentity(7)),
             CraftingRequester.web(),
-            CraftingRequester.automation())) {
+            CraftingRequester.automation(),
+            CraftingRequester.standingOrder(StableKey.random(), "Keep plastic"))) {
             onGame(() -> AE2JobTracker.addJob(cpu, grid, false, requester));
             for (JsonObject data : Arrays.asList(
                 json(listUrl).getAsJsonObject("data")
@@ -137,14 +138,28 @@ class CpuLiveHttpTest {
                 assertTrue(
                     data.get("nativeRequesterName")
                         .isJsonNull());
+                JsonObject shown = data.getAsJsonArray("requesters")
+                    .get(0)
+                    .getAsJsonObject();
                 assertEquals(
                     requester.source()
                         .name(),
-                    data.getAsJsonArray("requesters")
-                        .get(0)
-                        .getAsJsonObject()
-                        .get("source")
+                    shown.get("source")
                         .getAsString());
+                assertEquals(
+                    requester.orderKey() == null ? null
+                        : requester.orderKey()
+                            .toString(),
+                    shown.get("orderKey")
+                        .isJsonNull() ? null
+                            : shown.get("orderKey")
+                                .getAsString());
+                assertEquals(
+                    requester.orderName(),
+                    shown.get("orderName")
+                        .isJsonNull() ? null
+                            : shown.get("orderName")
+                                .getAsString());
             }
         }
         onGame(() -> { cpu.busy = false; });

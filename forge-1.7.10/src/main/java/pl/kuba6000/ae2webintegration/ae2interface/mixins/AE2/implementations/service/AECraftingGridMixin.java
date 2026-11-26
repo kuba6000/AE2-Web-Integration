@@ -34,6 +34,11 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
+    default boolean web$canEmitFor(IAEKey key) {
+        return ((ICraftingGrid) (Object) this).canEmitFor((IAEStack<?>) (Object) key);
+    }
+
+    @Override
     default int web$getCPUCount() {
         return ((ICraftingGrid) (Object) this).getCpus()
             .size();
@@ -77,6 +82,16 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
                 .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
         }
         return (Future<IAECraftingJob>) (Object) job;
+    }
+
+    @Override
+    default String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+        ICraftingCPU cpu = (ICraftingCPU) target;
+        if (!target.web$acceptsMachineOrders() || !target.web$isValidForGrid(grid) || cpu.getActionSource() == null)
+            return "No suitable automation CPU.";
+        ICraftingLink link = ((ICraftingGrid) this)
+            .submitJob((ICraftingJob<?>) job, null, cpu, true, cpu.getActionSource());
+        return link == null ? "Submission failed" : null;
     }
 
     @Override

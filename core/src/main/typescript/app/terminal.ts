@@ -1,4 +1,5 @@
 import { createPins, type PinsState } from './pins.js';
+import { createStandingOrders, type StandingOrdersState } from './standing-orders.js';
 import { createServerSettings, type ServerSettingsState } from './server-settings.js';
 import type { Route } from './router.js';
 import type {
@@ -38,7 +39,10 @@ export type TerminalData = {
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    itemsByKey: ReadonlyMap<string, StoredResource>;
     itemSnapshotRevision: number;
+    /** Advances on a new snapshot or when available choices, names, icons or craftability change. */
+    itemCatalogRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; hasAnimations: boolean; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -61,6 +65,7 @@ export type TerminalState = TerminalData & {
     settings: SettingsState;
     serverSettings: ServerSettingsState;
     pins: PinsState;
+    standingOrders: StandingOrdersState;
 };
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
@@ -131,6 +136,15 @@ export function createTerminal(
         () => iconsEnabled && state.iconPack.available === true,
         notifications.publish
     );
+    const standingOrders = createStandingOrders(
+        api,
+        () => {
+            notify();
+            schedule();
+        },
+        () => iconsEnabled && state.iconPack.available === true,
+        notifications.publish
+    );
     const settings = createGridSettings(
         api,
         () => {
@@ -161,7 +175,9 @@ export function createTerminal(
         gridStatus: 'loading',
         gridError: null,
         items: [],
+        itemsByKey: new Map(),
         itemSnapshotRevision: 0,
+        itemCatalogRevision: 0,
         itemIcons: null,
         iconPack: { available: null, hasAnimations: false, status: 'loading' },
         itemStatus: 'idle',
@@ -178,15 +194,25 @@ export function createTerminal(
         resourceHistory: resourceHistory.state,
         recent: null,
         pins: pins.state,
+        standingOrders: standingOrders.state,
         settings: settings.state,
         serverSettings: serverSettings.state
     };
 
+    const editingOrder = () => state.route.view === 'standing-orders' && state.route.editor !== null;
+    const wantsItems = () => state.route.view === 'items' || editingOrder();
+    const liveItems = () => state.route.view === 'items' && state.preferences.autoRefresh;
     const live = createLiveStream<StoredResource, StoredResourceUpdate, TerminalDelta>({
-        enabled: () => state.preferences.autoRefresh,
+        enabled: liveItems,
         rows: () => state.items,
         icons: () => state.itemIcons,
         section(delta) {
+            if (
+                delta.definitions.length ||
+                delta.removed.length ||
+                delta.updates.some((row) => row.craftable !== state.itemsByKey.get(row.itemKey)?.craftable)
+            )
+                state.itemCatalogRevision++;
             if (delta.recent) {
                 state.recent = {
                     ...delta.recent,
@@ -202,6 +228,7 @@ export function createTerminal(
         apply({ rows, icons }) {
             if (rows) {
                 state.items = rows.all;
+                state.itemsByKey = rows.keyed;
                 state.selected = state.selected?.itemKey ? (rows.keyed.get(state.selected.itemKey) ?? null) : null;
                 if (!state.selected) resourceHistory.clear();
             }
@@ -241,6 +268,7 @@ export function createTerminal(
         serial++;
         itemRequest?.abort();
         state.items = [];
+        state.itemsByKey = new Map();
         state.recent = null;
         state.itemIcons = null;
         state.selected = null;
@@ -252,7 +280,7 @@ export function createTerminal(
     }
     async function loadItems(automatic = false) {
         const key = state.route.gridKey;
-        if (disposed || state.route.view !== 'items' || !key || state.gridStatus !== 'ready') return;
+        if (disposed || !wantsItems() || !key || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === key)) {
             invalidateItems();
             state.itemStatus = 'error';
@@ -260,6 +288,8 @@ export function createTerminal(
             notify();
             return;
         }
+        // A picker uses one catalogue per visit. Status polls do not retry failures or replace its search results.
+        if (automatic && editingOrder() && state.itemStatus !== 'idle') return;
         const recovering = state.stream?.status === 'connecting' && state.itemStatus === 'ready';
         live.stop();
         if (recovering) state.stream = { status: 'connecting', lastEventAt: null };
@@ -272,17 +302,16 @@ export function createTerminal(
         if (!recovering) state.itemError = null;
         notify();
         try {
-            const result = await api.items(
-                key,
-                request.signal,
-                iconsEnabled && state.iconPack.available === true,
-                state.preferences.autoRefresh
-            );
+            const result = editingOrder()
+                ? await api.standingOrderResources(key, request.signal, iconsEnabled)
+                : await api.items(key, request.signal, iconsEnabled && state.iconPack.available === true, liveItems());
             if (disposed || version !== serial) return;
             const items = result.data;
             state.itemIcons = result.icons;
             state.items = items;
+            state.itemsByKey = new Map(items.flatMap((item) => (item.itemKey ? [[item.itemKey, item]] : [])));
             state.itemSnapshotRevision++;
+            state.itemCatalogRevision++;
             state.recent = result.recent ?? null;
             state.selected = state.selected
                 ? items.find((item) => item.itemKey && item.itemKey === state.selected?.itemKey) || null
@@ -295,7 +324,7 @@ export function createTerminal(
                     api.itemEvents(key, subscription, iconsEnabled && state.iconPack.available === true, handlers),
                 () => !disposed && version === serial
             );
-            if (!live.active || !state.preferences.autoRefresh) {
+            if (!live.active || !liveItems()) {
                 state.stream = null;
                 state.itemError = null;
             }
@@ -314,6 +343,7 @@ export function createTerminal(
             live.stop();
             resourceHistory.clear();
             state.items = [];
+            state.itemsByKey = new Map();
             state.recent = null;
             state.itemIcons = null;
             state.selected = null;
@@ -339,6 +369,8 @@ export function createTerminal(
             const pack = await api.iconPack(request.signal);
             if (disposed || request !== iconRequest) return;
             if (typeof pack?.available !== 'boolean') throw new Error('Invalid icon availability');
+            // The editor already requested icon mappings with its snapshot, even if pack discovery finished later.
+            const reloadItemsForPack = !editingOrder() || state.iconPack.available !== null;
             const changed =
                 (state.iconPack.available === true) !== pack.available ||
                 (pack.available && iconPackId !== pack.packId);
@@ -346,21 +378,23 @@ export function createTerminal(
             iconPackId = pack.packId;
             icons.enabled(iconsEnabled && pack.available);
             if (changed) {
-                state.itemIcons = null;
+                if (reloadItemsForPack) state.itemIcons = null;
                 cpus.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
                 resourceHistory.invalidateIcons();
                 pins.invalidateIcons();
+                standingOrders.invalidateIcons();
             }
             notify();
             if (changed) {
-                void loadItems();
+                if (reloadItemsForPack) void loadItems();
                 void loadCpus();
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
                 void resourceHistory.refresh();
                 void pins.refresh();
+                void loadStandingOrders();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -389,6 +423,11 @@ export function createTerminal(
         if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
         else return history.refresh(reloadDetail);
+    }
+    function loadStandingOrders(automatic = false) {
+        if (state.route.view !== 'standing-orders' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) standingOrders.block('GRID_NOT_FOUND');
+        else return standingOrders.refresh(automatic);
     }
     function loadSettings() {
         if (state.route.view !== 'settings') return;
@@ -420,7 +459,7 @@ export function createTerminal(
                 await Promise.all([homeRefresh, refreshingGrids]);
                 return;
             }
-            if (!automatic && ['items', 'cpus'].includes(state.route.view)) {
+            if (!automatic && (['items', 'cpus'].includes(state.route.view) || editingOrder())) {
                 if (!refreshingAutomatically) return refreshingGrids;
                 const route = state.route;
                 return refreshingGrids.then(() => {
@@ -462,6 +501,7 @@ export function createTerminal(
                 await loadCpus(automatic);
                 await loadHistory(reloadDetail);
                 await loadSettings();
+                await loadStandingOrders(automatic);
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
                 if (!homeRefresh || state.route.view !== 'home') await pins.refresh(automatic);
             } catch (caught) {
@@ -487,6 +527,7 @@ export function createTerminal(
                 cpus.block(state.gridError);
                 history.block(state.gridError);
                 settings.block(state.gridError);
+                standingOrders.block(state.gridError);
                 if (state.route.view !== 'home' || status === 'UNAUTHORIZED') pins.block(state.gridError);
                 notify();
             } finally {
@@ -509,6 +550,7 @@ export function createTerminal(
         settings,
         serverSettings,
         pins,
+        standingOrders,
         resourceHistory,
         exportPlan: createPlanExporter(icons),
         icons,
@@ -521,12 +563,14 @@ export function createTerminal(
             history.invalidateIcons();
             resourceHistory.invalidateIcons();
             pins.invalidateIcons();
+            standingOrders.invalidateIcons();
             void pins.refresh();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
             void loadCrafting();
             if (state.route.view === 'history') void loadHistory();
+            void loadStandingOrders();
             void resourceHistory.refresh();
             notify();
         },
@@ -574,6 +618,7 @@ export function createTerminal(
             cpus.route(route);
             history.route(route);
             settings.route(route);
+            standingOrders.route(route);
             serverSettings.route(route);
             notify();
             if (needsDiscovery) void refresh();
@@ -583,6 +628,7 @@ export function createTerminal(
                 loadCpus();
                 loadHistory();
                 loadSettings();
+                loadStandingOrders();
             }
             void pins.refresh();
             schedule();
@@ -601,10 +647,10 @@ export function createTerminal(
             preferences.set(name, value);
             if (name === 'autoRefresh') {
                 if (value) {
-                    void loadItems();
+                    if (state.route.view === 'items') void loadItems();
                     void loadCpus();
                 } else {
-                    live.stop();
+                    if (!liveItems()) live.stop();
                     cpus.stopLive();
                 }
                 schedule();
@@ -626,6 +672,7 @@ export function createTerminal(
             settings.dispose();
             serverSettings.dispose();
             pins.dispose();
+            standingOrders.dispose();
             icons.dispose();
             listeners.clear();
         }

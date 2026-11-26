@@ -11,13 +11,17 @@ import org.spongepowered.asm.mixin.Unique;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
+import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.execution.CraftingCpuLogic;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMachineOrderCpu;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
@@ -29,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 @SuppressWarnings("UnstableApiUsage")
-public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
+public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex, IMachineOrderCpu {
 
     @Unique
     private @Nullable StableKey web$stableKey;
@@ -118,6 +122,18 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
             case MACHINE_ONLY -> CpuSelectionMode.AUTOMATION_ONLY;
             case ANY -> CpuSelectionMode.ALL;
         };
+    }
+
+    @Override
+    public boolean web$acceptsMachineOrders() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && !cpu.isBusy() && web$getSelectionMode() == CpuSelectionMode.AUTOMATION_ONLY;
+    }
+
+    @Override
+    public ICraftingSubmitResult web$submitReserved(IGrid grid, ICraftingPlan plan) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.submitJob(grid, plan, cpu.getSrc(), null);
     }
 
     @Override

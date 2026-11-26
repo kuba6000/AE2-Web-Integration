@@ -361,6 +361,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         }
 
         @Override
+        public boolean web$canEmitFor(IAEKey key) {
+            throw new AssertionError("Existing plan lifecycle must not query emitters");
+        }
+
+        @Override
         public int web$getCPUCount() {
             return 0;
         }

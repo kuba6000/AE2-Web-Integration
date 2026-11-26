@@ -17,7 +17,10 @@ import type {
     ResourcePinUpdate,
     HomePinGroupUpdate,
     HomePinGroup,
-    PinPlacement
+    PinPlacement,
+    StandingOrderChanges,
+    StandingOrderDefinitionInput,
+    StandingOrdersListing
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
 
@@ -53,6 +56,11 @@ const responseStatuses = new Set([
     'NOT_FOUND',
     'METHOD_NOT_ALLOWED',
     'TOO_MANY_REQUESTS',
+    'INVALID_STANDING_ORDER',
+    'STANDING_ORDERS_DISABLED',
+    'STANDING_ORDER_NOT_FOUND',
+    'STANDING_ORDER_LIMIT_REACHED',
+    'STANDING_ORDER_NOT_RUNNABLE',
     'INTERNAL_ERROR',
     'SERVER_BUSY',
     'SERVER_STOPPING',
@@ -95,6 +103,28 @@ export type Api = {
         icons?: boolean
     ): Promise<ResourceResponse<ResourcePin[]>>;
     deletePinGroup(groupKey: string, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
+    standingOrders(
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean
+    ): Promise<ResourceResponse<StandingOrdersListing>>;
+    createStandingOrder(
+        gridKey: string,
+        body: StandingOrderDefinitionInput,
+        icons?: boolean
+    ): Promise<ResourceResponse<StandingOrdersListing>>;
+    updateStandingOrder(
+        gridKey: string,
+        orderKey: string,
+        changes: StandingOrderChanges,
+        icons?: boolean
+    ): Promise<ResourceResponse<StandingOrdersListing>>;
+    deleteStandingOrder(
+        gridKey: string,
+        orderKey: string,
+        icons?: boolean
+    ): Promise<ResourceResponse<StandingOrdersListing>>;
+    runStandingOrder(gridKey: string, orderKey: string): Promise<null>;
     themes: (signal?: AbortSignal) => Promise<{ defaultTheme: string; themes: ThemeManifest[] }>;
     context: (signal?: AbortSignal) => Promise<ApplicationContext>;
     skipUpdate: (tag: string) => Promise<null>;
@@ -108,6 +138,11 @@ export type Api = {
         icons?: boolean,
         live?: boolean
     ) => Promise<ResourceResponse<StoredResource[]>>;
+    standingOrderResources(
+        gridKey: string,
+        signal: AbortSignal,
+        icons: boolean
+    ): Promise<ResourceResponse<StoredResource[]>>;
     itemEvents: (
         gridKey: string,
         subscription: string,
@@ -238,7 +273,9 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 | { tag: string }
                 | { itemKey: string; placement: PinPlacement }
                 | ResourcePinUpdate
-                | HomePinGroupUpdate;
+                | HomePinGroupUpdate
+                | StandingOrderDefinitionInput
+                | StandingOrderChanges;
         } = {}
     ): Promise<ResourceResponse<T>> {
         let response;
@@ -422,9 +459,34 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             }),
         deletePinGroup: (groupKey, icons = false) =>
             read(`api/resource-pin-groups/${encodeURIComponent(groupKey)}?icons=${icons}`, { method: 'DELETE' }),
+        standingOrders: (gridKey, signal, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/standing-orders?icons=${icons}`, { signal }),
+        createStandingOrder: (gridKey, body, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/standing-orders?icons=${icons}`, {
+                method: 'POST',
+                body
+            }),
+        updateStandingOrder: (gridKey, orderKey, changes, icons = false) =>
+            read(
+                `api/grids/${encodeURIComponent(gridKey)}/standing-orders/${encodeURIComponent(orderKey)}?icons=${icons}`,
+                { method: 'PATCH', body: changes }
+            ),
+        deleteStandingOrder: (gridKey, orderKey, icons = false) =>
+            read(
+                `api/grids/${encodeURIComponent(gridKey)}/standing-orders/${encodeURIComponent(orderKey)}?icons=${icons}`,
+                { method: 'DELETE' }
+            ),
+        runStandingOrder: (gridKey, orderKey) =>
+            request(`api/grids/${encodeURIComponent(gridKey)}/standing-orders/${encodeURIComponent(orderKey)}/run`, {
+                method: 'POST'
+            }),
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false, live = false) =>
             snapshot<StoredResource[]>(`api/grids/${encodeURIComponent(gridKey)}/items`, signal, icons, live),
+        standingOrderResources: (gridKey, signal, icons) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/items?catalog=true${icons ? '&icons=true' : ''}`, {
+                signal
+            }),
         itemEvents: (gridKey, subscription, icons, handlers) =>
             events(`api/grids/${encodeURIComponent(gridKey)}/items/events`, subscription, icons, handlers),
         createPlan: (gridKey, body) =>

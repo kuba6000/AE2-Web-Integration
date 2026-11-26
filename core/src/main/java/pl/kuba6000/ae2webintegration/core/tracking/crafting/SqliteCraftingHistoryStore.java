@@ -75,7 +75,8 @@ public final class SqliteCraftingHistoryStore {
             }
             try (PreparedStatement insert = db.prepareStatement(
                 """
-                    INSERT INTO crafting_requesters(job_id, ordinal, source, player_uuid, player_name) VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO crafting_requesters(job_id, ordinal, source, player_uuid, player_name, order_key, order_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """)) {
                 int position = 0;
                 for (CraftingRequester requester : job.requesters()) {
@@ -87,6 +88,12 @@ public final class SqliteCraftingHistoryStore {
                             .name());
                     insert.setString(4, requester.player() == null ? null : requester.player().uuid.toString());
                     insert.setString(5, requester.player() == null ? null : requester.player().name);
+                    insert.setString(
+                        6,
+                        requester.orderKey() == null ? null
+                            : requester.orderKey()
+                                .toString());
+                    insert.setString(7, requester.orderName());
                     insert.addBatch();
                 }
                 if (position > 0) insert.executeBatch();
@@ -136,14 +143,15 @@ public final class SqliteCraftingHistoryStore {
     private static void validate(CompletedCrafting job) throws RejectedCraftingException {
         validate(job.finalOutput());
         Set<UUID> players = new HashSet<>();
+        Set<StableKey> orders = new HashSet<>();
         Set<CraftingRequester.Source> sources = new HashSet<>();
         for (CraftingRequester requester : job.requesters()) {
             PlayerIdentity player = requester.player();
-            if ((requester.source() == CraftingRequester.Source.PLAYER) != (player != null))
-                throw new RejectedCraftingException("Invalid requester identity");
             if (player != null) {
                 if (!players.add(player.uuid)) throw new RejectedCraftingException("Duplicate requester UUID");
                 validateLength(player.name, 1048576, "requester name");
+            } else if (requester.orderKey() != null) {
+                if (!orders.add(requester.orderKey())) throw new RejectedCraftingException("Duplicate requester order");
             } else
                 if (!sources.add(requester.source())) throw new RejectedCraftingException("Duplicate requester source");
         }
@@ -371,7 +379,8 @@ public final class SqliteCraftingHistoryStore {
         if (jobs.isEmpty()) return result;
         String placeholders = String.join(",", Collections.nCopies(jobs.size(), "?"));
         try (PreparedStatement query = db.prepareStatement(
-            "SELECT job_id, source, player_uuid, player_name FROM crafting_requesters WHERE job_id IN (" + placeholders
+            "SELECT job_id, source, player_uuid, player_name, order_key, order_name FROM crafting_requesters WHERE job_id IN ("
+                + placeholders
                 + ") ORDER BY job_id, ordinal")) {
             for (int index = 0; index < jobs.size(); index++) query.setLong(index + 1, jobs.get(index));
             try (ResultSet rows = query.executeQuery()) {
@@ -380,7 +389,9 @@ public final class SqliteCraftingHistoryStore {
                         new CraftingRequester(
                             CraftingRequester.Source.valueOf(rows.getString(2)),
                             rows.getString(3) == null ? null
-                                : new PlayerIdentity(UUID.fromString(rows.getString(3)), rows.getString(4))));
+                                : new PlayerIdentity(UUID.fromString(rows.getString(3)), rows.getString(4)),
+                            rows.getString(5) == null ? null : StableKey.parse(rows.getString(5)),
+                            rows.getString(6)));
             }
         }
         result.replaceAll((id, identities) -> Collections.unmodifiableList(identities));

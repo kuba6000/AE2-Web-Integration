@@ -36,6 +36,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -66,6 +67,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.tracking.CraftingRequesterContext;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
@@ -90,6 +92,68 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     void tearDown() {
         AE2JobTracker.clearActiveJobs();
         historyWorld.close();
+    }
+
+    @Test
+    @Tag(GSON)
+    void standingOrderSubmissionsAreAttributedAndMergedByOrderKeyWhileTheContextIsOpen() {
+        EqualCpu cpu = new EqualCpu();
+        PlayerIdentity webPlayer = new PlayerIdentity(UUID.randomUUID(), "WebPlayer");
+        StableKey plastic = StableKey.random();
+        StableKey circuits = StableKey.random();
+        AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
+        try (CraftingRequesterContext ignored = CraftingRequesterContext.openStandingOrder(plastic, "Keep plastic")) {
+            callbacks.jobStarted(cpu, grid, false, true, null);
+        }
+        try (CraftingRequesterContext ignored = CraftingRequesterContext.openStandingOrder(plastic, "Renamed")) {
+            callbacks.jobStarted(cpu, grid, true, false, webPlayer);
+        }
+        try (CraftingRequesterContext ignored = CraftingRequesterContext.openStandingOrder(circuits, "Keep circuits")) {
+            callbacks.jobStarted(cpu, grid, true, false, webPlayer);
+        }
+        callbacks.jobStarted(cpu, grid, true, true, null);
+        List<CraftingRequester> expected = Arrays.asList(
+            CraftingRequester.standingOrder(plastic, "Renamed"),
+            CraftingRequester.standingOrder(circuits, "Keep circuits"),
+            CraftingRequester.automation());
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertNotNull(info);
+        assertEquals(expected, info.getRequesters());
+        callbacks.jobCompleted(grid, cpu);
+        assertEquals(expected, completed(gridKey).requesters());
+        GetTracking detail = new GetTracking();
+        detail.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey + "&id=1"));
+        JsonArray requesters = new JsonParser().parse(detail.getJSON())
+            .getAsJsonObject()
+            .getAsJsonObject("data")
+            .getAsJsonArray("requesters");
+        JsonObject order = requesters.get(1)
+            .getAsJsonObject();
+        assertEquals(
+            "STANDING_ORDER",
+            order.get("source")
+                .getAsString());
+        assertEquals(
+            circuits.toString(),
+            order.get("orderKey")
+                .getAsString());
+        assertEquals(
+            "Keep circuits",
+            order.get("orderName")
+                .getAsString());
+        assertTrue(
+            order.get("player")
+                .isJsonNull());
+        GetTrackingHistory list = new GetTrackingHistory();
+        list.handle(TestGridFixtures.context(OWNER_ID, "grid=" + gridKey));
+        assertEquals(
+            requesters,
+            new JsonParser().parse(list.getJSON())
+                .getAsJsonObject()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .getAsJsonArray("requesters"));
     }
 
     @Test

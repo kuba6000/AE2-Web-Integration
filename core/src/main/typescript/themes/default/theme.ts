@@ -10,6 +10,7 @@ export const defaultTheme: ThemeDefinition = {
         'items',
         'cpus',
         'history',
+        'standing-orders',
         'plan',
         'tracking',
         'settings',

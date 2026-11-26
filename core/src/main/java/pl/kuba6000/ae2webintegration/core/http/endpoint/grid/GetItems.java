@@ -14,6 +14,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
@@ -33,9 +34,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
 import pl.kuba6000.ae2webintegration.core.live.LiveView;
+import pl.kuba6000.ae2webintegration.core.standingorders.StandingOrderEditor;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /**
@@ -92,6 +96,10 @@ public final class GetItems extends LiveSnapshotRequest {
     @QueryParam("icons")
     boolean icons;
 
+    /** Read an editor catalogue once, without activating a viewer or reserving a subscription. */
+    @QueryParam("catalog")
+    boolean catalog;
+
     @Override
     protected void cancel(String token) {
         TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
@@ -100,12 +108,16 @@ public final class GetItems extends LiveSnapshotRequest {
 
     @Override
     protected void handle(IAEGrid grid) {
-        if (replace != null && replace.length() != 36) {
+        if ((replace != null && replace.length() != 36) || (catalog && (live || replace != null))) {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
+            return;
+        }
+        if (catalog) {
+            catalogue(grid);
             return;
         }
         StorageSnapshot shared;
@@ -190,6 +202,23 @@ public final class GetItems extends LiveSnapshotRequest {
 
         listing.commit();
         respondDetached(HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+    }
+
+    private void catalogue(IAEGrid grid) {
+        // A temporary capture reads exactly once. It is never attached to AE2 or a live topic.
+        try (StorageCapture read = new StorageCapture(
+            grid,
+            Config.INSTANCE.resourceTracking.maxResourcesPerGrid,
+            false)) {
+            StorageObservation snapshot = read.observe(grid, System.currentTimeMillis(), true, false);
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            List<StoredResource> items = StorageTopic
+                .resources(snapshot.rows(), snapshot.descriptions(), snapshot.unkeyed(), mappings);
+            StandingOrderEditor editor = CoreEngine.getStandingOrderEditor();
+            if (editor != null) editor.rememberCatalogue(grid, snapshot);
+            respondDetached(HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+        }
     }
 
     private static void addItem(ArrayList<StoredResource> items, IAEGenericStack stack, IAEGrid grid,

@@ -341,7 +341,7 @@ export function createIconLoader(base: URL, unauthorized: () => void, stalePack:
                 value && Number.isFinite(intervalMillis) ? Math.max(0, Math.min(1000, intervalMillis)) : 0;
             updateViews();
         },
-        observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void) {
+        observe(root: HTMLElement | null, paint: (target: HTMLElement, sprite: IconSprite | null) => void) {
             type Binding = {
                 descriptor: Descriptor | null;
                 animation: AnimationDescriptor | null;

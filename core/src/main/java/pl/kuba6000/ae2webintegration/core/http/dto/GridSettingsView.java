@@ -14,6 +14,9 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
  * @param trackMachineCrafting         whether new machine-requested jobs are recorded when crafting tracking is enabled
  * @param isStorageTracked             whether stored resource quantities are sampled
  * @param isFlowTracked                whether resource input and output are recorded
+ * @param standingOrdersEnabled        whether this network's standing orders may run; the server-wide setting still
+ *                                     applies
+ * @param canEditStandingOrders        whether this account may change the network standing order switch
  * @param name                         custom network name; empty when unnamed
  * @param stockSampleIntervalSeconds   seconds between saved stock samples, independent of live terminal updates
  * @param flowFlushIntervalSeconds     seconds covered by each saved input/output total
@@ -25,17 +28,20 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
  */
 @Desugar
 public record GridSettingsView(boolean isTracked, boolean trackMachineCrafting, boolean isStorageTracked,
-    boolean isFlowTracked, @NotNull String name, int stockSampleIntervalSeconds, int flowFlushIntervalSeconds,
-    int historyRetentionDays, int craftingHistoryRetentionDays, @NotNull ConfigSettings.ResourceHistory limits,
+    boolean isFlowTracked, boolean standingOrdersEnabled, boolean canEditStandingOrders, @NotNull String name,
+    int stockSampleIntervalSeconds, int flowFlushIntervalSeconds, int historyRetentionDays,
+    int craftingHistoryRetentionDays, @NotNull ConfigSettings.ResourceHistory limits,
     @NotNull ConfigSettings.CraftingHistory craftingLimits) {
 
-    public static @NotNull GridSettingsView from(@NotNull GridSettingsData settings,
+    public static @NotNull GridSettingsView from(@NotNull GridSettingsData settings, boolean canEditStandingOrders,
         @NotNull ConfigSettings.ResourceHistory limits, @NotNull ConfigSettings.CraftingHistory craftingLimits) {
         return new GridSettingsView(
             settings.isTracked(),
             settings.isTrackMachineCrafting(),
             settings.isStorageTracked(),
             settings.isFlowTracked(),
+            settings.isStandingOrdersEnabled(),
+            canEditStandingOrders,
             settings.getName(),
             settings.getStockSampleIntervalSeconds(),
             settings.getFlowFlushIntervalSeconds(),

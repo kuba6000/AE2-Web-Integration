@@ -8,6 +8,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -70,7 +71,11 @@ public final class GetGridSettings extends IAsyncRequest {
                 HTTP_OK,
                 new Response(
                     ApiStatus.OK,
-                    GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy())));
+                    GridSettingsView.from(
+                        settings,
+                        Config.INSTANCE.standingOrders.canEdit(context.getPrincipal()),
+                        registry.getDataPolicy(),
+                        registry.getCraftingHistoryPolicy())));
         }
     }
 }

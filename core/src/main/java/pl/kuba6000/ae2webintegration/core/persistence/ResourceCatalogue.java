@@ -2,11 +2,13 @@ package pl.kuba6000.ae2webintegration.core.persistence;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
@@ -72,6 +74,40 @@ public final class ResourceCatalogue {
         }
     }
 
+    /**
+     * Resolves a current resource, one recorded in this network, or a pin owned by this account on it.
+     * Standing orders may also reuse references from their network's existing orders.
+     */
+    public static @Nullable Long admissibleResource(@NotNull Connection db, @NotNull String owner, long gridId,
+        @NotNull StableKey item, boolean current, boolean includeOrders) throws SQLException {
+        try (PreparedStatement query = db.prepareStatement(
+            """
+                SELECT r.id
+                FROM history_resources r
+                WHERE r.item_key = ? AND (
+                    ? OR EXISTS (SELECT 1 FROM history_stock s JOIN history_measurements m ON m.id = s.measurement_id
+                                 WHERE m.grid_id = ? AND s.resource_id = r.id)
+                      OR EXISTS (SELECT 1 FROM history_flow f JOIN history_measurements m ON m.id = f.measurement_id
+                                 WHERE m.grid_id = ? AND f.resource_id = r.id)
+                      OR EXISTS (SELECT 1 FROM resource_pins p WHERE p.owner = ? AND p.grid_id = ? AND p.resource_id = r.id)
+                      OR (? AND EXISTS (SELECT 1 FROM standing_order_resources s JOIN standing_orders o ON o.order_key = s.order_key
+                                        WHERE o.grid_id = ? AND s.resource_id = r.id))
+                )
+                """)) {
+            query.setString(1, item.toString());
+            query.setBoolean(2, current);
+            query.setLong(3, gridId);
+            query.setLong(4, gridId);
+            query.setString(5, owner);
+            query.setLong(6, gridId);
+            query.setBoolean(7, includeOrders);
+            query.setLong(8, gridId);
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next() ? rows.getLong(1) : null;
+            }
+        }
+    }
+
     public static void removeUnreferenced(@NotNull Connection db, @NotNull Set<Long> resources) throws SQLException {
         try (PreparedStatement delete = db.prepareStatement("""
             DELETE FROM history_resources
@@ -87,6 +123,7 @@ public final class ResourceCatalogue {
                     WHERE resource_id = ?
                 )
                 AND NOT EXISTS (SELECT 1 FROM resource_pins WHERE resource_id = ?)
+                AND NOT EXISTS (SELECT 1 FROM standing_order_resources WHERE resource_id = ?)
                 AND NOT EXISTS (SELECT 1 FROM crafting_resources WHERE resource_id = ?)
             """)) {
             for (Long resourceId : resources) {
@@ -95,6 +132,7 @@ public final class ResourceCatalogue {
                 delete.setLong(3, resourceId);
                 delete.setLong(4, resourceId);
                 delete.setLong(5, resourceId);
+                delete.setLong(6, resourceId);
                 delete.addBatch();
             }
             if (!resources.isEmpty()) delete.executeBatch();

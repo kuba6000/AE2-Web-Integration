@@ -61,7 +61,8 @@ public final class ThemeCatalog implements Closeable {
             "cpus",
             "history",
             "plan",
-            "tracking"));
+            "tracking",
+            "standing-orders"));
 
     /**
      * Installed theme and its entry points.

@@ -17,6 +17,13 @@ public interface IAECraftingGrid {
     /** Current order-time validation in this service's grid, independent of saved listing flags. */
     boolean web$isCurrentlyCraftable(IAEKey key);
 
+    /**
+     * True when a crafting-card level emitter provides this resource, so it is requested by the emitter rather than
+     * ordered through a calculation. Server thread only. Reads the grid's current emitter registry for the one key;
+     * it does not enumerate stock or craftables.
+     */
+    boolean web$canEmitFor(IAEKey key);
+
     int web$getCPUCount();
 
     Set<ICraftingCPUCluster> web$getCPUs();
@@ -25,6 +32,11 @@ public interface IAECraftingGrid {
         @NotNull CraftingOptions options);
 
     String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
+
+    /** Submit using the chosen CPU's native machine source. Never fall back to automatic selection. */
+    default String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+        throw new UnsupportedOperationException("Machine-only CPU selection is unavailable");
+    }
 
     Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter);
 

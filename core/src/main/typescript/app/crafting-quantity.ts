@@ -1,8 +1,16 @@
 type Fraction = { numerator: bigint; denominator: bigint };
 
-/** Evaluate bounded quantity expressions exactly; HTTP still receives a safe integer. */
+type Ratio = { numerator: number; denominator: number };
+
+/** Item quantities must be whole numbers even when the expression has fractional intermediate results. */
 export function parseCraftingQuantity(input: string): number | null {
-    if (!input.trim() || input.length > 256) return null;
+    const value = parseCraftingRatio(input);
+    return value?.denominator === 1 ? value.numerator : null;
+}
+
+/** Evaluate bounded expressions exactly and only send fractions whose two parts survive a JSON round trip. */
+export function parseCraftingRatio(input: string): Ratio | null {
+    if (input.length > 256 || !input.trim()) return null;
     const tokens = input.match(/(?:\d+(?:[.,]\d*)?|[.,]\d+)[kmbgt]?|[()+*/-]|\S/gi) || [];
     let index = 0;
     const fraction = (numerator: bigint, denominator = 1n): Fraction => {
@@ -66,13 +74,35 @@ export function parseCraftingQuantity(input: string): number | null {
     }
     try {
         const value = expression();
-        return index === tokens.length &&
-            value.denominator === 1n &&
-            value.numerator > 0n &&
-            value.numerator <= BigInt(Number.MAX_SAFE_INTEGER)
-            ? Number(value.numerator)
+        const safe = BigInt(Number.MAX_SAFE_INTEGER);
+        return index === tokens.length && value.numerator > 0n && value.numerator <= safe && value.denominator <= safe
+            ? { numerator: Number(value.numerator), denominator: Number(value.denominator) }
             : null;
     } catch {
         return null;
     }
+}
+
+/** Show a short decimal only if it is exact; otherwise leave the saved fraction readable and editable. */
+export function formatCraftingRatio(numerator?: number | null, denominator?: number | null): string | null {
+    if (
+        !numerator ||
+        !denominator ||
+        numerator < 0 ||
+        denominator < 0 ||
+        !Number.isSafeInteger(numerator) ||
+        !Number.isSafeInteger(denominator)
+    )
+        return null;
+    const n = BigInt(numerator),
+        d = BigInt(denominator);
+    let remainder = n % d,
+        decimals = '';
+    while (remainder && decimals.length < 6) {
+        remainder *= 10n;
+        decimals += String(remainder / d);
+        remainder %= d;
+    }
+    if (remainder) return `${numerator}/${denominator}`;
+    return decimals ? `${n / d}.${decimals}` : String(n / d);
 }

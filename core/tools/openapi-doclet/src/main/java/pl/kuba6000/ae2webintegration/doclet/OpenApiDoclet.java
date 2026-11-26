@@ -66,6 +66,10 @@ public final class OpenApiDoclet implements Doclet {
         new Category("tracking", "History", "Browse recorded crafting jobs, resource stock and transfer measurements."),
         new Category("auth", "Authentication", "Log in, log out and register an account."),
         new Category("pins", "Resource pins", "Manage personal resource pins for the terminal and home page."),
+        new Category(
+            "standingorders",
+            "Standing orders",
+            "Keep resources stocked automatically: manage a network's standing orders and run them on demand."),
         new Category("server", "Server settings", "Read and update server settings as an administrator."),
         new Category("themes", "Themes", "List available themes and retrieve their assets."),
         new Category("updates", "Updates", "Manage update notifications."));

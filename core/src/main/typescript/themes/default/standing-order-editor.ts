@@ -1,0 +1,749 @@
+import type { ConditionKind, FieldId, ReadonlyData, ThemeApplication, ThemeState } from '../../app/theme-api.js';
+import type { Translator } from '../../app/i18n.js';
+import type { IconTarget } from '../../app/icons.js';
+import type { StandingOrderCondition, StandingOrderDefinition } from '../../app/api-types.js';
+import { formatCraftingRatio } from '../../app/crafting-quantity.js';
+import { inlineResourceName, resourceMessage } from './resource-icon.js';
+import { standingOrdersHref } from '../../app/router.js';
+import {
+    defaultRatio,
+    isIdleCpuCondition,
+    isRatioCondition,
+    maxConditions,
+    reasonMessageKey,
+    type RatioDraft,
+    type AmountDraft
+} from '../../app/standing-order-model.js';
+import { element } from './dom.js';
+import { createResourcePicker, type ResourceChoice } from './resource-picker.js';
+
+let nextId = 0;
+
+const kinds: { kind: ConditionKind; label: string }[] = [
+    { kind: 'stockBelow', label: 'conditionStockBelow' },
+    { kind: 'stockAtLeast', label: 'conditionStockAtLeast' },
+    { kind: 'stockRatioBelow', label: 'conditionRatioBelow' },
+    { kind: 'stockRatioAtLeast', label: 'conditionRatioAtLeast' },
+    { kind: 'idleCpusAtLeast', label: 'conditionIdleCpus' },
+    { kind: 'idlePlayerCpusAtLeast', label: 'conditionIdlePlayerCpus' }
+];
+
+/** A control with its label and the message of the field's current error. */
+function field(control: HTMLElement, className = '') {
+    const id = `standing-order-field-${nextId++}`;
+    const text = element('span');
+    text.id = `${id}-label`;
+    const error = element('p', '', 'standing-order-error');
+    error.id = `${id}-error`;
+    error.hidden = true;
+    const wrap = element('div', '', `standing-order-field ${className}`.trim());
+    return { wrap, text, error, control, id };
+}
+type Field = ReturnType<typeof field>;
+
+function labelledField(control: HTMLInputElement | HTMLSelectElement, className = '') {
+    const result = field(control, className);
+    const label = element('label');
+    label.append(result.text, control);
+    result.wrap.append(label, result.error);
+    return result;
+}
+
+function setError(target: Field, message: string | undefined, controls = [target.control]) {
+    target.error.hidden = !message;
+    target.error.textContent = message ?? '';
+    for (const control of controls) {
+        control.setAttribute('aria-invalid', String(!!message));
+        if (message) control.setAttribute('aria-describedby', target.error.id);
+        else control.removeAttribute('aria-describedby');
+    }
+}
+
+function option(value: string, text: string) {
+    const node = element('option', text);
+    node.value = value;
+    return node;
+}
+
+function numberText(value: number | null, locale: Translator) {
+    return value === null || !Number.isSafeInteger(value)
+        ? locale.common('standingOrderLargeAmount')
+        : locale.number(value);
+}
+
+type ResourceLabel = (key: string | null) => HTMLElement | string;
+
+function ratioSummary(
+    ratio: ReadonlyData<StandingOrderCondition | StandingOrderDefinition['action']['amount']>,
+    label: ResourceLabel,
+    locale: Translator
+) {
+    return resourceMessage(locale, 'standingOrderRatioSummary', {
+        reference: label(ratio.reference ?? null),
+        multiplier: formatCraftingRatio(ratio.numerator, ratio.denominator) ?? locale.common('standingOrderLargeAmount')
+    });
+}
+
+function conditionSummary(condition: ReadonlyData<StandingOrderCondition>, label: ResourceLabel, locale: Translator) {
+    const item = element('li');
+    const { common: t } = locale;
+    if (condition.type === 'stockBelow' || condition.type === 'stockAtLeast' || isRatioCondition(condition.type)) {
+        item.append(
+            resourceMessage(
+                locale,
+                condition.type === 'stockBelow' || condition.type === 'stockRatioBelow'
+                    ? 'standingOrderSummaryBelow'
+                    : 'standingOrderSummaryAtLeast',
+                {
+                    resource: label(condition.resource),
+                    amount: isRatioCondition(condition.type)
+                        ? ratioSummary(condition, label, locale)
+                        : numberText(condition.amount, locale)
+                }
+            )
+        );
+    } else if (isIdleCpuCondition(condition.type)) {
+        item.textContent = t(
+            condition.type === 'idlePlayerCpusAtLeast' ? 'standingOrderSummaryPlayerIdle' : 'standingOrderSummaryIdle',
+            { count: condition.count ?? 0 }
+        );
+    } else {
+        const children = condition.type === 'not' ? [condition.child] : (condition.children ?? []);
+        const group = { all: 'standingOrderGroupAll', any: 'standingOrderGroupAny', not: 'standingOrderGroupNot' };
+        const list = element('ul');
+        for (const child of children) if (child) list.append(conditionSummary(child, label, locale));
+        item.append(t(group[condition.type]), list);
+    }
+    return item;
+}
+
+/** The stored order, as text, for orders whose rules the editor cannot change. */
+function ruleSummary(definition: ReadonlyData<StandingOrderDefinition>, label: ResourceLabel, locale: Translator) {
+    const { common: t } = locale;
+    const { action } = definition;
+    const triggers = element('ul');
+    triggers.append(conditionSummary(definition.trigger, label, locale));
+    const amount = action.amount;
+    const craft = element('p');
+    craft.append(
+        amount.type === 'fixed'
+            ? resourceMessage(locale, 'standingOrderSummaryFixed', {
+                  resource: label(action.resource),
+                  amount: numberText(amount.batch, locale)
+              })
+            : resourceMessage(locale, 'standingOrderSummaryFillTo', {
+                  resource: label(action.resource),
+                  target:
+                      amount.type === 'fillToRatio'
+                          ? ratioSummary(amount, label, locale)
+                          : numberText(amount.target, locale),
+                  maxBatch: numberText(amount.maxBatch, locale)
+              })
+    );
+    const details = [craft];
+    const options = [
+        ...(action.options.lightMode ? [t('craftingLightMode')] : []),
+        ...(action.options.ignoreMissing ? [t('ignoreMissing')] : [])
+    ];
+    if (options.length) details.push(element('p', `${t('standingOrderOptions')}: ${options.join(', ')}`));
+    if (action.cpu.type === 'specific')
+        details.push(element('p', t('standingOrderSummaryCpu', { cpu: action.cpu.key ?? '' })));
+    if (action.cpu.type === 'machineOnly') details.push(element('p', t('standingOrderCpuMachine')));
+    return [triggers, ...details];
+}
+
+/** The form for creating, editing and repairing one standing order. */
+export function createStandingOrderEditor(application: ThemeApplication, iconsChanged: () => void) {
+    const form = element('form', '', 'standing-order-editor');
+    form.noValidate = true;
+    const edit = application.standingOrders.edit;
+
+    const heading = element('div', '', 'standing-order-editor-heading');
+    const back = element('a', '', 'button-link');
+    const title = element('h3');
+    heading.append(back, title);
+    const status = element('p', '', 'hint');
+    status.role = 'status';
+    const failure = element('p', '', 'api-error');
+    failure.role = 'alert';
+    const notice = element('p', '', 'hint');
+
+    const name = element('input');
+    name.type = 'text';
+    name.autocomplete = 'off';
+    const nameField = labelledField(name);
+    name.addEventListener('input', () => edit({ type: 'name', value: name.value }));
+    const enabled = element('input');
+    enabled.type = 'checkbox';
+    const enabledLabel = element('label', '', 'checkbox');
+    const enabledText = element('span');
+    enabledLabel.append(enabled, enabledText);
+    enabled.addEventListener('change', () => edit({ type: 'enabled', value: enabled.checked }));
+
+    const whenSet = element('fieldset', '', 'standing-order-section');
+    const whenLegend = element('legend');
+    const guard = element('fieldset', '', 'standing-order-condition');
+    const guardTitle = element('legend');
+    const guardName = element('span');
+    const guardStatus = element('span', '', 'standing-order-guard-status');
+    guardTitle.append(guardName, ' ', guardStatus);
+    const guardText = element('p', '', 'hint');
+    guard.append(guardTitle, guardText);
+    const match = element('select');
+    match.append(option('all', ''), option('any', ''));
+    const matchField = labelledField(match);
+    match.addEventListener('change', () => edit({ type: 'match', value: match.value === 'any' ? 'any' : 'all' }));
+    const triggerError = element('p', '', 'standing-order-error');
+    triggerError.hidden = true;
+    const rowList = element('div', '', 'standing-order-conditions');
+    const add = element('button');
+    add.type = 'button';
+    add.addEventListener('click', () => edit({ type: 'addCondition' }));
+    whenSet.append(whenLegend, guard, matchField.wrap, rowList, triggerError, add);
+
+    function createRatioFields(index: () => number | undefined) {
+        const wrap = element('div', '', 'standing-order-ratio');
+        const picker = createResourcePicker(
+            (item) => edit({ type: 'ratio', index: index(), field: 'reference', value: item.itemKey! }, item),
+            { craftableOnly: false, retry: () => void application.refresh(), changed: iconsChanged }
+        );
+        const reference = field(picker.choice);
+        reference.wrap.append(reference.text, picker.element, reference.error);
+        const input = element('input');
+        input.autocomplete = 'off';
+        input.addEventListener('input', () =>
+            edit({ type: 'ratio', index: index(), field: 'multiplier', value: input.value })
+        );
+        const multiplier = labelledField(input, 'standing-order-value');
+        const help = element('p', '', 'hint');
+        multiplier.wrap.append(help);
+        wrap.append(reference.wrap, multiplier.wrap);
+        return { wrap, picker, reference, input, multiplier, help };
+    }
+
+    function createRow() {
+        const row = {
+            index: 0,
+            group: element('fieldset', '', 'standing-order-condition'),
+            legend: element('legend'),
+            kind: element('select'),
+            value: element('input'),
+            negate: element('input'),
+            negateText: element('span'),
+            remove: element('button', '', 'standing-order-remove')
+        };
+        for (const { kind, label } of kinds) row.kind.append(option(kind, label));
+        const kindField = labelledField(row.kind);
+        row.value.type = 'text';
+        row.value.autocomplete = 'off';
+        row.value.inputMode = 'numeric';
+        const valueField = labelledField(row.value, 'standing-order-value');
+        row.negate.type = 'checkbox';
+        const negateLabel = element('label', '', 'checkbox');
+        negateLabel.append(row.negate, row.negateText);
+        row.remove.type = 'button';
+        const picker = createResourcePicker(
+            (item) => edit({ type: 'conditionResource', index: row.index, resource: { itemKey: item.itemKey! } }, item),
+            { craftableOnly: false, retry: () => void application.refresh(), changed: iconsChanged }
+        );
+        const resourceField = field(picker.choice, 'standing-order-condition-resource');
+        resourceField.wrap.append(resourceField.text, picker.element, resourceField.error);
+        const ratio = createRatioFields(() => row.index);
+        row.group.append(
+            row.legend,
+            kindField.wrap,
+            resourceField.wrap,
+            valueField.wrap,
+            ratio.wrap,
+            negateLabel,
+            row.remove
+        );
+        row.kind.addEventListener('change', () =>
+            edit({ type: 'conditionKind', index: row.index, kind: row.kind.value as ConditionKind })
+        );
+        row.value.addEventListener('input', () =>
+            edit({ type: 'conditionValue', index: row.index, value: row.value.value })
+        );
+        row.negate.addEventListener('change', () =>
+            edit({ type: 'conditionNegate', index: row.index, value: row.negate.checked })
+        );
+        row.remove.addEventListener('click', () => edit({ type: 'removeCondition', index: row.index }));
+        return Object.assign(row, { kindField, valueField, resourceField, picker, ratio });
+    }
+    const rows: ReturnType<typeof createRow>[] = [];
+
+    const craftSet = element('fieldset', '', 'standing-order-section');
+    const craftLegend = element('legend');
+    const target = createResourcePicker(
+        (item) => edit({ type: 'target', resource: { itemKey: item.itemKey! } }, item),
+        { craftableOnly: true, retry: () => void application.refresh(), changed: iconsChanged }
+    );
+    const targetField = field(target.choice);
+    targetField.wrap.append(targetField.text, target.element, targetField.error);
+    const amountType = element('select');
+    amountType.append(option('fillTo', ''), option('fixed', ''), option('fillToRatio', ''));
+    const fillRatio = createRatioFields(() => undefined);
+    const amountTypeField = labelledField(amountType);
+    amountType.addEventListener('change', () =>
+        edit({ type: 'amountType', value: amountType.value as AmountDraft['type'] })
+    );
+    function amountInput(fieldName: 'batch' | 'target' | 'maxBatch') {
+        const input = element('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.inputMode = 'numeric';
+        const result = labelledField(input, 'standing-order-value');
+        input.addEventListener('input', () => edit({ type: 'amount', field: fieldName, value: input.value }));
+        return { input, ...result };
+    }
+    const batch = amountInput('batch');
+    const fillTarget = amountInput('target');
+    const maxBatch = amountInput('maxBatch');
+    const maxBatchHelp = element('p', '', 'hint');
+    maxBatch.wrap.append(maxBatchHelp);
+    const optionsGroup = element('div', '', 'standing-order-options');
+    const optionsText = element('span', '', 'standing-order-options-title');
+    function optionBox(change: 'lightMode' | 'ignoreMissing') {
+        const input = element('input');
+        input.type = 'checkbox';
+        const text = element('span');
+        const label = element('label', '', 'checkbox');
+        label.append(input, text);
+        input.addEventListener('change', () => edit({ type: change, value: input.checked }));
+        const owner = field(input);
+        owner.wrap.append(label, owner.error);
+        return { input, text, owner };
+    }
+    const lightMode = optionBox('lightMode');
+    const ignoreMissing = optionBox('ignoreMissing');
+    optionsGroup.append(optionsText, lightMode.owner.wrap, ignoreMissing.owner.wrap);
+    const cpu = element('select');
+    const cpuField = labelledField(cpu);
+    const cpuHelp = element('p', '', 'hint');
+    cpuField.wrap.append(cpuHelp);
+    const machineChoice = ':machine'; // Stable CPU keys cannot contain a colon.
+    cpu.addEventListener('change', () =>
+        edit(cpu.value === machineChoice ? { type: 'machineCpu' } : { type: 'cpu', key: cpu.value || null })
+    );
+    craftSet.append(
+        craftLegend,
+        targetField.wrap,
+        amountTypeField.wrap,
+        batch.wrap,
+        fillTarget.wrap,
+        fillRatio.wrap,
+        maxBatch.wrap,
+        optionsGroup,
+        cpuField.wrap
+    );
+
+    const locked = element('section', '', 'standing-order-section standing-order-locked');
+    const lockedTitle = element('h4');
+    const lockedHelp = element('p', '', 'hint');
+    const lockedBody = element('div', '', 'standing-order-summary');
+    locked.append(lockedTitle, lockedHelp, lockedBody);
+
+    const scheduleSet = element('fieldset', '', 'standing-order-section');
+    const scheduleLegend = element('legend');
+    const cooldown = element('input');
+    cooldown.type = 'text';
+    cooldown.autocomplete = 'off';
+    cooldown.inputMode = 'numeric';
+    const cooldownField = labelledField(cooldown, 'standing-order-value');
+    const cooldownHelp = element('p', '', 'hint');
+    cooldownField.wrap.append(cooldownHelp);
+    cooldown.addEventListener('input', () => edit({ type: 'cooldownSeconds', value: cooldown.value }));
+    scheduleSet.append(scheduleLegend, cooldownField.wrap);
+
+    const save = element('button');
+    save.type = 'submit';
+    const cancel = element('a', '', 'button-link');
+    const actions = element('div', '', 'settings-actions standing-order-actions');
+    actions.append(save, cancel);
+    form.append(
+        heading,
+        status,
+        failure,
+        notice,
+        nameField.wrap,
+        enabledLabel,
+        whenSet,
+        craftSet,
+        locked,
+        scheduleSet,
+        actions
+    );
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        void application.standingOrders.save();
+    });
+
+    const errorTargets = new Map<string, { target: Field; controls: HTMLElement[] }>();
+    let shownErrors = '';
+    /** Unsaved changes, and the question that guards leaving them; both follow the last render. */
+    let unsaved = false;
+    let leaveQuestion = '';
+    /** An in-app link away from an editor with unsaved changes asks first; saving navigates without a click. */
+    function confirmLeaving(event: MouseEvent) {
+        if (!unsaved || event.defaultPrevented || event.button !== 0) return;
+        // A new tab or window leaves the editor where it is.
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const link = (event.target as Element | null)?.closest?.('a[href^="#"]');
+        if (!link || link.hasAttribute('target') || link.getAttribute('href') === location.hash) return;
+        if (!window.confirm(leaveQuestion)) event.preventDefault();
+    }
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+        if (unsaved) event.preventDefault();
+    }
+    document.addEventListener('click', confirmLeaving, true);
+    window.addEventListener('beforeunload', warnBeforeUnload);
+
+    function resetPickers() {
+        target.reset();
+        fillRatio.picker.reset();
+        for (const row of rows) {
+            row.picker.reset();
+            row.ratio.picker.reset();
+        }
+    }
+    let visiblePickers: ReturnType<typeof createResourcePicker>[] = [];
+    let inlineTargets: { element: HTMLElement; key: string }[] = [];
+    let guardLabel: { element: HTMLElement; key: string } | null = null;
+    let summaryLabels: typeof inlineTargets = [];
+    const summaryNames = new Map<string, string | undefined>();
+    let guardSignature = '',
+        summarySignature = '';
+    let choices: ResourceChoice | undefined;
+    const targets = (saved: boolean): IconTarget[] => [
+        ...visiblePickers.flatMap((picker) => picker.targets(saved)),
+        ...inlineTargets.flatMap(({ element, key }) => {
+            const live = choices?.byKey.get(key)?.icon;
+            return saved === !live ? [{ element, icon: live ?? choices?.known[key]?.icon }] : [];
+        })
+    ];
+    function render(
+        state: ThemeState,
+        editor: NonNullable<ThemeState['standingOrders']['editor']>,
+        locale: Translator,
+        iconsOn: boolean
+    ) {
+        inlineTargets = [];
+        visiblePickers = [];
+        const orders = state.standingOrders;
+        unsaved = editor.status === 'ready' && editor.dirty && !editor.saving;
+        leaveQuestion = locale.common('standingOrderLeaveConfirm');
+        const { common: t } = locale;
+        const gridKey = state.route.gridKey!;
+        const listHref = standingOrdersHref(gridKey);
+        back.href = listHref;
+        back.textContent = t('standingOrderBack');
+        cancel.href = listHref;
+        cancel.textContent = t('standingOrderCancel');
+        let heading = t('newStandingOrder');
+        if (editor.order !== null) heading = t(editor.invalid ? 'standingOrderRepairTitle' : 'standingOrderEditTitle');
+        title.textContent = heading;
+        const ready = editor.status === 'ready';
+        status.textContent = '';
+        if (editor.status === 'loading' && orders.status !== 'error') status.textContent = t('loading');
+        else if (editor.status === 'missing') status.textContent = t('standingOrderMissing');
+        else if (editor.saving) status.textContent = t('standingOrderSaving');
+        status.hidden = !status.textContent;
+        failure.textContent = editor.formError ? t(editor.formError) : '';
+        failure.hidden = !editor.formError;
+        notice.textContent = '';
+        if (ready && editor.invalid)
+            notice.textContent = t('standingOrderRepairHelp', { reason: t(reasonMessageKey(editor.invalid.reason)) });
+        else if (ready && !orders.canEdit) notice.textContent = t('standingOrdersReadOnly');
+        else if (ready && editor.order === null) notice.textContent = `${t('keepStocked')}: ${t('keepStockedHelp')}`;
+        notice.hidden = !notice.textContent;
+        for (const part of [nameField.wrap, enabledLabel, whenSet, craftSet, scheduleSet, actions])
+            part.hidden = !ready;
+        if (!ready) {
+            resetPickers();
+            locked.hidden = true;
+            return;
+        }
+        const editable = orders.canEdit && (orders.serverEnabled || editor.order !== null) && !editor.saving;
+        const draft = editor.draft;
+        const rules = draft.rules;
+        const flat = rules.locked === null;
+        const errors = editor.errors as Partial<Record<FieldId, string>>;
+
+        nameField.text.textContent = t('standingOrderName');
+        name.placeholder = t('standingOrderNameExample');
+        if (name.value !== draft.name) name.value = draft.name;
+        enabledText.textContent = t('standingOrderEnabledField');
+        enabled.checked = draft.enabled;
+        cooldownField.text.textContent = t('standingOrderCooldown');
+        scheduleLegend.textContent = t('standingOrderSchedule');
+        if (cooldown.value !== draft.cooldownSeconds) cooldown.value = draft.cooldownSeconds;
+        cooldownHelp.textContent = t('standingOrderCooldownHelp');
+        save.textContent = t('standingOrderSave');
+
+        const resourceChoice: ResourceChoice = {
+            items: state.items,
+            catalogRevision: state.itemCatalogRevision,
+            itemsReady: state.itemStatus === 'ready',
+            itemsError: state.itemStatus === 'error' ? (state.itemError ?? 'error') : null,
+            byKey: state.itemsByKey,
+            known: orders.resources,
+            locale,
+            language: state.preferences.language
+        };
+        choices = resourceChoice;
+        errorTargets.clear();
+        errorTargets.set('name', { target: nameField, controls: [name] });
+        errorTargets.set('cooldownSeconds', { target: cooldownField, controls: [cooldown] });
+
+        function renderRatio(
+            fields: ReturnType<typeof createRatioFields>,
+            shown: boolean,
+            ratio: Readonly<RatioDraft> = defaultRatio,
+            prefix: `condition.${number}` | 'action.amount'
+        ) {
+            fields.wrap.hidden = !shown;
+            if (!shown) {
+                fields.picker.reset();
+                return;
+            }
+            fields.reference.text.textContent = t('standingOrderReference');
+            fields.picker.render(
+                resourceChoice,
+                ratio.reference,
+                !!errors[`${prefix}.reference`],
+                t('standingOrderReference')
+            );
+            fields.picker.choice.disabled = !editable;
+            errorTargets.set(`${prefix}.reference`, { target: fields.reference, controls: [fields.picker.choice] });
+            if (iconsOn) visiblePickers.push(fields.picker);
+            fields.multiplier.text.textContent = t('standingOrderMultiplier');
+            fields.help.textContent = t('standingOrderMultiplierHelp');
+            fields.input.setAttribute('aria-description', fields.help.textContent);
+            if (fields.input.value !== ratio.multiplier) fields.input.value = ratio.multiplier;
+            fields.input.disabled = !editable;
+            errorTargets.set(`${prefix}.multiplier`, { target: fields.multiplier, controls: [fields.input] });
+        }
+        whenLegend.textContent = t('standingOrderWhen');
+        guardName.textContent = t('standingOrderCondition', { index: 0 });
+        guardStatus.textContent = t('standingOrderAlwaysActive');
+        const output = rules.locked === null ? rules.resource : editor.definition?.action.resource;
+        const description = (key: string) => resourceChoice.byKey.get(key) ?? orders.resources[key];
+        const outputName = output ? description(output)?.displayName : null;
+        const signatureGuard = JSON.stringify([state.preferences.language, output, outputName]);
+        if (signatureGuard !== guardSignature) {
+            guardSignature = signatureGuard;
+            guardLabel = output && outputName ? { key: output, element: inlineResourceName(outputName) } : null;
+            guardText.replaceChildren(
+                guardLabel
+                    ? resourceMessage(locale, 'standingOrderGuardResource', { resource: guardLabel.element })
+                    : t('standingOrderGuard')
+            );
+        }
+        if (iconsOn && guardLabel) inlineTargets.push(guardLabel);
+        rowList.hidden = !flat;
+        add.hidden = !flat;
+        matchField.wrap.hidden = !flat;
+        craftSet.hidden = !flat;
+        locked.hidden = flat;
+        if (rules.locked === null) {
+            craftLegend.textContent = t('standingOrderThenCraft');
+            matchField.text.textContent = t('standingOrderMatch');
+            match.options[0].textContent = t('standingOrderMatchAll');
+            match.options[1].textContent = t('standingOrderMatchAny');
+            match.value = rules.match;
+            matchField.wrap.hidden = rules.conditions.length < 2;
+            add.textContent = t('standingOrderAddCondition');
+            add.disabled = !editable || rules.conditions.length >= maxConditions;
+            while (rows.length < rules.conditions.length) {
+                const row = createRow();
+                rows.push(row);
+                rowList.append(row.group);
+            }
+            while (rows.length > rules.conditions.length) {
+                const row = rows.pop()!;
+                row.picker.reset();
+                row.ratio.picker.reset();
+                row.group.remove();
+            }
+            rules.conditions.forEach((condition, index) => {
+                const row = rows[index];
+                const idle = isIdleCpuCondition(condition.kind);
+                row.index = index;
+                row.legend.textContent = t('standingOrderCondition', { index: index + 1 });
+                row.kindField.text.textContent = t('standingOrderConditionKind');
+                kinds.forEach(({ kind, label }, position) => {
+                    const option = row.kind.options[position];
+                    option.textContent = t(label);
+                    option.disabled = kind === 'idlePlayerCpusAtLeast' && !state.capabilities.cpuSelectionMode;
+                    option.hidden = option.disabled && condition.kind !== kind;
+                });
+                row.kind.value = condition.kind;
+                row.valueField.text.textContent = t(
+                    idle ? 'standingOrderConditionCpuCount' : 'standingOrderConditionAmount'
+                );
+                if (row.value.value !== condition.value) row.value.value = condition.value;
+                row.negate.checked = condition.negate;
+                row.negateText.textContent = t('standingOrderConditionNegate');
+                row.resourceField.text.textContent = t('standingOrderResource');
+                row.resourceField.wrap.hidden = idle;
+                row.valueField.wrap.hidden = isRatioCondition(condition.kind);
+                renderRatio(row.ratio, isRatioCondition(condition.kind), condition.ratio, `condition.${index}`);
+                row.picker.render(
+                    resourceChoice,
+                    condition.resource,
+                    !!errors[`condition.${index}.resource`],
+                    t('standingOrderResource')
+                );
+                row.remove.textContent = t('standingOrderRemoveCondition', { index: index + 1 });
+                row.remove.hidden = rules.conditions.length < 2;
+                for (const control of [row.kind, row.value, row.negate, row.remove, row.picker.choice])
+                    control.disabled = !editable;
+                errorTargets.set(`condition.${index}.resource`, {
+                    target: row.resourceField,
+                    controls: [row.picker.choice]
+                });
+                errorTargets.set(`condition.${index}.value`, { target: row.valueField, controls: [row.value] });
+                if (!idle && iconsOn) visiblePickers.push(row.picker);
+            });
+
+            targetField.text.textContent = t('standingOrderTarget');
+            target.render(resourceChoice, rules.resource, !!errors['action.resource'], t('standingOrderTarget'));
+            target.choice.disabled = !editable;
+            if (iconsOn) visiblePickers.push(target);
+            errorTargets.set('action.resource', { target: targetField, controls: [target.choice] });
+            amountTypeField.text.textContent = t('standingOrderAmountKind');
+            amountType.options[0].textContent = t('standingOrderAmountFillTo');
+            amountType.options[1].textContent = t('standingOrderAmountFixed');
+            amountType.options[2].textContent = t('standingOrderAmountFillRatio');
+            amountType.value = rules.amount.type;
+            const fixed = rules.amount.type === 'fixed';
+            batch.wrap.hidden = !fixed;
+            fillTarget.wrap.hidden = rules.amount.type !== 'fillTo';
+            renderRatio(fillRatio, rules.amount.type === 'fillToRatio', rules.amount.ratio, 'action.amount');
+            maxBatch.wrap.hidden = fixed;
+            batch.text.textContent = t('standingOrderBatch');
+            fillTarget.text.textContent = t('standingOrderFillTarget');
+            maxBatch.text.textContent = t('standingOrderMaxBatch');
+            maxBatchHelp.textContent = t(
+                rules.amount.type === 'fillToRatio' ? 'standingOrderRatioBatchHelp' : 'standingOrderMaxBatchHelp'
+            );
+            for (const [input, value] of [
+                [batch.input, rules.amount.batch],
+                [fillTarget.input, rules.amount.target],
+                [maxBatch.input, rules.amount.maxBatch]
+            ] as const)
+                if (input.value !== value) input.value = value;
+            errorTargets.set('action.amount.batch', { target: batch, controls: [batch.input] });
+            errorTargets.set('action.amount.target', { target: fillTarget, controls: [fillTarget.input] });
+            errorTargets.set('action.amount.maxBatch', { target: maxBatch, controls: [maxBatch.input] });
+
+            const light = state.capabilities.craftingLightMode === true || rules.lightMode;
+            const ignore = state.capabilities.craftingIgnoreMissing === true || rules.ignoreMissing;
+            optionsGroup.hidden = !light && !ignore;
+            optionsText.textContent = t('standingOrderOptions');
+            lightMode.owner.wrap.hidden = !light;
+            ignoreMissing.owner.wrap.hidden = !ignore;
+            lightMode.text.textContent = t('craftingLightMode');
+            ignoreMissing.text.textContent = t('ignoreMissing');
+            lightMode.input.checked = rules.lightMode;
+            ignoreMissing.input.checked = rules.ignoreMissing;
+            lightMode.input.disabled = !editable;
+            ignoreMissing.input.disabled = !editable;
+
+            cpuField.text.textContent = t('standingOrderCpu');
+            const machineSupported = state.capabilities.cpuSelectionMode === true;
+            cpuHelp.textContent = t(machineSupported ? 'standingOrderCpuModeHelp' : 'standingOrderCpuHelp');
+            const specific = rules.cpu.type === 'specific' ? rules.cpu.key : null;
+            const choices = orders.cpus.filter((entry) => entry.eligible);
+            const wanted = [
+                ['', t('standingOrderCpuAny')],
+                ...(machineSupported || rules.cpu.type === 'machineOnly'
+                    ? [[machineChoice, t('standingOrderCpuMachine')]]
+                    : []),
+                ...choices.map((entry) => [entry.key, `${entry.name || t('cpuUnnamed')} · ${entry.key.slice(0, 6)}`]),
+                ...(specific !== null && !choices.some((entry) => entry.key === specific)
+                    ? [[specific, `${t('standingOrderCpuMissing')} · ${specific.slice(0, 6)}`]]
+                    : [])
+            ] as [string, string][];
+            if (
+                cpu.options.length !== wanted.length ||
+                wanted.some(
+                    ([value, text], index) => cpu.options[index].value !== value || cpu.options[index].text !== text
+                )
+            )
+                cpu.replaceChildren(...wanted.map(([value, text]) => option(value, text)));
+            cpu.value = rules.cpu.type === 'machineOnly' ? machineChoice : (specific ?? '');
+            cpu.disabled = !editable;
+            errorTargets.set('action.cpu.key', { target: cpuField, controls: [cpu] });
+            errorTargets.set('action.options.lightMode', { target: lightMode.owner, controls: [lightMode.input] });
+            errorTargets.set('action.options.ignoreMissing', {
+                target: ignoreMissing.owner,
+                controls: [ignoreMissing.input]
+            });
+        } else if (editor.definition) {
+            resetPickers();
+            lockedTitle.textContent = t('standingOrderRules');
+            lockedHelp.textContent = t(
+                rules.locked === 'nested' ? 'standingOrderLockedNested' : 'standingOrderLockedLarge'
+            );
+            const signature = JSON.stringify([editor.definition, state.preferences.language]);
+            if (
+                signature !== summarySignature ||
+                [...summaryNames].some(([key, name]) => description(key)?.displayName !== name)
+            ) {
+                summarySignature = signature;
+                summaryLabels = [];
+                summaryNames.clear();
+                const label: ResourceLabel = (key) => {
+                    if (!key) return t('standingOrderUnknownResource');
+                    const name = description(key)?.displayName;
+                    summaryNames.set(key, name);
+                    if (!name) return t('standingOrderUnknownResource');
+                    const element = inlineResourceName(name);
+                    summaryLabels.push({ key, element });
+                    return element;
+                };
+                lockedBody.replaceChildren(...ruleSummary(editor.definition, label, locale));
+            }
+            if (iconsOn) inlineTargets.push(...summaryLabels);
+        }
+        for (const control of [
+            name,
+            enabled,
+            cooldown,
+            amountType,
+            match,
+            batch.input,
+            fillTarget.input,
+            maxBatch.input
+        ])
+            control.disabled = !editable;
+        // With the server switch off an order can be switched off but not on.
+        enabled.disabled = !editable || (!orders.serverEnabled && !draft.enabled && editor.baseline?.enabled !== true);
+        save.disabled = !editable;
+        triggerError.hidden = !errors.trigger;
+        triggerError.textContent = errors.trigger ? t(errors.trigger) : '';
+        for (const [id, { target: owner, controls }] of errorTargets) {
+            const message = errors[id as FieldId];
+            setError(owner, message ? t(message) : undefined, controls);
+        }
+        const signature = JSON.stringify(errors);
+        if (signature !== shownErrors) {
+            shownErrors = signature;
+            const first = Object.keys(errors).find((id) => id === 'trigger' || errorTargets.has(id));
+            const firstTarget = first && errorTargets.get(first)?.controls[0];
+            if (firstTarget) firstTarget.focus();
+            else if (first === 'trigger') add.focus();
+        }
+    }
+    return {
+        element: form,
+        render,
+        targets,
+        dispose() {
+            resetPickers();
+            document.removeEventListener('click', confirmLeaving, true);
+            window.removeEventListener('beforeunload', warnBeforeUnload);
+        }
+    };
+}

@@ -17,6 +17,7 @@ import { createCraftingView } from './crafting.js';
 import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
+import { createStandingOrdersView } from './standing-orders.js';
 import { createSettingsView } from './settings.js';
 import { createServerSettingsView } from './server-settings.js';
 import { createAboutView } from './about.js';
@@ -105,6 +106,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     lifetime.onCleanup(() => cpuView.dispose());
     const historyView = createHistoryView(windowFrame, application, tooltips.bind, settings);
     lifetime.onCleanup(() => historyView.dispose());
+    const standingOrdersView = createStandingOrdersView(windowFrame, application);
+    lifetime.onCleanup(() => standingOrdersView.dispose());
     const settingsView = createSettingsView(windowFrame, application);
     const serverSettingsView = createServerSettingsView(windowFrame, application, tooltips);
     const aboutView = createAboutView(windowFrame, modVersion);
@@ -177,6 +180,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
         trackingView.render(state, locale, effectiveDisplay !== 'names');
+        standingOrdersView.render(state, locale, effectiveDisplay !== 'names');
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
         const panes: MobilePane[] = [];

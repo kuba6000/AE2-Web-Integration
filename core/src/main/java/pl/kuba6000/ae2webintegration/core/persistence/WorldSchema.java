@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 /** Current schema creation and required tables; historical upgrades belong to registered migrations. */
 final class WorldSchema {
 
-    static final int VERSION = 10;
+    static final int VERSION = 11;
     private static final Set<String> TABLES = new HashSet<>(
         Arrays.asList(
             "world_schema",
@@ -28,6 +28,8 @@ final class WorldSchema {
             "history_coverage",
             "resource_pins",
             "home_pin_groups",
+            "standing_orders",
+            "standing_order_resources",
             "crafting_jobs",
             "crafting_requesters",
             "crafting_resources",
@@ -77,7 +79,8 @@ final class WorldSchema {
                         stock_tracked INTEGER NOT NULL CHECK (stock_tracked IN (0, 1)),
                         flow_tracked INTEGER NOT NULL CHECK (flow_tracked IN (0, 1)),
                         stock_seconds INTEGER NOT NULL CHECK (typeof(stock_seconds) = 'integer' AND stock_seconds BETWEEN -2147483648 AND 2147483647),
-                        flow_seconds INTEGER NOT NULL CHECK (typeof(flow_seconds) = 'integer' AND flow_seconds BETWEEN -2147483648 AND 2147483647)
+                        flow_seconds INTEGER NOT NULL CHECK (typeof(flow_seconds) = 'integer' AND flow_seconds BETWEEN -2147483648 AND 2147483647),
+                        standing_orders_enabled INTEGER NOT NULL DEFAULT 1 CHECK (standing_orders_enabled IN (0, 1))
                     )
                     """);
             sql.execute(
@@ -180,6 +183,26 @@ final class WorldSchema {
                     )
                     """);
             sql.execute(
+                """
+                    CREATE TABLE standing_orders (
+                        order_key TEXT NOT NULL CHECK (typeof(order_key) = 'text' AND length(order_key) <= 22) PRIMARY KEY,
+                        grid_id INTEGER NOT NULL CHECK (typeof(grid_id) = 'integer') REFERENCES grids(id),
+                        ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 2147483647),
+                        created_by TEXT NOT NULL CHECK (typeof(created_by) = 'text' AND length(created_by) <= 36),
+                        definition TEXT NOT NULL CHECK (typeof(definition) = 'text' AND length(definition) <= 65536),
+                        definition_version INTEGER NOT NULL CHECK (typeof(definition_version) = 'integer' AND definition_version >= 1)
+                    )
+                    """);
+            sql.execute(
+                """
+                    CREATE TABLE standing_order_resources (
+                        order_key TEXT NOT NULL CHECK (typeof(order_key) = 'text' AND length(order_key) <= 22) REFERENCES standing_orders(order_key) ON DELETE CASCADE,
+                        slot INTEGER NOT NULL CHECK (typeof(slot) = 'integer' AND slot BETWEEN 0 AND 2147483647),
+                        resource_id INTEGER NOT NULL CHECK (typeof(resource_id) = 'integer') REFERENCES history_resources(id),
+                        PRIMARY KEY (order_key, slot)
+                    )
+                    """);
+            sql.execute(
                 "CREATE INDEX history_measurements_grid_time ON history_measurements(grid_id, observed_at, id)");
             for (String name : new String[] { "history_stock", "history_flow", "history_coverage" }) {
                 String field = name.equals("history_coverage") ? "kind" : "resource_id";
@@ -201,18 +224,21 @@ final class WorldSchema {
                     CREATE TABLE crafting_requesters (
                         job_id INTEGER NOT NULL REFERENCES crafting_jobs(id) ON DELETE CASCADE,
                         ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 2147483647),
-                        source TEXT NOT NULL CHECK (source IN ('PLAYER', 'AUTOMATION', 'WEB')),
+                        source TEXT NOT NULL CHECK (source IN ('PLAYER', 'AUTOMATION', 'WEB', 'STANDING_ORDER')),
                         player_uuid TEXT CHECK (player_uuid IS NULL OR (typeof(player_uuid) = 'text' AND length(player_uuid) = 36)),
                         player_name TEXT CHECK (player_name IS NULL OR (typeof(player_name) = 'text' AND length(player_name) <= 1048576)),
-                        CHECK ((source = 'PLAYER' AND player_uuid IS NOT NULL AND player_name IS NOT NULL)
-                            OR (source <> 'PLAYER' AND player_uuid IS NULL AND player_name IS NULL)),
+                        order_key TEXT CHECK (order_key IS NULL OR (typeof(order_key) = 'text' AND length(order_key) <= 22)),
+                        order_name TEXT CHECK (order_name IS NULL OR (typeof(order_name) = 'text' AND length(order_name) <= 128)),
+                        CHECK ((source = 'PLAYER' AND player_uuid IS NOT NULL AND player_name IS NOT NULL AND order_key IS NULL AND order_name IS NULL)
+                            OR (source = 'STANDING_ORDER' AND order_key IS NOT NULL AND order_name IS NOT NULL AND player_uuid IS NULL AND player_name IS NULL)
+                            OR (source IN ('AUTOMATION', 'WEB') AND player_uuid IS NULL AND player_name IS NULL AND order_key IS NULL AND order_name IS NULL)),
                         PRIMARY KEY (job_id, ordinal)
                     )
                     """);
             sql.execute(
                 "CREATE UNIQUE INDEX crafting_requester_players ON crafting_requesters(job_id, player_uuid) WHERE source = 'PLAYER'");
             sql.execute(
-                "CREATE UNIQUE INDEX crafting_requester_sources ON crafting_requesters(job_id, source) WHERE source <> 'PLAYER'");
+                "CREATE UNIQUE INDEX crafting_requester_sources ON crafting_requesters(job_id, source, COALESCE(order_key, '')) WHERE source <> 'PLAYER'");
             sql.execute(
                 """
                     CREATE TABLE crafting_resources (
@@ -296,6 +322,8 @@ final class WorldSchema {
             sql.execute("CREATE INDEX resource_pins_grid ON resource_pins(grid_id)");
             sql.execute("CREATE INDEX resource_pins_resource ON resource_pins(resource_id)");
             sql.execute("CREATE INDEX resource_pins_home_group ON resource_pins(home_group_key)");
+            sql.execute("CREATE INDEX standing_orders_grid ON standing_orders(grid_id, ordinal)");
+            sql.execute("CREATE INDEX standing_order_resources_resource ON standing_order_resources(resource_id)");
             sql.execute("CREATE INDEX crafting_resources_resource ON crafting_resources(resource_id)");
             sql.execute(
                 "CREATE INDEX crafting_resource_providers_resource ON crafting_resource_providers(job_id, crafting_resource_id)");

@@ -33,6 +33,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMachineOrderCpu;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -74,6 +75,14 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
             .contains(key)
             || craftingProviders.getEmittableKeys()
                 .contains(key);
+    }
+
+    @Shadow
+    public abstract boolean canEmitFor(AEKey key);
+
+    @Override
+    public boolean web$canEmitFor(IAEKey key) {
+        return canEmitFor((AEKey) key);
     }
 
     @Shadow
@@ -133,6 +142,18 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
             (ICraftingCPU) target,
             prioritizePower,
             ((IGridPlayerSource) grid).web$getPlayerSource());
+        return web$submissionError(result);
+    }
+
+    @Override
+    public String web$submitMachineJob(IAECraftingJob job, ICraftingCPUCluster target, IAEGrid grid) {
+        if (job.web$isSimulation() || !target.web$acceptsMachineOrders() || !target.web$isValidForGrid(grid))
+            return "No suitable automation CPU.";
+        return web$submissionError(((IMachineOrderCpu) target).web$submitReserved((IGrid) grid, (ICraftingPlan) job));
+    }
+
+    @Unique
+    private static String web$submissionError(ICraftingSubmitResult result) {
         if (result.successful()) return null;
         String errorMessage = "";
         switch (result.errorCode()) {

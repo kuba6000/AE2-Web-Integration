@@ -15,12 +15,16 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
+import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IAdvCraftingCPUClusterOwnership;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMachineOrderCpu;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -31,7 +35,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
 @SuppressWarnings("UnstableApiUsage")
-public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
+public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex, IMachineOrderCpu {
 
     @Shadow
     @Final
@@ -119,6 +123,20 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
             case MACHINE_ONLY -> CpuSelectionMode.AUTOMATION_ONLY;
             case ANY -> CpuSelectionMode.ALL;
         };
+    }
+
+    @Override
+    public boolean web$acceptsMachineOrders() {
+        AdvCraftingCPU cpu = (AdvCraftingCPU) (Object) this;
+        return uniqueId == null && cpu.isActive()
+            && !cpu.isBusy()
+            && web$getSelectionMode() == CpuSelectionMode.AUTOMATION_ONLY;
+    }
+
+    @Override
+    public ICraftingSubmitResult web$submitReserved(IGrid grid, ICraftingPlan plan) {
+        AdvCraftingCPU cpu = (AdvCraftingCPU) (Object) this;
+        return cluster.submitJob(grid, plan, cpu.getSrc(), null);
     }
 
     @Override

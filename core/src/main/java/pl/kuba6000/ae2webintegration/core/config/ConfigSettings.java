@@ -1,8 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
+import org.jetbrains.annotations.NotNull;
+
 import com.electronwill.nightconfig.core.conversion.Path;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers") // Defaults and bounds belong alongside their settings.
 public final class ConfigSettings {
@@ -21,6 +24,9 @@ public final class ConfigSettings {
     @Path("resource_tracking")
     @Comment("Live observation and background capacity controls. Changes apply on the next server tick.")
     public ResourceTracking resourceTracking = new ResourceTracking();
+    @Path("standing_orders")
+    @Comment("Standing orders craft automatically when a condition on network stock holds. A configuration reload applies changes.")
+    public StandingOrders standingOrders = new StandingOrders();
 
     public static final class Telemetry {
 
@@ -268,6 +274,53 @@ public final class ConfigSettings {
 
     }
 
+    /**
+     * Limits for standing orders. Evaluation follows each network's stock sample interval; there is no separate
+     * check interval.
+     */
+    public static final class StandingOrders {
+
+        /** Global switch; when false no standing order is evaluated or submitted. */
+        @Comment("Evaluate standing orders. When false, no standing order crafts anything.")
+        public boolean enabled = true;
+
+        /** Whether players with network access may create and edit standing orders; administrators always may. */
+        @Path("allow_players")
+        @Comment("Allow players with access to a network to manage and run its standing orders, including the network switch. Administrators always can; existing standing orders keep running.")
+        public boolean allowPlayers = true;
+
+        /** Called after network access has been checked. */
+        public boolean canEdit(@NotNull WebPrincipal principal) {
+            return allowPlayers || principal.isAdmin();
+        }
+
+        /** Crafting calculations that standing orders of one network may have running at once. Must be positive. */
+        @Path("max_calculations_in_flight_per_grid")
+        @Comment("Crafting calculations that one network's standing orders may run at the same time (at least 1).")
+        public int maxCalculationsInFlightPerGrid = 1;
+
+        /** Standing orders one network may hold. Must be positive. */
+        @Path("max_orders_per_grid")
+        @Comment("Maximum standing orders per network (at least 1).")
+        public int maxOrdersPerGrid = 128;
+
+        /** Server-thread time spent evaluating standing orders per tick, in milliseconds. From 1 to 50. */
+        @Path("tick_budget_millis")
+        @Comment("Server thread time per tick that standing order evaluation may use, in milliseconds (1-50).")
+        public int tickBudgetMillis = 1;
+
+        /** Minutes a standing order's job may run before it is reported as long-running. Must be positive. */
+        @Path("long_running_job_minutes")
+        @Comment("Minutes after which a standing order's crafting job is reported as long-running. The job is never cancelled.")
+        public int longRunningJobMinutes = 60;
+
+        /** Minutes a standing order's crafting calculation may run before it is cancelled. From 1 to 1440. */
+        @Path("max_calculation_minutes")
+        @Comment("Minutes after which a standing order's crafting calculation is cancelled and the order backs off (1-1440). Calculations on large networks can take minutes.")
+        public int maxCalculationMinutes = 10;
+
+    }
+
     void validate() {
         craftingHistory.historyRetentionDays.validate();
         if (craftingHistory.historyMaxJobsPerGrid < 1)
@@ -291,6 +344,21 @@ public final class ConfigSettings {
             || resourceTracking.maxQueuedRows < 1) {
             throw new IllegalArgumentException(
                 "Resource tracking limits must be positive; active interval must be at least 50 ms");
+        }
+        if (standingOrders.maxCalculationsInFlightPerGrid < 1) {
+            throw new IllegalArgumentException("standing_orders.max_calculations_in_flight_per_grid must be positive");
+        }
+        if (standingOrders.maxOrdersPerGrid < 1) {
+            throw new IllegalArgumentException("standing_orders.max_orders_per_grid must be positive");
+        }
+        if (standingOrders.tickBudgetMillis < 1 || standingOrders.tickBudgetMillis > 50) {
+            throw new IllegalArgumentException("standing_orders.tick_budget_millis must be between 1 and 50");
+        }
+        if (standingOrders.longRunningJobMinutes < 1) {
+            throw new IllegalArgumentException("standing_orders.long_running_job_minutes must be positive");
+        }
+        if (standingOrders.maxCalculationMinutes < 1 || standingOrders.maxCalculationMinutes > 1440) {
+            throw new IllegalArgumentException("standing_orders.max_calculation_minutes must be between 1 and 1440");
         }
     }
 }

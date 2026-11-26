@@ -44,6 +44,12 @@ Pins belong to your web account. Each player can keep their own terminal pins an
 Home can show resources from several networks together. Pinned resources retain access to recorded
 history when they are no longer present in storage.
 
+### Standing orders
+
+Let a network keep resources stocked on its own: a standing order watches stock and orders crafting
+when its conditions hold. Choose **Keep stocked…** in a craftable resource's details, or open
+**Standing orders** for the network. See [Standing orders](#standing-orders).
+
 ### Crafting plan images
 
 After calculating a plan, choose **Export** at the bottom left of the plan in the default theme
@@ -241,6 +247,58 @@ With **Automatic updates** enabled, the terminal and selected CPU view receive l
 The CPU list refreshes periodically. Live viewing does not require resource history tracking or
 increase the frequency of saved storage measurements. After a connection interruption or storage
 topology change, the terminal loads a fresh snapshot automatically.
+
+## Standing orders
+
+A standing order crafts a resource automatically. **Keep stocked** is the simple form: when stock falls
+below a low mark, craft up to a target. An order can also combine several conditions, met all or any:
+stock thresholds, stock ratios and counts of idle CPUs. Each of these conditions can be inverted.
+**Condition 0** always applies, even with **Any**: no busy CPU on the network may already have the
+ordered resource as its final output.
+
+Opening the editor loads the network’s stored and craftable resources once. The resource chooser opens in a separate dialog and searches this
+list locally. Reopen the editor or use **Refresh** to see resources added since you opened it.
+
+To keep Infinity level with Hypogen, choose **Stock below a proportion of another resource**, compare Infinity to
+Hypogen using a multiplier of 1, and fill up to that same ratio with a maximum batch. With 80 Infinity and 120 Hypogen the
+shortfall is 40; a maximum batch of 24 orders 24. The condition and amount are independent: you can
+instead choose a fixed batch. Enter a decimal (such as 0.5 or 0,5) or an exact fraction (1/3) in
+the multiplier field. Ratio targets round up to a whole unit. Lite mode and ignoring missing ingredients are
+offered where the server supports them.
+
+Orders are checked when the network's storage is sampled, at the storage sampling interval from the
+network settings (five minutes by default, 60 seconds at the shortest). Storage history does not have
+to be enabled; without it the same sample is taken and nothing is saved. **Run now** asks for an extra
+check using fresh stock. Requests on the same network share a read; extra reads are at least 30 seconds
+apart, and a scheduled sample can satisfy the request first.
+
+An order waits while its resource is already the final output of a running crafting job, including
+jobs started by players, and does not order resources provided by a level emitter. Click **Crafting** to open the CPU
+when the order can identify it. Finishing or cancelling a job updates its status without waiting for the next stock sample. After a job
+finishes, the next order needs a storage sample taken afterwards, so one order runs at most about once
+per crafting time plus one sampling interval. An optional cooldown adds a further pause. Calculations
+that lack ingredients or fail are retried with a growing delay, from 30 seconds up to 10 minutes; the
+list shows the status, the reason and the largest missing ingredients.
+
+By default, orders use CPUs that accept player jobs. On GTNH, Forge 1.20.1 and NeoForge 1.21.1 you
+can instead send the order to a machine-only CPU. The separate player-only idle condition counts
+free CPUs dedicated to players; mixed CPUs do not count. Forge 1.12.2 has no such native CPU modes.
+The CPU view, crafting history and notifications name the standing order as the requester. Running jobs are never cancelled by an order, also not when it is edited,
+disabled or deleted. After a server restart orders resume by themselves and recognise a job that is
+still running.
+
+Standing orders belong to the network, not to their creator: everyone with access to the network can
+view them, and create, edit, run and delete them unless the server restricts this to administrators.
+**Run standing orders on this network** in the network settings switches them off for one network.
+
+Administrators configure `standing_orders` in `config.toml`:
+
+- `enabled` (default `true`): when `false` nothing runs; orders can still be switched off or deleted.
+- `allow_players` (default `true`): when `false` only administrators can change or run orders or toggle them for the network; existing orders keep running.
+- `max_orders_per_grid` (default `128`) and `max_calculations_in_flight_per_grid` (default `1`).
+- `max_calculation_minutes` (default `10`): a longer calculation is cancelled and retried later.
+- `long_running_job_minutes` (default `60`): a longer job is marked as long-running, nothing else.
+- `tick_budget_millis` (default `1`): server thread time per tick for evaluating orders.
 
 ## Notification services integration
 
